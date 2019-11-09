@@ -13,14 +13,19 @@ import abc
 import re
 
 from enum import Enum
-from typing import Optional, List, Callable
 
 
 class TwoFactorChannel(Enum):
-    Authenticator = 1,
+    Authenticator = 1
     TextMessage = 2
     DuoSecurity = 3
     Other = 4
+
+
+class TwoFactorCodeDuration(Enum):
+    EveryLogin = 'every_login'
+    Every30Days = 'every_30_days'
+    Forever = 'forever'
 
 
 class PasswordRule:
@@ -30,7 +35,6 @@ class PasswordRule:
         self.description = None
 
     def matches(self, password):
-        # type: (str) -> bool
         ok = True
         if self.pattern:
             regex = re.compile(self.pattern)
@@ -41,25 +45,26 @@ class PasswordRule:
 
 
 class PasswordRuleMatcher:
-    def __init__(self, intro, rules):   # type: (str, List[PasswordRule]) -> None
+    def __init__(self, intro, rules):
         self.intro = intro
         self.rules = rules
 
     def match_failed_rules(self, password):
-        # type: (str) -> List[PasswordRule]
         return [x for x in self.rules if not x.matches(password)]
 
 
-class AuthUI:
-    """
-    Defines UI methods for Auth class
-    """
-    def confirmation(self, information):        # type: (str) -> bool
-        raise NotImplemented
-    def get_new_password(self, matcher):        # type: (PasswordRuleMatcher) -> Optional[str]
-        raise NotImplemented
-    def get_twofactor_code(self, provider):     # type: (TwoFactorChannel) -> str
-        raise NotImplemented
+class IAuthUI(abc.ABC):
+    @abc.abstractmethod
+    def confirmation(self, information):
+        pass
+
+    @abc.abstractmethod
+    def get_new_password(self, matcher):
+        pass
+
+    @abc.abstractmethod
+    def get_two_factor_code(self, provider):
+        pass
 
 
 class DuoAction(Enum):
@@ -70,13 +75,12 @@ class DuoAction(Enum):
 
 class DuoAccount:
     def __init__(self):
-        self.capabilities = []      # type: List[DuoAction]
+        self.capabilities = []
         self.phone = None
         self.enrollment_url = None
 
 
-class DuoAuthUI(abc.ABC):
+class IDuoAuthUI(abc.ABC):
     @abc.abstractmethod
-    def get_duo_twofactor_result(self, duo_account, on_action):
-        # type: (DuoAccount, Callable) -> str
+    def get_duo_two_factor_result(self, duo_account, on_action):
         pass

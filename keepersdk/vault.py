@@ -9,75 +9,62 @@
 # Contact: ops@keepersecurity.coms
 #
 
-from typing import Optional, NoReturn
-
-import collections
 import json
-import io
+import logging
 import requests
 import tempfile
 
 from . import crypto, utils
-from .auth import Auth
-from .storage import KeeperStorage, InMemoryVaultStorage
+from .storage import InMemoryVaultStorage
 from .sync_down import VaultSyncDown
-from .vault_types import PasswordRecord, AttachmentFile, Folder, PersonalFolderUid
+from .vault_types import PasswordRecord, AttachmentFile
 from .errors import KeeperApiError
 
-RecordAccessPath = collections.namedtuple('RecordAccessPath', 'record_uid, shared_folder_uid, team_uid')
+
+class RecordAccessPath:
+    def __init__(self, record_uid):
+        self.record_uid = record_uid
+        self.shared_folder_uid = None
+        self.team_uid = None
 
 
 class Vault(VaultSyncDown):
-    def __init__(self, auth, storage=None):     # type: (Auth, Optional[KeeperStorage]) -> None
-        super().__init__(auth, storage or InMemoryVaultStorage(auth.client_key))
+    def __init__(self, auth, storage=None):
+        super().__init__(auth, storage or InMemoryVaultStorage())
         if self.auth.is_authenticated:
             self.sync_down()
 
-    def sync_down(self):
-        sync_down_result = self.sync_down_command()
-        if sync_down_result.is_full_sync or len(self.records) == 0:
-            self.full_rebuild()
-        else:
-            self.incremental_rebuild(sync_down_result)
-        self.build_folders()
+    def resolve_record_access_path(self, path, for_edit=False, for_share=False):
+        if not path.record_uid:
+            return None
+        for rp in self.storage.record_keys.get_links_for_subject(path.record_uid):
+            if for_edit and not rp.can_edit:
+                continue
+            if for_share and not rp.can_share:
+                continue
+            if not rp.shared_folder_uid:
+                return rp
 
-    def resolve_record_access_path(self, record, access_write=False, access_share=False):
-        # type: (PasswordRecord, bool, bool) -> Optional[RecordAccessPath]
-        for permission in record.permissions:
-            if access_write and not permission.can_edit:
-                continue
-            if access_share and not permission.can_share:
-                continue
-            if permission.shared_folder_uid:
-                if permission.shared_folder_uid not in self.shared_folders:
-                    continue
-                shared_folder = self.shared_folders[permission.shared_folder_uid]
-                if not shared_folder.permissions:
-                    continue
-                for sf_permission in shared_folder.permissions:
-                    if sf_permission.team_uid:
-                        if sf_permission.team_uid in self.teams:
-                            team = self.teams[sf_permission.team_uid]
-                            if access_write and team.restrict_edit:
-                                continue
-                            if access_share and team.restrict_share:
-                                continue
-                            return RecordAccessPath(record_uid=record.record_uid,
-                                                    shared_folder_uid=shared_folder.shared_folder_uid,
-                                                    team_uid=team.team_uid)
-                    else:
-                        return RecordAccessPath(record_uid=record.record_uid,
-                                                shared_folder_uid=shared_folder.shared_folder_uid,
-                                                team_uid=None)
-            else:
-                return RecordAccessPath(record_uid=record.record_uid,
-                                        shared_folder_uid=None,
-                                        team_uid=None)
-        return None
+            for sfp in self.storage.shared_folder_keys.get_links_for_subject(rp.shared_folder_uid):
+                if not sfp.team_uid:
+                    path.shared_folder_uid = sfp.shared_folder_uid
+                    return rp
+                if not for_edit and not for_share:
+                    path.shared_folder_uid = sfp.shared_folder_uid
+                    path.team_uid = sfp.team_uid
+                    return rp
+                team = self.get_team(sfp.team_uid)
+                if team:
+                    if for_edit and team.restrict_edit:
+                        continue
+                    if for_share and team.restrict_share:
+                        continue
+                    path.shared_folder_uid = sfp.shared_folder_uid
+                    path.team_uid = sfp.team_uid
+                    return rp
 
     def download_attachment(self, record, attachment_id, output_stream):
-        # type: (PasswordRecord, str, io.RawIOBase) -> Optional[AttachmentFile]
-        attachment = None           # type: Optional[AttachmentFile]
+        attachment = None
         for atta in record.attachments:
             if attachment_id == atta.id:
                 attachment = atta
@@ -96,16 +83,16 @@ class Vault(VaultSyncDown):
                 'file_ids': [attachment.id],
                 'record_uid': record.record_uid
             }
-            ap = self.resolve_record_access_path(record)
-            if ap:
-                if ap.shared_folder_uid:
-                    rq['shared_folder_uid'] = ap.shared_folder_uid
-                    if ap.team_uid:
-                        rq['team_uid'] = ap.team_uid
+            path = RecordAccessPath(record_uid=record.record_uid)
+            if self.resolve_record_access_path(path):
+                if path.shared_folder_uid:
+                    rq['shared_folder_uid'] = path.shared_folder_uid
+                    if path.team_uid:
+                        rq['team_uid'] = path.team_uid
             rs = self.auth.execute_auth_command(rq)
             dl = rs['downloads'][0]
             if 'url' in dl:
-                key = utils.base64_url_decode(attachment.key)
+                key = attachment.key
                 with requests.get(dl['url'], stream=True) as rq_http:
                     iv = rq_http.raw.read(16)
                     decryptor = crypto.aes_v1_stream_decryptor(iv, key)
@@ -124,7 +111,6 @@ class Vault(VaultSyncDown):
         return attachment
 
     def upload_attachment(self, input_stream):
-        # type: (io.RawIOBase) -> Optional[AttachmentFile]
         rq = {
             'command': 'request_upload',
             'file_count': 1,
@@ -149,7 +135,7 @@ class Vault(VaultSyncDown):
                     encrypted = encryptor.update(to_encrypt)
                     if encrypted:
                         dst.write(encrypted)
-            encrypted = encryptor.finish(to_encrypt)
+            encrypted = encryptor.finish()
             if encrypted:
                 dst.write(encrypted)
 
@@ -163,14 +149,13 @@ class Vault(VaultSyncDown):
                 return attachment
 
     def add_record(self, record, folder_uid=None):
-        # type: (PasswordRecord, Optional[str]) -> NoReturn
         folder = self.get_folder(folder_uid)
-        record_uid = utils.generate_uid()
+
         record_key = utils.generate_aes_key()
         encrypted_record_key = crypto.encrypt_aes_v1(record_key, self.auth.data_key)
         rq = {
             "command": "record_add",
-            "record_uid": record_uid,
+            "record_uid": utils.generate_uid(),
             "record_type": "password",
             "record_key": utils.base64_url_encode(encrypted_record_key),
             "how_long_ago": 0
@@ -181,7 +166,7 @@ class Vault(VaultSyncDown):
             if folder.shared_folder_uid:
                 shared_folder = self.get_shared_folder(folder.shared_folder_uid)
                 if shared_folder:
-                    encrypted_record_key = crypto.encrypt_aes_v1(record.record_key, shared_folder.shared_folder_key)
+                    encrypted_record_key = crypto.encrypt_aes_v1(record_key, shared_folder.shared_folder_key)
                     rq['folder_key'] = utils.base64_url_encode(encrypted_record_key)
         else:
             rq['folder_type'] = 'user_folder'
@@ -197,29 +182,43 @@ class Vault(VaultSyncDown):
                 udata_data = json.dumps(datas['udata']).encode('utf-8')
                 rq['udata'] = utils.base64_url_encode(udata_data)
 
-        rs = self.auth.execute_auth_command(rq)
-        record.record_uid = record_uid
-        record.record_key = record_key
-        record.revision = rs['revision']
-        record.data = datas['data'] if 'data' in datas else None
-        record.extra = datas['extra'] if 'extra' in datas else None
-        record.udata = datas['udata'] if 'udata' in datas else None
-        self.records[record.record_uid] = record
-        if not folder:
-            folder = self.root_folder
-        folder.records.add(record.record_uid)
+        self.auth.execute_auth_command(rq)
 
-    def update_record(self, record, skip_data=False, skip_extra=False):
-        # type: (PasswordRecord, bool, bool) -> NoReturn
-
+    def put_record(self, record, skip_data=False, skip_extra=False):
         record_object = {
-            "record_uid": record.record_uid,
-            "version": 2,
-            "client_modified_time": utils.current_milli_time(),
-            "revision": record.revision
+            'record_uid': record.record_uid,
+            'version': 2,
+            'client_modified_time': utils.current_milli_time(),
         }
 
-        datas = PasswordRecord.dump(record)
+        existing_record = self.storage.records.get(record.record_uid) if record.record_uid else None
+        existing_extra = None
+        existing_udata = None
+        if existing_record:
+            record_object['revision'] = existing_record.revision
+            path = RecordAccessPath(record_uid=record.record_uid)
+            r_key = self.resolve_record_access_path(path, for_edit=True)
+            if r_key:
+                if r_key.key_type in {0, 2}:
+                    enc_key = crypto.encrypt_aes_v1(record.record_key, self.auth.data_key)
+                    record_object['record_key'] = utils.base64_url_encode(enc_key)
+
+                if path.shared_folder_uid:
+                    record_object['shared_folder_uid'] = path.shared_folder_uid
+                if path.team_uid:
+                    record_object['team_uid'] = path.team_uid
+            if existing_record.extra:
+                try:
+                    enc_extra = utils.base64_url_decode(existing_record.extra)
+                    dec_extra = crypto.decrypt_aes_v1(enc_extra, record.record_key)
+                    existing_extra = json.loads(dec_extra.decode('utf-8'))
+                except Exception as e:
+                    logging.debug('Record (%s) extra decrypt error: %s', existing_record.record_uid, e)
+            if existing_record.udata:
+                dec_udata = utils.base64_url_decode(existing_record.udata)
+                existing_udata = json.loads(dec_udata.decode('utf-8'))
+
+        datas = PasswordRecord.dump(record, extra=existing_extra, udata=existing_udata)
         if 'data' in datas and not skip_data:
             data_data = json.dumps(datas['data']).encode('utf-8')
             record_object['data'] = utils.base64_url_encode(crypto.encrypt_aes_v1(data_data, record.record_key))
@@ -230,27 +229,21 @@ class Vault(VaultSyncDown):
                 udata_data = json.dumps(datas['udata']).encode('utf-8')
                 record_object['udata'] = utils.base64_url_encode(udata_data)
 
-        access_path = self.resolve_record_access_path(record, access_write=True)
-        if access_path.shared_folder_uid:
-            record_object['shared_folder_uid'] = access_path.shared_folder_uid
-        if access_path.team_uid:
-            record_object['team_uid'] = access_path.team_uid
-
         rq = {
             "command": "record_update",
             "device_id": self.auth.endpoint.device_name,
-            "update_records": [record_object]
         }
+        if existing_record:
+            rq['update_records'] = [record_object]
+        else:
+            rq['add_records'] = [record_object]
+
         rs = self.auth.execute_auth_command(rq)
-        if 'update_records' in rs:
-            status = rs['update_records'][0]
-            if status['status'] == 'success':
-                record.revision = rs['revision']
-            else:
-                raise KeeperApiError(status['status_code'], status['message'])
+        status = rs['update_records' if existing_record else 'add_records'][0]
+        if status['status'] != 'success':
+            raise KeeperApiError(status['status_code'], status['message'])
 
     def delete_record(self, record_uid, folder=None):
-        # type: (str, Optional[Folder]) -> NoReturn
         if not folder:
             if self.auth.ui:
                 if not self.auth.ui.confirmation('Delete a record?'):
@@ -260,14 +253,17 @@ class Vault(VaultSyncDown):
                 "device_id": self.auth.endpoint.device_name,
                 "delete_records": [record_uid]
             }
-            self.auth.execute_auth_command(rq)
+            rs = self.auth.execute_auth_command(rq)
+            status = rs['delete_records'][0]
+            if status['status'] != 'success':
+                raise KeeperApiError(status['status_code'], status['message'])
         else:
             record_object = {
                 'object_uid': record_uid,
                 'object_type': 'record',
                 'delete_resolution': 'unlink'
             }
-            if folder.folder_uid == PersonalFolderUid:
+            if folder.folder_uid == self.storage.personal_scope_uid:
                 record_object['from_type'] = 'user_folder'
             else:
                 record_object['from_uid'] = folder.folder_uid
@@ -287,14 +283,3 @@ class Vault(VaultSyncDown):
                     "pre_delete_token": rs['pre_delete_response']['pre_delete_token']
                 }
                 self.auth.execute_auth_command(rq)
-
-        if record_uid in self.records:
-            del self.records[record_uid]
-
-        folders = [folder] if folder else [x for x in self.folders.values() if record_uid in x.records]
-        for folder in folders:
-            if record_uid in folder.records:
-                folder.records.remove(record_uid)
-            if folder.shared_folder_uid:
-                if folder.shared_folder_uid in self.shared_folders:
-                    pass

@@ -11,10 +11,8 @@
 
 import abc
 import os
-from typing import Optional, NoReturn
 
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey, RSAPrivateKey
 from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
 from cryptography.hazmat.primitives.padding import PKCS7
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -29,20 +27,17 @@ from cryptography.hazmat.primitives.serialization import load_der_private_key, l
 _CRYPTO_BACKEND = default_backend()
 
 
-def pad_data(data):
-    # type: (bytes) -> bytes
+def pad_data(data):    # type: (bytes) -> bytes
     padder = PKCS7(16*8).padder()
     return padder.update(data) + padder.finalize()
 
 
-def unpad_data(data):
-    # type: (bytes) -> bytes
+def unpad_data(data):     # type: (bytes) -> bytes
     unpadder = PKCS7(16*8).unpadder()
     return unpadder.update(data) + unpadder.finalize()
 
 
 def get_random_bytes(length):
-    # type: (int) -> bytes
     return os.urandom(length)
 
 
@@ -55,7 +50,6 @@ def load_public_key(der_public_key):
 
 
 def encrypt_aes_v1(data, key, iv=None, use_padding=True):
-    # type: (bytes, bytes, bytes, bool) -> bytes
     iv = iv or os.urandom(16)
     cipher = Cipher(AES(key), CBC(iv), backend=_CRYPTO_BACKEND)
     encryptor = cipher.encryptor()
@@ -64,7 +58,6 @@ def encrypt_aes_v1(data, key, iv=None, use_padding=True):
 
 
 def decrypt_aes_v1(data, key, use_padding=True):
-    # type: (bytes, bytes, bool) -> bytes
     iv = data[:16]
     cipher = Cipher(AES(key), CBC(iv), backend=_CRYPTO_BACKEND)
     decryptor = cipher.decryptor()
@@ -73,7 +66,6 @@ def decrypt_aes_v1(data, key, use_padding=True):
 
 
 def encrypt_aes_v2(data, key, nonce=None):
-    # type: (bytes, bytes, bytes) -> bytes
     aesgcm = AESGCM(key)
     nonce = nonce or os.urandom(12)
     enc = aesgcm.encrypt(nonce, data, None)
@@ -81,18 +73,15 @@ def encrypt_aes_v2(data, key, nonce=None):
 
 
 def decrypt_aes_v2(data, key):
-    # type: (bytes, bytes) -> bytes
     aesgcm = AESGCM(key)
     return aesgcm.decrypt(data[:12], data[12:], None)
 
 
 def encrypt_rsa(data, rsa_key):
-    # type: (bytes, RSAPublicKey) -> bytes
     return rsa_key.encrypt(data, PKCS1v15())
 
 
 def decrypt_rsa(data, rsa_key):
-    # type: (bytes, RSAPrivateKey) -> bytes
     return rsa_key.decrypt(data, PKCS1v15())
 
 
@@ -109,7 +98,6 @@ def derive_keyhash_v1(password, salt, iterations):
 
 
 def derive_keyhash_v2(domain, password, salt, iterations):
-    # type: (str, str, bytes, int) -> bytes
     kdf = PBKDF2HMAC(algorithm=SHA512(), length=64, salt=salt, iterations=iterations, backend=_CRYPTO_BACKEND)
     derived_key = kdf.derive((domain+password).encode('utf-8'))
     hf = HMAC(derived_key, SHA256(), backend=_CRYPTO_BACKEND)
@@ -118,11 +106,11 @@ def derive_keyhash_v2(domain, password, salt, iterations):
 
 
 class AesStreamCryptor(abc.ABC):
-    def __init__(self, is_encrypt, block_size):     # type: (bool, int) -> NoReturn
+    def __init__(self, is_encrypt, block_size):     # type: (bool, int) -> None
         self.is_encrypt = is_encrypt
         self.block_size = block_size
-        self.input_tail = None            # type: Optional[bytes]
-        self.output_tail = None           # type: Optional[bytes]
+        self.input_tail = None            # type: bytes or None
+        self.output_tail = None           # type: bytes or None
 
     def update(self, in_data):
         if self.input_tail:

@@ -10,231 +10,351 @@
 #
 
 import abc
-import collections
-
-from typing import Iterable, Dict, Optional, NoReturn, Set
 
 
-class StorageItem(abc.ABC):
-    @abc.abstractmethod
-    def put(self, uid, data):  # type: (str, dict) -> NoReturn
-        pass
-
-    @abc.abstractmethod
-    def delete(self, uid):  # type: (str) -> NoReturn
-        pass
-
-    @abc.abstractmethod
-    def get_all(self):   # type: () -> Iterable[dict]
-        pass
-
-    @abc.abstractmethod
-    def clear(self):   # type: () -> NoReturn
-        pass
-
-
-class StorageItemLookup(StorageItem):
-    @abc.abstractmethod
-    def get(self, uid):  # type: (str) -> Optional[dict]
-        pass
-
-
-FolderRecordLink = collections.namedtuple('FolderRecordLink', 'record_uid, folder_uid')
-
-
-class StorageFolder(abc.ABC):
-    @abc.abstractmethod
-    def get_all_folders(self):      # type: () -> Iterable[dict]
-        pass
-
-    def get_all_records(self):      # type: () -> Iterable[FolderRecordLink]
-        pass
-
-    @abc.abstractmethod
-    def delete_record(self, record_uid, key_scope_uid=None, folder_uid=None):
-        # type: (str, Optional[str], Optional[str]) -> NoReturn
-        pass
-
-    @abc.abstractmethod
-    def delete_folder(self, folder_uid):   # type: (str) -> NoReturn
-        pass
-
-    @abc.abstractmethod
-    def put_folder(self, folder_uid, data):  # type: (str, dict) -> NoReturn
-        pass
-
-    @abc.abstractmethod
-    def put_record(self, record_uid, folder_uid):           # type: (str, str) -> NoReturn
-        pass
-
-    @abc.abstractmethod
-    def clear(self):   # type: () -> NoReturn
-        pass
-
-
-class KeeperStorage(abc.ABC):
-    @abc.abstractmethod
-    def clear(self):  # type: () -> NoReturn
-        pass
-
-    @property
-    @abc.abstractmethod
-    def client_key(self):  # type: () -> bytes
-        pass
-
-    @property
-    @abc.abstractmethod
-    def revision(self):  # type: () -> int
-        pass
-
-    @revision.setter
-    @abc.abstractmethod
-    def revision(self, value):  # type: (int) -> NoReturn
-        pass
-
-    @property
-    @abc.abstractmethod
-    def metadata(self):    # type: () -> StorageItemLookup
-        pass
-
-    @property
-    @abc.abstractmethod
-    def records(self):    # type: () -> StorageItemLookup
-        pass
-
-    @property
-    @abc.abstractmethod
-    def shared_folders(self):    # type: () -> StorageItemLookup
-        pass
-
-    @property
-    @abc.abstractmethod
-    def teams(self):    # type: () -> StorageItemLookup
-        pass
-
-    @property
-    @abc.abstractmethod
-    def non_shared_data(self):    # type: () -> StorageItemLookup
-        pass
-
-    @property
-    @abc.abstractmethod
-    def folders(self):    # type: () -> StorageFolder
-        pass
-
-
-class InMemoryStorageItem(StorageItem):
+class StorageRecord:
     def __init__(self):
-        self._items = {}     # type: Dict[str, dict]
+        self.record_uid = ''
+        self.revision = 0
+        self.client_modified_time = 0
+        self.data = None
+        self.extra = None
+        self.udata = None
+        self.shared = False
+        self.owner = False
 
-    def get(self, uid):  # type: (str) -> Optional[dict]
+    def uid(self):
+        return self.record_uid
+
+
+class StorageNonSharedData:
+    def __init__(self):
+        self.record_uid = ''
+        self.data = ''
+
+    def uid(self):
+        return self.record_uid
+
+
+class StorageSharedFolder:
+    def __init__(self):
+        self.shared_folder_uid = ''
+        self.revision = 0
+        self.name = ''
+        self.default_manage_records = False
+        self.default_manage_users = False
+        self.default_can_edit = False
+        self.default_can_share = False
+
+    def uid(self):
+        return self.shared_folder_uid
+
+
+class StorageFolder:
+    def __init__(self):
+        self.folder_uid = ''
+        self.parent_uid = ''
+        self.folder_type = ''
+        self.folder_key = ''
+        self.shared_folder_uid = ''
+        self.revision = 0
+        self.data = ''
+
+    def uid(self):
+        return self.folder_uid
+
+
+class StorageTeam:
+    def __init__(self):
+        self.team_uid = ''
+        self.name = ''
+        self.team_key = ''
+        self.key_type = 0
+        self.team_private_key = ''
+        self.restrict_edit = False
+        self.restrict_share = False
+        self.restrict_view = False
+
+    def uid(self):
+        return self.team_uid
+
+
+class StorageRecordKey:
+    def __init__(self):
+        self.record_uid = ''
+        self.shared_folder_uid = ''
+        self.record_key = ''
+        self.key_type = 0
+        self.can_share = False
+        self.can_edit = False
+
+    def subject_uid(self):
+        return self.record_uid
+
+    def object_uid(self):
+        return self.shared_folder_uid
+
+
+class StorageSharedFolderKey:
+    def __init__(self):
+        self.shared_folder_uid = ''
+        self.team_uid = ''
+        self.key_type = 0
+        self.shared_folder_key = ''
+
+    def subject_uid(self):
+        return self.shared_folder_uid
+
+    def object_uid(self):
+        return self.team_uid
+
+
+class StorageSharedFolderPermission:
+    def __init__(self):
+        self.shared_folder_uid = ''
+        self.user_uid = ''
+        self.user_type = 0
+        self.manage_records = False
+        self.manage_users = False
+
+    def subject_uid(self):
+        return self.shared_folder_uid
+
+    def object_uid(self):
+        return self.user_uid
+
+
+class StorageFolderRecordLink:
+    def __init__(self):
+        self.folder_uid = ''
+        self.record_uid = ''
+
+    def subject_uid(self):
+        return self.folder_uid
+
+    def object_uid(self):
+        return self.record_uid
+
+
+class UidLink:
+    def __init__(self, subject_uid, object_uid):
+        self._subject_uid = subject_uid
+        self._object_uid = object_uid
+
+    def subject_uid(self):
+        return self._subject_uid
+
+    def object_uid(self):
+        return self._object_uid
+
+
+class IEntityStorage(abc.ABC):
+    @abc.abstractmethod
+    def get(self, uid):
+        pass
+
+    @abc.abstractmethod
+    def put(self, uid, data):
+        pass
+
+    @abc.abstractmethod
+    def delete(self, uid):
+        pass
+
+    @abc.abstractmethod
+    def get_all(self):
+        pass
+
+    @abc.abstractmethod
+    def clear(self):
+        pass
+
+
+class IPredicateStorage(abc.ABC):
+    @abc.abstractmethod
+    def put(self, data):
+        pass
+
+    @abc.abstractmethod
+    def delete(self, link):
+        pass
+
+    @abc.abstractmethod
+    def get_links_for_subject(self, subject_uid):
+        pass
+
+    @abc.abstractmethod
+    def get_links_for_object(self, object_uid):
+        pass
+
+    @abc.abstractmethod
+    def get_all_links(self):
+        pass
+
+    @abc.abstractmethod
+    def clear(self):
+        pass
+
+    def delete_object(self, object_uid):
+        links = [x for x in self.get_links_for_object(object_uid)]
+        for link in links:
+            self.delete(link)
+
+    def delete_subject(self, subject_uid):
+        links = [x for x in self.get_links_for_subject(subject_uid)]
+        for link in links:
+            self.delete(link)
+
+    def delete_link(self, subject_uid, object_uid):
+        self.delete(UidLink(subject_uid, object_uid))
+
+
+class IKeeperStorage(abc.ABC):
+    def __init__(self):
+        self.revision = 0
+
+    @property
+    @abc.abstractmethod
+    def personal_scope_uid(self):
+        pass
+
+    @property
+    @abc.abstractmethod
+    def records(self):
+        pass
+
+    @property
+    @abc.abstractmethod
+    def shared_folders(self):
+        pass
+
+    @property
+    @abc.abstractmethod
+    def teams(self):
+        pass
+
+    @property
+    @abc.abstractmethod
+    def non_shared_data(self):
+        pass
+
+    @property
+    @abc.abstractmethod
+    def record_keys(self):
+        pass
+
+    @property
+    @abc.abstractmethod
+    def shared_folder_keys(self):
+        pass
+
+    @property
+    @abc.abstractmethod
+    def shared_folder_permissions(self):
+        pass
+
+    @property
+    @abc.abstractmethod
+    def folders(self):
+        pass
+
+    @property
+    @abc.abstractmethod
+    def folder_records(self):
+        pass
+
+    @abc.abstractmethod
+    def clear(self):
+        pass
+
+
+class InMemoryItemStorage(IEntityStorage):
+    def __init__(self):
+        self._items = {}
+
+    def get(self, uid):
         return self._items.get(uid)
 
-    def put(self, uid, data):  # type: (str, dict) -> NoReturn
+    def put(self, data):
+        uid = data.uid()
+        if uid in self._items:
+            if self._items[uid] is data:
+                return
         self._items[uid] = data
 
-    def delete(self, uid):  # type: (str) -> NoReturn
+    def delete(self, uid):
         if uid in self._items:
             del self._items[uid]
 
-    def get_all(self):   # type: () -> Iterable[dict]
+    def get_all(self):
         for item in self._items.values():
             yield item
 
-    def clear(self):  # type: () -> NoReturn
+    def clear(self):
         self._items.clear()
 
 
-class InMemoryStorageFolder(StorageFolder):
+class InMemoryLinkStorage(IPredicateStorage):
     def __init__(self):
-        self._folders = {}      # type: Dict[str, dict]
-        self._records = {}     # type: Dict[str, Set[str]]
-
-    def clear(self):  # type: () -> NoReturn
-        self._folders.clear()
-        self._records.clear()
-
-    def get_all_folders(self):  # type: () -> Iterable[dict]
-        for data in self._folders.values():
-            yield data
-
-    def get_all_records(self):  # type: () -> Iterable[FolderRecordLink]
-        for folder_uid in self._records:
-            records = self._records[folder_uid]
-            for record_uid in records:
-                yield FolderRecordLink(record_uid, folder_uid)
-
-    def delete_folder(self, folder_uid):   # type: (str) -> NoReturn
-        if folder_uid in self._folders:
-            del self._folders[folder_uid]
-        if folder_uid in self._records:
-            del self._records[folder_uid]
-
-    def delete_record(self, record_uid, key_scope_uid=None, folder_uid=None):
-        # type: (str, Optional[str], Optional[str]) -> NoReturn
-        if folder_uid:
-            if folder_uid in self._records:
-                folder = self._records[folder_uid]
-                if record_uid in folder:
-                    folder.remove(record_uid)
-
-        elif key_scope_uid:
-            for folder in self._folders.values():
-                if 'key_scope_uid' in folder:
-                    if folder['key_scope_uid'] == key_scope_uid:
-                        folder_uid = folder['folder_uid']
-                        if folder_uid in self._records:
-                            folder = self._records[folder_uid]
-                            if record_uid in folder:
-                                folder.remove(record_uid)
-        else:
-            for records in self._records.values():
-                if record_uid in records:
-                    records.remove(record_uid)
-
-    def put_folder(self, folder_uid, data):         # type: (str, dict) -> NoReturn
-        self._folders[folder_uid] = data
-
-    def put_record(self, record_uid, folder_uid):  # type: (str, str) -> NoReturn
-        if folder_uid not in self._records:
-            self._records[folder_uid] = set()
-        self._records[folder_uid].add(record_uid)
-
-
-class InMemoryVaultStorage(KeeperStorage):
-    def __init__(self, client_key):
-        self._revision = 0
-        self._client_key = client_key
-        self._metadata = InMemoryStorageItem()
-        self._records = InMemoryStorageItem()
-        self._shared_folders = InMemoryStorageItem()
-        self._teams = InMemoryStorageItem()
-        self._non_shared_data = InMemoryStorageItem()
-        self._folders = InMemoryStorageFolder()
+        self._links = {}
 
     def clear(self):
-        self.revision = 0
-        self._metadata.clear()
-        self._records.clear()
-        self._shared_folders.clear()
-        self._teams.clear()
-        self._non_shared_data.clear()
+        self._links.clear()
+
+    def put(self, data):
+        subject_uid = data.subject_uid()
+        object_uid = data.object_uid()
+        if subject_uid not in self._links:
+            self._links[subject_uid] = {}
+        self._links[subject_uid][object_uid] = data
+
+    def delete(self, link):
+        subject_uid = link.subject_uid()
+        if subject_uid in self._links:
+            object_uid = link.object_uid()
+            if object_uid in self._links[subject_uid]:
+                del self._links[subject_uid][object_uid]
+
+    def get_all_links(self):
+        for subj in self._links.values():
+            for data in subj.values():
+                yield data
+
+    def get_links_for_subject(self, subject_uid):
+        if subject_uid in self._links:
+            for data in self._links[subject_uid].values():
+                yield data
+
+    def get_links_for_object(self, object_uid):
+        for subj in self._links.values():
+            if object_uid in subj:
+                yield subj[object_uid]
+
+    def get(self, subject_uid, object_uid):
+        if subject_uid in self._links:
+            if object_uid in self._links[subject_uid]:
+                return self._links[subject_uid][object_uid]
+
+
+class InMemoryVaultStorage(IKeeperStorage):
+    def __init__(self):
+        super().__init__()
+
+        self._records = InMemoryItemStorage()
+        self._shared_folders = InMemoryItemStorage()
+        self._teams = InMemoryItemStorage()
+        self._non_shared_data = InMemoryItemStorage()
+
+        self._record_keys = InMemoryLinkStorage()
+        self._shared_folder_keys = InMemoryLinkStorage()
+        self._shared_folder_permissions = InMemoryLinkStorage()
+
+        self._folders = InMemoryItemStorage()
+        self._folder_records = InMemoryLinkStorage()
 
     @property
-    def client_key(self):
-        return self._client_key
-
-    @property
-    def revision(self):
-        return self._revision
-
-    @revision.setter
-    def revision(self, value):
-        self._revision = value
-
-    @property
-    def metadata(self):
-        return self._metadata
+    def personal_scope_uid(self):
+        return 'PersonalScopeUid'
 
     @property
     def records(self):
@@ -253,5 +373,35 @@ class InMemoryVaultStorage(KeeperStorage):
         return self._non_shared_data
 
     @property
+    def record_keys(self):
+        return self._record_keys
+
+    @property
+    def shared_folder_keys(self):
+        return self._shared_folder_keys
+
+    @property
+    def shared_folder_permissions(self):
+        return self._shared_folder_permissions
+
+    @property
     def folders(self):
         return self._folders
+
+    @property
+    def folder_records(self):
+        return self._folder_records
+
+    def clear(self):
+        self.revision = 0
+        self._records.clear()
+        self._shared_folders.clear()
+        self._teams.clear()
+        self._non_shared_data.clear()
+
+        self._record_keys.clear()
+        self._shared_folder_keys.clear()
+        self._shared_folder_permissions.clear()
+
+        self._folders.clear()
+        self._folder_records.clear()

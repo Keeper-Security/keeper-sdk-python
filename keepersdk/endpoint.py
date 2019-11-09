@@ -8,11 +8,10 @@
 # Copyright 2019 Keeper Security Inc.
 # Contact: ops@keepersecurity.com
 #
-from typing import Union
-
 import json
 import logging
 import locale
+from typing import Union
 
 from requests import post
 from urllib.parse import urlunparse
@@ -26,7 +25,6 @@ DEFAULT_KEEPER_SERVER = 'keepersecurity.com'
 
 class KeeperEndpoint:
     def __init__(self):
-        # type: () -> None
         self.client_version = CLIENT_VERSION
         self.device_name = DEFAULT_DEVICE_NAME
         self.locale = resolve_locale()
@@ -36,8 +34,7 @@ class KeeperEndpoint:
         self.server_key_id = 1
         self.encrypted_device_token = None
 
-    def execute_rest(self, endpoint, payload):
-        # type: (str, bytes) -> Union[bytes, dict]
+    def execute_rest(self, endpoint, payload):  # type: (str, bytes) -> Union[bytes,  dict]
 
         api_payload = proto.ApiRequestPayload()
         api_payload.payload = payload
@@ -92,9 +89,7 @@ class KeeperEndpoint:
 
                 return failure
 
-    def get_device_token(self):
-        # type: () -> str
-
+    def get_device_token(self):  # type: () -> str
         if not self.encrypted_device_token:
             rq = proto.DeviceRequest()
             rq.clientVersion = self.client_version
@@ -109,8 +104,7 @@ class KeeperEndpoint:
                 raise KeeperApiError(rs['error'], rs['message'])
         return self.encrypted_device_token
 
-    def get_new_user_params(self, username):
-        # type: (str) -> proto.NewUserMinimumParams
+    def get_new_user_params(self, username):   # type: (str) -> proto.NewUserMinimumParams
         rq = proto.AuthRequest()
         rq.clientVersion = CLIENT_VERSION
         rq.username = username.lower()
@@ -125,9 +119,7 @@ class KeeperEndpoint:
         if type(rs) == dict:
             raise KeeperApiError(rs['error'], rs['message'])
 
-    def v2_execute(self, rq):
-        # type: (dict) -> dict
-
+    def v2_execute(self, rq):             # type: (dict) -> dict
         if 'client_version' not in rq:
             rq['client_version'] = self.client_version
         logging.debug('>>> Request JSON: [%s]', json.dumps(rq, sort_keys=True, indent=4))
