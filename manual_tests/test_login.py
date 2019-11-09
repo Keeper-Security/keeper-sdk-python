@@ -1,20 +1,22 @@
-from typing import Optional
+from typing import Optional, Tuple
 from unittest import TestCase
 
 import os
+import datetime
 
 from keepersdk import configuration, auth, ui
 from keepersdk.vault import Vault
 
 
-class TestUi(ui.AuthUI):
+class TestUi(ui.IAuthUI):
     def confirmation(self, information):  # type: (str) -> bool
         print(information)
         answer = input('(Y)es/(No): ')
         return answer.lower() in {'y', 'yes'}
 
-    def get_twofactor_code(self, provider):  # type: (ui.TwoFactorChannel) -> str
-        return input('Enter Two Factor Code: ')
+    def get_two_factor_code(self, provider):  # type: (ui.TwoFactorChannel) -> Tuple[str, ui.TwoFactorCodeDuration]
+        code = input('Enter Two Factor Code: ')
+        return code, ui.TwoFactorCodeDuration.EveryLogin
 
     def get_new_password(self, matcher):  # type: (ui.PasswordRuleMatcher) -> Optional[str]
         raise NotImplemented()
@@ -22,8 +24,9 @@ class TestUi(ui.AuthUI):
 
 class TestLogin(TestCase):
     def test_login(self):
-        config_file = os.path.abspath('.')
+        config_file = os.path.dirname(__file__)
         config_file = os.path.join(config_file, 'login.json')
+        self.assertTrue(os.path.exists(config_file))
         storage = configuration.JsonConfiguration(config_file)
         keeper_ui = TestUi()
         keeper_auth = auth.Auth(keeper_ui, storage)
@@ -41,8 +44,9 @@ class TestLogin(TestCase):
         self.assertEqual(rs["result"], "success")
 
     def test_sync_down(self):
-        config_file = os.path.abspath('.')
+        config_file = os.path.dirname(__file__)
         config_file = os.path.join(config_file, 'login.json')
+        self.assertTrue(os.path.exists(config_file))
         storage = configuration.JsonConfiguration(config_file)
         keeper_ui = TestUi()
         keeper_auth = auth.Auth(keeper_ui, storage)
@@ -56,7 +60,13 @@ class TestLogin(TestCase):
         vault.sync_down()
         self.assertIsNotNone(vault)
 
-        record = next(vault.get_all_records())
-        vault.update_record(record)
+        record = None
+        for r in vault.records.values():
+            if r.owner:
+                record = r
+                break
+        self.assertIsNotNone(record)
+        record.notes += '\n' + str(datetime.datetime.now())
+        vault.put_record(record)
         self.assertIsNotNone(record.record_uid)
 

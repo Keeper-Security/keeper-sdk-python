@@ -1,5 +1,5 @@
-from typing import Optional
 
+import datetime
 import json
 import copy
 
@@ -11,8 +11,8 @@ from unittest import mock
 from keepersdk import crypto, utils, ui
 from keepersdk.vault import Vault
 from keepersdk.auth import Auth
-from keepersdk.vault_types import PasswordRecord, SharedFolder, Team, AttachmentFile
-from keepersdk.configuration import Configuration, ServerConfiguration, UserConfiguration, ConfigurationStorage, InMemoryConfiguration
+from keepersdk.vault_types import PasswordRecord, SharedFolder, EnterpriseTeam, AttachmentFile
+from keepersdk.configuration import Configuration, ServerConfiguration, UserConfiguration, InMemoryConfiguration, IConfigurationStorage
 
 _USER_NAME = 'unit.test@keepersecurity.com'
 _USER_PASSWORD = utils.base64_url_encode(crypto.get_random_bytes(8))
@@ -77,8 +77,8 @@ _DER_PRIVATE_KEY = _IMPORTED_PRIVATE_KEY.private_bytes(encoding=serialization.En
 _ENCRYPTED_PRIVATE_KEY = utils.base64_url_encode(crypto.encrypt_aes_v1(_DER_PRIVATE_KEY, _USER_DATA_KEY))
 
 _IMPORTED_PUBLIC_KEY = serialization.load_pem_public_key(_USER_PUBLIC_KEY.encode('utf-8'), default_backend())
-_DER_PUBLIC_KEY = _IMPORTED_PUBLIC_KEY.public_bytes(encoding=serialization.Encoding.DER,
-                                                     format=serialization.PublicFormat.PKCS1)
+_DER_PUBLIC_KEY = _IMPORTED_PUBLIC_KEY.public_bytes(
+    encoding=serialization.Encoding.DER, format=serialization.PublicFormat.PKCS1)
 _ENCODED_PUBLIC_KEY = utils.base64_url_encode(_DER_PUBLIC_KEY)
 
 _V2_DERIVED_KEY = crypto.derive_keyhash_v2('data_key', _USER_PASSWORD, _USER_SALT, _USER_ITERATIONS)
@@ -92,15 +92,15 @@ _enc_dk = b'\x01' + _enc_iter + _USER_SALT + crypto.encrypt_aes_v1(_USER_DATA_KE
 _ENCRYPTION_PARAMS = utils.base64_url_encode(_enc_dk)
 
 
-class TestAuthUI(ui.AuthUI):
-    def confirmation(self, information):  # type: (str) -> bool
+class TestAuthUI(ui.IAuthUI):
+    def confirmation(self, information):
         return True
 
-    def get_new_password(self, matcher):  # type: (ui.PasswordRuleMatcher) -> Optional[str]
+    def get_new_password(self, matcher):
         return 'qwerty'
 
-    def get_twofactor_code(self, provider):  # type: (ui.TwoFactorChannel) -> str
-        return '123456'
+    def get_two_factor_code(self, provider):
+        return '123456', ui.TwoFactorCodeDuration.Every30Days
 
 
 class VaultEnvironment:
@@ -123,8 +123,7 @@ class VaultEnvironment:
         self.revision = _REVISION
 
 
-def get_configuration_storage():
-    # type: () -> ConfigurationStorage
+def get_configuration_storage():   # type: () -> IConfigurationStorage
     server_conf = ServerConfiguration(server='test.keepersecurity.com', device_id=_DEVICE_ID, server_key_id=1)
     user_conf = UserConfiguration(username=_USER_NAME, password=_USER_PASSWORD)
     config = Configuration()
@@ -135,14 +134,12 @@ def get_configuration_storage():
     return InMemoryConfiguration(config)
 
 
-def get_auth_context():
-    # type: () -> Auth
+def get_auth_context():   # type: () -> Auth
     config = get_configuration_storage()
     return Auth(TestAuthUI(), config)
 
 
-def get_connected_auth_context():
-    # type: () -> Auth
+def get_connected_auth_context():   # type: () -> Auth
     auth = get_auth_context()
     config = auth.storage.get_configuration()
     user_config = config.get_user_configuration(config.last_username)
@@ -157,8 +154,8 @@ def get_connected_auth_context():
 
     return auth
 
-def get_vault():
-    # type: () -> Vault
+
+def get_vault():   # type: () -> Vault
     auth = get_connected_auth_context()
     with mock.patch('keepersdk.auth.Auth.execute_auth_command') as mock_comm:
         mock_comm.return_value = get_sync_down_response()
@@ -191,23 +188,23 @@ def get_sync_down_response():
     }
 
 
-def register_record(record, key_type=None):
-    # type: (PasswordRecord, Optional[int]) -> bytes
+def register_record(record, key_type=None):    # type: (PasswordRecord, int) -> None
 
     record_dict = PasswordRecord.dump(record)
-    record_key = crypto.get_random_bytes(32) if key_type != 0 else _USER_DATA_KEY
+    record.record_key = crypto.get_random_bytes(32) if key_type != 0 else _USER_DATA_KEY
     data = json.dumps(record_dict['data']).encode('utf-8')
-    data = crypto.encrypt_aes_v1(data, record_key)
+    data = crypto.encrypt_aes_v1(data, record.record_key)
     rec_object = {
         'record_uid': record.record_uid,
-        'revision': record.revision if (0 < record.revision <= _REVISION) else _REVISION,
+        'revision': _REVISION,
         'version': 2 if key_type != 0 else 1,
         'shared': key_type not in [0, 1],
+        'client_modified_time': datetime.datetime.now().timestamp(),
         'data': utils.base64_url_encode(data)
     }
     if 'extra' in record_dict:
         extra = json.dumps(record_dict['extra']).encode('utf-8')
-        rec_object['extra'] = utils.base64_url_encode(crypto.encrypt_aes_v1(extra, record_key))
+        rec_object['extra'] = utils.base64_url_encode(crypto.encrypt_aes_v1(extra, record.record_key))
     if 'udata' in rec_object:
         rec_object['udata'] = json.dumps(rec_object['udata'])
 
@@ -224,17 +221,14 @@ def register_record(record, key_type=None):
     if key_type == 0:
         _RECORD_METADATA.append(meta_data)
     if key_type == 1:
-        meta_data['record_key'] = utils.base64_url_encode(crypto.encrypt_aes_v1(record_key, _USER_DATA_KEY))
+        meta_data['record_key'] = utils.base64_url_encode(crypto.encrypt_aes_v1(record.record_key, _USER_DATA_KEY))
         _RECORD_METADATA.append(meta_data)
     elif key_type == 2:
-        meta_data['record_key'] = utils.base64_url_encode(crypto.encrypt_rsa(record_key, _IMPORTED_PUBLIC_KEY))
+        meta_data['record_key'] = utils.base64_url_encode(crypto.encrypt_rsa(record.record_key, _IMPORTED_PUBLIC_KEY))
         _RECORD_METADATA.append(meta_data)
 
-    return record_key
 
-
-def register_records_to_folder(folder_uid, record_uids):
-    # type: (Optional[str], list) -> None
+def register_records_to_folder(folder_uid, record_uids):   # type: (str, list) -> None
     for record_uid in record_uids:
         ufr = {
             'record_uid': record_uid
@@ -244,8 +238,7 @@ def register_records_to_folder(folder_uid, record_uids):
         _USER_FOLDER_RECORDS.append(ufr)
 
 
-def register_shared_folder(shared_folder, records):
-    # type: (SharedFolder, dict) -> bytes
+def register_shared_folder(shared_folder, records):   # type: (SharedFolder, dict) -> bytes
 
     shared_folder_key = crypto.get_random_bytes(32)
     sf = {
@@ -279,8 +272,7 @@ def register_shared_folder(shared_folder, records):
     return shared_folder_key
 
 
-def register_team(team, key_type, sfs=None):
-    # type: (Team, int, dict) -> bytes
+def register_team(team, key_type, sfs=None):    # type: (EnterpriseTeam, int, dict) -> bytes
     team_key = crypto.get_random_bytes(32)
     encrypted_team_key = crypto.encrypt_aes_v1(team_key, _USER_DATA_KEY) if key_type == 1 else crypto.encrypt_rsa(team_key, _IMPORTED_PUBLIC_KEY)
     t = {
@@ -334,8 +326,7 @@ def generate_data():
     atta.key = crypto.get_random_bytes(32)
     atta.size = 1000
     r1.attachments = [atta]
-    r1.revision = 1
-    r1_key = register_record(r1, 1)
+    register_record(r1, 1)
 
     r2 = PasswordRecord()
     r2.record_uid = utils.base64_url_encode(crypto.get_random_bytes(16))
@@ -345,10 +336,9 @@ def generate_data():
     r2.login_url = 'https://keepersecurity.com/2'
     r2.set_field('field2', 'value2')
     r2.notes = 'note2'
-    r2.revision = 2
-    r2_key = register_record(r2, 2)
+    register_record(r2, 2)
 
-    register_records_to_folder(None, [r1.record_uid, r2.record_uid])
+    register_records_to_folder('', [r1.record_uid, r2.record_uid])
 
     r3 = PasswordRecord()
     r3.record_uid = utils.base64_url_encode(crypto.get_random_bytes(16))
@@ -356,8 +346,7 @@ def generate_data():
     r3.login = 'user3@keepersecurity.com'
     r3.password = 'password3'
     r3.login_url = 'https://keepersecurity.com/3'
-    r3.revision = 3
-    r3_key = register_record(r3)
+    register_record(r3)
 
     sf1 = SharedFolder()
     sf1.shared_folder_uid = utils.base64_url_encode(crypto.get_random_bytes(16))
@@ -367,12 +356,12 @@ def generate_data():
     sf1.default_can_share = False
     sf1.name = 'Shared Folder 1'
     sf1_key = register_shared_folder(sf1, {
-        r3.record_uid: r3_key
+        r3.record_uid: r3.record_key
     })
     register_records_to_folder(sf1.shared_folder_uid, [r3.record_uid])
     _USER_FOLDER_SHARED_FOLDER.append({'shared_folder_uid': sf1.shared_folder_uid})
 
-    t1 = Team()
+    t1 = EnterpriseTeam()
     t1.team_uid = utils.base64_url_encode(crypto.get_random_bytes(16))
     t1.name = 'Team 1'
     t1.restrict_edit = True

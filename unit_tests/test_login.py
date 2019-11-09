@@ -64,7 +64,7 @@ class TestLogin(TestCase):
     def test_login_success_2fa_one_time(self):
         TestLogin.has2fa = True
         auth = get_auth_context()
-        auth.ui.get_twofactor_code = mock.MagicMock(side_effect=[vault_env.one_time_token, KeyboardInterrupt()])
+        auth.ui.get_two_factor_code = mock.MagicMock(side_effect=[(vault_env.one_time_token, 'forever'), KeyboardInterrupt()])
         m = mock.MagicMock()
         auth.store_configuration = m
         config = auth.storage.get_configuration()
@@ -77,7 +77,7 @@ class TestLogin(TestCase):
     def test_login_2fa_cancel(self):
         TestLogin.has2fa = True
         auth = get_auth_context()
-        auth.ui.get_twofactor_code = mock.MagicMock(side_effect=[KeyboardInterrupt()])
+        auth.ui.get_two_factor_code = mock.MagicMock(side_effect=[KeyboardInterrupt()])
         config = auth.storage.get_configuration()
         user_config = config.get_user_configuration(config.last_username)
         with self.assertRaises(KeyboardInterrupt):
@@ -85,7 +85,7 @@ class TestLogin(TestCase):
 
     def test_login_failed(self):
         auth = get_auth_context()
-        auth.ui.get_twofactor_code = mock.MagicMock(side_effect=[KeyboardInterrupt()])
+        auth.ui.get_two_factor_code = mock.MagicMock(side_effect=[KeyboardInterrupt()])
         config = auth.storage.get_configuration()
         user_config = config.get_user_configuration(config.last_username)
         with self.assertRaises(KeeperApiError):

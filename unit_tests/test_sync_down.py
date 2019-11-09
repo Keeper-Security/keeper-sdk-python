@@ -1,4 +1,3 @@
-from typing import NoReturn
 from unittest import TestCase, mock
 
 from keepersdk.vault import Vault
@@ -34,7 +33,7 @@ class TestSyncDown(TestCase):
         vault = get_vault()
         len_before = len(vault.records)
 
-        records_to_delete = [x.record_uid for x in vault.records.values() if x.owner]
+        records_to_delete = [x.record_uid for x in vault.records.values() if x.owner and not x.shared]
 
         def sync_down_removed_records(rq):
             self.assertEqual(rq['command'], 'sync_down')

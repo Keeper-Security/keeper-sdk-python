@@ -8,25 +8,31 @@
 # Copyright 2019 Keeper Security Inc.
 # Contact: ops@keepersecurity.com
 #
-from typing import Optional
 
 import logging
 
-from . import APIRequest_pb2 as proto
+from .APIRequest_pb2 import LoginType, PreLoginRequest, PreLoginResponse
 
 from . import crypto, ui, utils
 from .endpoint import KeeperEndpoint
 from .errors import KeeperApiError, KeeperError
-from .configuration import (ConfigurationStorage, JsonConfiguration, Configuration,  UserConfiguration,
-                            ServerConfiguration)
+from .configuration import JsonConfiguration, UserConfiguration, ServerConfiguration
 
 
 class Auth:
-    def __init__(self, auth_ui=None, storage=None):
-        # type: (Optional[ui.AuthUI], Optional[ConfigurationStorage]) -> None
-        self.ui = auth_ui or ui.AuthUI()
+    def __init__(self, auth_ui, storage=None):
+        self.ui = auth_ui
         self.storage = storage or JsonConfiguration('config.json')
         self.endpoint = KeeperEndpoint()
+        self.data_key = None
+        self.client_key = None
+        self.private_key = None
+        self.is_enterprise_admin = False
+        self.session_token = None
+        self.username = None
+        self.encrypted_password = None
+        self.two_factor_token = None
+
         conf = self.storage.get_configuration()
         if conf.last_server:
             self.endpoint.server = conf.last_server
@@ -36,19 +42,11 @@ class Auth:
                 self.endpoint.server_key_id = server_conf.server_key_id
 
         self.auth_response = None
-        self.data_key = None
-        self.client_key = None
-        self.private_key = None
-        self.is_enterprise_admin = False
-        self.session_token = None
-        self.username = None
-        self.encrypted_password = None
-        self.twofactor_token = None
         self.enforcements = None
         self.settings = None
 
     @property
-    def is_authenticated(self):     # type: () -> bool
+    def is_authenticated(self):
         return True if self.session_token else False
 
     def logout(self):
@@ -60,61 +58,22 @@ class Auth:
         self.session_token = None
         self.username = None
         self.encrypted_password = None
-        self.twofactor_token = None
+        self.two_factor_token = None
         self.enforcements = None
         self.settings = None
 
-    def pre_login(self, username, two_factor_token=None):
-        # type: (str, Optional[bytes]) -> proto.PreLoginResponse
-        attempt = 0
-        while attempt < 3:
-            attempt += 1
-            rq = proto.PreLoginRequest()
-            rq.authRequest.clientVersion = self.endpoint.client_version
-            rq.authRequest.username = username.lower()
-            rq.authRequest.encryptedDeviceToken = self.endpoint.get_device_token()
-            rq.loginType = proto.LoginType.Value('NORMAL')
-            if two_factor_token:
-                rq.twoFactorToken = two_factor_token
-
-            rs = self.endpoint.execute_rest('authentication/pre_login', rq.SerializeToString())
-            if type(rs) == bytes:
-                pre_login_rs = proto.PreLoginResponse()
-                pre_login_rs.ParseFromString(rs)
-                return pre_login_rs
-
-            if type(rs) == dict:
-                if 'error' in rs and 'message' in rs:
-                    if rs['error'] == 'region_redirect':
-                        self.endpoint.encrypted_device_token = None
-                        self.endpoint.server = rs['region_host']
-                        config = self.storage.get_configuration()
-                        server_config = config.get_server_configuration(self.endpoint.server)
-                        if server_config:
-                            self.endpoint.encrypted_device_token = server_config.device_id
-                        logging.warning('Switching to keeper host: %s.', self.endpoint.server)
-                        continue
-                    if rs['error'] == 'bad_request':
-                        self.endpoint.encrypted_device_token = None
-                        logging.warning('Pre-Login error: %s', rs.get('additional_info'))
-                        continue
-
-                    raise KeeperApiError(rs['error'], rs['message'])
-
-        raise KeeperError('Cannot get user information')
-
     def login(self, username, password):
-        # type: (str, str) -> None
         if not username or not password:
             logging.error('invalid username or password')
 
         config = self.storage.get_configuration()
         user_conf = config.get_user_configuration(username)
 
-        auth_verifier = None   # type: Optional[str]
-        pre_login = None   # type: Optional[proto.PreLoginResponse]
+        auth_verifier = ''
+        pre_login = None   # type: PreLoginResponse
         mfa_token = user_conf.two_factor_token if user_conf is not None else None
         mfa_type = 'device_token'
+        mfa_duration = 30
 
         success = False
         while not success:
@@ -137,7 +96,7 @@ class Auth:
                 rq['2fa_token'] = mfa_token
                 rq['2fa_type'] = mfa_type or 'device_token'
                 if mfa_type == 'one_time':
-                    rq['device_token_expire_days'] = 30
+                    rq['device_token_expire_days'] = mfa_duration
 
             rs = self.endpoint.v2_execute(rq)
             if rs['result'] == 'fail' and rs['result_code'] == 'auth_failed':
@@ -173,7 +132,7 @@ class Auth:
 
             if rs['result'] == 'success':
                 self.encrypted_password = crypto.encrypt_aes_v2(password.encode('utf-8'), self.data_key)
-                self.twofactor_token = mfa_token
+                self.two_factor_token = mfa_token
                 self.auth_response = auth_verifier
                 self.is_enterprise_admin = rs.get('is_enterprise_admin') or False
                 self.store_configuration(config)
@@ -208,10 +167,12 @@ class Auth:
                         channel = ui.TwoFactorChannel.Authenticator
                     elif channel_code == 'two_factor_channel_duo':
                         channel = ui.TwoFactorChannel.DuoSecurity
-                    tfa_code = self.ui.get_twofactor_code(channel)
+                    tfa_code, expiration = self.ui.get_two_factor_code(channel)
                     if tfa_code:
                         mfa_token = tfa_code
                         mfa_type = 'one_time'
+                        mfa_duration = 9999 if expiration == ui.TwoFactorCodeDuration.Forever \
+                            else 30 if expiration == ui.TwoFactorCodeDuration.Every30Days else 0
                         continue
                 elif result_code == 'auth_expired':
                     logging.warning(rs['message'])
@@ -233,47 +194,7 @@ class Auth:
 
                 raise KeeperApiError(result_code, rs['message'])
 
-    def store_configuration(self, config):
-        # type: (Configuration) -> None
-
-        should_save_config = not config.last_username or not config.last_server
-        if not should_save_config:
-            should_save_config = config.last_username != UserConfiguration.adjust_name(self.username) or \
-                                 config.last_server != ServerConfiguration.adjust_name(self.endpoint.server)
-
-        user_conf = config.get_user_configuration(self.username)
-        should_save_user = not user_conf
-        if user_conf:
-            should_save_user = user_conf.two_factor_token != self.twofactor_token
-
-        server_conf = config.get_server_configuration(self.endpoint.server)
-        should_save_server = not server_conf
-        if server_conf:
-            should_save_server = server_conf.device_id != self.endpoint.encrypted_device_token or \
-                                 server_conf.server_key_id != self.endpoint.server_key_id
-
-        if should_save_config or should_save_user or should_save_server:
-            if should_save_config:
-                config.last_username = UserConfiguration.adjust_name(self.username)
-                config.last_server = ServerConfiguration.adjust_name(self.endpoint.server)
-
-            if should_save_user:
-                if not user_conf:
-                    user_conf = UserConfiguration(username=self.username)
-                user_conf.two_factor_token = self.twofactor_token
-                config.merge_user_configuration(user_conf)
-
-            if should_save_server:
-                if not server_conf:
-                    server_conf = ServerConfiguration(server=self.endpoint.server)
-                server_conf.device_id = self.endpoint.encrypted_device_token
-                server_conf.server_key_id = self.endpoint.server_key_id
-                config.merge_server_configuration(server_conf)
-
-            self.storage.put_configuration(config)
-
     def accept_account_transfer_consent(self, share_account_to):
-        # type: (list) -> None
         for role in share_account_to:
             public_key = crypto.load_public_key(utils.base64_url_decode(role['public_key']))
             transfer_key = crypto.encrypt_rsa(self.data_key, public_key)
@@ -285,7 +206,6 @@ class Auth:
             self.execute_auth_command(request)
 
     def change_master_password(self, iterations):
-        # type: (int) -> Optional[str]
         rules_intro = ""
         rules = []
         if self.settings:
@@ -325,7 +245,6 @@ class Auth:
         return password
 
     def execute_auth_command(self, command, throw_on_error=True):
-        # type: (dict, bool) -> dict
         command['session_token'] = self.session_token
         command['username'] = self.username.lower()
         if 'client_time' not in command:
@@ -346,6 +265,81 @@ class Auth:
                 raise KeeperApiError(response['result_code'], response['message'])
             return response
 
+    def pre_login(self, username, two_factor_token=None):
+        attempt = 0
+        while attempt < 3:
+            attempt += 1
+            rq = PreLoginRequest()
+            rq.authRequest.clientVersion = self.endpoint.client_version
+            rq.authRequest.username = username.lower()
+            rq.authRequest.encryptedDeviceToken = self.endpoint.get_device_token()
+            rq.loginType = LoginType.Value('NORMAL')
+            if two_factor_token:
+                rq.twoFactorToken = two_factor_token
+
+            rs = self.endpoint.execute_rest('authentication/pre_login', rq.SerializeToString())
+            if type(rs) == bytes:
+                pre_login_rs = PreLoginResponse()
+                pre_login_rs.ParseFromString(rs)
+                return pre_login_rs
+
+            if type(rs) == dict:
+                if 'error' in rs and 'message' in rs:
+                    if rs['error'] == 'region_redirect':
+                        self.endpoint.encrypted_device_token = None
+                        self.endpoint.server = rs['region_host']
+                        config = self.storage.get_configuration()
+                        server_config = config.get_server_configuration(self.endpoint.server)
+                        if server_config:
+                            self.endpoint.encrypted_device_token = server_config.device_id
+                        logging.warning('Switching to keeper host: %s.', self.endpoint.server)
+                        continue
+                    if rs['error'] == 'bad_request':
+                        self.endpoint.encrypted_device_token = None
+                        logging.warning('Pre-Login error: %s', rs.get('additional_info'))
+                        continue
+
+                    raise KeeperApiError(rs['error'], rs['message'])
+
+        raise KeeperError('Cannot get user information')
+
+    def store_configuration(self, config):
+        should_save_config = not config.last_username or not config.last_server
+        if not should_save_config:
+            should_save_config = config.last_username != UserConfiguration.adjust_name(self.username) or \
+                                 config.last_server != ServerConfiguration.adjust_name(self.endpoint.server)
+
+        user_conf = config.get_user_configuration(self.username)
+        should_save_user = not user_conf
+        if user_conf:
+            should_save_user = user_conf.two_factor_token != self.two_factor_token
+
+        server_conf = config.get_server_configuration(self.endpoint.server)
+        should_save_server = not server_conf
+        if server_conf:
+            should_save_server = server_conf.device_id != self.endpoint.encrypted_device_token or \
+                                 server_conf.server_key_id != self.endpoint.server_key_id
+
+        if should_save_config or should_save_user or should_save_server:
+            if should_save_config:
+                config.last_username = UserConfiguration.adjust_name(self.username)
+                config.last_server = ServerConfiguration.adjust_name(self.endpoint.server)
+
+            if should_save_user:
+                if not user_conf:
+                    user_conf = UserConfiguration(username=self.username)
+                user_conf.two_factor_token = self.two_factor_token
+                config.merge_user_configuration(user_conf)
+
+            if should_save_server:
+                if not server_conf:
+                    server_conf = ServerConfiguration(server=self.endpoint.server)
+                server_conf.device_id = self.endpoint.encrypted_device_token
+                server_conf.server_key_id = self.endpoint.server_key_id
+                config.merge_server_configuration(server_conf)
+
+            self.storage.put_configuration(config)
+
     def refresh_session_token(self):
         request = {
             'command': 'login',
@@ -353,8 +347,8 @@ class Auth:
             'auth_response': self.auth_response,
             'username': self.username.lower()
         }
-        if self.twofactor_token:
-            request['2fa_token'] = self.twofactor_token
+        if self.two_factor_token:
+            request['2fa_token'] = self.two_factor_token
             request['2fa_type'] = 'device_token'
 
         response = self.endpoint.v2_execute(request)

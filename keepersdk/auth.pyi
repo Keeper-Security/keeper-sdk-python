@@ -1,0 +1,33 @@
+from typing import Optional, Any, List, Dict
+
+from .ui import IAuthUI
+from .endpoint import KeeperEndpoint
+from .configuration import IConfigurationStorage, Configuration
+from .APIRequest_pb2 import PreLoginResponse
+
+class Auth:
+    ui: IAuthUI = ...
+    storage: IConfigurationStorage
+    endpoint: KeeperEndpoint
+    data_key: Optional[bytes]
+    client_key: Optional[bytes]
+    private_key: Optional[Any]
+    is_enterprise_admin: bool
+    session_token: Optional[str]
+    username: Optional[str]
+    encrypted_password: Optional[bytes]
+    two_factor_token: Optional[str]
+    is_authenticated: bool
+    auth_response: Optional[str]
+    enforcements: Optional[Dict[str, Any]]
+    settings: Optional[Dict[str, Any]]
+
+    def __init__(self, auth_ui: IAuthUI, storage: Optional[IConfigurationStorage] = ...) -> None: ...
+    def login(self, username: str, password: str) -> None: ...
+    def logout(self) -> None: ...
+    def execute_auth_command(self, command: dict, throw_on_error: bool = ...) -> dict: ...
+    def pre_login(self, username: str, two_factor_token: bool=...) -> PreLoginResponse: ...
+    def refresh_session_token(self) -> None: ...
+    def accept_account_transfer_consent(self, share_account_to: List[dict]) -> None: ...
+    def change_master_password(self, iterations: int) -> Optional[str]: ...
+    def store_configuration(self, config: Configuration) -> None: ...

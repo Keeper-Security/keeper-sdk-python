@@ -9,16 +9,15 @@
 # Contact: ops@keepersecurity.com
 #
 
-from .storage import KeeperStorage
 from .vault import Vault
-from .vault_types import PasswordRecord, SharedFolder, Team, Folder, CustomField, AttachmentFile
+from .vault_types import PasswordRecord, SharedFolder, EnterpriseTeam, Folder, CustomField, AttachmentFile
 from .errors import KeeperApiError, KeeperError
-from .ui import AuthUI
+from .ui import IAuthUI
 from .auth import Auth
 
 __author__ = 'Keeper Security Inc.'
 __license__ = 'MIT'
 __version__ = '0.9.0'
 
-__all__ = ('Vault', 'Auth', 'AuthUI', 'PasswordRecord', 'SharedFolder', 'Team', 'Folder',
+__all__ = ('Vault', 'Auth', 'IAuthUI', 'PasswordRecord', 'SharedFolder', 'EnterpriseTeam', 'Folder',
            'CustomField', 'AttachmentFile', 'KeeperApiError', 'KeeperError')
