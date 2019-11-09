@@ -171,6 +171,7 @@ _USER_FOLDER_RECORDS = []
 _USER_FOLDER_SHARED_FOLDER = []
 _TEAMS = []
 
+
 def get_sync_down_response():
     return {
         'result': 'success',

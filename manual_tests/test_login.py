@@ -61,7 +61,7 @@ class TestLogin(TestCase):
         self.assertIsNotNone(vault)
 
         record = None
-        for r in vault.records.values():
+        for r in vault.get_all_records():
             if r.owner:
                 record = r
                 break
@@ -69,4 +69,3 @@ class TestLogin(TestCase):
         record.notes += '\n' + str(datetime.datetime.now())
         vault.put_record(record)
         self.assertIsNotNone(record.record_uid)
-

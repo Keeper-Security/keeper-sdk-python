@@ -102,6 +102,7 @@ class TestLogin(TestCase):
         user_config = config.get_user_configuration(config.last_username)
 
         call_no = 0
+
         def return_auth_expired(rq):
             nonlocal call_no
             call_no += 1
@@ -195,7 +196,7 @@ class TestLogin(TestCase):
                     if method == 'one_time':
                         if token != vault_env.one_time_token:
                             return {
-                                'result' : 'fail',
+                                'result': 'fail',
                                 'result_code': 'invalid_totp',
                                 'channel': 'two_factor_channel_google'
                             }
@@ -203,13 +204,13 @@ class TestLogin(TestCase):
                     elif method == 'device_token':
                         if token != vault_env.device_token:
                             return {
-                                'result' : 'fail',
+                                'result': 'fail',
                                 'result_code': 'invalid_device_token',
                                 'channel': 'two_factor_channel_google'
                             }
                     else:
                         return {
-                            'result' : 'fail',
+                            'result': 'fail',
                             'result_code': 'need_totp',
                             'channel': 'two_factor_channel_google'
                         }
@@ -227,7 +228,7 @@ class TestLogin(TestCase):
                     include = request['include']
                     if 'keys' in include:
                         keys = {
-                            'encrypted_private_key':vault_env.encrypted_private_key
+                            'encrypted_private_key': vault_env.encrypted_private_key
                         }
                         if TestLogin.dataKeyAsEncParam:
                             keys['encryption_params'] = vault_env.encryption_params
@@ -243,14 +244,14 @@ class TestLogin(TestCase):
                 return rs
 
             return {
-                'result' : 'fail',
+                'result': 'fail',
                 'result_code': 'auth_failed',
                 'salt': utils.base64_url_encode(vault_env.salt),
                 'iterations': vault_env.iterations
             }
 
         return {
-            'result' : 'fail',
+            'result': 'fail',
             'result_code': 'Failed_to_find_user'
         }
 

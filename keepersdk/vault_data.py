@@ -50,6 +50,10 @@ class VaultData:
         for record in self.records.values():
             yield record
 
+    @property
+    def record_count(self):
+        return len(self.records)
+
     def get_shared_folder(self, shared_folder_uid):
         return self.shared_folders.get(shared_folder_uid) if shared_folder_uid else None
 
@@ -57,12 +61,20 @@ class VaultData:
         for shared_folder in self.shared_folders.values():
             yield shared_folder
 
+    @property
+    def shared_folder_count(self):
+        return len(self.shared_folders)
+
     def get_team(self, team_uid):
         return self.teams.get(team_uid) if team_uid else None
 
     def get_all_teams(self):
         for team in self.teams.values():
             yield team
+
+    @property
+    def team_count(self):
+        return len(self.teams)
 
     def get_folder(self, folder_uid):
         return self.folders.get(folder_uid) if folder_uid else None

@@ -12,7 +12,6 @@
 
 class KeeperError(Exception):
     def __init__(self, message):
-        # type: (str) -> None
         self.message = message
 
     def __str__(self):
@@ -21,7 +20,6 @@ class KeeperError(Exception):
 
 class KeeperApiError(KeeperError):
     def __init__(self, result_code, message):
-        # type: (str, str) -> None
         KeeperError.__init__(self, message)
         self.result_code = result_code
 
