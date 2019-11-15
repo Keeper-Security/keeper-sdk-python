@@ -14,6 +14,7 @@ class IAuth(Protocol):
     is_enterprise_admin: bool
     session_token: Optional[str]
     username: Optional[str]
+    is_authenticated: bool
 
     def login(self, username: str, password: str) -> None: ...
     def logout(self) -> None: ...

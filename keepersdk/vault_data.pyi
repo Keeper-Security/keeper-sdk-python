@@ -1,4 +1,4 @@
-from typing import Optional, Iterable, Set, Protocol
+from typing import Optional, Iterable, Protocol
 
 from .storage import IKeeperStorage
 from .vault_types import PasswordRecord, SharedFolder, EnterpriseTeam, Folder

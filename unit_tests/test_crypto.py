@@ -9,6 +9,14 @@ from keepersdk import crypto, utils
 
 
 class TestCrypto(TestCase):
+    def test_encrypt_aes_v1(self):
+        iv = utils.base64_url_decode('KvsOJmE4JNK1HwKSpkBeRw')
+        block = utils.base64_url_decode('6lf4FGVyhDRnRhJ91TrahjIW8lTqGA')
+        key = utils.base64_url_decode('pAZmcxEoV2chXsFQ6bzn7Lop8yO4F8ERIuS7XpFtr7Y')
+        enc = crypto.encrypt_aes_v1(block, key, iv)
+        encoded = utils.base64_url_encode(enc)
+        self.assertEqual(encoded, 'KvsOJmE4JNK1HwKSpkBeR5R9YDms86uOb3wjNvc4LbUnZhKQtDxWifgA99tH2ZuP')
+
     def test_key_derive_v1(self):
         password = 'q2rXmNBFeLwAEX55hVVTfg'
         salt = utils.base64_url_decode('Ozv5_XSBgw-XSrDosp8Y1A')

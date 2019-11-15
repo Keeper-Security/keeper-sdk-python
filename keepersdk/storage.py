@@ -1,6 +1,6 @@
-#  _  __
-# | |/ /___ ___ _ __  ___ _ _ ®
-# | ' </ -_) -_) '_ \/ -_) '_|
+#     _  __
+#   | |/ /___ ___ _ __  ___ _ _ ®
+#  | ' </ -_) -_) '_ \/ -_) '_|
 # |_|\_\___\___| .__/\___|_|
 #              |_|
 #
@@ -176,7 +176,7 @@ class IPredicateStorage(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def delete(self, link):
+    def delete_link(self, link):
         pass
 
     @abc.abstractmethod
@@ -198,15 +198,15 @@ class IPredicateStorage(abc.ABC):
     def delete_object(self, object_uid):
         links = [x for x in self.get_links_for_object(object_uid)]
         for link in links:
-            self.delete(link)
+            self.delete_link(link)
 
     def delete_subject(self, subject_uid):
         links = [x for x in self.get_links_for_subject(subject_uid)]
         for link in links:
-            self.delete(link)
+            self.delete_link(link)
 
-    def delete_link(self, subject_uid, object_uid):
-        self.delete(UidLink(subject_uid, object_uid))
+    def delete(self, subject_uid, object_uid):
+        self.delete_link(UidLink(subject_uid, object_uid))
 
 
 class IKeeperStorage(abc.ABC):
@@ -308,7 +308,7 @@ class InMemoryLinkStorage(IPredicateStorage):
             self._links[subject_uid] = {}
         self._links[subject_uid][object_uid] = data
 
-    def delete(self, link):
+    def delete_link(self, link):
         subject_uid = link.subject_uid()
         if subject_uid in self._links:
             object_uid = link.object_uid()
