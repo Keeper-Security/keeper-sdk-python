@@ -16,13 +16,13 @@ from .APIRequest_pb2 import LoginType, PreLoginRequest, PreLoginResponse
 from . import crypto, ui, utils
 from .endpoint import KeeperEndpoint
 from .errors import KeeperApiError, KeeperError
-from .configuration import JsonConfiguration, UserConfiguration, ServerConfiguration
+from .configuration import InMemoryConfiguration, UserConfiguration, ServerConfiguration
 
 
 class Auth:
     def __init__(self, auth_ui, storage=None):
         self.ui = auth_ui
-        self.storage = storage or JsonConfiguration('config.json')
+        self.storage = storage or InMemoryConfiguration()
         self.endpoint = KeeperEndpoint()
         self.data_key = None
         self.client_key = None

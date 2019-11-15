@@ -42,6 +42,9 @@ setup(name=PACKAGE_NAME,
                    'Topic :: Security'],
       keywords='keeper security password',
       packages=[PACKAGE_NAME],
+      package_data={
+          PACKAGE_NAME:  ["py.typed", '*.pyi']
+      },
       python_requires='>=3.4',
       install_requires=install_requires
       )

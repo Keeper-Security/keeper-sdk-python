@@ -47,16 +47,16 @@ class VaultSyncDown(VaultData):
         if 'removed_records' in response:
             for record_uid in response['removed_records']:
                 result.add_record(record_uid)
-                self.storage.record_keys.delete_link(record_uid, self.storage.personal_scope_uid)
-                record_links = [x for x in self.storage.folder_records.get_links_for_subject(record_uid)]
+                self.storage.record_keys.delete(record_uid, self.storage.personal_scope_uid)
+                record_links = [x for x in self.storage.folder_records.get_links_for_object(record_uid)]
                 for link in record_links:
                     if link.folder_uid == self.storage.personal_scope_uid:
-                        self.storage.folder_records.delete(link)
+                        self.storage.folder_records.delete_link(link)
                     else:
                         folder = self.storage.folders.get(link.folder_uid)
                         if folder:
                             if folder.folder_type == 'user_folder':
-                                self.storage.folder_records.delete(link)
+                                self.storage.folder_records.delete_link(link)
 
         if 'removed_teams' in response:
             for team_uid in response['removed_teams']:
@@ -80,14 +80,14 @@ class VaultSyncDown(VaultData):
                 for rec_link in rec_links:
                     result.add_record(rec_link.record_uid)
 
-                self.storage.shared_folder_keys.delete_link(shared_folder_uid, self.storage.personal_scope_uid)
+                self.storage.shared_folder_keys.delete(shared_folder_uid, self.storage.personal_scope_uid)
 
         if 'user_folders_removed' in response:
             for ufr in response['user_folders_removed']:
                 folder_uid = ufr['folder_uid']
                 links = [x for x in self.storage.folder_records.get_links_for_object(folder_uid)]
                 for link in links:
-                    self.storage.folder_records.delete(link)
+                    self.storage.folder_records.delete_link(link)
                 self.storage.folders.delete(folder_uid)
 
         if 'shared_folder_folder_removed' in response:
@@ -95,7 +95,7 @@ class VaultSyncDown(VaultData):
                 folder_uid = sffr['folder_uid'] if 'folder_uid' in sffr else sffr['shared_folder_uid']
                 links = [x for x in self.storage.folder_records.get_links_for_object(folder_uid)]
                 for link in links:
-                    self.storage.folder_records.delete(link)
+                    self.storage.folder_records.delete_link(link)
                 self.storage.folders.delete(folder_uid)
 
         if 'user_folder_shared_folders_removed' in response:
@@ -103,20 +103,20 @@ class VaultSyncDown(VaultData):
                 folder_uid = ufsfr['shared_folder_uid']
                 links = [x for x in self.storage.folder_records.get_links_for_object(folder_uid)]
                 for link in links:
-                    self.storage.folder_records.delete(link)
+                    self.storage.folder_records.delete_link(link)
                 self.storage.folders.delete(folder_uid)
 
         if 'user_folders_removed_records' in response:
             for ufrr in response['user_folders_removed_records']:
                 folder_uid = ufrr.get('folder_uid') or self.storage.personal_scope_uid
                 record_uid = ufrr['record_uid']
-                self.storage.folder_records.delete_link(record_uid, folder_uid)
+                self.storage.folder_records.delete(record_uid, folder_uid)
 
         if 'shared_folder_folder_records_removed' in response:
             for sfrrr in response['shared_folder_folder_records_removed']:
                 folder_uid = sfrrr['folder_uid'] if 'folder_uid' in sfrrr else sfrrr['shared_folder_uid']
                 record_uid = sfrrr['record_uid']
-                self.storage.folder_records.delete_link(record_uid, folder_uid)
+                self.storage.folder_records.delete(record_uid, folder_uid)
 
         if 'shared_folders' in response:
             for shared_folder in response['shared_folders']:
@@ -129,13 +129,13 @@ class VaultSyncDown(VaultData):
                     if 'records_removed' in shared_folder:
                         for record_uid in shared_folder['records_removed']:
                             result.add_record(record_uid)
-                            self.storage.record_keys.delete_link(record_uid, shared_folder_uid)
+                            self.storage.record_keys.delete(record_uid, shared_folder_uid)
                     if 'teams_removed' in shared_folder:
                         for team_uid in shared_folder['teams_removed']:
-                            self.storage.shared_folder_keys.delete_link(shared_folder_uid, team_uid)
+                            self.storage.shared_folder_keys.delete(shared_folder_uid, team_uid)
                     if 'users_removed' in shared_folder:
                         for username in shared_folder['users_removed']:
-                            self.storage.shared_folder_permissions.delete_link(shared_folder, username)
+                            self.storage.shared_folder_permissions.delete(shared_folder, username)
 
         if 'non_shared_data' in response:
             for nsd in response['non_shared_data']:
@@ -206,7 +206,7 @@ class VaultSyncDown(VaultData):
                 if 'removed_shared_folders' in team:
                     for shared_folder_uid in team['removed_shared_folders']:
                         result.add_shared_folder(shared_folder_uid)
-                        self.storage.shared_folder_keys.delete_link(shared_folder_uid, team_uid)
+                        self.storage.shared_folder_keys.delete(shared_folder_uid, team_uid)
                 try:
                     key_type = team['team_key_type']
                     team_key = utils.base64_url_decode(team['team_key'])
@@ -271,7 +271,7 @@ class VaultSyncDown(VaultData):
                         elif key_type == 2:
                             shared_folder_key = crypto.decrypt_rsa(shared_folder_key, self.auth.private_key)
                         else:
-                            raise KeeperError('Shared Folder UID %s: wrong key type %s'.format(shared_folder_uid, key_type))
+                            raise KeeperError('Shared Folder UID (0): wrong key type {1}}'.format(shared_folder_uid, key_type))
                         shared_folder_key = crypto.encrypt_aes_v1(shared_folder_key, self.client_key)
                         s_sfkey = StorageSharedFolderKey()
                         s_sfkey.shared_folder_uid = shared_folder_uid

@@ -7,6 +7,12 @@ class CustomField:
     value: str
     type: str
 
+class ExtraField:
+    id: str
+    field_type: str
+    field_title: str
+    custom: Dict[str, Any]
+
 class AttachmentFileThumb:
     id: str
     type: str
@@ -31,6 +37,7 @@ class PasswordRecord:
     notes: str
     custom: List[CustomField]
     attachments: List[AttachmentFile]
+    extra_fields: List[ExtraField]
     owner: bool
     shared: bool
     record_key: Optional[bytes]
@@ -38,6 +45,7 @@ class PasswordRecord:
     def get_field(self, name: str) -> Optional[CustomField]: ...
     def set_field(self, name: str, value: str) -> CustomField: ...
     def remove_field(self, name: str) -> None: ...
+    def get_extra(self, type: str) -> Optional[ExtraField]: ...
     @staticmethod
     def load(store_record: StorageRecord, record_key: bytes) -> PasswordRecord: ...
     @staticmethod

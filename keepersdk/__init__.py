@@ -14,10 +14,12 @@ from .vault_types import PasswordRecord, SharedFolder, EnterpriseTeam, Folder, C
 from .errors import KeeperApiError, KeeperError
 from .ui import IAuthUI
 from .auth import Auth
+from .configuration import JsonConfiguration
 
 __author__ = 'Keeper Security Inc.'
 __license__ = 'MIT'
 __version__ = '0.9.0'
 
-__all__ = ('Vault', 'Auth', 'IAuthUI', 'PasswordRecord', 'SharedFolder', 'EnterpriseTeam', 'Folder',
+__all__ = ('Vault', 'Auth', 'IAuthUI', 'JsonConfiguration',
+           'PasswordRecord', 'SharedFolder', 'EnterpriseTeam', 'Folder',
            'CustomField', 'AttachmentFile', 'KeeperApiError', 'KeeperError')

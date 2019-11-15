@@ -12,7 +12,7 @@ from keepersdk import crypto, utils, ui
 from keepersdk.vault import Vault
 from keepersdk.auth import Auth
 from keepersdk.vault_types import PasswordRecord, SharedFolder, EnterpriseTeam, AttachmentFile
-from keepersdk.configuration import Configuration, ServerConfiguration, UserConfiguration, InMemoryConfiguration, IConfigurationStorage
+from keepersdk.configuration import Configuration, ServerConfiguration, UserConfiguration, InMemoryConfiguration
 
 _USER_NAME = 'unit.test@keepersecurity.com'
 _USER_PASSWORD = utils.base64_url_encode(crypto.get_random_bytes(8))
@@ -123,7 +123,7 @@ class VaultEnvironment:
         self.revision = _REVISION
 
 
-def get_configuration_storage():   # type: () -> IConfigurationStorage
+def get_configuration_storage():
     server_conf = ServerConfiguration(server='test.keepersecurity.com', device_id=_DEVICE_ID, server_key_id=1)
     user_conf = UserConfiguration(username=_USER_NAME, password=_USER_PASSWORD)
     config = Configuration()

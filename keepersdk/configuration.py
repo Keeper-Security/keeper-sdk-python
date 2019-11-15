@@ -1,6 +1,6 @@
-#  _  __
-# | |/ /___ ___ _ __  ___ _ _ ®
-# | ' </ -_) -_) '_ \/ -_) '_|
+#    _  __
+#   | |/ /___ ___ _ __  ___ _ _ ®
+#  | ' </ -_) -_) '_ \/ -_) '_|
 # |_|\_\___\___| .__/\___|_|
 #              |_|
 #
@@ -8,7 +8,7 @@
 # Copyright 2019 Keeper Security Inc.
 # Contact: ops@keepersecurity.com
 #
-import abc
+
 import copy
 import logging
 import json
@@ -21,8 +21,8 @@ from urllib.parse import urlparse
 
 
 class UserConfiguration:
-    def __init__(self, username=None, password=None, two_factor_token=None):
-        self.username = username or ''
+    def __init__(self, username, password=None, two_factor_token=None):
+        self.username = UserConfiguration.adjust_name(username or '')
         self.password = password
         self.two_factor_token = two_factor_token
 
@@ -32,8 +32,8 @@ class UserConfiguration:
 
 
 class ServerConfiguration:
-    def __init__(self, server=None, device_id=None, server_key_id=1):
-        self.server = server
+    def __init__(self, server, device_id=None, server_key_id=1):
+        self.server = ServerConfiguration.adjust_name(server)
         self.device_id = device_id
         self.server_key_id = server_key_id
 
@@ -67,11 +67,8 @@ class Configuration:
         if users:
             user = users[0]
         else:
-            user = UserConfiguration()
+            user = UserConfiguration(username)
             self.users.append(user)
-        user.username = username
-        if user.password:    # don't store password unless it's already stored
-            user.password = user_config.password
         user.two_factor_token = user_config.two_factor_token
 
     def merge_server_configuration(self, server_config):
@@ -80,9 +77,8 @@ class Configuration:
         if servers:
             server = servers[0]
         else:
-            server = ServerConfiguration()
+            server = ServerConfiguration(host_name)
             self.servers.append(server)
-        server.server = host_name
         server.device_id = server_config.device_id
         server.server_key_id = server_config.server_key_id
 
@@ -109,17 +105,7 @@ class Configuration:
         return None
 
 
-class IConfigurationStorage(abc.ABC):
-    @abc.abstractmethod
-    def get_configuration(self):
-        pass
-
-    @abc.abstractmethod
-    def put_configuration(self, configuration):
-        pass
-
-
-class InMemoryConfiguration(IConfigurationStorage):
+class InMemoryConfiguration:
     def __init__(self, configuration=None):
         self._configuration = configuration if configuration else Configuration()
 
@@ -132,7 +118,7 @@ class InMemoryConfiguration(IConfigurationStorage):
             self._configuration.merge_configuration(configuration)
 
 
-class JsonConfiguration(IConfigurationStorage):
+class JsonConfiguration:
     def __init__(self, filename):
         if os.path.isfile(filename):
             self._file_path = os.path.abspath(filename)
@@ -143,37 +129,51 @@ class JsonConfiguration(IConfigurationStorage):
             self._file_path = os.path.join(keeper_dir, filename)
 
     @staticmethod
-    def config_to_json(config):
-        json_config = {}
+    def config_to_json(config, json_config):
         if config.last_username:
             json_config['last_login'] = config.last_username
         if config.last_server:
             json_config['last_server'] = config.last_server
         if config.users:
-            json_config['users'] = []
+            cache = {}
+            if 'users' in json_config and type(json_config['users']) is list:
+                for user in json_config['users']:
+                    if type(user) is dict and 'user' in user:
+                        cache[UserConfiguration.adjust_name(user['user'])] = user
+            else:
+                json_config['users'] = []
+
             for user in config.users:
                 if user.username:
-                    json_user = {
-                        'user': user.username
-                    }
-                    json_config['users'].append(json_user)
-                    if user.password:
-                        json_user['password'] = user.password
-                    if user.two_factor_token:
-                        json_user['mfa_token'] = user.two_factor_token
+                    username = user.username
+                    json_user = cache.get(UserConfiguration.adjust_name(username))
+                    if not json_user:
+                        json_user = {
+                            'user': username
+                        }
+                        cache[username] = json_user
+                        json_config['users'].append(json_user)
+                    json_user['mfa_token'] = user.two_factor_token
         if config.servers:
-            json_config['servers'] = []
+            cache = {}
+            if 'servers' in json_config and type(json_config['servers']) is list:
+                for server in json_config['servers']:
+                    if type(server) is dict and 'server' in server:
+                        cache[ServerConfiguration.adjust_name(server['server'])] = server
             for server in config.servers:
                 if server.server:
-                    json_server = {
-                        'server': server.server
-                    }
-                    json_config['servers'].append(json_server)
+                    host_name = ServerConfiguration.adjust_name(server.server)
+                    json_server = cache.get(host_name)
+                    if json_server is None:
+                        json_server = {
+                            'server': host_name
+                        }
+                        cache[host_name] = json_server
+                        json_config['servers'].append(json_server)
                     if server.device_id:
                         json_server['device_id'] = base64_url_encode(server.device_id)
                     if server.server_key_id:
                         json_server['server_key_id'] = server.server_key_id
-        return json_config
 
     @staticmethod
     def json_to_config(json_config):
@@ -207,12 +207,18 @@ class JsonConfiguration(IConfigurationStorage):
         return Configuration()
 
     def put_configuration(self, configuration):
-        conf = self.get_configuration()
-        conf.merge_configuration(configuration)
-        json_config = self.config_to_json(conf)
+        stored_config = {}
+        try:
+            if os.path.isfile(self._file_path):
+                with open(self._file_path, 'r') as fp:
+                    stored_config = json.load(fp)
+        except Exception as e:
+            logging.error('Load JSON configuration error: %s', e)
+
+        self.config_to_json(configuration, stored_config)
         try:
             with open(self._file_path, 'w') as fp:
-                json.dump(json_config, fp, ensure_ascii=False, indent=2)
+                json.dump(stored_config, fp, ensure_ascii=False, indent=2)
                 logging.debug('Stored JSON configuration')
         except Exception as e:
             logging.error('JSON configuration store error: %s', e)

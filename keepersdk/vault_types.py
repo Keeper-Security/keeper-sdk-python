@@ -22,6 +22,14 @@ class CustomField:
         self.type = ''
 
 
+class ExtraField:
+    def __init__(self):
+        self.id = ''
+        self.field_type = ''
+        self.field_title = ''
+        self.custom = {}
+
+
 class AttachmentFileThumb:
     def __init__(self):
         self.id = ''
@@ -58,6 +66,7 @@ class PasswordRecord:
         self.notes = ''
         self.custom = []
         self.attachments = []
+        self.extra_fields = []
         self.owner = False
         self.shared = False
         self.record_key = None
@@ -79,6 +88,11 @@ class PasswordRecord:
 
     def remove_field(self, name):
         self.custom = [x for x in self.custom if x.name != name]
+
+    def get_extra(self, field_type):
+        for ef in self.extra_fields:
+            if ef.field_type == field_type:
+                return ef
 
     @staticmethod
     def load(store_record, record_key):
@@ -127,6 +141,18 @@ class PasswordRecord:
                                 thumb.type = thumb_dict.get('type') or ''
                                 file.thumbnails.append(thumb)
                         record.attachments.append(file)
+            if 'fields' in extra:
+                for field_dict in extra['fields']:  # type: dict
+                    field = ExtraField()
+                    for k, v in field_dict.items():
+                        if k == 'field_type':
+                            field.field_type = v
+                        elif k == 'id':
+                            field.id = v
+                        elif k == 'field_title':
+                            field.field_title = v
+                        else:
+                            field.custom[k] = v
 
         return record
 
@@ -150,12 +176,9 @@ class PasswordRecord:
             })
         result['data'] = data
 
+        extra = extra or {}
+        udata = udata or {}
         if record.attachments:
-            extra = extra or {}
-            udata = udata or {}
-            result['extra'] = extra
-            result['udata'] = udata
-
             file_ids = []
             udata['file_ids'] = file_ids
             files = []
@@ -185,6 +208,22 @@ class PasswordRecord:
                         attachment['thumbnails'].append(th)
                         file_ids.append(file_ids)
                 files.append(attachment)
+
+        if record.extra_fields:
+            fields = []
+            extra['fields'] = fields
+            for field in record.extra_fields:
+                field_dict = {
+                    'field_type': field.field_title,
+                    'id': field.id,
+                    'field_title': field.field_title
+                }
+                if field.custom:
+                    field_dict.update(field.custom)
+                fields.append(field_dict)
+
+        result['extra'] = extra
+        result['udata'] = udata
 
         return result
 
