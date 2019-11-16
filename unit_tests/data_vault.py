@@ -12,7 +12,7 @@ from keepersdk import crypto, utils, ui
 from keepersdk.vault import Vault
 from keepersdk.auth import Auth
 from keepersdk.vault_types import PasswordRecord, SharedFolder, EnterpriseTeam, AttachmentFile
-from keepersdk.configuration import Configuration, ServerConfiguration, UserConfiguration, InMemoryConfiguration
+from keepersdk.configuration import Configuration, ServerConfiguration, UserConfiguration, InMemoryConfigurationStorage
 
 _USER_NAME = 'unit.test@keepersecurity.com'
 _USER_PASSWORD = utils.base64_url_encode(crypto.get_random_bytes(8))
@@ -131,7 +131,7 @@ def get_configuration_storage():
     config.last_username = user_conf.username
     config.users.append(user_conf)
     config.servers.append(server_conf)
-    return InMemoryConfiguration(config)
+    return InMemoryConfigurationStorage(config)
 
 
 def get_auth_context():   # type: () -> Auth
