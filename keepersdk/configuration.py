@@ -105,7 +105,7 @@ class Configuration:
         return None
 
 
-class InMemoryConfiguration:
+class InMemoryConfigurationStorage:
     def __init__(self, configuration=None):
         self._configuration = configuration if configuration else Configuration()
 
@@ -118,7 +118,7 @@ class InMemoryConfiguration:
             self._configuration.merge_configuration(configuration)
 
 
-class JsonConfiguration:
+class JsonConfigurationStorage:
     def __init__(self, filename):
         if os.path.isfile(filename):
             self._file_path = os.path.abspath(filename)

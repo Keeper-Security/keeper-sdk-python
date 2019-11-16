@@ -49,7 +49,7 @@ class TestConfig(TestCase):
         config_file = os.path.join(config_file, 'empty.json')
         if os.path.isfile(config_file):
             os.remove(config_file)
-        storage = configuration.JsonConfiguration(config_file)
+        storage = configuration.JsonConfigurationStorage(config_file)
         self.assertIsNotNone(storage)
         config = storage.get_configuration()
         self.assertIsNotNone(config)
@@ -64,7 +64,7 @@ class TestConfig(TestCase):
         config.merge_server_configuration(server_conf)
         storage.put_configuration(config)
 
-        storage = configuration.JsonConfiguration(config_file)
+        storage = configuration.JsonConfigurationStorage(config_file)
         config = storage.get_configuration()
         self.assertEqual(config.last_server, _KEEPER_HOST)
         self.assertEqual(config.last_username, _KEEPER_USER)
