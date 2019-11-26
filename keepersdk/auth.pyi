@@ -3,6 +3,7 @@ from typing import Optional, Any, Protocol
 from .ui import IAuthUI
 from .endpoint import KeeperEndpoint
 from .configuration import IConfigurationStorage
+from .APIRequest_pb2 import NewUserMinimumParams
 
 class IAuth(Protocol):
     ui: IAuthUI
