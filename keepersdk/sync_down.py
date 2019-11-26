@@ -50,10 +50,11 @@ class VaultSyncDown(VaultData):
                 self.storage.record_keys.delete(record_uid, self.storage.personal_scope_uid)
                 record_links = [x for x in self.storage.folder_records.get_links_for_object(record_uid)]
                 for link in record_links:
-                    if link.folder_uid == self.storage.personal_scope_uid:
+                    folder_uid = link.folder_uid
+                    if folder_uid == self.storage.personal_scope_uid:
                         self.storage.folder_records.delete_link(link)
                     else:
-                        folder = self.storage.folders.get(link.folder_uid)
+                        folder = self.storage.folders.get(folder_uid)
                         if folder:
                             if folder.folder_type == 'user_folder':
                                 self.storage.folder_records.delete_link(link)
@@ -69,8 +70,8 @@ class VaultSyncDown(VaultData):
                         result.add_record(record_uid)
 
                     result.add_shared_folder(shared_folder_uid)
-                self.storage.teams.delete(team_uid)
                 self.storage.shared_folder_keys.delete_object(team_uid)
+                self.storage.teams.delete(team_uid)
 
         if 'removed_shared_folders' in response:
             for shared_folder_uid in response['removed_shared_folders']:
@@ -85,32 +86,26 @@ class VaultSyncDown(VaultData):
         if 'user_folders_removed' in response:
             for ufr in response['user_folders_removed']:
                 folder_uid = ufr['folder_uid']
-                links = [x for x in self.storage.folder_records.get_links_for_object(folder_uid)]
-                for link in links:
-                    self.storage.folder_records.delete_link(link)
+                self.storage.folder_records.delete_subject(folder_uid)
                 self.storage.folders.delete(folder_uid)
 
         if 'shared_folder_folder_removed' in response:
             for sffr in response['shared_folder_folder_removed']:
                 folder_uid = sffr['folder_uid'] if 'folder_uid' in sffr else sffr['shared_folder_uid']
-                links = [x for x in self.storage.folder_records.get_links_for_object(folder_uid)]
-                for link in links:
-                    self.storage.folder_records.delete_link(link)
+                self.storage.folder_records.delete_subject(folder_uid)
                 self.storage.folders.delete(folder_uid)
 
         if 'user_folder_shared_folders_removed' in response:
             for ufsfr in response['user_folder_shared_folders_removed']:
                 folder_uid = ufsfr['shared_folder_uid']
-                links = [x for x in self.storage.folder_records.get_links_for_object(folder_uid)]
-                for link in links:
-                    self.storage.folder_records.delete_link(link)
+                self.storage.folder_records.delete_subject(folder_uid)
                 self.storage.folders.delete(folder_uid)
 
         if 'user_folders_removed_records' in response:
             for ufrr in response['user_folders_removed_records']:
                 folder_uid = ufrr.get('folder_uid') or self.storage.personal_scope_uid
                 record_uid = ufrr['record_uid']
-                self.storage.folder_records.delete(record_uid, folder_uid)
+                self.storage.folder_records.delete(folder_uid, record_uid)
 
         if 'shared_folder_folder_records_removed' in response:
             for sfrrr in response['shared_folder_folder_records_removed']:
@@ -133,6 +128,7 @@ class VaultSyncDown(VaultData):
                     if 'teams_removed' in shared_folder:
                         for team_uid in shared_folder['teams_removed']:
                             self.storage.shared_folder_keys.delete(shared_folder_uid, team_uid)
+                            self.storage.shared_folder_permissions.delete(shared_folder, team_uid)
                     if 'users_removed' in shared_folder:
                         for username in shared_folder['users_removed']:
                             self.storage.shared_folder_permissions.delete(shared_folder, username)

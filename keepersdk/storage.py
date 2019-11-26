@@ -1,6 +1,6 @@
-#     _  __
-#   | |/ /___ ___ _ __  ___ _ _ ®
-#  | ' </ -_) -_) '_ \/ -_) '_|
+#  _  __
+# | |/ /___ ___ _ __  ___ _ _ ®
+# | ' </ -_) -_) '_ \/ -_) '_|
 # |_|\_\___\___| .__/\___|_|
 #              |_|
 #
@@ -154,7 +154,7 @@ class IEntityStorage(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def put(self, uid, data):
+    def put(self, data):
         pass
 
     @abc.abstractmethod

@@ -11,14 +11,14 @@
 import json
 import logging
 import locale
-from typing import Union
 
 from requests import post
 from urllib.parse import urlunparse
 
-from . import crypto, utils, APIRequest_pb2 as proto
+from . import crypto, utils
 from .errors import KeeperApiError
-
+from .APIRequest_pb2 import (NewUserMinimumParams, ApiRequestPayload, ApiRequest, DeviceRequest,
+                             DeviceResponse, DeviceStatus, AuthRequest)
 
 DEFAULT_KEEPER_SERVER = 'keepersecurity.com'
 
@@ -28,15 +28,14 @@ class KeeperEndpoint:
         self.client_version = CLIENT_VERSION
         self.device_name = DEFAULT_DEVICE_NAME
         self.locale = resolve_locale()
-        self.server_key_id = 1
         self.transmission_key = None
         self.server = DEFAULT_KEEPER_SERVER
         self.server_key_id = 1
         self.encrypted_device_token = None
 
-    def execute_rest(self, endpoint, payload):  # type: (str, bytes) -> Union[bytes,  dict]
+    def execute_rest(self, endpoint, payload):
 
-        api_payload = proto.ApiRequestPayload()
+        api_payload = ApiRequestPayload()
         api_payload.payload = payload
 
         run_request = True
@@ -50,7 +49,7 @@ class KeeperEndpoint:
             server_public_key = SERVER_PUBLIC_KEYS[self.server_key_id]
             encrypted_transmission_key = crypto.encrypt_rsa(self.transmission_key, server_public_key)
 
-            api_request = proto.ApiRequest()
+            api_request = ApiRequest()
             api_request.encryptedTransmissionKey = encrypted_transmission_key
             api_request.publicKeyId = self.server_key_id
             api_request.locale = self.locale
@@ -89,37 +88,36 @@ class KeeperEndpoint:
 
                 return failure
 
-    def get_device_token(self):  # type: () -> str
+    def get_device_token(self):
         if not self.encrypted_device_token:
-            rq = proto.DeviceRequest()
+            rq = DeviceRequest()
             rq.clientVersion = self.client_version
             rq.deviceName = self.device_name
             rs = self.execute_rest('authentication/get_device_token', rq.SerializeToString())
             if type(rs) == bytes:
-                device_rs = proto.DeviceResponse()
+                device_rs = DeviceResponse()
                 device_rs.ParseFromString(rs)
-                if proto.DeviceStatus.Name(device_rs.status) == 'OK':
+                if DeviceStatus.Name(device_rs.status) == 'OK':
                     self.encrypted_device_token = device_rs.encryptedDeviceToken
             elif type(rs) == dict:
                 raise KeeperApiError(rs['error'], rs['message'])
         return self.encrypted_device_token
 
-    def get_new_user_params(self, username):   # type: (str) -> proto.NewUserMinimumParams
-        rq = proto.AuthRequest()
+    def get_new_user_params(self, username):
+        rq = AuthRequest()
         rq.clientVersion = CLIENT_VERSION
         rq.username = username.lower()
         rq.encryptedDeviceToken = self.get_device_token()
 
         rs = self.execute_rest('authentication/get_new_user_params', rq.SerializeToString())
         if type(rs) == bytes:
-            pre_login_rs = proto.NewUserMinimumParams()
+            pre_login_rs = NewUserMinimumParams()
             pre_login_rs.ParseFromString(rs)
             return pre_login_rs
 
-        if type(rs) == dict:
-            raise KeeperApiError(rs['error'], rs['message'])
+        raise KeeperApiError(rs['error'], rs['message'])
 
-    def v2_execute(self, rq):             # type: (dict) -> dict
+    def v2_execute(self, rq):
         if 'client_version' not in rq:
             rq['client_version'] = self.client_version
         logging.debug('>>> Request JSON: [%s]', json.dumps(rq, sort_keys=True, indent=4))
