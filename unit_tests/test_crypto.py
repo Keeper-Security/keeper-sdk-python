@@ -60,7 +60,6 @@ class TestCrypto(TestCase):
                       '_K6HoezU-Evb6e3q31vskzLMqNar84-5M8fRASsveiIVtNpnh8NemUf_pKfA'
         crypto.load_private_key(utils.base64_url_decode(private_key))
 
-
     def test_aesgcm_encryption(self):
         key = utils.base64_url_decode('c-EeCGlAO7F9QoJThlFBrhSCLYMe1H6GtKP-rezDnik')
         nonce = utils.base64_url_decode('Nt9_Y37C_43eRCRQ')

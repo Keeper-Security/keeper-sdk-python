@@ -34,12 +34,12 @@ class TestLogin(TestCase):
         user_conf = config.get_user_configuration(config.last_username)
         if user_conf:
             keeper_auth.login(user_conf.username, user_conf.password)
-        self.assertIsNotNone(keeper_auth.session_token)
+        self.assertIsNotNone(keeper_auth.auth_context.session_token)
         rq = {
             "command": "account_summary",
             "include": ["client_key"]
         }
-        keeper_auth.session_token += '1'
+        keeper_auth.auth_context.session_token += '1'
         rs = keeper_auth.execute_auth_command(rq)
         self.assertEqual(rs["result"], "success")
 
@@ -54,7 +54,7 @@ class TestLogin(TestCase):
         user_conf = config.get_user_configuration(config.last_username)
         if user_conf:
             keeper_auth.login(user_conf.username, user_conf.password)
-        self.assertIsNotNone(keeper_auth.session_token)
+        self.assertIsNotNone(keeper_auth.auth_context.session_token)
 
         vault = Vault(keeper_auth)
         vault.sync_down()

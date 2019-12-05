@@ -1,21 +1,29 @@
-from typing import Optional, Any, Protocol
+from typing import Optional, Protocol
 
-from .ui import IAuthUI
-from .endpoint import KeeperEndpoint
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+
 from .configuration import IConfigurationStorage
-from .APIRequest_pb2 import NewUserMinimumParams
+from .endpoint import KeeperEndpoint
+from .ui import IAuthUI
+
+
+class AuthContext:
+    username: str
+    data_key: Optional[bytes]
+    client_key: Optional[bytes]
+    private_key: Optional[RSAPrivateKey]
+    is_enterprise_admin: bool
+    session_token: str
+    two_factor_token: str
+    enforcements: Optional[dict]
+    settings: Optional[dict]
 
 class IAuth(Protocol):
     ui: IAuthUI
     storage: IConfigurationStorage
     endpoint: KeeperEndpoint
-    data_key: Optional[bytes]
-    client_key: Optional[bytes]
-    private_key: Optional[Any]
-    is_enterprise_admin: bool
-    session_token: Optional[str]
-    username: Optional[str]
     is_authenticated: bool
+    auth_context: Optional[AuthContext]
 
     def login(self, username: str, password: str) -> None: ...
     def logout(self) -> None: ...

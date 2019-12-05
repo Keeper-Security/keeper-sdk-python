@@ -3,9 +3,9 @@ from unittest import TestCase, mock
 from keepersdk.APIRequest_pb2 import PreLoginResponse, DeviceStatus
 from keepersdk.errors import KeeperApiError
 from keepersdk import utils, crypto
+from keepersdk.configuration import Configuration
 
 from data_vault import VaultEnvironment, get_connected_auth_context, get_auth_context
-
 vault_env = VaultEnvironment()
 
 
@@ -31,15 +31,15 @@ class TestLogin(TestCase):
         config = auth.storage.get_configuration()
         user_config = config.get_user_configuration(config.last_username)
         auth.login(user_config.username, user_config.password)
-        self.assertEqual(auth.session_token, vault_env.session_token)
-        self.assertEqual(auth.data_key, vault_env.data_key)
+        self.assertEqual(auth.auth_context.session_token, vault_env.session_token)
+        self.assertEqual(auth.auth_context.data_key, vault_env.data_key)
 
     def test_refresh_session_token(self):
         auth = get_connected_auth_context()
-        auth.session_token = 'BadSessionToken'
+        auth.auth_context.session_token = 'BadSessionToken'
         auth.refresh_session_token()
-        self.assertEqual(auth.session_token, vault_env.session_token)
-        self.assertEqual(auth.data_key, vault_env.data_key)
+        self.assertEqual(auth.auth_context.session_token, vault_env.session_token)
+        self.assertEqual(auth.auth_context.data_key, vault_env.data_key)
 
     def test_login_success_params(self):
         TestLogin.dataKeyAsEncParam = True
@@ -47,19 +47,22 @@ class TestLogin(TestCase):
         config = auth.storage.get_configuration()
         user_config = config.get_user_configuration(config.last_username)
         auth.login(user_config.username, user_config.password)
-        self.assertEqual(auth.data_key, vault_env.data_key)
-        self.assertEqual(auth.session_token, vault_env.session_token)
+        self.assertEqual(auth.auth_context.data_key, vault_env.data_key)
+        self.assertEqual(auth.auth_context.session_token, vault_env.session_token)
 
     def test_login_success_2fa_device_token(self):
         TestLogin.has2fa = True
         auth = get_auth_context()
+
         config = auth.storage.get_configuration()
         user_config = config.get_user_configuration(config.last_username)
         user_config.two_factor_token = vault_env.device_token
         config.merge_user_configuration(user_config)
+        auth.storage.put_configuration(config)
+
         auth.login(user_config.username, user_config.password)
-        self.assertEqual(auth.session_token, vault_env.session_token)
-        self.assertEqual(auth.data_key, vault_env.data_key)
+        self.assertEqual(auth.auth_context.session_token, vault_env.session_token)
+        self.assertEqual(auth.auth_context.data_key, vault_env.data_key)
 
     def test_login_success_2fa_one_time(self):
         TestLogin.has2fa = True
@@ -71,8 +74,8 @@ class TestLogin(TestCase):
         user_config = config.get_user_configuration(config.last_username)
         auth.login(user_config.username, user_config.password)
         m.assert_called()
-        self.assertEqual(auth.session_token, vault_env.session_token)
-        self.assertEqual(auth.data_key, vault_env.data_key)
+        self.assertEqual(auth.auth_context.session_token, vault_env.session_token)
+        self.assertEqual(auth.auth_context.data_key, vault_env.data_key)
 
     def test_login_2fa_cancel(self):
         TestLogin.has2fa = True
@@ -125,8 +128,8 @@ class TestLogin(TestCase):
             auth.login(user_config.username, user_config.password)
             m_passwd.assert_called()
 
-        self.assertEqual(auth.session_token, vault_env.session_token)
-        self.assertEqual(auth.data_key, vault_env.data_key)
+        self.assertEqual(auth.auth_context.session_token, vault_env.session_token)
+        self.assertEqual(auth.auth_context.data_key, vault_env.data_key)
 
     def test_account_transfer_expired(self):
         auth = get_auth_context()
@@ -165,8 +168,8 @@ class TestLogin(TestCase):
             auth.login(user_config.username, user_config.password)
         m_transfer.assert_called()
 
-        self.assertEqual(auth.session_token, vault_env.session_token)
-        self.assertEqual(auth.data_key, vault_env.data_key)
+        self.assertEqual(auth.auth_context.session_token, vault_env.session_token)
+        self.assertEqual(auth.auth_context.data_key, vault_env.data_key)
 
     @staticmethod
     def process_pre_login(username):

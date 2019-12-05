@@ -152,7 +152,7 @@ class Vault(VaultSyncDown):
         folder = self.get_folder(folder_uid)
 
         record_key = utils.generate_aes_key()
-        encrypted_record_key = crypto.encrypt_aes_v1(record_key, self.auth.data_key)
+        encrypted_record_key = crypto.encrypt_aes_v1(record_key, self.auth.auth_context.data_key)
         rq = {
             "command": "record_add",
             "record_uid": utils.generate_uid(),
@@ -200,7 +200,7 @@ class Vault(VaultSyncDown):
             r_key = self.resolve_record_access_path(path, for_edit=True)
             if r_key:
                 if r_key.key_type in {0, 2}:
-                    enc_key = crypto.encrypt_aes_v1(record.record_key, self.auth.data_key)
+                    enc_key = crypto.encrypt_aes_v1(record.record_key, self.auth.auth_context.data_key)
                     record_object['record_key'] = utils.base64_url_encode(enc_key)
 
                 if path.shared_folder_uid:
@@ -215,8 +215,7 @@ class Vault(VaultSyncDown):
                 except Exception as e:
                     logging.debug('Record (%s) extra decrypt error: %s', existing_record.record_uid, e)
             if existing_record.udata:
-                dec_udata = utils.base64_url_decode(existing_record.udata)
-                existing_udata = json.loads(dec_udata.decode('utf-8'))
+                existing_udata = json.loads(existing_record.udata)
 
         datas = PasswordRecord.dump(record, extra=existing_extra, udata=existing_udata)
         if 'data' in datas and not skip_data:
@@ -232,6 +231,7 @@ class Vault(VaultSyncDown):
         rq = {
             "command": "record_update",
             "device_id": self.auth.endpoint.device_name,
+            "client_time": utils.current_milli_time()
         }
         if existing_record:
             rq['update_records'] = [record_object]
