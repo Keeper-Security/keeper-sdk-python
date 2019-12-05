@@ -10,7 +10,7 @@ from unittest import mock
 
 from keepersdk import crypto, utils, ui
 from keepersdk.vault import Vault
-from keepersdk.auth import Auth
+from keepersdk.auth import Auth, AuthContext
 from keepersdk.vault_types import PasswordRecord, SharedFolder, EnterpriseTeam, AttachmentFile
 from keepersdk.configuration import Configuration, ServerConfiguration, UserConfiguration, InMemoryConfigurationStorage
 
@@ -143,14 +143,15 @@ def get_connected_auth_context():   # type: () -> Auth
     auth = get_auth_context()
     config = auth.storage.get_configuration()
     user_config = config.get_user_configuration(config.last_username)
-    auth.username = user_config.username
+    auth.auth_context = AuthContext()
+    auth.auth_context.username = user_config.username
     key_hash = crypto.derive_keyhash_v1(user_config.password, _USER_SALT, _USER_ITERATIONS)
     auth.auth_response = utils.base64_url_encode(key_hash)
-    auth.twofactor_token = user_config.two_factor_token
-    auth.client_key = _USER_CLIENT_KEY
-    auth.data_key = _USER_DATA_KEY
-    auth.private_key = _IMPORTED_PRIVATE_KEY
-    auth.session_token = _SESSION_TOKEN
+    auth.auth_context.twofactor_token = user_config.two_factor_token
+    auth.auth_context.client_key = _USER_CLIENT_KEY
+    auth.auth_context.data_key = _USER_DATA_KEY
+    auth.auth_context.private_key = _IMPORTED_PRIVATE_KEY
+    auth.auth_context.session_token = _SESSION_TOKEN
 
     return auth
 

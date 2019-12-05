@@ -1,6 +1,7 @@
 from typing import Optional, List, Any, Set, Iterable, Dict
 
 from .storage import (StorageRecord, StorageSharedFolder, StorageTeam, StorageRecordKey, StorageSharedFolderPermission)
+from .crypto import PrivateKey
 
 class CustomField:
     name: str
@@ -86,7 +87,7 @@ class EnterpriseTeam:
     restrict_share: bool
     restrict_view: bool
     team_key: Optional[bytes]
-    private_key: Any
+    private_key: Optional[PrivateKey]
     @staticmethod
     def load(store_team: StorageTeam, team_key: bytes) -> EnterpriseTeam: ...
 

@@ -24,6 +24,7 @@ from cryptography.hazmat.primitives.hmac import HMAC
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives.serialization import load_der_private_key, load_der_public_key
 
+
 _CRYPTO_BACKEND = default_backend()
 
 
@@ -106,11 +107,11 @@ def derive_keyhash_v2(domain, password, salt, iterations):
 
 
 class AesStreamCryptor(abc.ABC):
-    def __init__(self, is_encrypt, block_size):     # type: (bool, int) -> None
+    def __init__(self, is_encrypt, block_size):
         self.is_encrypt = is_encrypt
         self.block_size = block_size
-        self.input_tail = None            # type: bytes or None
-        self.output_tail = None           # type: bytes or None
+        self.input_tail = None
+        self.output_tail = None
 
     def update(self, in_data):
         if self.input_tail:

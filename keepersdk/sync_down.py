@@ -22,7 +22,7 @@ from .vault_data import VaultData, RebuildTask
 
 class VaultSyncDown(VaultData):
     def __init__(self, auth, storage):
-        super().__init__(auth.client_key, storage)
+        super().__init__(auth.auth_context.client_key, storage)
         self.auth = auth
 
     def sync_down(self):
@@ -31,12 +31,13 @@ class VaultSyncDown(VaultData):
             "include": ["sfheaders", "sfrecords", "sfusers", "teams", "folders"],
             "revision": self.storage.revision,
             "device_id": self.auth.endpoint.device_name,
-            "device_name": self.auth.endpoint.device_name
+            "device_name": self.auth.endpoint.device_name,
+            "client_time": utils.current_milli_time()
         }
 
         response = self.auth.execute_auth_command(request)
 
-        is_full_sync = response.get('full_sync') or False   # type: bool
+        is_full_sync = response.get('full_sync') or False
         if is_full_sync:
             self.storage.clear()
 
@@ -138,7 +139,7 @@ class VaultSyncDown(VaultData):
                 record_uid = nsd['record_uid']
                 try:
                     data = utils.base64_url_decode(nsd['data'])
-                    data = crypto.decrypt_aes_v1(data, self.auth.data_key)
+                    data = crypto.decrypt_aes_v1(data, self.auth.auth_context.data_key)
                     data = crypto.encrypt_aes_v1(data, self.client_key)
 
                     s_nsd = StorageNonSharedData()
@@ -176,11 +177,11 @@ class VaultSyncDown(VaultData):
                     key_type = rmd['record_key_type']
                     record_key = utils.base64_url_decode(rmd['record_key'])
                     if key_type == 0:
-                        record_key = self.auth.data_key
+                        record_key = self.auth.auth_context.data_key
                     elif key_type == 1:
-                        record_key = crypto.decrypt_aes_v1(record_key, self.auth.data_key)
+                        record_key = crypto.decrypt_aes_v1(record_key, self.auth.auth_context.data_key)
                     elif key_type == 2:
-                        record_key = crypto.decrypt_rsa(record_key, self.auth.private_key)
+                        record_key = crypto.decrypt_rsa(record_key, self.auth.auth_context.private_key)
                     else:
                         raise KeeperError('Record metadata UID %s: unsupported key type %s'.format(record_uid, key_type))
                     record_key = crypto.encrypt_aes_v1(record_key, self.client_key)
@@ -207,9 +208,9 @@ class VaultSyncDown(VaultData):
                     key_type = team['team_key_type']
                     team_key = utils.base64_url_decode(team['team_key'])
                     if key_type == 1:
-                        team_key = crypto.decrypt_aes_v1(team_key, self.auth.data_key)
+                        team_key = crypto.decrypt_aes_v1(team_key, self.auth.auth_context.data_key)
                     elif key_type == 2:
-                        team_key = crypto.decrypt_rsa(team_key, self.auth.private_key)
+                        team_key = crypto.decrypt_rsa(team_key, self.auth.auth_context.private_key)
                     else:
                         raise KeeperError('Team UID %s: unsupported key type %s'.format(team_uid, key_type))
                     encrypted_team_key = crypto.encrypt_aes_v1(team_key, self.client_key)
@@ -263,9 +264,9 @@ class VaultSyncDown(VaultData):
                         key_type = shared_folder['key_type']
                         shared_folder_key = utils.base64_url_decode(shared_folder['shared_folder_key'])
                         if key_type == 1:
-                            shared_folder_key = crypto.decrypt_aes_v1(shared_folder_key, self.auth.data_key)
+                            shared_folder_key = crypto.decrypt_aes_v1(shared_folder_key, self.auth.auth_context.data_key)
                         elif key_type == 2:
-                            shared_folder_key = crypto.decrypt_rsa(shared_folder_key, self.auth.private_key)
+                            shared_folder_key = crypto.decrypt_rsa(shared_folder_key, self.auth.auth_context.private_key)
                         else:
                             raise KeeperError('Shared Folder UID (0): wrong key type {1}}'.format(shared_folder_uid, key_type))
                         shared_folder_key = crypto.encrypt_aes_v1(shared_folder_key, self.client_key)
@@ -328,9 +329,9 @@ class VaultSyncDown(VaultData):
                 key_type = uf['key_type']
                 key = utils.base64_url_decode(uf['user_folder_key'])
                 if key_type == 2:
-                    key = crypto.decrypt_rsa(key, self.auth.private_key)
+                    key = crypto.decrypt_rsa(key, self.auth.auth_context.private_key)
                 else:
-                    key = crypto.decrypt_aes_v1(key, self.auth.data_key)
+                    key = crypto.decrypt_aes_v1(key, self.auth.auth_context.data_key)
                 key = crypto.encrypt_aes_v1(key, self.client_key)
                 s_f = StorageFolder()
                 s_f.folder_uid = folder_uid
