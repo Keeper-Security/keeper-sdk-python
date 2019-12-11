@@ -4,21 +4,22 @@ from unittest import TestCase
 import os
 import datetime
 
-from keepersdk import configuration, auth, ui
+from keepersdk import configuration, auth
 from keepersdk.vault import Vault
+from keepersdk.auth_ui import IAuthUI, TwoFactorChannel, TwoFactorCodeDuration, PasswordRuleMatcher
 
 
-class TestUi(ui.IAuthUI):
+class TestUi(IAuthUI):
     def confirmation(self, information):  # type: (str) -> bool
         print(information)
         answer = input('(Y)es/(No): ')
         return answer.lower() in {'y', 'yes'}
 
-    def get_two_factor_code(self, provider):  # type: (ui.TwoFactorChannel) -> Tuple[str, ui.TwoFactorCodeDuration]
+    def get_two_factor_code(self, provider):  # type: (TwoFactorChannel) -> Tuple[str, TwoFactorCodeDuration]
         code = input('Enter Two Factor Code: ')
-        return code, ui.TwoFactorCodeDuration.EveryLogin
+        return code, TwoFactorCodeDuration.EveryLogin
 
-    def get_new_password(self, matcher):  # type: (ui.PasswordRuleMatcher) -> Optional[str]
+    def get_new_password(self, matcher):  # type: (PasswordRuleMatcher) -> Optional[str]
         raise NotImplemented()
 
 

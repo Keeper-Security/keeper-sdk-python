@@ -12,7 +12,7 @@
 from .vault import Vault
 from .vault_types import PasswordRecord, SharedFolder, EnterpriseTeam, Folder, CustomField, AttachmentFile
 from .errors import KeeperApiError, KeeperError
-from .ui import IAuthUI
+from .auth_ui import IAuthUI
 from .auth import Auth
 from .configuration import JsonConfigurationStorage
 

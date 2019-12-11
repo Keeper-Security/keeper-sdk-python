@@ -1,7 +1,7 @@
 from typing import Optional, BinaryIO
 
 from .auth import Auth
-from .sync_down import VaultSyncDown
+from .vault_data import IVaultData
 from .vault_types import PasswordRecord, AttachmentFile, Folder
 from .storage import IKeeperStorage, StorageRecordKey
 
@@ -10,8 +10,11 @@ class RecordAccessPath:
     shared_folder_uid: Optional[str]
     team_uid: Optional[str]
 
-class Vault(VaultSyncDown):
-    def __init__(self, auth: Auth, storage: Optional[IKeeperStorage]=...): ...
+class Vault(IVaultData):
+    auth: Auth
+
+    def __init__(self, auth: Auth, storage: Optional[IKeeperStorage]=...) -> None: ...
+    def sync_down(self) -> None: ...
     def resolve_record_access_path(self, path: RecordAccessPath, for_edit: bool=..., for_share: bool=...) -> Optional[StorageRecordKey]: ...
     def download_attachment(self, record: PasswordRecord, attachment_id: str, output_stream: BinaryIO) -> Optional[AttachmentFile]: ...
     def upload_attachment(self, input_stream: BinaryIO) -> Optional[AttachmentFile]: ...

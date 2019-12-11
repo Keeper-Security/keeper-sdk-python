@@ -66,6 +66,7 @@ class IAuthUI(abc.ABC):
     def get_two_factor_code(self, provider):
         pass
 
+
 '''
 class DuoAction(Enum):
     DuoPush = "push",

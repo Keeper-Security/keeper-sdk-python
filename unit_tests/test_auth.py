@@ -3,9 +3,9 @@ from unittest import TestCase, mock
 from keepersdk.APIRequest_pb2 import PreLoginResponse, DeviceStatus
 from keepersdk.errors import KeeperApiError
 from keepersdk import utils, crypto
-from keepersdk.configuration import Configuration
-
+from keepersdk.configuration import InMemoryConfigurationStorage, UserConfiguration, Configuration, JsonConfigurationStorage
 from data_vault import VaultEnvironment, get_connected_auth_context, get_auth_context
+
 vault_env = VaultEnvironment()
 
 
@@ -67,7 +67,7 @@ class TestLogin(TestCase):
     def test_login_success_2fa_one_time(self):
         TestLogin.has2fa = True
         auth = get_auth_context()
-        auth.ui.get_two_factor_code = mock.MagicMock(side_effect=[(vault_env.one_time_token, 'forever'), KeyboardInterrupt()])
+        auth.auth_ui.get_two_factor_code = mock.MagicMock(side_effect=[(vault_env.one_time_token, 'forever'), KeyboardInterrupt()])
         m = mock.MagicMock()
         auth.store_configuration = m
         config = auth.storage.get_configuration()
@@ -80,7 +80,7 @@ class TestLogin(TestCase):
     def test_login_2fa_cancel(self):
         TestLogin.has2fa = True
         auth = get_auth_context()
-        auth.ui.get_two_factor_code = mock.MagicMock(side_effect=[KeyboardInterrupt()])
+        auth.auth_ui.get_two_factor_code = mock.MagicMock(side_effect=[KeyboardInterrupt()])
         config = auth.storage.get_configuration()
         user_config = config.get_user_configuration(config.last_username)
         with self.assertRaises(KeyboardInterrupt):
@@ -88,7 +88,7 @@ class TestLogin(TestCase):
 
     def test_login_failed(self):
         auth = get_auth_context()
-        auth.ui.get_two_factor_code = mock.MagicMock(side_effect=[KeyboardInterrupt()])
+        auth.auth_ui.get_two_factor_code = mock.MagicMock(side_effect=[KeyboardInterrupt()])
         config = auth.storage.get_configuration()
         user_config = config.get_user_configuration(config.last_username)
         with self.assertRaises(KeeperApiError):
@@ -98,6 +98,32 @@ class TestLogin(TestCase):
         auth = get_auth_context()
         with self.assertRaises(KeeperApiError):
             auth.login('wrong.user@keepersecurity.com', '123456')
+
+    def test_password_not_stored(self):
+        config = Configuration()
+        user_config = UserConfiguration(vault_env.user, password="old_password")
+        config.merge_user_configuration(user_config)
+        storage = InMemoryConfigurationStorage(config)
+        config = storage.get_configuration()
+        user_config = UserConfiguration(vault_env.user, password="new_password")
+        config.merge_user_configuration(user_config)
+        storage.put_configuration(config)
+        config = storage.get_configuration()
+        user_config = config.get_user_configuration(vault_env.user)
+        self.assertIsNotNone(user_config)
+        self.assertEqual(user_config.password, "old_password")
+
+    def test_password_not_stored_json(self):
+        storage = JsonConfigurationStorage("test.json")
+        config = storage.get_configuration()
+        user_config = UserConfiguration(vault_env.user, password="password")
+        config.merge_user_configuration(user_config)
+        storage.put_configuration(config)
+        storage = JsonConfigurationStorage("test.json")
+        config = storage.get_configuration()
+        user_config = config.get_user_configuration(vault_env.user)
+        self.assertIsNotNone(user_config)
+        self.assertIsNone(user_config.password)
 
     def test_login_auth_expired(self):
         auth = get_auth_context()
@@ -257,4 +283,3 @@ class TestLogin(TestCase):
             'result': 'fail',
             'result_code': 'Failed_to_find_user'
         }
-

@@ -104,10 +104,14 @@ class VaultData:
         uids = set()
         if full_rebuild:
             self.shared_folders.clear()
+            self.records.clear()
         else:
             for shared_folder_uid in changes.shared_folders:
                 if shared_folder_uid in self.shared_folders:
                     del self.shared_folders[shared_folder_uid]
+            for record_uid in changes.records:
+                if record_uid in self.records:
+                    del self.records[record_uid]
 
         def shared_folder_changes():
             nonlocal full_rebuild
@@ -158,13 +162,6 @@ class VaultData:
             self.storage.record_keys.delete_object(shared_folder_uid)
             self.storage.shared_folder_keys.delete_subject(shared_folder_uid)
             self.storage.shared_folder_permissions.delete_subject(shared_folder_uid)
-
-        if full_rebuild:
-            self.records.clear()
-        else:
-            for record_uid in changes.records:
-                if record_uid in self.records:
-                    del self.records[record_uid]
 
         def record_changes():
             nonlocal full_rebuild
