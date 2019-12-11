@@ -4,7 +4,7 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
 from .configuration import IConfigurationStorage
 from .endpoint import KeeperEndpoint
-from .ui import IAuthUI
+from .auth_ui import IAuthUI
 
 
 class AuthContext:
@@ -19,7 +19,7 @@ class AuthContext:
     settings: Optional[dict]
 
 class IAuth(Protocol):
-    ui: IAuthUI
+    auth_ui: IAuthUI
     storage: IConfigurationStorage
     endpoint: KeeperEndpoint
     is_authenticated: bool
@@ -31,3 +31,4 @@ class IAuth(Protocol):
 
 class Auth(IAuth):
     def __init__(self, auth_ui: IAuthUI, storage: Optional[IConfigurationStorage] = ...) -> None: ...
+    def refresh_session_token(self) -> None: ...

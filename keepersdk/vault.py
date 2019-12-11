@@ -16,7 +16,8 @@ import tempfile
 
 from . import crypto, utils
 from .storage import InMemoryVaultStorage
-from .sync_down import VaultSyncDown
+from .sync_down import sync_down_command
+from .vault_data import VaultData
 from .vault_types import PasswordRecord, AttachmentFile
 from .errors import KeeperApiError
 
@@ -28,11 +29,16 @@ class RecordAccessPath:
         self.team_uid = None
 
 
-class Vault(VaultSyncDown):
+class Vault(VaultData):
     def __init__(self, auth, storage=None):
-        super().__init__(auth, storage or InMemoryVaultStorage())
+        super().__init__(auth.auth_context.client_key, storage or InMemoryVaultStorage())
+        self.auth = auth
         if self.auth.is_authenticated:
             self.sync_down()
+
+    def sync_down(self):
+        rebuild_task = sync_down_command(self.auth, self.storage)
+        self.rebuild_data(rebuild_task)
 
     def resolve_record_access_path(self, path, for_edit=False, for_share=False):
         if not path.record_uid:
@@ -245,8 +251,8 @@ class Vault(VaultSyncDown):
 
     def delete_record(self, record_uid, folder=None):
         if not folder:
-            if self.auth.ui:
-                if not self.auth.ui.confirmation('Delete a record?'):
+            if self.auth.auth_ui:
+                if not self.auth.auth_ui.confirmation('Delete a record?'):
                     return
             rq = {
                 "command": "record_update",
@@ -275,8 +281,8 @@ class Vault(VaultSyncDown):
             rs = self.auth.execute_auth_command(rq)
             if 'pre_delete_response' in rs:
                 lines = rs['pre_delete_response']['would_delete']['deletion_summary']
-                if self.auth.ui:
-                    if not self.auth.ui.confirmation('\n'.join(lines)):
+                if self.auth.auth_ui:
+                    if not self.auth.auth_ui.confirmation('\n'.join(lines)):
                         return
                 rq = {
                     "commmand": "delete",

@@ -13,7 +13,8 @@ import logging
 
 from .APIRequest_pb2 import LoginType, PreLoginRequest, PreLoginResponse
 
-from . import crypto, ui, utils
+from . import crypto, utils
+from .auth_ui import TwoFactorChannel, TwoFactorCodeDuration, PasswordRuleMatcher, PasswordRule
 from .endpoint import KeeperEndpoint
 from .errors import KeeperApiError, KeeperError
 from .configuration import InMemoryConfigurationStorage, UserConfiguration, ServerConfiguration
@@ -27,14 +28,15 @@ class AuthContext:
         self.private_key = None
         self.is_enterprise_admin = False
         self.session_token = ''
-        self.two_factor_token = ''
+        self.auth_response = None
         self.enforcements = None
         self.settings = None
+        self.two_factor_token = ''
 
 
 class Auth:
     def __init__(self, auth_ui, storage=None):
-        self.ui = auth_ui
+        self.auth_ui = auth_ui
         self.storage = storage or InMemoryConfigurationStorage()
         self.endpoint = KeeperEndpoint()
         self.auth_context = None
@@ -47,14 +49,12 @@ class Auth:
                 self.endpoint.encrypted_device_token = server_conf.device_id
                 self.endpoint.server_key_id = server_conf.server_key_id
 
-        self.auth_response = None
-
     @property
     def is_authenticated(self):
         return True if self.auth_context and self.auth_context.session_token else False
 
     def logout(self):
-        self.auth_response = None
+        self.auth_context = None
 
     def login(self, username, password):
         if not username or not password:
@@ -127,7 +127,7 @@ class Auth:
 
             if rs['result'] == 'success':
                 self.auth_context.two_factor_token = mfa_token
-                self.auth_response = auth_verifier
+                self.auth_context.auth_response = auth_verifier
                 self.auth_context.is_enterprise_admin = rs.get('is_enterprise_admin') or False
                 self.store_configuration(config)
                 try:
@@ -153,20 +153,20 @@ class Auth:
             else:
                 result_code = rs['result_code']
                 if result_code in {'need_totp', 'invalid_device_token', 'invalid_totp'}:
-                    channel = ui.TwoFactorChannel.Other
+                    channel = TwoFactorChannel.Other
                     channel_code = rs['channel']
                     if channel_code == 'two_factor_channel_sms':
-                        channel = ui.TwoFactorChannel.TextMessage
+                        channel = TwoFactorChannel.TextMessage
                     elif channel_code == 'two_factor_channel_google':
-                        channel = ui.TwoFactorChannel.Authenticator
+                        channel = TwoFactorChannel.Authenticator
                     elif channel_code == 'two_factor_channel_duo':
-                        channel = ui.TwoFactorChannel.DuoSecurity
-                    tfa_code, expiration = self.ui.get_two_factor_code(channel)
+                        channel = TwoFactorChannel.DuoSecurity
+                    tfa_code, expiration = self.auth_ui.get_two_factor_code(channel)
                     if tfa_code:
                         mfa_token = tfa_code
                         mfa_type = 'one_time'
-                        mfa_duration = 9999 if expiration == ui.TwoFactorCodeDuration.Forever \
-                            else 30 if expiration == ui.TwoFactorCodeDuration.Every30Days else 0
+                        mfa_duration = 9999 if expiration == TwoFactorCodeDuration.Forever \
+                            else 30 if expiration == TwoFactorCodeDuration.Every30Days else 0
                         continue
                 elif result_code == 'auth_expired':
                     logging.warning(rs['message'])
@@ -180,7 +180,7 @@ class Auth:
                 elif result_code == 'auth_expired_transfer':
                     logging.warning(rs['message'])
                     prompt = 'Do you accept Account Transfer policy?'
-                    if self.ui.confirmation(rs['message'] + '\n\n' + prompt):
+                    if self.auth_ui.confirmation(rs['message'] + '\n\n' + prompt):
                         share_account_to = self.auth_context.settings['share_account_to']
                         self.accept_account_transfer_consent(share_account_to)
                         self.auth_context.session_token = None
@@ -205,7 +205,7 @@ class Auth:
         if self.is_authenticated and self.auth_context.settings:
             rules_intro = self.auth_context.settings['password_rules_intro']
             for r in self.auth_context.settings['password_rules']:
-                rule = ui.PasswordRule()
+                rule = PasswordRule()
                 rule.match = r.get('match') or True
                 rule.pattern = r.get('pattern')
                 rule.description = r.get('description')
@@ -213,13 +213,13 @@ class Auth:
         else:
             user_params = self.endpoint.get_new_user_params(self.auth_context.username)
             for r, d in zip(user_params.PasswordMatchRegex, user_params.PasswordMatchDescription):
-                rule = ui.PasswordRule()
+                rule = PasswordRule()
                 rule.match = True
                 rule.pattern = r
                 rule.description = d
                 rules.append(rule)
-        matcher = ui.PasswordRuleMatcher(rules_intro, rules)
-        password = self.ui.get_new_password(matcher)
+        matcher = PasswordRuleMatcher(rules_intro, rules)
+        password = self.auth_ui.get_new_password(matcher)
         if password:
             failed_rules = matcher.match_failed_rules(password)
             if not failed_rules:
@@ -339,7 +339,7 @@ class Auth:
         request = {
             'command': 'login',
             'version': 2,
-            'auth_response': self.auth_response,
+            'auth_response': self.auth_context.auth_response,
             'username': self.auth_context.username
         }
         if self.auth_context.two_factor_token:

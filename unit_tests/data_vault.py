@@ -8,7 +8,7 @@ from cryptography.hazmat.backends import default_backend
 
 from unittest import mock
 
-from keepersdk import crypto, utils, ui
+from keepersdk import crypto, utils, auth_ui
 from keepersdk.vault import Vault
 from keepersdk.auth import Auth, AuthContext
 from keepersdk.vault_types import PasswordRecord, SharedFolder, EnterpriseTeam, AttachmentFile
@@ -92,7 +92,7 @@ _enc_dk = b'\x01' + _enc_iter + _USER_SALT + crypto.encrypt_aes_v1(_USER_DATA_KE
 _ENCRYPTION_PARAMS = utils.base64_url_encode(_enc_dk)
 
 
-class TestAuthUI(ui.IAuthUI):
+class TestAuthUI(auth_ui.IAuthUI):
     def confirmation(self, information):
         return True
 
@@ -100,7 +100,7 @@ class TestAuthUI(ui.IAuthUI):
         return 'qwerty'
 
     def get_two_factor_code(self, provider):
-        return '123456', ui.TwoFactorCodeDuration.Every30Days
+        return '123456', auth_ui.TwoFactorCodeDuration.Every30Days
 
 
 class VaultEnvironment:
@@ -146,7 +146,7 @@ def get_connected_auth_context():   # type: () -> Auth
     auth.auth_context = AuthContext()
     auth.auth_context.username = user_config.username
     key_hash = crypto.derive_keyhash_v1(user_config.password, _USER_SALT, _USER_ITERATIONS)
-    auth.auth_response = utils.base64_url_encode(key_hash)
+    auth.auth_context.auth_response = utils.base64_url_encode(key_hash)
     auth.auth_context.twofactor_token = user_config.two_factor_token
     auth.auth_context.client_key = _USER_CLIENT_KEY
     auth.auth_context.data_key = _USER_DATA_KEY

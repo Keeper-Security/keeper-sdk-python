@@ -61,7 +61,11 @@ class KeeperEndpoint:
             url = urlunparse(url_comp)
             logging.debug('>>> Request URL: [%s]', url)
 
-            rs = post(url, data=request_data, headers={'Content-Type': 'application/octet-stream'})
+            headers = {
+                'Content-Type': 'application/octet-stream',
+                'User-Agent': 'KeeperSDK.Python/' + self.client_version
+            }
+            rs = post(url, data=request_data, headers=headers)
             logging.debug('<<< Response Code: [%d]', rs.status_code)
             logging.debug('<<< Response Headers: [%s]', str(rs.headers))
 
