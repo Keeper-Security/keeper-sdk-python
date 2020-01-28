@@ -35,9 +35,6 @@ class KeeperEndpoint:
 
     def execute_rest(self, endpoint, payload):
 
-        api_payload = ApiRequestPayload()
-        api_payload.payload = payload
-
         run_request = True
         while run_request:
             run_request = False
@@ -53,7 +50,7 @@ class KeeperEndpoint:
             api_request.encryptedTransmissionKey = encrypted_transmission_key
             api_request.publicKeyId = self.server_key_id
             api_request.locale = self.locale
-            api_request.encryptedPayload = crypto.encrypt_aes_v2(api_payload.SerializeToString(), self.transmission_key)
+            api_request.encryptedPayload = crypto.encrypt_aes_v2(payload.SerializeToString(), self.transmission_key)
 
             request_data = api_request.SerializeToString()
 
@@ -97,7 +94,10 @@ class KeeperEndpoint:
             rq = DeviceRequest()
             rq.clientVersion = self.client_version
             rq.deviceName = self.device_name
-            rs = self.execute_rest('authentication/get_device_token', rq.SerializeToString())
+
+            payload = ApiRequestPayload()
+            payload.payload = rq.SerializeToString()
+            rs = self.execute_rest('authentication/get_device_token', payload)
             if type(rs) == bytes:
                 device_rs = DeviceResponse()
                 device_rs.ParseFromString(rs)
@@ -113,7 +113,9 @@ class KeeperEndpoint:
         rq.username = username.lower()
         rq.encryptedDeviceToken = self.get_device_token()
 
-        rs = self.execute_rest('authentication/get_new_user_params', rq.SerializeToString())
+        payload = ApiRequestPayload()
+        payload.payload = rq.SerializeToString()
+        rs = self.execute_rest('authentication/get_new_user_params', payload)
         if type(rs) == bytes:
             pre_login_rs = NewUserMinimumParams()
             pre_login_rs.ParseFromString(rs)
@@ -126,7 +128,10 @@ class KeeperEndpoint:
             rq['client_version'] = self.client_version
         logging.debug('>>> Request JSON: [%s]', json.dumps(rq, sort_keys=True, indent=4))
         rq_data = json.dumps(rq).encode('utf-8')
-        rs_data = self.execute_rest('vault/execute_v2_command', rq_data)
+
+        payload = ApiRequestPayload()
+        payload.payload = rq_data
+        rs_data = self.execute_rest('vault/execute_v2_command', payload)
         rs = json.loads(rs_data.decode('utf-8'))
         logging.debug('<<< Response JSON: [%s]', json.dumps(rs, sort_keys=True, indent=4))
 
