@@ -11,7 +11,7 @@
 
 import logging
 
-from .APIRequest_pb2 import LoginType, PreLoginRequest, PreLoginResponse
+from .APIRequest_pb2 import LoginType, PreLoginRequest, PreLoginResponse, ApiRequestPayload
 
 from . import crypto, utils
 from .auth_ui import TwoFactorChannel, TwoFactorCodeDuration, PasswordRuleMatcher, PasswordRule
@@ -272,7 +272,9 @@ class Auth:
             if two_factor_token:
                 rq.twoFactorToken = two_factor_token
 
-            rs = self.endpoint.execute_rest('authentication/pre_login', rq.SerializeToString())
+            payload = ApiRequestPayload()
+            payload.payload = rq.SerializeToString()
+            rs = self.endpoint.execute_rest('authentication/pre_login', payload)
             if type(rs) == bytes:
                 pre_login_rs = PreLoginResponse()
                 pre_login_rs.ParseFromString(rs)
