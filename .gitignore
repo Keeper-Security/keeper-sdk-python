@@ -128,3 +128,6 @@ dmypy.json
 # IntelliJ
 .idea/
 *.iml
+
+*.json
+.DS_Store

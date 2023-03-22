@@ -5,21 +5,10 @@
 #              |_|
 #
 # Keeper Commander
-# Copyright 2019 Keeper Security Inc.
+# Copyright 2022 Keeper Security Inc.
 # Contact: ops@keepersecurity.com
 #
 
-from .vault import Vault
-from .vault_types import PasswordRecord, SharedFolder, EnterpriseTeam, Folder, CustomField, AttachmentFile
-from .errors import KeeperApiError, KeeperError
-from .auth_ui import IAuthUI
-from .auth import Auth
-from .configuration import JsonConfigurationStorage
-
 __author__ = 'Keeper Security Inc.'
 __license__ = 'MIT'
-__version__ = '0.9.0'
-
-__all__ = ('Vault', 'Auth', 'IAuthUI', 'JsonConfigurationStorage',
-           'PasswordRecord', 'SharedFolder', 'EnterpriseTeam', 'Folder',
-           'CustomField', 'AttachmentFile', 'KeeperApiError', 'KeeperError')
+__version__ = '0.9.9'

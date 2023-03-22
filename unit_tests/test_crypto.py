@@ -1,9 +1,28 @@
+import io
 from unittest import TestCase
 
 from keepersdk import crypto, utils
 
 
 class TestCrypto(TestCase):
+
+    def test_encrypt_transform(self):
+        key = utils.generate_aes_key()
+        data = bytearray(999)
+        for i in range(len(data)):
+            data[i] = i & 0xff
+
+        transform_v2 = crypto.StreamCrypter()
+        transform_v2.key = key
+        transform_v2.is_gcm = True
+        stream = io.BytesIO(data)
+        with transform_v2.set_stream(stream, for_encrypt=True) as enc_stream:
+            enc_data = enc_stream.read()
+        self.assertEqual(len(enc_data), len(data) + 12 + 16)
+        stream = io.BytesIO(enc_data)
+        with transform_v2.set_stream(stream, for_encrypt=False) as dec_stream:
+            dec_data = dec_stream.read()
+        self.assertEqual(data, dec_data)
 
     def test_decrypt_aes_v1(self):
         data = utils.base64_url_decode('KvsOJmE4JNK1HwKSpkBeR5R9YDms86uOb3wjNvc4LbUnZhKQtDxWifgA99tH2ZuP')
@@ -34,9 +53,9 @@ class TestCrypto(TestCase):
 
     def test_encrypt_rsa(self):
         data = crypto.get_random_bytes(100)
-        puk = crypto.load_public_key(utils.base64_url_decode(_test_public_key))
+        puk = crypto.load_rsa_public_key(utils.base64_url_decode(_test_public_key))
         enc_data = crypto.encrypt_rsa(data, puk)
-        prk = crypto.load_private_key(utils.base64_url_decode(_test_private_key))
+        prk = crypto.load_rsa_private_key(utils.base64_url_decode(_test_private_key))
         dec_data = crypto.decrypt_rsa(enc_data, prk)
         self.assertEqual(data, dec_data)
 
