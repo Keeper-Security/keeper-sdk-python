@@ -3,18 +3,18 @@ from typing import List
 from unittest import TestCase
 from dataclasses import dataclass, field
 
-from keepersdk import utils, crypto
-import sqlite_dao
-from storage import types, sqlite
-from vault import storage_types
-from proto import enterprise_pb2
+from keepersdk import utils, crypto, sqlite_dao
+from keepersdk.storage import types, sqlite
+from keepersdk.vault import storage_types
+from keepersdk.proto import enterprise_pb2
 
 
 @dataclass
 class Settings:
     str_value: str = field(default_factory=str)
     bool_value: bool = field(default_factory=bool)
-    int_value: List[int] = field(default_factory=list)
+    int_value: int = field(default_factory=int)
+    list_value: List[int] = field(default_factory=list)
 
 
 class TestSqliteDao(TestCase):
@@ -89,12 +89,11 @@ class TestSqliteDao(TestCase):
             setting.str_value = '123456'
             setting.bool_value = True
             setting.int_value = 123456
+            setting.list_value = [1,2,3,4,5]
             settings_storage.store(setting)
         setting1 = settings_storage.load()
         self.assertIsNotNone(setting1)
-        self.assertEqual(setting.str_value, setting1.str_value)
-        self.assertEqual(setting.bool_value, setting1.bool_value)
-        self.assertEqual(setting.int_value, setting1.int_value)
+        self.assertEqual(setting, setting1)
 
         record = storage_types.StorageRecord()
         record.record_uid = utils.generate_uid()

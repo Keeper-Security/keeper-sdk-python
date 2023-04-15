@@ -9,6 +9,8 @@
 # Contact: ops@keepersecurity.com
 #
 
+from dataclasses import dataclass
+
 from ..storage.types import IUid, IUidLink
 
 
@@ -52,6 +54,8 @@ class StorageSharedFolder(IUid):
         self.shared_folder_uid = ''
         self.revision = 0
         self.name = b''
+        self.data = b''
+        self.owner_account_uid = ''
         self.default_manage_records = False
         self.default_manage_users = False
         self.default_can_edit = False
@@ -75,16 +79,28 @@ class StorageFolder(IUid):
         return self.folder_uid
 
 
+@dataclass
+class StorageUserEmail(IUidLink):
+    account_uid: str = ''
+    email: str = ''
+
+    def subject_uid(self):
+        return self.account_uid
+
+    def object_uid(self):
+        return self.email
+
+
+@dataclass
 class StorageTeam(IUid):
-    def __init__(self):
-        self.team_uid = ''
-        self.name = ''
-        self.team_key = b''
-        self.key_type = 0
-        self.team_private_key = b''
-        self.restrict_edit = False
-        self.restrict_share = False
-        self.restrict_view = False
+    team_uid = ''
+    name = ''
+    team_key = b''
+    key_type = 0
+    team_private_key = b''
+    restrict_edit = False
+    restrict_share = False
+    restrict_view = False
 
     def uid(self):
         return self.team_uid
@@ -99,6 +115,7 @@ class StorageRecordKey(IUidLink):
         self.record_key = b''
         self.can_share = False
         self.can_edit = False
+        self.owner_account_uid = ''
 
     def subject_uid(self):
         return self.record_uid
@@ -133,6 +150,7 @@ class StorageSharedFolderPermission(IUidLink):
         self.user_type = 0
         self.manage_records = False
         self.manage_users = False
+        self.expiration = 0
 
     def subject_uid(self):
         return self.shared_folder_uid

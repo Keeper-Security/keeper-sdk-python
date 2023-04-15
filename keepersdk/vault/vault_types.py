@@ -9,7 +9,6 @@
 # Contact: ops@keepersecurity.com
 #
 
-import collections
 import json
 from typing import List, Optional, Set, Iterable, Sequence, Literal
 from dataclasses import dataclass
@@ -21,7 +20,11 @@ from .storage_types import (
     StorageTeam, StorageRecordType)
 from .. import crypto, utils
 
-RecordPath = collections.namedtuple('RecordPath', ['record_uid', 'folder_uid'])
+
+@dataclass(frozen=True)
+class RecordPath:
+    record_uid: str
+    folder_uid: str
 
 
 @dataclass(frozen=True)
@@ -76,13 +79,22 @@ class SharedFolder:
         shared_folder.default_manage_users = store_sf.default_manage_users
         shared_folder.default_can_edit = store_sf.default_can_edit
         shared_folder.default_can_share = store_sf.default_can_share
-        try:
-            dec_name = crypto.decrypt_aes_v1(store_sf.name, shared_folder_key)
-            shared_folder.name = dec_name.decode('utf-8')
-        except Exception as e:
+        if store_sf.data:
+            try:
+                decrypted_data = crypto.decrypt_aes_v1(store_sf.data, shared_folder_key)
+                data = json.loads(decrypted_data.decode())
+                if 'name' in data:
+                    shared_folder.name = data['name']
+            except Exception as e:
+                utils.get_logger().debug('Error decrypting Shared Folder %s data: %s', shared_folder_uid, e)
+        if not shared_folder.name:
+            try:
+                dec_name = crypto.decrypt_aes_v1(store_sf.name, shared_folder_key)
+                shared_folder.name = dec_name.decode('utf-8')
+            except Exception as e:
+                utils.get_logger().debug('Error decrypting Shared Folder %s name: %s', shared_folder_uid, e)
+        if not shared_folder.name:
             shared_folder.name = shared_folder_uid
-            utils.get_logger().debug('Error decrypting Shared Folder %s name: %s', shared_folder_uid, e)
-
         for up in users:
             sf_p = SharedFolderPermission()
             sf_p.user_type = up.user_type

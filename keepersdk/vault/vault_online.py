@@ -70,7 +70,7 @@ class VaultOnline(vault_data.VaultData):
         with self._sync_down_lock:
             if force:
                 self.storage.clear()
-            changes = sync_down.sync_down_command(
+            changes = sync_down.sync_down_request(
                 self._keeper_auth, self.storage, sync_record_types=self._sync_record_types)
             self.sync_requested = False
             self._sync_record_types = False

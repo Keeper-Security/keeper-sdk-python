@@ -8,6 +8,7 @@
 # Copyright 2022 Keeper Security Inc.
 # Contact: ops@keepersecurity.coms
 #
+
 import itertools
 import json
 from typing import Iterable, Dict, Set, Optional, List, Tuple, Protocol, TypeVar

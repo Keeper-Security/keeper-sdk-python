@@ -11,7 +11,7 @@
 
 import abc
 import itertools
-from typing import Optional, Dict, Any, List, NamedTuple
+from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 
 from . import vault_types

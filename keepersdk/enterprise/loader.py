@@ -9,7 +9,7 @@
 # Contact: ops@keepersecurity.com
 #
 
-from typing import Optional, Set
+from typing import Optional, Set, Iterable
 
 from .enterprise_types import EnterpriseStorage, EnterpriseEntityMap, EnterpriseData
 from .. import utils, crypto
@@ -23,7 +23,7 @@ class EnterpriseLoader:
         self._storage = storage if storage else _InMemoryEnterpriseStorage()
         self._external_data = external_data
 
-    def load(self, keeper_auth):  # type: (auth.KeeperAuth) -> None
+    def load(self, keeper_auth):  # type: (auth.KeeperAuth) -> Set[enterprise_pb2.EnterpriseDataEntity]
         enterprise_info = self._external_data.enterprise_info
         if not enterprise_info.tree_key:
             rq = enterprise_pb2.GetEnterpriseDataKeysRequest()
@@ -112,7 +112,20 @@ class EnterpriseLoader:
                 break
 
         self._storage.flush()
-        self._external_data.populate(entities)
+        return entities
+
+    def load_role_keys(self, keeper_auth, role_ids):    # type: (auth.KeeperAuth, Iterable[int]) -> None
+        rq = enterprise_pb2.GetEnterpriseDataKeysRequest()
+        rq.roleId.extend(role_ids)
+        rs = keeper_auth.execute_auth_rest('enterprise/get_enterprise_data_keys', rq,
+                                           response_type=enterprise_pb2.GetEnterpriseDataKeysResponse)
+        if len(rs.roleKey) > 0:
+            for rk1 in rs.roleKey:
+                self._external_data.put_role_key(rk1.roleId, rk1.keyType, utils.base64_url_decode(rk1.encryptedKey))
+
+        if len(rs.reEncryptedRoleKey) > 0:
+            for rk2 in rs.reEncryptedRoleKey:
+                self._external_data.put_role_key2(rk2.role_id, rk2.encryptedRoleKey)
 
 
 class _InMemoryEnterpriseStorage(EnterpriseStorage):

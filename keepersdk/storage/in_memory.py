@@ -13,7 +13,8 @@ from typing import Dict, Any, Callable, Optional, Union
 
 from .types import IEntityStorage, ILinkStorage, IUidLink, IUid
 
-GetUid = Callable[[Any], Union[str, int, bytes]]
+KeyType = Union[str, int, bytes]
+GetUid = Callable[[Any], KeyType]
 
 
 class InMemoryEntityStorage(IEntityStorage):
@@ -44,7 +45,8 @@ class InMemoryEntityStorage(IEntityStorage):
 
     def delete_uids(self, uids):
         for uid in uids:
-            del self._items[uid]
+            if uid in self._items:
+                del self._items[uid]
 
     def clear(self):
         self._items.clear()
@@ -54,7 +56,7 @@ class InMemoryLinkStorage(ILinkStorage):
     def __init__(self, get_subject=None, get_object=None):    # type: (Optional[GetUid], Optional[GetUid]) -> None
         self.get_subject = get_subject
         self.get_object = get_object
-        self._links = {}   # type: Dict[KeyTypes, Dict[KeyTypes, Any]]
+        self._links = {}   # type: Dict[KeyType, Dict[KeyType, Any]]
 
     def put_links(self, links):
         for link in links:

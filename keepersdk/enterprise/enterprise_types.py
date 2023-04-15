@@ -10,9 +10,10 @@
 #
 
 import abc
-from typing import Tuple, Dict, Type, Iterator, Set, Optional
+from typing import Tuple, Dict, Type, Iterator
 
 from google.protobuf.message import Message
+
 from ..proto import enterprise_pb2
 
 
@@ -66,7 +67,12 @@ class EnterpriseData(EnterprisePlugin, abc.ABC):
         pass
 
     @abc.abstractmethod
-    def populate(self, scopes=None):   # type: (Optional[Set[enterprise_pb2.EnterpriseDataEntity]]) -> None
+    def put_role_key(self, role_id, key_type, encrypted_key):
+        # type: (int, enterprise_pb2.EncryptedKeyType, bytes) -> None
+        pass
+
+    @abc.abstractmethod
+    def put_role_key2(self, role_id, encrypted_key):  # type: (int, bytes) -> None
         pass
 
 

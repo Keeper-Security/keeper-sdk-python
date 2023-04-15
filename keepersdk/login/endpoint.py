@@ -12,21 +12,29 @@
 import json
 import logging
 import locale
+from typing import Optional, Dict, Any
+
 import requests
 
-from typing import Optional, Dict, Any
 from urllib.parse import urlunparse
 from google.protobuf.json_format import MessageToJson
 
 from . import configuration, notifications
 from .. import crypto, utils
+from ..constants import DEFAULT_KEEPER_SERVER, DEFAULT_DEVICE_NAME, CLIENT_VERSION
 from ..proto import APIRequest_pb2
 
 from .. import errors
 
-DEFAULT_KEEPER_SERVER = 'keepersecurity.com'
-DEFAULT_DEVICE_NAME = 'Python Keeper API'
-CLIENT_VERSION = 'c16.5.0'
+
+def encrypt_with_keeper_key(data, key_id):
+    # type: (bytes, int) -> bytes
+    if 1 <= key_id <= 6:
+        return crypto.encrypt_rsa(data, SERVER_PUBLIC_KEYS[key_id])
+    elif 7 <= key_id <= 17:
+        return crypto.encrypt_ec(data, SERVER_PUBLIC_KEYS[key_id])
+    else:
+        raise errors.KeeperApiError('invalid_key_id', f'Key ID \"{key_id}\" is not valid.')
 
 
 def prepare_api_request(key_id, transmission_key, payload=None, session_token=None, keeper_locale=None):
@@ -49,61 +57,56 @@ def prepare_api_request(key_id, transmission_key, payload=None, session_token=No
     return api_request
 
 
-def encrypt_with_keeper_key(data, key_id):
-    # type: (bytes, int) -> bytes
-    if 1 <= key_id <= 6:
-        return crypto.encrypt_rsa(data, SERVER_PUBLIC_KEYS[key_id])
-    elif 7 <= key_id <= 17:
-        return crypto.encrypt_ec(data, SERVER_PUBLIC_KEYS[key_id])
-    else:
-        raise errors.KeeperApiError('invalid_key_id', f'Key ID \"{key_id}\" is not valid.')
-
-
-class KeeperEndpoint:
-    def __init__(self, storage, server=None):
-        # type: (configuration.IConfigurationStorage, Optional[str]) -> None
+class KeeperEndpoint(object):
+    def __init__(self, configuration_storage, keeper_server=None):
         self.client_version = CLIENT_VERSION     # type: str
         self.device_name = DEFAULT_DEVICE_NAME   # type: str
         self.locale = resolve_locale()           # type: str
         self._server = ''                        # type: str
-        self._server_key_id = 1                  # type: int
-        self._storage = storage                  # type: configuration.IConfigurationStorage
+        self._server_key_id = 7                  # type: int
+        self._storage = configuration_storage    # type: configuration.IConfigurationStorage
         self._transmission_key = utils.generate_aes_key()  # type: bytes
-        if not server:
-            config = storage.get()
-            server = config.get_last_server()
-        self.server = server or DEFAULT_KEEPER_SERVER
+        if not keeper_server:
+            config = configuration_storage.get()
+            keeper_server = config.last_server
+        self.server = keeper_server or DEFAULT_KEEPER_SERVER
+        self.proxies = None                      # type: Optional[Dict]
+        self.certificate_check = True
 
-    def set_server(self, server):   # type: (str) -> None
-        config = self._storage.get()
-        server = configuration.adjust_servername(server)
-        sc = config.servers().get(server)
-        if sc:
-            self._server = sc.get_server()
-            self._server_key_id = sc.get_server_key_id()
-        else:
-            self._server = server
-            self._server_key_id = None
-
-    def get_server(self):  # type: () -> str
+    @property
+    def server(self):
         return self._server or DEFAULT_KEEPER_SERVER
 
-    server = property(get_server, set_server)
+    @server.setter
+    def server(self, keeper_server: str):
+        config = self._storage.get()
+        keeper_server = configuration.adjust_servername(keeper_server)
+        sc = config.servers().get(keeper_server)
+        if sc:
+            self._server = sc.server
+            self._server_key_id = sc.server_key_id
+        else:
+            self._server = keeper_server
+            self._server_key_id = None
 
-    def get_server_key_id(self):  # type: () -> int
+    @property
+    def server_key_id(self):
         return self._server_key_id or 1
 
-    def get_configuration_storage(self):  # type: () -> configuration.IConfigurationStorage
+    def get_configuration_storage(self):
         return self._storage
 
-    def get_push_server(self):  # type: () -> str
+    def get_push_server(self):
         return f'push.services.{self.server}'
 
-    def _communicate_keeper(self, endpoint, payload, session_token=None):
-        # type: (str, bytes, Optional[bytes]) -> bytes
+    def _communicate_keeper(self,
+                            endpoint,           # type: str
+                            payload,            # type: Optional[bytes]
+                            session_token=None  # type: Optional[bytes]
+                            ):
         logger = utils.get_logger()
 
-        key_id = self.get_server_key_id()
+        key_id = self.server_key_id
         attempt = 0
         while attempt < 3:
             attempt += 1
@@ -121,7 +124,8 @@ class KeeperEndpoint:
                 'Content-Type': 'application/octet-stream',
                 'User-Agent': 'KeeperSDK.Python/' + self.client_version
             }
-            rs = requests.post(url, data=api_request.SerializeToString(), headers=headers)
+            rs = requests.post(url, data=api_request.SerializeToString(), headers=headers, proxies=self.proxies,
+                               verify=self.certificate_check)
             logger.debug('<<< Response Code: [%d]', rs.status_code)
 
             content_type = rs.headers.get('Content-Type') or ''
@@ -129,7 +133,7 @@ class KeeperEndpoint:
                 if key_id != self._server_key_id:
                     self._server_key_id = key_id
                     config = self._storage.get()
-                    sc = configuration.ServerConfiguration(self.get_server())
+                    sc = configuration.ServerConfiguration(self.server)
                     sc.server_key_id = key_id
                     config.servers().put(sc)
                     self._storage.put(config)
@@ -198,7 +202,7 @@ class KeeperEndpoint:
 
     def connect_to_push_server(self, payload):  # type: (bytes) -> notifications.KeeperPushNotifications
         transmission_key = utils.generate_aes_key()
-        api_rq = prepare_api_request(self.get_server_key_id(), transmission_key, payload)
+        api_rq = prepare_api_request(self.server_key_id, transmission_key, payload)
 
         push_server = self.get_push_server()
         url_comp = ('wss', push_server, '/wss_open_connection/' + utils.base64_url_encode(api_rq.SerializeToString()),

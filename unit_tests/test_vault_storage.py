@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from vault import sqlite_storage, vault_storage, memory_storage
+from keepersdk.vault import sqlite_storage, vault_storage, memory_storage
 
 
 class TestVaultStorage(TestCase):

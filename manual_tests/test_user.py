@@ -2,9 +2,9 @@ import os
 import unittest
 
 import generator
-from login import auth, endpoint, configuration
-from vault import (sqlite_storage, record_facades,
-                   folder_management, vault_online, record_management, vault_record, vault_types, attachment)
+from keepersdk.login import auth, endpoint, configuration
+from keepersdk.vault import (sqlite_storage, record_facades, folder_management, vault_online, record_management,
+                             vault_record, vault_types, attachment)
 
 
 class MyTestCase(unittest.TestCase):
@@ -145,8 +145,9 @@ class MyTestCase(unittest.TestCase):
         login_auth = auth.LoginAuth(keeper_endpoint)
         login_auth.login('integration.tests@keepersecurity.com')
         login_auth.login_step.is_final()
-        self.assertIsInstance(login_auth.login_step, auth.LoginStepConnected)
-        keeper_auth = login_auth.login_step.keeper_auth()
+        step = login_auth.login_step
+        self.assertIsInstance(step, auth.LoginStepConnected)
+        keeper_auth = step.keeper_auth()
         vault_storage = sqlite_storage.SqliteVaultStorage(
             file_name='', vault_owner=keeper_auth.auth_context.username)
         vault = vault_online.VaultOnline(keeper_auth, vault_storage)

@@ -6,25 +6,25 @@
 #
 # Keeper Commander
 # Copyright 2022 Keeper Security Inc.
-# Contact: ops@keepersecurity.com        self._remove_indexes(to_remove)class _
+# Contact: ops@keepersecurity.com
 #
 
 import abc
 import io
 import json
 import os
-from typing import Type, Union
+from typing import Type, Union, TypeVar, Optional, Generic, Iterator
 from urllib.parse import urlparse
 
-from .endpoint import DEFAULT_KEEPER_SERVER
 from .. import utils
+from ..constants import DEFAULT_KEEPER_SERVER
 
 
-def adjust_username(username):
+def adjust_username(username):   # type: (str) -> str
     return username.lower() if isinstance(username, str) else ''
 
 
-def adjust_servername(server):
+def adjust_servername(server):   # type: (str) -> str
     if server:
         url = urlparse(server)
         if url.netloc:
@@ -39,121 +39,133 @@ class IEntityId(abc.ABC):
         super(IEntityId, self).__init__()
 
     @abc.abstractmethod
-    def get_id(self):
+    def get_id(self):   # type: () -> str
         pass
 
 
-class IUserConfiguration(IEntityId):
-    def __init__(self):
-        super(IUserConfiguration, self).__init__()
-        
-    @abc.abstractmethod
-    def get_username(self):
-        pass
+TID = TypeVar('TID', bound=IEntityId)
 
+
+class IConfigurationCollection(Generic[TID], abc.ABC):
     @abc.abstractmethod
-    def get_password(self):
+    def get(self, entity_id):   # type: (str) -> Optional[TID]
         pass
 
     @abc.abstractmethod
-    def get_server(self):
+    def put(self, entity):    # type: (TID) -> None
         pass
 
     @abc.abstractmethod
-    def get_last_device(self):
-        pass
-
-    def get_id(self):
-        return self.get_username()
-
-
-class IServerConfiguration(IEntityId):
-    def __init__(self):
-        super(IServerConfiguration, self).__init__()
-
-    @abc.abstractmethod
-    def get_server(self):
+    def delete(self, entity_id):   # type: (str) -> None
         pass
 
     @abc.abstractmethod
-    def get_server_key_id(self):
+    def list(self):   # type: () -> Iterator[TID]
         pass
-
-    def get_id(self):
-        return self.get_server()
-
-
-class IDeviceServerConfiguration(IEntityId):
-    def __init__(self):
-        super(IDeviceServerConfiguration, self).__init__()
-
-    @abc.abstractmethod
-    def get_server(self):
-        pass
-
-    @abc.abstractmethod
-    def get_clone_code(self):
-        pass
-
-    def get_id(self):
-        return self.get_server()
-
-
-class IDeviceConfiguration(IEntityId):
-    def __init__(self):
-        super(IDeviceConfiguration, self).__init__()
-
-    @abc.abstractmethod
-    def get_device_token(self):
-        pass
-
-    @abc.abstractmethod
-    def get_public_key(self):
-        pass
-
-    @abc.abstractmethod
-    def get_private_key(self):
-        pass
-
-    @abc.abstractmethod
-    def get_server_info(self):
-        pass
-
-    def get_id(self):
-        return self.get_device_token()
 
 
 class IUserDeviceConfiguration(IEntityId):
     def __init__(self):
         super(IUserDeviceConfiguration, self).__init__()
 
+    @property
     @abc.abstractmethod
-    def get_device_token(self):
+    def device_token(self):  # type: () -> str
         pass
 
     def get_id(self):
-        return self.get_device_token()
+        return self.device_token
 
 
-class IConfigurationCollection(abc.ABC):
+class IUserConfiguration(IEntityId):
     def __init__(self):
-        super(IConfigurationCollection, self).__init__()
-
+        super(IUserConfiguration, self).__init__()
+        
+    @property
     @abc.abstractmethod
-    def get(self, entity_id):
+    def username(self):   # type: () -> str
+        pass
+
+    @property
+    @abc.abstractmethod
+    def password(self):   # type: () -> Optional[str]
+        pass
+
+    @property
+    @abc.abstractmethod
+    def server(self):   # type: () -> Optional[str]
+        pass
+
+    @property
+    @abc.abstractmethod
+    def last_device(self):   # type: () -> Optional[IUserDeviceConfiguration]
+        pass
+
+    def get_id(self):
+        return self.username
+
+
+class IServerConfiguration(IEntityId):
+    def __init__(self):
+        super(IServerConfiguration, self).__init__()
+
+    @property
+    @abc.abstractmethod
+    def server(self):  # type: () -> str
+        pass
+
+    @property
+    @abc.abstractmethod
+    def server_key_id(self):  # type: () -> int
+        pass
+
+    def get_id(self):
+        return self.server
+
+
+class IDeviceServerConfiguration(IEntityId):
+    def __init__(self):
+        super(IDeviceServerConfiguration, self).__init__()
+
+    @property
+    @abc.abstractmethod
+    def server(self):   # type: () -> str
+        pass
+
+    @property
+    @abc.abstractmethod
+    def clone_code(self):   # type: () -> Optional[str]
+        pass
+
+    def get_id(self):
+        return self.server
+
+
+class IDeviceConfiguration(IEntityId):
+    def __init__(self):
+        super(IDeviceConfiguration, self).__init__()
+
+    @property
+    @abc.abstractmethod
+    def device_token(self):   # type: () -> str
+        pass
+
+    @property
+    @abc.abstractmethod
+    def public_key(self):  # type: () -> str
+        pass
+
+    @property
+    @abc.abstractmethod
+    def private_key(self):  # type: () -> str
         pass
 
     @abc.abstractmethod
-    def put(self, entity):
+    def get_server_info(self):   # type: () -> IConfigurationCollection[IDeviceServerConfiguration]
         pass
 
-    @abc.abstractmethod
-    def delete(self, entity_id):
-        pass
-
-    @abc.abstractmethod
-    def list(self):
-        pass
+    def get_id(self):
+        return self.device_token
 
 
 class IKeeperConfiguration(abc.ABC):
@@ -161,34 +173,38 @@ class IKeeperConfiguration(abc.ABC):
         super(IKeeperConfiguration, self).__init__()
 
     @abc.abstractmethod
-    def users(self):
+    def users(self):     # type: () -> IConfigurationCollection[IUserConfiguration]
         pass
 
     @abc.abstractmethod
-    def servers(self):
+    def servers(self):   # type: () -> IConfigurationCollection[IServerConfiguration]
         pass
 
     @abc.abstractmethod
-    def devices(self):
+    def devices(self):   # type: () -> IConfigurationCollection[IDeviceConfiguration]
         pass
 
+    @property
     @abc.abstractmethod
-    def get_last_login(self):
+    def last_login(self):   # type: () -> str
         pass
 
+    @last_login.setter
     @abc.abstractmethod
-    def set_last_login(self, value):
+    def last_login(self, value):   # type: (str) -> None
         pass
 
+    @property
     @abc.abstractmethod
-    def get_last_server(self):
+    def last_server(self):   # type: () -> str
         pass
 
+    @last_server.setter
     @abc.abstractmethod
-    def set_last_server(self, value):
+    def last_server(self, value):    # type: (str) -> None
         pass
 
-    def assign(self, other):
+    def assign(self, other):   # type: (IKeeperConfiguration) -> None
         user_ids = [x.get_id() for x in self.users().list()]
         for user_id in user_ids:
             self.users().delete(user_id)
@@ -199,8 +215,8 @@ class IKeeperConfiguration(abc.ABC):
         for device_id in device_ids:
             self.devices().delete(device_id)
 
-        self.set_last_login(other.get_last_login())
-        self.set_last_server(other.get_last_server())
+        self.last_login = other.last_login
+        self.last_server = other.last_server
         for user in other.users().list():
             self.users().put(user)
         for server in other.servers().list():
@@ -210,22 +226,19 @@ class IKeeperConfiguration(abc.ABC):
 
 
 class IConfigurationStorage(abc.ABC):
-    def __init__(self):
-        super(IConfigurationStorage, self).__init__()
-
     @abc.abstractmethod
-    def get(self):
+    def get(self):  # type: () -> IKeeperConfiguration
         pass
 
     @abc.abstractmethod
-    def put(self, configuration):
+    def put(self, configuration):  # type: (IKeeperConfiguration) -> None
         pass
 
 
 class ConfigurationCollection(IConfigurationCollection):
     def __init__(self):
         super(ConfigurationCollection, self).__init__()
-        self._storage = {}
+        self._storage = {} 
 
     def get(self, entity_id):
         return self._storage.get(entity_id)
@@ -242,21 +255,22 @@ class ConfigurationCollection(IConfigurationCollection):
 
 
 class UserDeviceConfiguration(IUserDeviceConfiguration):
-    def __init__(self, user_device):
+    def __init__(self, user_device):   # type: (Union[str, IUserDeviceConfiguration]) -> None
         IUserDeviceConfiguration.__init__(self)
 
         self._device_token = ''
         if isinstance(user_device, str):
             self._device_token = user_device
         elif isinstance(user_device, IUserDeviceConfiguration):
-            self._device_token = user_device.get_device_token()
+            self._device_token = user_device.device_token
 
-    def get_device_token(self):
+    @property
+    def device_token(self):
         return self._device_token
 
 
 class UserConfiguration(IUserConfiguration):
-    def __init__(self, user):
+    def __init__(self, user):   # type: (Union[IUserConfiguration, str]) -> None
         IUserConfiguration.__init__(self)
 
         self._username = ''
@@ -266,65 +280,69 @@ class UserConfiguration(IUserConfiguration):
         if isinstance(user, str):
             self._username = adjust_username(user)
         elif isinstance(user, IUserConfiguration):
-            self._username = user.get_username()
-            self._password = user.get_password()
-            self._server = user.get_server()
-            ldc = user.get_last_device()
+            self._username = user.username
+            self._password = user.password
+            self._server = user.server
+            ldc = user.last_device
             if ldc:
                 self._last_device = UserDeviceConfiguration(ldc)
 
-    def get_username(self):
+    @property
+    def username(self):
         return self._username
 
-    def get_password(self):
+    @property
+    def password(self):
         return self._password
 
-    def get_server(self):
+    @property
+    def server(self):
         return self._server
 
-    def get_last_device(self):
+    @property
+    def last_device(self):
         return self._last_device
 
-    def set_password(self, value):
+    @password.setter
+    def password(self, value):
         self._password = value
 
-    def set_server(self, value):
+    @server.setter
+    def server(self, value):
         self._server = value
 
-    def set_last_device(self, value):
+    @last_device.setter
+    def last_device(self, value):
         self._last_device = value
-
-    password = property(get_password, set_password)
-    server = property(get_server, set_server)
-    last_device = property(get_last_device, set_last_device)
 
 
 class ServerConfiguration(IServerConfiguration):
-    def __init__(self, server):
+    def __init__(self, other):  # type: (Union[str, IServerConfiguration]) -> None
         IServerConfiguration.__init__(self)
 
         self._server = ''
         self._server_key_id = 1
-        if isinstance(server, str):
-            self._server = adjust_servername(server)
-        elif isinstance(server, IServerConfiguration):
-            self._server = server.get_server()
-            self._server_key_id = server.get_server_key_id()
+        if isinstance(other, str):
+            self._server = adjust_servername(other)
+        elif isinstance(other, IServerConfiguration):
+            self._server = other.server
+            self._server_key_id = other.server_key_id
 
-    def get_server(self):
+    @property
+    def server(self):
         return self._server
 
-    def get_server_key_id(self):
+    @property
+    def server_key_id(self):
         return self._server_key_id
 
-    def set_server_key_id(self, value):
+    @server_key_id.setter
+    def server_key_id(self, value):
         self._server_key_id = value
-
-    server_key_id = property(get_server_key_id, set_server_key_id)
 
 
 class DeviceServerConfiguration(IDeviceServerConfiguration):
-    def __init__(self, server):
+    def __init__(self, server):   # type: (Union[IDeviceServerConfiguration, str]) -> None
         IDeviceServerConfiguration.__init__(self)
 
         self._server = ''
@@ -332,23 +350,24 @@ class DeviceServerConfiguration(IDeviceServerConfiguration):
         if isinstance(server, str):
             self._server = adjust_servername(server)
         elif isinstance(server, IDeviceServerConfiguration):
-            self._server = server.get_server()
-            self._clone_code = server.get_clone_code()
+            self._server = server.server
+            self._clone_code = server.clone_code
 
-    def get_server(self):
+    @property
+    def server(self):
         return self._server
 
-    def get_clone_code(self):
+    @property
+    def clone_code(self):
         return self._clone_code
 
-    def set_clone_code(self, value):
+    @clone_code.setter
+    def clone_code(self, value):
         self._clone_code = value
-
-    clone_code = property(get_clone_code, set_clone_code)
 
 
 class DeviceConfiguration(IDeviceConfiguration):
-    def __init__(self, device):
+    def __init__(self, device):    # type: (Union[IDeviceConfiguration, str]) -> None
         IDeviceConfiguration.__init__(self)
 
         self._device_token = ''
@@ -358,35 +377,37 @@ class DeviceConfiguration(IDeviceConfiguration):
         if isinstance(device, str):
             self._device_token = device
         elif isinstance(device, IDeviceConfiguration):
-            self._device_token = device.get_device_token()
-            self._private_key = device.get_private_key()
-            self._public_key = device.get_public_key()
+            self._device_token = device.device_token
+            self._private_key = device.private_key
+            self._public_key = device.public_key
             src_server_info = device.get_server_info()
             dst_server_info = self.get_server_info()
             if src_server_info:
                 for dsc in src_server_info.list():
                     dst_server_info.put(DeviceServerConfiguration(dsc))
 
-    def get_device_token(self):
+    @property
+    def device_token(self):
         return self._device_token
 
-    def get_public_key(self):
+    @property
+    def public_key(self):
         return self._public_key
 
-    def get_private_key(self):
+    @property
+    def private_key(self):
         return self._private_key
 
     def get_server_info(self):
         return self._server_info
 
-    def set_public_key(self, value):
+    @public_key.setter
+    def public_key(self, value):  # type: (str) -> None
         self._public_key = value
 
-    def set_private_key(self, value):
+    @private_key.setter
+    def private_key(self, value):
         self._private_key = value
-
-    public_key = property(get_public_key, set_public_key)
-    private_key = property(get_private_key, set_private_key)
 
 
 class KeeperConfiguration(IKeeperConfiguration):
@@ -399,8 +420,8 @@ class KeeperConfiguration(IKeeperConfiguration):
         self._devices = ConfigurationCollection()
         self._servers = ConfigurationCollection()
         if isinstance(other, IKeeperConfiguration):
-            self._last_login = other.get_last_login()
-            self._last_server = other.get_last_server()
+            self._last_login = other.last_login
+            self._last_server = other.last_server
             for uc in other.users().list():
                 self.users().put(UserConfiguration(uc))
             for dc in other.devices().list():
@@ -417,25 +438,27 @@ class KeeperConfiguration(IKeeperConfiguration):
     def devices(self):
         return self._devices
 
-    def get_last_login(self):
+    @property
+    def last_login(self):
         return self._last_login
 
-    def set_last_login(self, value):
+    @last_login.setter
+    def last_login(self, value):
         self._last_login = value
 
-    def get_last_server(self):
+    @property
+    def last_server(self):
         return self._last_server
 
-    def set_last_server(self, value):
+    @last_server.setter
+    def last_server(self, value):
         self._last_server = value
-
-    last_login = property(get_last_login, set_last_login)
-    last_server = property(get_last_server, set_last_server)
 
 
 class InMemoryConfigurationStorage(IConfigurationStorage):
-    def __init__(self, configuration: KeeperConfiguration):
-        self.configuration = configuration or KeeperConfiguration()
+    def __init__(self, configuration=None):
+        super().__init__()
+        self.configuration = configuration if isinstance(configuration, IKeeperConfiguration) else KeeperConfiguration()
 
     def get(self):
         return self.configuration
@@ -490,15 +513,17 @@ class _JsonDeviceServerConfiguration(IDeviceServerConfiguration, dict):
         if isinstance(data, dict):
             self.update(data)
         elif isinstance(data, IDeviceServerConfiguration):
-            self[self.SERVER] = data.get_server()
-            clone_code = data.get_clone_code()
+            self[self.SERVER] = data.server
+            clone_code = data.clone_code
             if clone_code:
                 self[self.CLONE_CODE] = clone_code
 
-    def get_server(self):
+    @property
+    def server(self):
         return self.get(self.SERVER)
 
-    def get_clone_code(self):
+    @property
+    def clone_code(self):
         return self.get(self.CLONE_CODE)
 
 
@@ -517,24 +542,27 @@ class _JsonDeviceConfiguration(IDeviceConfiguration, dict):
                 for si in data[self.SERVER_INFO]:
                     server_info.append(_JsonDeviceServerConfiguration(si))
         elif isinstance(data, IDeviceConfiguration):
-            self[self.DEVICE_TOKEN] = data.get_device_token()
-            public_key = data.get_public_key()
+            self[self.DEVICE_TOKEN] = data.device_token
+            public_key = data.public_key
             if public_key:
                 self[self.PUBLIC_KEY] = public_key
-            private_key = data.get_private_key()
+            private_key = data.private_key
             if private_key:
                 self[self.PRIVATE_KEY] = private_key
             for si in data.get_server_info().list():  # type: IDeviceServerConfiguration
                 server_info.append(_JsonDeviceServerConfiguration(si))
         self[self.SERVER_INFO] = server_info
 
-    def get_device_token(self):
+    @property
+    def device_token(self):
         return self.get(self.DEVICE_TOKEN)
 
-    def get_public_key(self):
+    @property
+    def public_key(self):
         return self.get(self.PUBLIC_KEY)
 
-    def get_private_key(self):
+    @property
+    def private_key(self):
         return self.get(self.PRIVATE_KEY)
 
     def get_server_info(self):
@@ -550,13 +578,15 @@ class _JsonServerConfiguration(IServerConfiguration, dict):
         if isinstance(data, dict):
             self.update(data)
         if isinstance(data, IServerConfiguration):
-            self[self.SERVER] = data.get_server()
-            self[self.SERVER_KEY_ID] = data.get_server_key_id()
+            self[self.SERVER] = data.server
+            self[self.SERVER_KEY_ID] = data.server_key_id
 
-    def get_server(self):
+    @property
+    def server(self):
         return self.get(self.SERVER, '')
 
-    def get_server_key_id(self):
+    @property
+    def server_key_id(self):
         return self.get(self.SERVER_KEY_ID, 1)
 
 
@@ -568,9 +598,10 @@ class _JsonUserDeviceConfiguration(IUserDeviceConfiguration, dict):
         if isinstance(data, dict):
             self.update(data)
         elif isinstance(data, IUserDeviceConfiguration):
-            self[self.DEVICE_TOKEN] = data.get_device_token()
+            self[self.DEVICE_TOKEN] = data.device_token
 
-    def get_device_token(self):
+    @property
+    def device_token(self):
         return self.get(self.DEVICE_TOKEN)
 
 
@@ -589,27 +620,31 @@ class _JsonUserConfiguration(IUserConfiguration, dict):
                 self[self.LAST_DEVICE] = _JsonUserDeviceConfiguration(self[self.LAST_DEVICE])
 
         elif isinstance(data, IUserConfiguration):
-            self[self.USER] = data.get_username()
-            password = data.get_password()
+            self[self.USER] = data.username
+            password = data.password
             if password:
                 self[self.PASSWORD] = password
-            server = data.get_server()
+            server = data.server
             if server:
-                self[self.SERVER] = data.get_server()
-            last_device = data.get_last_device()
+                self[self.SERVER] = data.server
+            last_device = data.last_device
             if last_device:
                 self[self.LAST_DEVICE] = _JsonUserDeviceConfiguration(last_device)
 
-    def get_username(self):
+    @property
+    def username(self):
         return self.get(self.USER)
 
-    def get_password(self):
+    @property
+    def password(self):
         return self.get(self.PASSWORD)
 
-    def get_server(self):
+    @property
+    def server(self):
         return self.get(self.SERVER)
 
-    def get_last_device(self):
+    @property
+    def last_device(self):
         return self.get(self.LAST_DEVICE)
 
 
@@ -626,19 +661,23 @@ class _JsonKeeperConfiguration(dict, IKeeperConfiguration):
         self[self.SERVERS] = _JsonConfigurationCollection(_JsonServerConfiguration)
         self[self.DEVICES] = _JsonConfigurationCollection(_JsonDeviceConfiguration)
 
-    def get_last_login(self):
+    @property
+    def last_login(self):
         return self.get(self.LAST_LOGIN)
 
-    def set_last_login(self, value):
+    @last_login.setter
+    def last_login(self, value):
         if value:
             self[self.LAST_LOGIN] = value
         else:
             self.pop(self.LAST_LOGIN, None)
 
-    def get_last_server(self):
+    @property
+    def last_server(self):
         return self.get(self.LAST_SERVER)
 
-    def set_last_server(self, value):
+    @last_server.setter
+    def last_server(self, value):
         if value:
             self[self.LAST_SERVER] = value
         else:
@@ -656,16 +695,16 @@ class _JsonKeeperConfiguration(dict, IKeeperConfiguration):
 
 class IJsonLoader(abc.ABC):
     @abc.abstractmethod
-    def load_json(self):
+    def load_json(self):   # type: () -> bytes
         pass
 
     @abc.abstractmethod
-    def store_json(self, data):
+    def store_json(self, data):   # type: (bytes) -> None
         pass
 
 
 class JsonFileLoader(IJsonLoader):
-    def __init__(self, file_name=None):
+    def __init__(self, file_name=None):  # type: (Optional[str]) -> None
         IJsonLoader.__init__(self)
         if not file_name:
             file_name = 'login.json'
@@ -687,7 +726,7 @@ class JsonFileLoader(IJsonLoader):
 
 
 class JsonConfigurationStorage(IConfigurationStorage):
-    def __init__(self, loader=None, file_name=None):
+    def __init__(self, loader=None, file_name=None):  # type: (Optional[IJsonLoader], Optional[str]) -> None
         IConfigurationStorage.__init__(self)
         if not loader:
             loader = JsonFileLoader(file_name or 'login.json')
@@ -718,8 +757,8 @@ class JsonConfigurationStorage(IConfigurationStorage):
                     logger.debug('Load JSON configuration', exc_info=e)
 
         storage = _JsonKeeperConfiguration()
-        storage.set_last_login(json_conf.get(_JsonKeeperConfiguration.LAST_LOGIN))
-        storage.set_last_server(json_conf.get(_JsonKeeperConfiguration.LAST_SERVER))
+        storage.last_login = json_conf.get(_JsonKeeperConfiguration.LAST_LOGIN)
+        storage.last_server = json_conf.get(_JsonKeeperConfiguration.LAST_SERVER)
         json_users = json_conf.get(_JsonKeeperConfiguration.USERS)
         if isinstance(json_users, list):
             users = storage.users()

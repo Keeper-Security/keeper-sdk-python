@@ -23,32 +23,32 @@ from urllib.parse import urlparse
 from . import crypto
 
 
-def get_logger(name='keeper-sdk'):
+def get_logger(name='keeper-sdk'):   # type: (str) -> logging.Logger
     return logging.getLogger(name)
 
 
-def generate_uid():
+def generate_uid():   # type: () -> str
     return base64_url_encode(crypto.get_random_bytes(16))
 
 
-def generate_aes_key():
+def generate_aes_key():   # type: () -> bytes
     return crypto.get_random_bytes(32)
 
 
-def current_milli_time():
+def current_milli_time():   # type: () -> int
     return int(round(time.time() * 1000))
 
 
-def base64_url_decode(s):
+def base64_url_decode(s):   # type: (str) -> bytes
     return base64.urlsafe_b64decode(s + '==')
 
 
-def base64_url_encode(b):
+def base64_url_encode(b):   # type: (bytes) -> str
     bs = base64.urlsafe_b64encode(b)
     return bs.rstrip(b'=').decode('utf-8')
 
 
-def decrypt_encryption_params(encryption_params, password):
+def decrypt_encryption_params(encryption_params, password):  # type: (bytes, str) -> bytes
     if len(encryption_params) != 100:
         raise Exception('Invalid encryption params: bad params length')
 
@@ -70,7 +70,7 @@ def decrypt_encryption_params(encryption_params, password):
     return decrypted_data_key[:32]
 
 
-def create_encryption_params(password, salt, iterations, data_key):
+def create_encryption_params(password, salt, iterations, data_key):  # type: (str, bytes, int, bytes) -> bytes
     key = crypto.derive_key_v1(password, salt, iterations)
     enc_iter = int.to_bytes(iterations, length=3, byteorder='big', signed=False)
     enc_iv = crypto.get_random_bytes(16)
@@ -78,7 +78,7 @@ def create_encryption_params(password, salt, iterations, data_key):
     return b'\x01' + enc_iter + salt + enc_data_key
 
 
-def create_auth_verifier(password, salt, iterations):
+def create_auth_verifier(password, salt, iterations):  # type: (str, bytes, int) -> bytes
     derived_key = crypto.derive_key_v1(password, salt, iterations)
     enc_iter = int.to_bytes(iterations, length=3, byteorder='big', signed=False)
     return b'\x01' + enc_iter + salt + derived_key
@@ -87,27 +87,26 @@ def create_auth_verifier(password, salt, iterations):
 VALID_URL_SCHEME_CHARS = '+-.:'
 
 
-def is_url(test_str):
-    if not isinstance(test_str, str):
-        return False
-    url_parts = test_str.split('://')
-    url_scheme = url_parts[0]
-    valid_scheme = all(c.isalnum or c in VALID_URL_SCHEME_CHARS for c in url_scheme)
-    if len(test_str.split()) == 1 and len(url_parts) > 1 and valid_scheme:
-        return True
-    else:
-        return False
+def is_url(test_str):   # type: (str) -> bool
+    if isinstance(test_str, str):
+        url_parts = test_str.split('://')
+        url_scheme = url_parts[0]
+        valid_scheme = all(c.isalnum or c in VALID_URL_SCHEME_CHARS for c in url_scheme)
+        if len(test_str.split()) == 1 and len(url_parts) > 1 and valid_scheme:
+            return True
+
+    return False
 
 
 EMAIL_PATTERN = r"(^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$)"
 email_pattern = re.compile(EMAIL_PATTERN)
 
 
-def is_email(test_str):
+def is_email(test_str):   # type: (str) -> bool
     return email_pattern.match(test_str) is not None
 
 
-def url_strip(url):
+def url_strip(url):   # type: (str) -> str
     if not url:
         return ''
     try:
@@ -140,7 +139,7 @@ def offset_char(text, func):  # type: (str, Callable[[str, str], int]) -> Iterat
         prev = ch
 
 
-def password_score(password):
+def password_score(password):   # type: (str) -> int
     score = 0
     if not password:
         return score
@@ -257,7 +256,7 @@ def password_score(password):
     return score if 0 <= score <= 100 else 0 if score < 0 else 100
 
 
-def size_to_str(size):
+def size_to_str(size):     # type: (int) -> str
     if size < 2000:
         return f'{size} b'
     size = size / 1024
@@ -273,7 +272,7 @@ def size_to_str(size):
 SEARCHABLE_CHARACTERS = {x for x in '\'"`-_+$@%^&'}
 
 
-def tokenize_searchable_text(text):
+def tokenize_searchable_text(text):   # type: (str) -> Iterator[str]
     start_pos = -1
     for i, ch in enumerate(itertools.chain(text, ' ')):
         is_word_break = False

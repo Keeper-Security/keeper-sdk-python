@@ -12,7 +12,7 @@ import enum
 import json
 from typing import Optional, Iterable, Union, Callable, List, Set
 
-from . import vault_extensions, record_facades
+from . import vault_extensions, record_facades, vault_online
 from .vault_record import PasswordRecord, TypedRecord, TypedField
 from .vault_types import RecordPath, Folder
 from .. import utils, crypto
@@ -122,7 +122,7 @@ def add_record_to_folder(vault, record, folder_uid=None):
                         vault.schedule_audit_event(
                             'file_attachment_uploaded', record_uid=record.record_uid, attachment_id=file_uid)
             else:
-                raise KeeperApiError(record_rs.status, rs.message)
+                raise KeeperApiError(record_rs.status, record_rs.message)
 
     else:
         raise ValueError('Unsupported Keeper record')
@@ -198,12 +198,13 @@ def update_record(vault, record, skip_extra=False):
     if not storage_record:
         raise Exception(f'Record Update: {record.record_uid} not found.')
 
-    existing_record = None  # type: Union[None, PasswordRecord, TypedRecord]
     existing_record = vault_extensions.load_keeper_record(storage_record, record_key)
-    if type(existing_record) != type(record):
+    if isinstance(record, PasswordRecord) and isinstance(existing_record, PasswordRecord):
+        status = compare_records(record, existing_record)
+    elif isinstance(record, TypedRecord) and isinstance(existing_record, TypedRecord):
+        status = compare_records(record, existing_record)
+    else:
         raise Exception(f'Record {record.record_uid}: Invalid record type.')
-
-    status = compare_records(record, existing_record)
 
     if isinstance(record, PasswordRecord) and isinstance(existing_record, PasswordRecord):
         record_object = {
@@ -297,7 +298,7 @@ def update_record(vault, record, skip_extra=False):
                 link.record_key = crypto.encrypt_aes_v2(ref_record_key, record_key)
                 ur.record_links_add.append(link)
         for ref in existing_refs.difference(refs):
-            ur.record_links_remove(utils.base64_url_decode(ref))
+            ur.record_links_remove.append(utils.base64_url_decode(ref))
 
         if vault.keeper_auth.auth_context.enterprise_ec_public_key:
             if bool(status & (RecordChangeStatus.Title | RecordChangeStatus.URL | RecordChangeStatus.RecordType)):
@@ -321,10 +322,12 @@ def update_record(vault, record, skip_extra=False):
         new_file_refs = set()    # type: Set[str]
         file_refs = existing_record.get_typed_field('fileRef')
         if isinstance(file_refs, TypedField) and isinstance(file_refs.value, list):
-            prev_file_refs.update(file_refs.value)
+            for uid in file_refs.value:
+                prev_file_refs.add(uid)
         file_refs = record.get_typed_field('fileRef')
         if isinstance(file_refs, TypedField) and isinstance(file_refs.value, list):
-            new_file_refs.update(file_refs.value)
+            for uid in file_refs.value:
+                new_file_refs.add(uid)
         for file_id in new_file_refs.difference(prev_file_refs):
             vault.schedule_audit_event(
                 'file_attachment_uploaded', record_uid=record.record_uid, attachment_id=file_id)

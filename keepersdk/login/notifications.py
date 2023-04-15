@@ -11,7 +11,7 @@
 
 import json
 import threading
-from typing import Optional
+from typing import Optional, TypeVar, Generic, Callable, List, Dict, Any
 
 import websocket
 
@@ -19,16 +19,19 @@ from .. import crypto, utils
 from ..proto import push_pb2
 
 
-class _FanOut:
+M = TypeVar('M')
+
+
+class FanOut(Generic[M]):
     def __init__(self):
-        self._callbacks = []
-        self._is_completed = False
+        self._callbacks = []         # type: List[Callable[[M], Optional[bool]]]
+        self._is_completed = False   # type: bool
 
     @property
-    def is_completed(self):
+    def is_completed(self):   # type: () -> bool
         return self._is_completed
 
-    def push(self, message):
+    def push(self, message):   # type: (M) -> None
         if self._is_completed:
             return
         to_remove = []
@@ -41,12 +44,12 @@ class _FanOut:
                 to_remove.append(i)
         self._remove_indexes(to_remove)
 
-    def register_callback(self, callback):
+    def register_callback(self, callback):  # type: (Callable[[M], Optional[bool]]) -> None
         if self._is_completed:
             return
         self._callbacks.append(callback)
 
-    def remove_callback(self, callback):
+    def remove_callback(self, callback):   # type: (Callable[[M], Optional[bool]]) -> None
         if self._is_completed:
             return
         to_remove = []
@@ -55,7 +58,7 @@ class _FanOut:
                 to_remove.append(i)
         self._remove_indexes(to_remove)
 
-    def remove_all(self):
+    def remove_all(self):   # type: () -> None
         self._callbacks.clear()
 
     def _remove_indexes(self, to_remove):
@@ -64,18 +67,18 @@ class _FanOut:
             if 0 <= idx < len(self._callbacks):
                 del self._callbacks[idx]
 
-    def shutdown(self):
+    def shutdown(self):   # type: () -> None
         self._is_completed = True
         self._callbacks.clear()
 
 
-class _KeeperPushNotifications(_FanOut):
-    def __init__(self, transmission_key):
-        _FanOut.__init__(self)
+class KeeperPushNotifications(FanOut[Dict[str, Any]]):
+    def __init__(self, transmission_key):   # type: (bytes) -> None
+        FanOut.__init__(self)
         self._transmission_key = transmission_key
-        self.ws_app = None  # type: Optional[websocket.WebSocketApp]
+        self.ws_app = None   # type: Optional[websocket.WebSocketApp]
         self._thread = None  # type: Optional[threading.Thread]
-        self.buffer = b''
+        self.buffer = b''    # type: bytes
         self.logger = utils.get_logger()
 
     def on_open(self, ws_app):
@@ -102,17 +105,17 @@ class _KeeperPushNotifications(_FanOut):
 
     def on_close(self, ws_app, close_code, close_message):
         self.logger.debug('WebSocket is closed with code %d: %s', close_code, close_message)
-        self.shutdown()
         if ws_app == self.ws_app:
+            self.shutdown()
             self.ws_app = None
 
-    def connect_to_push_channel(self, endpoint_uri):
+    def connect_to_push_channel(self, endpoint_uri):   # type: (str) -> None
         ws_app = websocket.WebSocketApp(
             endpoint_uri, on_open=self.on_open, on_data=self.on_data, on_error=self.on_error, on_close=self.on_close)
         self._thread = threading.Thread(target=lambda: ws_app.run_forever(), daemon=True)
         self._thread.start()
 
-    def send_to_push_channel(self, data, encrypted):
+    def send_to_push_channel(self, data, encrypted):   # type: (bytes, bool) -> None
         if self.ws_app:
             if encrypted:
                 data = crypto.encrypt_aes_v2(data, self._transmission_key)
@@ -121,12 +124,4 @@ class _KeeperPushNotifications(_FanOut):
     def shutdown(self):
         if self.ws_app:
             self.ws_app.close()
-        super(_KeeperPushNotifications, self).shutdown()
-
-
-class FanOut(_FanOut):
-    __doc__ = _FanOut.__doc__
-
-
-class KeeperPushNotifications(_KeeperPushNotifications):
-    __doc__ = _KeeperPushNotifications.__doc__
+        super(KeeperPushNotifications, self).shutdown()

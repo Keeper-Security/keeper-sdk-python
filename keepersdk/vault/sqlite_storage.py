@@ -1,14 +1,15 @@
 import sqlite3
 from typing import Optional
+from dataclasses import dataclass
 
 from . import vault_storage, storage_types
 from .. import sqlite_dao
 from ..storage import sqlite
 
 
+@dataclass
 class UserSettings:
-    def __init__(self):
-        self.revision = 0
+    continuation_token: bytes = b''
 
 
 class SqliteVaultStorage(vault_storage.IVaultStorage):
@@ -16,8 +17,9 @@ class SqliteVaultStorage(vault_storage.IVaultStorage):
         self._file_name = file_name or ':memory:'
         self._connection = None              # type: Optional[sqlite3.Connection]
         self.vault_owner = vault_owner
-        self.owner_column = 'account_uid'
-        settings_schema = sqlite_dao.TableSchema.load_schema(UserSettings, [], owner_column=self.owner_column)
+        self.owner_column = 'owner_uid'
+        settings_schema = sqlite_dao.TableSchema.load_schema(
+            UserSettings, [], owner_column=self.owner_column, owner_type=str)
         record_schema = sqlite_dao.TableSchema.load_schema(
             storage_types.StorageRecord, 'record_uid', owner_column=self.owner_column)
         record_type_schema = sqlite_dao.TableSchema.load_schema(
@@ -37,6 +39,9 @@ class SqliteVaultStorage(vault_storage.IVaultStorage):
         shared_folder_permission_schema = sqlite_dao.TableSchema.load_schema(
             storage_types.StorageSharedFolderPermission, ['shared_folder_uid', 'user_uid'],
             indexes={'UserUID': ['user_uid']}, owner_column=self.owner_column)
+        user_email_schema = sqlite_dao.TableSchema.load_schema(
+            storage_types.StorageUserEmail, ['account_uid', 'email'], indexes={'Email': ['email']},
+            owner_column=self.owner_column)
         folder_schema = sqlite_dao.TableSchema.load_schema(
             storage_types.StorageFolder, 'folder_uid', owner_column=self.owner_column)
         folder_record_schema = sqlite_dao.TableSchema.load_schema(
@@ -48,8 +53,8 @@ class SqliteVaultStorage(vault_storage.IVaultStorage):
         sqlite_dao.verify_database(self.get_connection(),
                                    (settings_schema, record_schema, record_type_schema, shared_folder_schema,
                                     team_schema, non_shared_data_schema, record_key_schema, shared_folder_key_schema,
-                                    shared_folder_permission_schema, folder_schema, folder_record_schema,
-                                    breach_watch_record_schema))
+                                    shared_folder_permission_schema, user_email_schema,
+                                    folder_schema, folder_record_schema, breach_watch_record_schema))
 
         self._settings_storage = sqlite.SqliteRecordStorage(
             self.get_connection, settings_schema, owner=self.vault_owner)
@@ -72,6 +77,8 @@ class SqliteVaultStorage(vault_storage.IVaultStorage):
             self.get_connection, shared_folder_key_schema, owner=self.vault_owner)
         self._shared_folder_permissions = sqlite.SqliteLinkStorage(
             self.get_connection, shared_folder_permission_schema, owner=self.vault_owner)
+        self._user_emails = sqlite.SqliteLinkStorage(
+            self.get_connection, user_email_schema, owner=self.vault_owner)
 
         self._folders = sqlite.SqliteEntityStorage(
             self.get_connection, folder_schema, owner=self.vault_owner)
@@ -86,51 +93,69 @@ class SqliteVaultStorage(vault_storage.IVaultStorage):
             self._connection = sqlite3.Connection(self._file_name)
         return self._connection
 
-    def get_revision(self):
+    @property
+    def continuation_token(self):
         setting = self._settings_storage.load()
-        return setting.revision if setting and isinstance(setting.revision, int) else 0
+        return setting.continuation_token if setting and isinstance(setting.continuation_token, bytes) else b''
 
-    def set_revision(self, value):
+    @continuation_token.setter
+    def continuation_token(self, value):
         setting = self._settings_storage.load()
         if setting is None:
             setting = UserSettings()
-        setting.revision = value
+        setting.continuation_token = value
         self._settings_storage.store(setting)
 
-    def get_personal_scope_uid(self):
+    @property
+    def personal_scope_uid(self):
         return self.vault_owner
 
-    def get_records(self):
+    @property
+    def records(self):
         return self._records
 
-    def get_record_types(self):
+    @property
+    def record_types(self):
         return self._record_types
 
-    def get_shared_folders(self):
+    @property
+    def shared_folders(self):
         return self._shared_folders
 
-    def get_teams(self):
+    @property
+    def teams(self):
         return self._teams
 
-    def get_non_shared_data(self):
+    @property
+    def non_shared_data(self):
         return self._non_shared_data
 
-    def get_record_keys(self):
+    @property
+    def record_keys(self):
         return self._record_keys
 
-    def get_shared_folder_keys(self):
+    @property
+    def shared_folder_keys(self):
         return self._shared_folder_keys
 
-    def get_shared_folder_permissions(self):
+    @property
+    def shared_folder_permissions(self):
         return self._shared_folder_permissions
 
-    def get_folders(self):
+    @property
+    def user_emails(self):
+        return self._user_emails
+
+    @property
+    def folders(self):
         return self._folders
 
-    def get_folder_records(self):
+    @property
+    def folder_records(self):
         return self._folder_records
 
-    def get_breach_watch_records(self):
+    @property
+    def breach_watch_records(self):
         return self._breach_watch_records
 
     def clear(self):

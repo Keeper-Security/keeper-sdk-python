@@ -15,7 +15,7 @@ from ..storage.in_memory import InMemoryLinkStorage, InMemoryEntityStorage
 
 class InMemoryVaultStorage(IVaultStorage):
     def __init__(self):
-        self._revision = 0
+        self._continuation_token = b''
         self._personal_scope = 'PersonalScopeUid'
 
         self._records = InMemoryEntityStorage()
@@ -27,56 +27,75 @@ class InMemoryVaultStorage(IVaultStorage):
         self._record_keys = InMemoryLinkStorage()
         self._shared_folder_keys = InMemoryLinkStorage()
         self._shared_folder_permissions = InMemoryLinkStorage()
+        self._user_emails = InMemoryLinkStorage()
 
         self._folders = InMemoryEntityStorage()
         self._folder_records = InMemoryLinkStorage()
 
         self._breach_watch_records = InMemoryEntityStorage()
 
-    def get_revision(self):
-        return self._revision
+    @property
+    def continuation_token(self):
+        return self._continuation_token
 
-    def set_revision(self, value):
-        self._revision = value
+    @continuation_token.setter
+    def continuation_token(self, value):
+        self._continuation_token = value
 
-    def get_personal_scope_uid(self):
+    @property
+    def personal_scope_uid(self):
         return self._personal_scope
 
-    def get_records(self):
+    @property
+    def records(self):
         return self._records
 
-    def get_record_types(self):
+    @property
+    def record_types(self):
         return self._record_types
 
-    def get_shared_folders(self):
+    @property
+    def shared_folders(self):
         return self._shared_folders
 
-    def get_teams(self):
+    @property
+    def teams(self):
         return self._teams
 
-    def get_non_shared_data(self):
+    @property
+    def non_shared_data(self):
         return self._non_shared_data
 
-    def get_record_keys(self):
+    @property
+    def record_keys(self):
         return self._record_keys
 
-    def get_shared_folder_keys(self):
+    @property
+    def shared_folder_keys(self):
         return self._shared_folder_keys
 
-    def get_shared_folder_permissions(self):
+    @property
+    def shared_folder_permissions(self):
         return self._shared_folder_permissions
 
-    def get_folders(self):
+    @property
+    def user_emails(self):
+        return self._user_emails
+
+    @property
+    def folders(self):
         return self._folders
 
-    def get_folder_records(self):
+    @property
+    def folder_records(self):
         return self._folder_records
 
-    def get_breach_watch_records(self):
+    @property
+    def breach_watch_records(self):
         return self._breach_watch_records
 
     def clear(self):
-        self._revision = 0
+        self._continuation_token = b''
         self._records.clear()
         self._record_types.clear()
 

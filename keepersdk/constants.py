@@ -5,10 +5,10 @@
 #              |_|
 #
 # Keeper Commander
-# Copyright 2022 Keeper Security Inc.
+# Copyright 2023 Keeper Security Inc.
 # Contact: ops@keepersecurity.com
 #
 
-__author__ = 'Keeper Security Inc.'
-__license__ = 'MIT'
-__version__ = '0.9.10'
+DEFAULT_KEEPER_SERVER = 'keepersecurity.com'
+DEFAULT_DEVICE_NAME = 'Python Keeper API'
+CLIENT_VERSION = 'c16.8.0'

@@ -10,9 +10,8 @@
 #
 
 import abc
-import copy
 import json
-from typing import Dict, List, Tuple, Set, Any, Type
+from typing import Dict, List, Tuple, Set, Any, Type, Optional
 
 from google.protobuf.message import Message
 
@@ -21,10 +20,21 @@ from .. import crypto, utils
 from ..proto import enterprise_pb2
 
 
+def _to_key_type(key_type):  # type: (enterprise_pb2.EncryptedKeyType) -> str
+    if key_type == enterprise_pb2.KT_ENCRYPTED_BY_DATA_KEY:
+        return 'encrypted_by_data_key'
+    if key_type == enterprise_pb2.KT_ENCRYPTED_BY_PUBLIC_KEY:
+        return 'encrypted_by_public_key'
+    if key_type == enterprise_pb2.KT_ENCRYPTED_BY_DATA_KEY_GCM:
+        return 'encrypted_by_data_key_gcm'
+    if key_type == enterprise_pb2.KT_ENCRYPTED_BY_PUBLIC_KEY_ECC:
+        return 'encrypted_by_public_key_ecc'
+    return 'no_key'
+
+
 class LegacyEnterpriseData(EnterpriseData):
     def __init__(self):
         self._enterprise = EnterpriseInfo()
-        self._enterprise_data = {}
         self._data_types = {
             enterprise_pb2.NODES: _EnterpriseNodeEntity(self._enterprise),
             enterprise_pb2.USERS: _EnterpriseUserEntity(self._enterprise),
@@ -47,6 +57,8 @@ class LegacyEnterpriseData(EnterpriseData):
             enterprise_pb2.DEVICES_REQUEST_FOR_ADMIN_APPROVAL: _EnterpriseAdminApprovalRequestEntity(self._enterprise),
             enterprise_pb2.USER_ALIASES: _EnterpriseUserAliasEntity(self._enterprise),
         }   # type: Dict[int, _EnterpriseBaseDataType]
+        self._role_keys = {}    # type: Dict[int, Dict]
+        self._role_keys2 = {}   # type: Dict[int, Dict]
 
         teams = self._data_types[enterprise_pb2.TEAMS]
         if isinstance(teams, _EnterpriseDataEntity):
@@ -69,10 +81,6 @@ class LegacyEnterpriseData(EnterpriseData):
     def enterprise_info(self):
         return self._enterprise
 
-    @property
-    def enterprise_data(self):
-        return self._enterprise_data
-
     def put_entity(self, entity_type, data):
         if entity_type in self._data_types:
             e_type = self._data_types[entity_type]
@@ -86,18 +94,66 @@ class LegacyEnterpriseData(EnterpriseData):
     def clear(self):
         for e_type in self._data_types.values():
             e_type.clear()
+        self._role_keys.clear()
+        self._role_keys2.clear()
 
-    def populate(self, entities=None):
+    def put_role_key(self, role_id, key_type, encrypted_key):
+        self._role_keys[role_id] = {
+            'role_id': role_id,
+            'key_type': _to_key_type(key_type),
+            'encrypted_key': utils.base64_url_encode(encrypted_key)
+        }
+
+    def put_role_key2(self, role_id, encrypted_key):
+        self._role_keys2[role_id] = {
+            'role_id': role_id,
+            'encrypted_key': utils.base64_url_encode(encrypted_key)
+        }
+
+    def get_missing_role_keys(self):   # type: () -> List[int]
+        role_ids = set()
+        managed_nodes = self._data_types[enterprise_pb2.MANAGED_NODES]
+        if isinstance(managed_nodes, _Entities):
+            role_ids.update((x['role_id'] for x in managed_nodes.entities.values() if 'role_id' in x))
+        role_ids.difference_update(self._role_keys.keys())
+        role_ids.difference_update(self._role_keys2.keys())
+        return list(role_ids)
+
+    def synchronize(self, enterprise_data, entities=None):
+        # type: (Dict, Optional[Set[enterprise_pb2.EnterpriseDataEntity]]) -> None
         for data_type, entity in self._data_types.items():
             if isinstance(entities, set):
                 if data_type not in entities:
                     continue
             entity_name = entity.get_keeper_entity_name()
-            entity_list = self._enterprise_data.get(entity_name)
+            entity_list = enterprise_data.get(entity_name)
             if entity_list is None:
                 entity_list = []
-                self._enterprise_data[entity_name] = entity_list
+                enterprise_data[entity_name] = entity_list
             entity.export(entity_list)
+            if len(entity_list) == 0:
+                del enterprise_data[entity_name]
+
+        role_keys = enterprise_data.get('role_keys')
+        if role_keys or len(self._role_keys) > 0:
+            if role_keys is None:
+                role_keys = []
+                enterprise_data['role_keys'] = role_keys
+            role_uids = set(x['role_id'] for x in role_keys)
+            role_uids.difference_update(self._role_keys.keys())
+            if len(role_uids) != 0:
+                role_keys.clear()
+                role_keys.extend(self._role_keys.values())
+        role_keys2 = enterprise_data.get('role_keys2')
+        if role_keys2 or len(self._role_keys2) > 0:
+            if role_keys2 is None:
+                role_keys2 = []
+                enterprise_data['role_keys2'] = role_keys2
+            role_uids = set(x['role_id'] for x in role_keys2)
+            role_uids.difference_update(self._role_keys2.keys())
+            if len(role_uids) != 0:
+                role_keys2.clear()
+                role_keys2.extend(self._role_keys2.values())
 
 
 class _EnterpriseBaseDataType(abc.ABC):
@@ -125,7 +181,6 @@ class _EnterpriseBaseDataType(abc.ABC):
         pass
 
 
-
 class _Entities(abc.ABC):
     @property
     @abc.abstractmethod
@@ -137,9 +192,9 @@ class _EnterpriseDataEntity(_EnterpriseBaseDataType, _Entities):
     def __init__(self, enterprise):    # type: (EnterpriseInfo) -> None
         super(_EnterpriseDataEntity, self).__init__(enterprise)
         self._entities = {}    # type: Dict[str, Dict]
-        self._changed = set()  # type: Set
         self._links = []       # type: List[Tuple[str, _EnterpriseLink]]
 
+    @property
     def entities(self):  # type:  () -> Dict[str, Dict]
         return self._entities
 
@@ -159,41 +214,12 @@ class _EnterpriseDataEntity(_EnterpriseBaseDataType, _Entities):
                 keeper_entity = {}
                 self._entities[entity_key] = keeper_entity
             self.to_keeper_entity(entity, keeper_entity)
-            self._changed.add(entity_key)
 
     def export(self, entities):  # type: (List) -> None
-        to_delete = []    # type: List[int]
-        already_added = set()
-        for i in range(len(entities)):
-            entity1 = entities[i]
-            entity_key = self.get_keeper_entity_key(entity1)
-            if entity_key in self._entities:
-                already_added.add(entity_key)
-                if entity_key in self._changed:
-                    entity2 = self._entities[entity_key]
-                    for key, value in entity2.items():
-                        entity1[key] = value
-                    self._changed.remove(entity_key)
-            else:
-                to_delete.append(i)
-        self._changed.clear()
-
-        for entity_key in self._entities:
-            if entity_key in already_added:
-                continue
-            entity2 = self._entities[entity_key]
-            entity1 = copy.copy(entity2)
-            if len(to_delete) > 0:
-                pos = to_delete.pop(0)
-                entities[pos] = entity1
-            else:
-                entities.append(entity1)
-
-        while len(to_delete) > 0:
-            del entities[to_delete.pop(-1)]
+        entities.clear()
+        entities.extend(self._entities.values())
 
     def clear(self):  # type: () -> None
-        self._changed.clear()
         self._entities.clear()
         for _, link in self._links:
             if isinstance(link, _EnterpriseBaseDataType):
@@ -761,44 +787,19 @@ class _EnterpriseRoleEnforcements(_EnterpriseDataEntity, _EnterpriseLink):
         return 'role_enforcements'
 
     def export(self, entities):  # type: (List) -> None
-        enforcements = {}   # type: Dict[int, Dict]
+        role_enforcements = {}   # type: Dict[int, Dict]
         for entity in self._entities.values():
             role_id = entity['role_id']
-            if role_id in enforcements:
-                enforcement = enforcements[role_id]
-            else:
-                enforcement = {}
-                enforcements[role_id] = enforcement
-            enforcement[entity['enforcement_type']] = entity.get('value')
+            if role_id not in role_enforcements:
+                role_enforcements[role_id] = {
+                    'role_id': role_id
+                }
+            if 'enforcements' not in role_enforcements[role_id]:
+                role_enforcements[role_id]['enforcements'] = {}
+            role_enforcements[role_id]['enforcements'][entity['enforcement_type']] = entity['value']
 
-        to_delete = []    # type: List[int]
-        already_added = set()
-
-        for i in range(len(entities)):
-            entity1 = entities[i]
-            entity_key = entity1['role_id']
-            if entity_key in enforcements:
-                already_added.add(entity_key)
-                entity1['enforcements'] = enforcements[entity_key]
-            else:
-                to_delete.append(i)
-        self._changed.clear()
-
-        for role_id in enforcements:
-            if role_id in already_added:
-                continue
-            entity1 = {
-                'role_id': role_id,
-                'enforcements': enforcements[role_id]
-            }
-            if len(to_delete) > 0:
-                pos = to_delete.pop(0)
-                entities[pos] = entity1
-            else:
-                entities.append(entity1)
-
-        while len(to_delete) > 0:
-            del entities[to_delete.pop(-1)]
+        entities.clear()
+        entities.extend(role_enforcements.values())
 
 
 class _EnterpriseQueuedTeamUserEntity(_EnterpriseBaseDataType, _EnterpriseLink):

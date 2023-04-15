@@ -1,9 +1,9 @@
 from typing import Optional, List
 
-from vault import TypedRecord
+from . import vault_record
 
 class TypedRecordFacade:
-    record: Optional[TypedRecord]
+    record: Optional[vault_record.TypedRecord]
     title: Optional[str]
     notes: Optional[str]
     def load_typed_fields(self) -> None: ...

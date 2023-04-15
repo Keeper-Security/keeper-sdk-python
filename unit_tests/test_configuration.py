@@ -1,7 +1,7 @@
 from unittest import TestCase
 
 from keepersdk import utils, crypto
-from login import configuration
+from keepersdk.login import configuration
 
 user_name = 'user@company.com'
 user_password = 'password'
@@ -35,42 +35,43 @@ class TestConfiguration(TestCase):
         json_config = holder.get()
         self._compare_configurations(config, json_config)
 
-    def _compare_configurations(self, config1, config2):   # type: (configuration.IKeeperConfiguration, configuration.IKeeperConfiguration) -> None
-        self.assertEqual(config1.get_last_login(), config2.get_last_login())
-        self.assertEqual(config1.get_last_server(), config2.get_last_server())
+    def _compare_configurations(self, config1, config2):
+        # type: (configuration.IKeeperConfiguration, configuration.IKeeperConfiguration) -> None
+        self.assertEqual(config1.last_login, config2.last_login)
+        self.assertEqual(config1.last_server, config2.last_server)
         for uc1 in config1.users().list():
-            self.assertEqual(uc1.get_username(), uc1.get_id())
+            self.assertEqual(uc1.username, uc1.get_id())
             uc2 = config2.users().get(uc1.get_id())
             self.assertIsNotNone(uc2)
-            self.assertEqual(uc1.get_username(), uc2.get_username())
-            self.assertEqual(uc1.get_password(), uc2.get_password())
-            self.assertEqual(uc1.get_server(), uc2.get_server())
-            uld1 = uc1.get_last_device()
-            uld2 = uc2.get_last_device()
+            self.assertEqual(uc1.username, uc2.username)
+            self.assertEqual(uc1.password, uc2.password)
+            self.assertEqual(uc1.server, uc2.server)
+            uld1 = uc1.last_device
+            uld2 = uc2.last_device
             self.assertIsInstance(uld1, configuration.IUserDeviceConfiguration)
             self.assertIsInstance(uld2, configuration.IUserDeviceConfiguration)
             if uld1:
-                self.assertEqual(uld1.get_device_token(), uld1.get_id())
-                self.assertEqual(uld1.get_device_token(), uld2.get_device_token())
+                self.assertEqual(uld1.device_token, uld1.get_id())
+                self.assertEqual(uld1.device_token, uld2.device_token)
         for sc1 in config1.servers().list():
-            self.assertEqual(sc1.get_server(), sc1.get_id())
+            self.assertEqual(sc1.server, sc1.get_id())
             sc2 = config2.servers().get(sc1.get_id())
             self.assertIsNotNone(sc2)
-            self.assertEqual(sc1.get_server(), sc2.get_server())
-            self.assertEqual(sc1.get_server_key_id(), sc2.get_server_key_id())
+            self.assertEqual(sc1.server, sc2.server)
+            self.assertEqual(sc1.server_key_id, sc2.server_key_id)
         for dc1 in config1.devices().list():
-            self.assertEqual(dc1.get_device_token(), dc1.get_id())
+            self.assertEqual(dc1.device_token, dc1.get_id())
             dc2 = config2.devices().get(dc1.get_id())
             self.assertIsNotNone(dc2)
-            self.assertEqual(dc1.get_device_token(), dc2.get_device_token())
-            self.assertEqual(dc1.get_private_key(), dc2.get_private_key())
-            self.assertEqual(dc1.get_public_key(), dc2.get_public_key())
+            self.assertEqual(dc1.device_token, dc2.device_token)
+            self.assertEqual(dc1.private_key, dc2.private_key)
+            self.assertEqual(dc1.public_key, dc2.public_key)
             for dsc1 in dc1.get_server_info().list():
-                self.assertEqual(dsc1.get_server(), dsc1.get_server())
+                self.assertEqual(dsc1.server, dsc1.server)
                 dsc2 = dc2.get_server_info().get(dsc1.get_id())
                 self.assertIsNotNone(dsc2)
-                self.assertEqual(dsc1.get_server(), dsc2.get_server())
-                self.assertEqual(dsc1.get_clone_code(), dsc2.get_clone_code())
+                self.assertEqual(dsc1.server, dsc2.server)
+                self.assertEqual(dsc1.clone_code, dsc2.clone_code)
 
     @staticmethod
     def create_default_configuration():

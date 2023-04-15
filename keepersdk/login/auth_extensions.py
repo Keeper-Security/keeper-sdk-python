@@ -17,10 +17,10 @@ from ..proto import APIRequest_pb2, AccountSummary_pb2, breachwatch_pb2, push_pb
 
 class LoginContext:
     def __init__(self):
-        self.username = ''
-        self.passwords = []
-        self.clone_code = b''
-        self.device_token = b''
+        self.username = ''         # type: str
+        self.passwords = []        # type: List[str]
+        self.clone_code = b''      # type: bytes
+        self.device_token = b''    # type: bytes
         self.device_private_key = None
         self.device_public_key = None
         self.message_session_uid = crypto.get_random_bytes(16)
@@ -44,7 +44,7 @@ def ensure_device_token_loaded(login_auth, context):  # type: (auth.LoginAuth, L
             if dc:
                 dsc = dc.get_server_info().get(server)
                 if dsc:
-                    clone_code = dsc.get_clone_code()
+                    clone_code = dsc.clone_code
                     if clone_code:
                         context.clone_code = utils.base64_url_decode(clone_code)
                     return
@@ -67,22 +67,22 @@ def ensure_device_token_loaded(login_auth, context):  # type: (auth.LoginAuth, L
             if context.username:
                 uc = config.users().get(context.username)
                 if uc:
-                    last_device = uc.get_last_device()
+                    last_device = uc.last_device
                     if last_device:
-                        device_token = last_device.get_device_token()
+                        device_token = last_device.device_token
                         if device_token:
                             dc = config.devices().get(device_token)
                             if dc:
                                 try:
-                                    context.device_token = utils.base64_url_decode(dc.get_device_token())
+                                    context.device_token = utils.base64_url_decode(dc.device_token)
                                     context.device_private_key = crypto.load_ec_private_key(
-                                        utils.base64_url_decode(dc.get_private_key()))
+                                        utils.base64_url_decode(dc.private_key))
                                     context.device_public_key = crypto.load_ec_public_key(
-                                        utils.base64_url_decode(dc.get_public_key()))
+                                        utils.base64_url_decode(dc.public_key))
                                     continue
                                 except Exception as e:
                                     logger.debug('Load device key error: %s', e)
-                                    config.devices().delete(dc.get_device_token())
+                                    config.devices().delete(dc.device_token)
                         uc = configuration.UserConfiguration(uc)
                         uc.last_device = None
                         config.users().put(uc)
@@ -91,19 +91,19 @@ def ensure_device_token_loaded(login_auth, context):  # type: (auth.LoginAuth, L
             if dc:
                 try:
                     context.device_token = \
-                        utils.base64_url_decode(dc.get_device_token())
+                        utils.base64_url_decode(dc.device_token)
                     context.device_private_key = \
-                        crypto.load_ec_private_key(utils.base64_url_decode(dc.get_private_key()))
+                        crypto.load_ec_private_key(utils.base64_url_decode(dc.private_key))
                     context.device_public_key = \
-                        crypto.load_ec_public_key(utils.base64_url_decode(dc.get_public_key()))
+                        crypto.load_ec_public_key(utils.base64_url_decode(dc.public_key))
                 except Exception as e:
                     logger.debug('Load device key error: %s', e)
-                    config.devices().delete(dc.get_device_token())
+                    config.devices().delete(dc.device_token)
             else:
                 dc = register_device(login_auth)
-                context.device_token = utils.base64_url_decode(dc.get_device_token())
-                context.device_private_key = crypto.load_ec_private_key(utils.base64_url_decode(dc.get_private_key()))
-                context.device_public_key = crypto.load_ec_public_key(utils.base64_url_decode(dc.get_public_key()))
+                context.device_token = utils.base64_url_decode(dc.device_token)
+                context.device_private_key = crypto.load_ec_private_key(utils.base64_url_decode(dc.private_key))
+                context.device_public_key = crypto.load_ec_public_key(utils.base64_url_decode(dc.public_key))
                 config.devices().put(dc)
                 login_auth.keeper_endpoint.get_configuration_storage().put(config)
                 return
@@ -112,10 +112,10 @@ def ensure_device_token_loaded(login_auth, context):  # type: (auth.LoginAuth, L
 def register_device_in_region(login_auth, device_config):
     # type: (auth.LoginAuth, configuration.IDeviceConfiguration) -> None
     rq = APIRequest_pb2.RegisterDeviceInRegionRequest()
-    rq.encryptedDeviceToken = utils.base64_url_decode(device_config.get_device_token())
+    rq.encryptedDeviceToken = utils.base64_url_decode(device_config.device_token)
     rq.clientVersion = login_auth.keeper_endpoint.client_version
     rq.deviceName = login_auth.keeper_endpoint.device_name
-    rq.devicePublicKey = utils.base64_url_decode(device_config.get_public_key())
+    rq.devicePublicKey = utils.base64_url_decode(device_config.public_key)
 
     try:
         login_auth.execute_rest('authentication/register_device_in_region', rq)
@@ -214,8 +214,8 @@ def get_session_token_scope(session_token_type):   # type: (int) -> auth.Session
 
 def store_configuration(login_auth, login_context):  # type: (auth.LoginAuth, LoginContext) -> None
     config = login_auth.keeper_endpoint.get_configuration_storage().get()
-    config.set_last_login(login_context.username)
-    config.set_last_server(login_auth.keeper_endpoint.server)
+    config.last_login = login_context.username
+    config.last_server = login_auth.keeper_endpoint.server
 
     device_token = utils.base64_url_encode(login_context.device_token)
     iuc = config.users().get(login_context.username)
@@ -225,8 +225,8 @@ def store_configuration(login_auth, login_context):  # type: (auth.LoginAuth, Lo
         uc.server = login_auth.keeper_endpoint.server
         uc.last_device = configuration.UserDeviceConfiguration(device_token)
     else:
-        udc = iuc.get_last_device()
-        if not udc or udc.get_device_token() != device_token:
+        udc = iuc.last_device
+        if not udc or udc.device_token != device_token:
             uc = configuration.UserConfiguration(iuc)
             uc.last_device = configuration.UserDeviceConfiguration(device_token)
     if uc:
@@ -236,7 +236,7 @@ def store_configuration(login_auth, login_context):  # type: (auth.LoginAuth, Lo
     sc = None   # type: Optional[configuration.ServerConfiguration]
     if not isc:
         sc = configuration.ServerConfiguration(login_auth.keeper_endpoint.server)
-        sc.server_key_id = login_auth.keeper_endpoint.get_server_key_id()
+        sc.server_key_id = login_auth.keeper_endpoint.server_key_id
     if sc:
         config.servers().put(sc)
 
@@ -615,7 +615,7 @@ class CloudSsoTokenLoginStep(SsoTokenLoginStep):
         rq.embedded = True
         transmission_key = utils.generate_aes_key()
         api_rq = endpoint.prepare_api_request(
-            login_auth.keeper_endpoint.get_server_key_id(), transmission_key, rq.SerializeToString())
+            login_auth.keeper_endpoint.server_key_id, transmission_key, rq.SerializeToString())
         url_comp = list(urlparse(sso_info.sso_url))
         url_comp[3] = f'payload={quote_plus(utils.base64_url_encode(api_rq.SerializeToString()))}'
         self._login_url = urlunparse(url_comp)
@@ -657,7 +657,7 @@ class OnPremisesSsoTokenLoginStep(SsoTokenLoginStep):
         for key in ('password', 'new_password'):
             if key in token:
                 password = crypto.decrypt_rsa(utils.base64_url_decode(token[key]), self._private_key)
-                self._login_context.passwords.append(password)
+                self._login_context.passwords.append(password.decode())
         self._login_context.sso_login_info = self._sso_info
 
         lt = self._login_token

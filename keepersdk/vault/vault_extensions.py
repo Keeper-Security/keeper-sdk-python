@@ -15,7 +15,7 @@ import json
 import math
 from typing import Optional, Dict, Union, Set, Any, Iterable
 
-from . import record_types
+from . import record_types, vault_storage, storage_types
 from .vault_record import KeeperRecord, PasswordRecord, TypedRecord, TypedField, FileRecord, ApplicationRecord
 from .vault_types import RecordType
 from .. import utils, crypto

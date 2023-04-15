@@ -11,6 +11,7 @@
 
 import io
 import secrets
+from typing import Tuple, Optional
 
 from cryptography.hazmat import backends
 from cryptography.hazmat.primitives import serialization, asymmetric
@@ -28,69 +29,79 @@ _CRYPTO_BACKEND = backends.default_backend()
 _CURVE = asymmetric.ec.SECP256R1()
 
 
-def pad_data(data):
+def pad_data(data):   # type: (bytes) -> bytes
     padder = PKCS7(16*8).padder()
     return padder.update(data) + padder.finalize()
 
 
-def unpad_data(data):
+def unpad_data(data):   # type: (bytes) -> bytes
     unpadder = PKCS7(16*8).unpadder()
     return unpadder.update(data) + unpadder.finalize()
 
 
-def get_random_bytes(length):
+def get_random_bytes(length):   # type: (int) -> bytes
     return secrets.token_bytes(length)
 
 
 def generate_rsa_key():
+    # type: () -> Tuple[rsa.RSAPrivateKeyWithSerialization, rsa.RSAPublicKeyWithSerialization]
     private_key = rsa.generate_private_key(key_size=2048, public_exponent=0x10001, backend=_CRYPTO_BACKEND)
     return private_key, private_key.public_key()
 
 
 def load_rsa_private_key(der_private_key, password=None):
+    # type: (bytes, Optional[str]) -> rsa.RSAPrivateKeyWithSerialization
     return serialization.load_der_private_key(der_private_key, password, _CRYPTO_BACKEND)
 
 
 def load_rsa_public_key(der_public_key):
+    # type: (bytes) -> rsa.RSAPublicKeyWithSerialization
     return serialization.load_der_public_key(der_public_key, _CRYPTO_BACKEND)
 
 
 def unload_rsa_private_key(private_key):
+    # type: (rsa.RSAPrivateKeyWithSerialization) -> bytes
     return private_key.private_bytes(encoding=serialization.Encoding.DER,
                                      format=serialization.PrivateFormat.TraditionalOpenSSL,
                                      encryption_algorithm=serialization.NoEncryption())
 
 
 def unload_rsa_public_key(public_key):
+    # type: (rsa.RSAPublicKeyWithSerialization) -> bytes
     return public_key.public_bytes(encoding=serialization.Encoding.DER,
                                    format=serialization.PublicFormat.PKCS1)
 
 
 def generate_ec_key():
+    # type: () -> Tuple[ec.EllipticCurvePrivateKeyWithSerialization, ec.EllipticCurvePublicKeyWithSerialization]
     private_key = ec.generate_private_key(curve=_CURVE, backend=_CRYPTO_BACKEND)
     return private_key, private_key.public_key()
 
 
 def load_ec_private_key(private_key):
+    # type: (bytes) -> ec.EllipticCurvePrivateKeyWithSerialization
     private_value = int.from_bytes(private_key, byteorder='big', signed=False)
     return ec.derive_private_key(private_value, _CURVE, _CRYPTO_BACKEND)
 
 
 def load_ec_public_key(public_key):
+    # type: (bytes) -> ec.EllipticCurvePublicKeyWithSerialization
     return ec.EllipticCurvePublicKey.from_encoded_point(_CURVE, public_key)
 
 
 def unload_ec_private_key(private_key):
+    # type: (ec.EllipticCurvePrivateKeyWithSerialization) -> bytes
     private_value = private_key.private_numbers().private_value
     return private_value.to_bytes(length=32, byteorder='big', signed=False)
 
 
 def unload_ec_public_key(public_key):
+    # type: (ec.EllipticCurvePublicKeyWithSerialization) -> bytes
     return public_key.public_bytes(encoding=serialization.Encoding.X962,
                                    format=serialization.PublicFormat.UncompressedPoint)
 
 
-def encrypt_aes_v1(data, key, iv=None, use_padding=True):
+def encrypt_aes_v1(data, key, iv=None, use_padding=True):  # type: (bytes, bytes, Optional[bytes], bool) -> bytes
     iv = iv or get_random_bytes(16)
     cipher = Cipher(AES(key), CBC(iv), backend=_CRYPTO_BACKEND)
     encrypter = cipher.encryptor()
@@ -98,7 +109,7 @@ def encrypt_aes_v1(data, key, iv=None, use_padding=True):
     return iv + encrypted_data
 
 
-def decrypt_aes_v1(data, key, use_padding=True):
+def decrypt_aes_v1(data, key, use_padding=True):  # type: (bytes, bytes, bool) -> bytes
     iv = data[:16]
     cipher = Cipher(AES(key), CBC(iv), backend=_CRYPTO_BACKEND)
     decrypter = cipher.decryptor()
@@ -106,7 +117,7 @@ def decrypt_aes_v1(data, key, use_padding=True):
     return unpad_data(decrypted_data) if use_padding else decrypted_data
 
 
-def encrypt_aes_v2(data, key, nonce=None):
+def encrypt_aes_v2(data, key, nonce=None):  # type: (bytes, bytes, Optional[bytes]) -> bytes
     nonce = nonce or get_random_bytes(12)
     cipher = Cipher(AES(key), GCM(nonce), backend=_CRYPTO_BACKEND)
     encrypter = cipher.encryptor()
@@ -114,7 +125,7 @@ def encrypt_aes_v2(data, key, nonce=None):
     return nonce + encrypted_data + encrypter.tag
 
 
-def decrypt_aes_v2(data, key):
+def decrypt_aes_v2(data, key):   # type: (bytes, bytes) -> bytes
     nonce = data[:12]
     cipher = Cipher(AES(key), GCM(nonce), backend=_CRYPTO_BACKEND)
     decrypter = cipher.decryptor()
@@ -122,15 +133,15 @@ def decrypt_aes_v2(data, key):
     return decrypted_data
 
 
-def encrypt_rsa(data, rsa_key):
+def encrypt_rsa(data, rsa_key):  # type: (bytes, rsa.RSAPublicKey) -> bytes
     return rsa_key.encrypt(data, PKCS1v15())
 
 
-def decrypt_rsa(data, rsa_key):
+def decrypt_rsa(data, rsa_key):  # type: (bytes, rsa.RSAPrivateKey) -> bytes
     return rsa_key.decrypt(data, PKCS1v15())
 
 
-def encrypt_ec(data, ec_public_key):
+def encrypt_ec(data, ec_public_key):   # type: (bytes, ec.EllipticCurvePublicKey) -> bytes
     e_private_key, e_public_key = generate_ec_key()
     shared_secret = e_private_key.exchange(ec.ECDH(), ec_public_key)
     digest = Hash(SHA256(), backend=_CRYPTO_BACKEND)
@@ -139,7 +150,7 @@ def encrypt_ec(data, ec_public_key):
     return unload_ec_public_key(e_public_key) + encrypt_aes_v2(data, encryption_key)
 
 
-def decrypt_ec(data, ec_private_key):
+def decrypt_ec(data, ec_private_key):    # type: (bytes, ec.EllipticCurvePrivateKey) -> bytes
     ephemeral_public_key = load_ec_public_key(data[:65])
     shared_secret = ec_private_key.exchange(ec.ECDH(), ephemeral_public_key)
     digest = Hash(SHA256(), backend=_CRYPTO_BACKEND)
@@ -148,19 +159,19 @@ def decrypt_ec(data, ec_private_key):
     return decrypt_aes_v2(data[65:], encryption_key)
 
 
-def derive_key_v1(password, salt, iterations):
+def derive_key_v1(password, salt, iterations):   # type: (str, bytes, int) -> bytes
     kdf = PBKDF2HMAC(algorithm=SHA256(), length=32, salt=salt, iterations=iterations, backend=_CRYPTO_BACKEND)
     return kdf.derive(password.encode('utf-8'))
 
 
-def derive_keyhash_v1(password, salt, iterations):
+def derive_keyhash_v1(password, salt, iterations):   # type: (str, bytes, int) -> bytes
     derived_key = derive_key_v1(password, salt, iterations)
     hf = Hash(SHA256(), backend=_CRYPTO_BACKEND)
     hf.update(derived_key)
     return hf.finalize()
 
 
-def derive_keyhash_v2(domain, password, salt, iterations):
+def derive_keyhash_v2(domain, password, salt, iterations):  # type: (str, str, bytes, int) -> bytes
     kdf = PBKDF2HMAC(algorithm=SHA512(), length=64, salt=salt, iterations=iterations, backend=_CRYPTO_BACKEND)
     derived_key = kdf.derive((domain+password).encode('utf-8'))
     hf = HMAC(derived_key, SHA256(), backend=_CRYPTO_BACKEND)
@@ -168,19 +179,19 @@ def derive_keyhash_v2(domain, password, salt, iterations):
     return hf.finalize()
 
 
-def hmac_sha512(key, data):
+def hmac_sha512(key, data):   # type: (bytes, bytes) -> bytes
     hf = HMAC(key, SHA512(), backend=_CRYPTO_BACKEND)
     hf.update(data)
     return hf.finalize()
 
 
-def create_bio_auth_hash(biometric_key):
+def create_bio_auth_hash(biometric_key):  # type: (bytes) -> bytes
     hf = HMAC(biometric_key, SHA256(), backend=_CRYPTO_BACKEND)
     hf.update(b'biometric_auth')
     return hf.finalize()
 
 
-class _StreamCrypter(io.RawIOBase):
+class StreamCrypter(io.RawIOBase):
     def __init__(self):
         super().__init__()
         self.key = b''
@@ -312,6 +323,3 @@ class _StreamCrypter(io.RawIOBase):
 
         return buffer_len
 
-
-class StreamCrypter(_StreamCrypter):
-    __doc__ = _StreamCrypter.__doc__

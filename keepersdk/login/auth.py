@@ -13,8 +13,14 @@ import abc
 import concurrent.futures
 import enum
 import time
+from typing import Optional, Dict, Any, Type, TypeVar, List, Callable, Sequence
 
-from . import configuration
+from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePrivateKey, EllipticCurvePublicKey
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
+
+from google.protobuf.message import Message
+
+from . import configuration, endpoint, notifications
 from .. import errors
 
 
@@ -80,14 +86,14 @@ class AuthContext:
         self.session_token_restriction = SessionTokenRestriction.Unrestricted
         self.data_key = b''
         self.client_key = b''
-        self.rsa_private_key = None
-        self.ec_private_key = None
-        self.enterprise_ec_public_key = None
-        self.enterprise_rsa_public_key = None
+        self.rsa_private_key = None              # type: Optional[RSAPrivateKey]
+        self.ec_private_key = None               # type: Optional[EllipticCurvePrivateKey]
+        self.enterprise_rsa_public_key = None    # type: Optional[RSAPublicKey]
+        self.enterprise_ec_public_key = None     # type: Optional[EllipticCurvePublicKey]
         self.is_enterprise_admin = False
-        self.enforcements = {}
-        self.settings = {}
-        self.license = {}
+        self.enforcements = {}   # type: Dict[str, Any]
+        self.settings = {}       # type: Dict[str, Any]
+        self.license = {}        # type: Dict[str, Any]
 
 
 class AsyncExecutor:
@@ -103,6 +109,10 @@ class AsyncExecutor:
             self._executor = None
 
 
+TRQ = TypeVar('TRQ', bound=Message)
+TRS = TypeVar('TRS', bound=Message)
+
+
 class KeeperAuth(AsyncExecutor):
     def __init__(self, keeper_endpoint, auth_context):
         AsyncExecutor.__init__(self)
@@ -116,17 +126,19 @@ class KeeperAuth(AsyncExecutor):
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
 
-    def close(self):
+    def close(self):  # type: () -> None
         if self.push_notifications and not self.push_notifications.is_completed:
             self.push_notifications.shutdown()
 
         AsyncExecutor.close(self)
 
     def execute_auth_rest(self, rest_endpoint, request, response_type=None):
+        # type: (str, Optional[TRQ], Optional[Type[TRS]]) -> Optional[TRS]
         return self.keeper_endpoint.execute_rest(
             rest_endpoint, request, response_type=response_type, session_token=self.auth_context.session_token)
 
     def execute_auth_command(self, request, throw_on_error=True):
+        # type: (Dict[str, Any], bool) -> Dict[str, Any]
         request['username'] = self.auth_context.username
         response = self.keeper_endpoint.v2_execute(
             request, session_token=self.auth_context.session_token)
@@ -134,7 +146,8 @@ class KeeperAuth(AsyncExecutor):
             raise errors.KeeperApiError(response.get('result_code'), response.get('message'))
         return response
 
-    def execute_batch(self, requests, throw_on_error=None):
+    def execute_batch(self, requests):  # type: (List[str, Any]) -> List[Dict[str, Any]]
+
         responses = []
         if not requests:
             return responses
@@ -154,11 +167,7 @@ class KeeperAuth(AsyncExecutor):
             if isinstance(results, list) and len(results) > 0:
                 responses.extend(results)
                 if len(results) < len(chunk):
-                    if throw_on_error:
-                        error_rs = responses[-1]
-                        raise errors.KeeperApiError(error_rs.get('result_code'), error_rs.get('message'))
-                    else:
-                        queue = chunk[len(results):] + queue
+                    queue = chunk[len(results):] + queue
 
                 if len(results) > 50:
                     time.sleep(5)
@@ -166,28 +175,30 @@ class KeeperAuth(AsyncExecutor):
         return responses
 
 
-class ILoginStep:
-    def close(self):
+class ILoginStep(abc.ABC):
+    def close(self):    # type: () -> None
         pass
 
-    def is_final(self):
+    def is_final(self):  # type: () -> bool
         return False
 
 
 class LoginAuth:
-    def __init__(self, keeper_endpoint):
+    def __init__(self, keeper_endpoint):   # type: (endpoint.KeeperEndpoint) -> None
         self.keeper_endpoint = keeper_endpoint
         self.alternate_password = False
         self.resume_session = False
-        self.on_next_step = None
-        self.on_region_changed = None
-        self._login_step = LoginStepReady()
-        self.push_notifications = None
+        self.on_next_step = None          # type: Optional[Callable[[], None]]
+        self.on_region_changed = None     # type: Optional[Callable[[str], None]]
+        self._login_step = LoginStepReady()  # type: ILoginStep
+        self.push_notifications = None    # type: Optional[notifications.FanOut[Dict[str, any]]]
 
-    def get_login_step(self):
+    @property
+    def login_step(self):   # type: () -> ILoginStep
         return self._login_step
 
-    def set_login_step(self, value):
+    @login_step.setter
+    def login_step(self, value):  # type: (ILoginStep) -> None
         if isinstance(value, ILoginStep):
             if self._login_step:
                 self._login_step.close()
@@ -195,12 +206,11 @@ class LoginAuth:
             if self.on_next_step:
                 self.on_next_step()
 
-    login_step = property(get_login_step, set_login_step)
-
     def execute_rest(self, rest_endpoint, request, response_type=None):
+        # type: (str, Optional[TRQ], Optional[Type[TRS]]) -> Optional[TRS]
         return self.keeper_endpoint.execute_rest(rest_endpoint, request, response_type)
 
-    def login(self, username, *passwords):
+    def login(self, username, *passwords):  # type: (str, str) -> None
         from . import auth_extensions
         login_context = auth_extensions.LoginContext()
         login_context.username = configuration.adjust_username(username)
@@ -208,10 +218,10 @@ class LoginAuth:
         config = self.keeper_endpoint.get_configuration_storage().get()
         uc = config.users().get(login_context.username)
         if uc:
-            pwd = uc.get_password()
+            pwd = uc.password
             if pwd:
                 login_context.passwords.append(pwd)
-            us = uc.get_server()
+            us = uc.server
             if us:
                 if us != self.keeper_endpoint.server:
                     self.keeper_endpoint.server = us
@@ -283,17 +293,18 @@ class LoginStepTwoFactor(ILoginStep, abc.ABC):
 
 class LoginStepPassword(ILoginStep, abc.ABC):
     @abc.abstractmethod
-    def verify_password(self, password):
+    def verify_password(self, password):   # type: (str) -> None
         pass
 
-    def verify_biometric_key(self, biometric_key):
+    @abc.abstractmethod
+    def verify_biometric_key(self, biometric_key):  # type: (bytes) -> None
         pass
 
 
 class LoginStepError(ILoginStep):
-    def __init__(self, code, message):
-        self.code = code
-        self.message = message
+    def __init__(self, code, message):    # type: (str, str) -> None
+        self.code = code         # type: str
+        self.message = message   # type: str
 
     def is_final(self):
         return True
@@ -301,20 +312,40 @@ class LoginStepError(ILoginStep):
 
 class TwoFactorChannelInfo:
     def __init__(self):
-        self.channel_type = TwoFactorChannel.Other
-        self.channel_name = ''
-        self.channel_uid = b''
-        self.phone = None
-        self.max_expiration = TwoFactorDuration.EveryLogin
+        self.channel_type = TwoFactorChannel.Other    # type: TwoFactorChannel
+        self.channel_name = ''   # type: str
+        self.channel_uid = b''   # type: bytes
+        self.phone = None        # type: Optional[str]
+        self.max_expiration = TwoFactorDuration.EveryLogin   # type: TwoFactorDuration
 
 
 class LoginStepSsoToken(ILoginStep, abc.ABC):
     @abc.abstractmethod
-    def set_sso_token(self, token):
+    def set_sso_token(self, token):   # type: (str) -> None
         pass
 
     @abc.abstractmethod
-    def login_with_password(self):
+    def login_with_password(self):    # type: () -> None
+        pass
+
+    @property
+    @abc.abstractmethod
+    def is_cloud_sso(self):    # type: () -> bool
+        pass
+
+    @property
+    @abc.abstractmethod
+    def is_provider_login(self):    # type: () -> bool
+        pass
+
+    @property
+    @abc.abstractmethod
+    def login_name(self):    # type: () -> str
+        pass
+
+    @property
+    @abc.abstractmethod
+    def sso_login_url(self):    # type: () -> str
         pass
 
 
@@ -324,9 +355,9 @@ class DataKeyShareChannel(enum.Enum):
 
 
 class LoginStepSsoDataKey(ILoginStep, abc.ABC):
-    def get_channels(self):
+    def get_channels(self):   # type: () -> Sequence[DataKeyShareChannel]
         return DataKeyShareChannel.KeeperPush, DataKeyShareChannel.AdminApproval
 
     @abc.abstractmethod
-    def request_data_key(self, channel):
+    def request_data_key(self, channel):   # type: (DataKeyShareChannel) -> None
         pass

@@ -76,8 +76,11 @@ class TableSchema:
     @staticmethod
     def _load_class_fields(class_type):     # type: (Type[Any]) -> Iterator[FieldSchema]
         class_name = class_type.__name__
-        obj_values = vars(class_type())
+        obj = class_type()
+        obj_values = {x: getattr(obj, x) for x in dir(obj) if not x.startswith('_')}
         for field_name, value in obj_values.items():
+            if callable(value):
+                continue
             field_type = None     # type: Optional[Type]
             if isinstance(value, str):
                 field_type = str
@@ -103,14 +106,21 @@ class TableSchema:
                 yield FieldSchema(field_name, field_type)
 
     @classmethod
-    def load_schema(cls, class_type, primary_key, indexes=None, owner_column=None, owner_type=None):
-        # type: (Type, Sequence[str], Optional[Dict[str, Union[str, Sequence[str]]]], Optional[str], Optional[Type]) -> TableSchema
+    def load_schema(cls,
+                    class_type,         # type: Type
+                    primary_key,        # type: Sequence[str]
+                    indexes=None,       # type: Optional[Dict[str, Union[str, Sequence[str]]]]
+                    owner_column=None,  # type: Optional[str]
+                    owner_type=None     # type: Optional[Type[str, int]]
+                    ):                  # type: (...) -> TableSchema
         schema = cls()
         schema.class_type = class_type
         schema.table_name = class_type.__name__
 
-        class_fields = TableSchema._load_proto_fields(class_type) if hasattr(class_type, 'DESCRIPTOR') \
-            else TableSchema._load_class_fields(class_type)
+        if hasattr(class_type, 'DESCRIPTOR'):
+            class_fields = TableSchema._load_proto_fields(class_type)
+        else:
+            class_fields = TableSchema._load_class_fields(class_type)
 
         for class_field in class_fields:
             column_name = class_field.name.lower()

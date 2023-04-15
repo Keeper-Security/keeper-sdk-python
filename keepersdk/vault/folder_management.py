@@ -12,7 +12,7 @@
 import json
 from typing import Optional
 
-from . import vault_types
+from . import vault_types, vault_online
 from .. import utils, crypto, errors
 
 
