@@ -273,10 +273,10 @@ class UserConfiguration(IUserConfiguration):
     def __init__(self, user):   # type: (Union[IUserConfiguration, str]) -> None
         IUserConfiguration.__init__(self)
 
-        self._username = ''
-        self._password = None
-        self._server = ''
-        self._last_device = None
+        self._username = ''          # type: str
+        self._password = None        # type: Optional[str]
+        self._server = ''            # type: Optional[str]
+        self._last_device = None     # type: Optional[UserDeviceConfiguration]
         if isinstance(user, str):
             self._username = adjust_username(user)
         elif isinstance(user, IUserConfiguration):
@@ -295,21 +295,21 @@ class UserConfiguration(IUserConfiguration):
     def password(self):
         return self._password
 
+    @password.setter
+    def password(self, value):    # type: (str) -> None
+        self._password = value
+
     @property
     def server(self):
         return self._server
 
-    @property
-    def last_device(self):
-        return self._last_device
-
-    @password.setter
-    def password(self, value):
-        self._password = value
-
     @server.setter
     def server(self, value):
         self._server = value
+
+    @property
+    def last_device(self):
+        return self._last_device
 
     @last_device.setter
     def last_device(self, value):
@@ -345,8 +345,8 @@ class DeviceServerConfiguration(IDeviceServerConfiguration):
     def __init__(self, server):   # type: (Union[IDeviceServerConfiguration, str]) -> None
         IDeviceServerConfiguration.__init__(self)
 
-        self._server = ''
-        self._clone_code = ''
+        self._server = ''       # type: str
+        self._clone_code = ''   # type: Optional[str]
         if isinstance(server, str):
             self._server = adjust_servername(server)
         elif isinstance(server, IDeviceServerConfiguration):
@@ -394,20 +394,20 @@ class DeviceConfiguration(IDeviceConfiguration):
     def public_key(self):
         return self._public_key
 
-    @property
-    def private_key(self):
-        return self._private_key
-
-    def get_server_info(self):
-        return self._server_info
-
     @public_key.setter
     def public_key(self, value):  # type: (str) -> None
         self._public_key = value
 
+    @property
+    def private_key(self):
+        return self._private_key
+
     @private_key.setter
     def private_key(self, value):
         self._private_key = value
+
+    def get_server_info(self):
+        return self._server_info
 
 
 class KeeperConfiguration(IKeeperConfiguration):
@@ -549,8 +549,8 @@ class _JsonDeviceConfiguration(IDeviceConfiguration, dict):
             private_key = data.private_key
             if private_key:
                 self[self.PRIVATE_KEY] = private_key
-            for si in data.get_server_info().list():  # type: IDeviceServerConfiguration
-                server_info.append(_JsonDeviceServerConfiguration(si))
+            for dsc in data.get_server_info().list():
+                server_info.append(_JsonDeviceServerConfiguration(dsc))
         self[self.SERVER_INFO] = server_info
 
     @property

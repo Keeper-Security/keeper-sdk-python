@@ -13,7 +13,7 @@ import datetime
 import itertools
 import json
 import math
-from typing import Optional, Dict, Union, Set, Any, Iterable
+from typing import Optional, Dict, Union, Set, Any, Iterable, List
 
 from . import record_types, vault_storage, storage_types
 from .vault_record import KeeperRecord, PasswordRecord, TypedRecord, TypedField, FileRecord, ApplicationRecord
@@ -137,7 +137,7 @@ def extract_typed_field(field):     # type: (TypedField) -> dict
                 if field_type:
                     if not isinstance(value, type(field_type.value)):
                         continue
-                    if isinstance(value, dict):
+                    if isinstance(value, dict) and isinstance(field_type.value, dict):
                         for key in field_type.value:
                             if key not in value:
                                 value[key] = ''
@@ -161,7 +161,7 @@ def extract_typed_record_data(record, schema):     # type: (TypedRecord, Optiona
         'notes': record.notes or '',
         'fields': [],
         'custom': [],
-    }
+    }  # type: Dict[str, Any]
     if schema:
         fields = {f'{(x.type or "text").lower()}:{(x.label or "").lower()}': i for i, x in enumerate(schema.fields)}
         data['fields'].extend(itertools.repeat(None, len(schema.fields)))
@@ -174,10 +174,10 @@ def extract_typed_record_data(record, schema):     # type: (TypedRecord, Optiona
                 data['custom'].append(extract_typed_field(field))
         nones = [i for i, x in data['fields'] if x is None]
         for index in nones:
-            field = schema.fields[index]
+            rt_field = schema.fields[index]
             data['fields'][index] = {
-                'type': field.type or 'text',
-                'label': field.label or '',
+                'type': rt_field.type or 'text',
+                'label': rt_field.label or '',
                 'value': []
             }
     else:
@@ -207,7 +207,7 @@ def extract_audit_data(record):      # type: (Union[KeeperRecord, TypedRecord]) 
         if url_field:
             url = url_field.get_default_value(str)
     else:
-        return
+        return None
 
     title = record.title or ''
     if url:
@@ -249,8 +249,8 @@ def get_padded_json_bytes(data):    # type: (dict) -> bytes
     return data_str.encode('utf-8')
 
 
-def get_record_description(record):   # type: (KeeperRecord) -> Optional[str]
-    comps = []
+def get_record_description(record):   # type: (KeeperRecord) -> str
+    comps = []   # type: List[str]
 
     if isinstance(record, PasswordRecord):
         comps.extend((record.login or '', record.link or ''))
@@ -343,8 +343,7 @@ def get_record_description(record):   # type: (KeeperRecord) -> Optional[str]
         comps.extend((record.file_name, utils.size_to_str(record.size)))
         return ': '.join((str(x) for x in comps if x))
 
-    if isinstance(record, ApplicationRecord):
-        return ''
+    return ''
 
 
 def load_keeper_record(record, record_key):
@@ -371,7 +370,7 @@ def load_keeper_record(record, record_key):
             pass
 
     if record.version in {0, 1, 2}:
-        k_record = PasswordRecord()
+        k_record = PasswordRecord()   # type: KeeperRecord
     elif record.version == 3:
         k_record = TypedRecord()
     elif record.version == 4:
@@ -380,8 +379,10 @@ def load_keeper_record(record, record_key):
             k_record.storage_size = udata_dict.get('file_size')
     elif record.version == 5:
         k_record = ApplicationRecord()
+    elif record.version == 6:
+        k_record = TypedRecord()
     else:
-        return
+        return None
 
     k_record.record_uid = record.record_uid
     k_record.client_time_modified = record.client_modified_time

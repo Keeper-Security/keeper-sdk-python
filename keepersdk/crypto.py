@@ -49,14 +49,18 @@ def generate_rsa_key():
     return private_key, private_key.public_key()
 
 
-def load_rsa_private_key(der_private_key, password=None):
-    # type: (bytes, Optional[str]) -> rsa.RSAPrivateKeyWithSerialization
-    return serialization.load_der_private_key(der_private_key, password, _CRYPTO_BACKEND)
+def load_rsa_private_key(der_private_key):
+    # type: (bytes) -> rsa.RSAPrivateKeyWithSerialization
+    key = serialization.load_der_private_key(der_private_key, password=None, backend=_CRYPTO_BACKEND)
+    assert isinstance(key, rsa.RSAPrivateKeyWithSerialization)
+    return key
 
 
 def load_rsa_public_key(der_public_key):
     # type: (bytes) -> rsa.RSAPublicKeyWithSerialization
-    return serialization.load_der_public_key(der_public_key, _CRYPTO_BACKEND)
+    key = serialization.load_der_public_key(der_public_key, backend=_CRYPTO_BACKEND)
+    assert isinstance(key, rsa.RSAPublicKeyWithSerialization)
+    return key
 
 
 def unload_rsa_private_key(private_key):
@@ -260,6 +264,7 @@ class StreamCrypter(io.RawIOBase):
         self.__exit__(None, None, None)
 
     def readinto(self, buffer):
+        assert self.crypter is not None
         buffer_len = 0
         mv = memoryview(buffer)
         while buffer_len < len(buffer):
@@ -302,7 +307,8 @@ class StreamCrypter(io.RawIOBase):
                                 tag = bytes(self.in_buffer[0: self.in_buffer_pos])
                                 crypted = self.crypter.finalize_with_tag(tag)
                             else:
-                                crypted = self.crypter.update(self.in_buffer[0: self.in_buffer_pos]) + self.crypter.finalize()
+                                crypted = self.crypter.update(
+                                    self.in_buffer[0: self.in_buffer_pos]) + self.crypter.finalize()
                                 crypted = unpad_data(crypted)
                             self.in_buffer_pos = 0
                 if crypted:
@@ -322,4 +328,3 @@ class StreamCrypter(io.RawIOBase):
                 break
 
         return buffer_len
-

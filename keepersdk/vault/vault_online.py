@@ -142,7 +142,7 @@ class VaultOnline(vault_data.VaultData):
                         self._pending_audit_data = {}
                     self._pending_audit_data[record.record_uid] = record_audit_rq
 
-    def schedule_audit_event(self, name, **kwargs):  # type: (str, ...) -> None
+    def schedule_audit_event(self, name, **kwargs):  # type: (str, Any) -> None
         if self._keeper_auth.auth_context.enterprise_ec_public_key:
             with self._sync_down_lock:
                 if self._pending_audit_events is None:

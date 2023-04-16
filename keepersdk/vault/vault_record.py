@@ -70,7 +70,7 @@ class AttachmentFileThumb:
 
 
 class AttachmentFile:
-    def __init__(self):
+    def __init__(self):             # type: () -> None
         self.id = ''
         self.key = ''
         self.name = ''
@@ -82,7 +82,7 @@ class AttachmentFile:
 
 
 class PasswordRecord(KeeperRecord):
-    def __init__(self):
+    def __init__(self):             # type: () -> None
         super(PasswordRecord, self).__init__()
         self.login = ''
         self.password = ''
@@ -205,7 +205,7 @@ class TypedField(object):
 
 
 class TypedRecord(KeeperRecord):
-    def __init__(self):
+    def __init__(self):          # type: () -> None
         super(TypedRecord, self).__init__()
         self.record_type = ''    # type: str
         self.notes = ''          # type: str
@@ -251,7 +251,7 @@ class TypedRecord(KeeperRecord):
 
 
 class FileRecord(KeeperRecord):
-    def __init__(self):
+    def __init__(self):            # type: () -> None
         super(FileRecord, self).__init__()
         self.file_name = ''        # type: str
         self.size = None           # type: Optional[int]

@@ -2,7 +2,7 @@ import os
 import unittest
 
 import generator
-from keepersdk.login import auth, endpoint, configuration
+from keepersdk.login import login_auth, endpoint, configuration
 from keepersdk.vault import (sqlite_storage, record_facades, folder_management, vault_online, record_management,
                              vault_record, vault_types, attachment)
 
@@ -142,11 +142,11 @@ class MyTestCase(unittest.TestCase):
         config_filename = os.path.join(os.path.dirname(__file__), 'login.json')
         config = configuration.JsonConfigurationStorage(file_name=config_filename)
         keeper_endpoint = endpoint.KeeperEndpoint(config)
-        login_auth = auth.LoginAuth(keeper_endpoint)
-        login_auth.login('integration.tests@keepersecurity.com')
-        login_auth.login_step.is_final()
-        step = login_auth.login_step
-        self.assertIsInstance(step, auth.LoginStepConnected)
+        auth = login_auth.LoginAuth(keeper_endpoint)
+        auth.login('integration.tests@keepersecurity.com')
+        auth.login_step.is_final()
+        step = auth.login_step
+        self.assertIsInstance(step, login_auth.LoginStepConnected)
         keeper_auth = step.keeper_auth()
         vault_storage = sqlite_storage.SqliteVaultStorage(
             file_name='', vault_owner=keeper_auth.auth_context.username)

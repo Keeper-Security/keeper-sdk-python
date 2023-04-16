@@ -120,8 +120,7 @@ class SqliteEnterpriseStorage(EnterpriseStorage):
         sqlite_dao.verify_database(self.get_connection(), (settings_schema, data_schema))
         self._settings_storage: storage_types.IRecordStorage[EnterpriseSettings] = sqlite.SqliteRecordStorage(
             self.get_connection, settings_schema, owner=self.enterprise_id)
-        self._data_storage = _EnterpriseEntityStorage(
-            self.get_connection, data_schema, owner=self.enterprise_id)
+        self._data_storage = _EnterpriseEntityStorage(self.get_connection, data_schema, owner=self.enterprise_id)
 
         self._data_types = {
             enterprise_pb2.NODES: _SimpleDataType(['nodeId']),
@@ -146,20 +145,21 @@ class SqliteEnterpriseStorage(EnterpriseStorage):
             enterprise_pb2.USER_ALIASES: _SimpleDataType(['username']),
         }  # type: Dict[int, _DataType]
 
-    def get_continuation_token(self):
-        setting = self._settings_storage.load()  # type: EnterpriseSettings
+    def get_continuation_token(self):            # type: () -> bytes
+        setting = self._settings_storage.load()  # type: Optional[EnterpriseSettings]
         if setting is None:
             setting = EnterpriseSettings()
         return setting.continuation_token
 
-    def set_continuation_token(self, token):
-        setting = self._settings_storage.load()   # type: EnterpriseSettings
+    def set_continuation_token(self, token):      # type: (bytes) -> None
+        setting = self._settings_storage.load()   # type: Optional[EnterpriseSettings]
         if setting is None:
             setting = EnterpriseSettings()
         setting.continuation_token = token
         self._settings_storage.store(setting)
 
     def store_entity(self, entity_type, data, is_delete):
+        # type: (enterprise_pb2.EnterpriseDataEntity, bytes, bool) -> None
         if entity_type in EnterpriseEntityMap and entity_type in self._data_types:
             entity = EnterpriseEntityMap[entity_type]()
             entity.SerializeToString()
@@ -167,7 +167,7 @@ class SqliteEnterpriseStorage(EnterpriseStorage):
             proc = self._data_types[entity_type]
             entity_key = proc.get_proto_entity_key(entity)
             if isinstance(proc, _MergeDataType):
-                ee = self._data_storage.get_entity(entity_type, entity_key)   # type: EnterpriseEntityData
+                ee = self._data_storage.get_entity(entity_type, entity_key)   # type: Optional[EnterpriseEntityData]
                 existing = None
                 if ee:
                     existing = EnterpriseEntityMap[entity_type]()

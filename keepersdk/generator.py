@@ -14,7 +14,7 @@ import logging
 import os
 import secrets
 import string
-from typing import Optional, List, Sequence, Any
+from typing import Optional, List, Any
 
 DEFAULT_PASSWORD_LENGTH = 32
 PW_SPECIAL_CHARACTERS = '!@#$%()+;<>=?[]{}^.,'
@@ -26,7 +26,7 @@ class PasswordGenerator(abc.ABC):
         pass
 
     @staticmethod
-    def shuffle(x):   # type: (Sequence[Any]) -> None
+    def shuffle(x):   # type: (List[Any]) -> None
         # See http://en.wikipedia.org/wiki/Fisher-Yates_shuffle
         for i in range(len(x)-1, 0, -1):    # iterate from len(x)-1 down to 1
             j = secrets.randbelow(i+1)      # choose random j such that 0 <= j <= i
@@ -35,11 +35,12 @@ class PasswordGenerator(abc.ABC):
 
 class KeeperPasswordGenerator(PasswordGenerator):
     def __init__(self, length: int = DEFAULT_PASSWORD_LENGTH,
-                 symbols: Optional[int] = None,
-                 digits: Optional[int] = None,
-                 caps: Optional[int] = None,
-                 lower: Optional[int] = None,
-                 special_characters: str = PW_SPECIAL_CHARACTERS):
+                 symbols=None,    # type: Optional[int]
+                 digits=None,     # type: Optional[int]
+                 caps=None,       # type: Optional[int]
+                 lower=None,      # type: Optional[int]
+                 special_characters=PW_SPECIAL_CHARACTERS  # type: str
+                 ):
 
         sum_categories = sum((abs(i) if isinstance(i, int) else 0) for i in (symbols, digits, caps, lower))
         extra_count = length - sum_categories if length > sum_categories else 0
@@ -72,10 +73,10 @@ class KeeperPasswordGenerator(PasswordGenerator):
             (extra_count, extra_chars)
         ]
 
-    def generate(self) -> str:
-        password_list = []
+    def generate(self):      # type: () -> str
+        password_list = []   # type: List[str]
         for count, chars in self.category_map:
-            password_list.extend(secrets.choice(chars) for i in range(count))
+            password_list.extend(secrets.choice(chars) for _ in range(count))
         self.shuffle(password_list)
         return ''.join(password_list)
 
@@ -95,10 +96,11 @@ class KeeperPasswordGenerator(PasswordGenerator):
             )
             return None
         else:
-            rule_list = [int(n) for n in rule_list]
-            upper, lower, digits, symbols = rule_list
-            length = sum(rule_list) if length is None else length
-            return cls(length=length, caps=upper, lower=lower, digits=digits, symbols=symbols, special_characters=special_characters)
+            int_rule_list = [int(n) for n in rule_list]
+            upper, lower, digits, symbols = int_rule_list
+            length = sum(int_rule_list) if length is None else length
+            return cls(length=length, caps=upper, lower=lower, digits=digits, symbols=symbols,
+                       special_characters=special_characters)
 
 
 class DicewarePasswordGenerator(PasswordGenerator):

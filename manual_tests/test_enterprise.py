@@ -2,7 +2,7 @@ import os
 import unittest
 
 from keepersdk.enterprise import legacy_enterprise, loader
-from keepersdk.login import auth, endpoint, configuration
+from keepersdk.login import login_auth, endpoint, configuration
 from keepersdk.proto import enterprise_pb2
 
 
@@ -14,11 +14,11 @@ class MyTestCase(unittest.TestCase):
         username = next((x.username for x in config.users().list() if 'enterprise' in x.username), None)
         self.assertIsNotNone(username, 'Enterprise username was not found in the configuration file')
         keeper_endpoint = endpoint.KeeperEndpoint(config_storage)
-        login_auth = auth.LoginAuth(keeper_endpoint)
-        login_auth.login(username)
-        login_auth.login_step.is_final()
-        step = login_auth.login_step
-        self.assertIsInstance(step, auth.LoginStepConnected)
+        auth = login_auth.LoginAuth(keeper_endpoint)
+        auth.login(username)
+        auth.login_step.is_final()
+        step = auth.login_step
+        self.assertIsInstance(step, login_auth.LoginStepConnected)
         return step.keeper_auth()
 
     def test_load_enterprise(self):

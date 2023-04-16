@@ -68,7 +68,7 @@ class LoadedSharedFolder(EntitySearch[vault_types.SharedFolderInfo]):
         self.words = words              # type: Optional[Tuple[str, ...]]
 
 
-class LoadedTeam(EntitySearch):
+class LoadedTeam(EntitySearch[vault_types.TeamInfo]):
     def __init__(self, team_key, info, words=None, rsa_key=None):
         # type: (bytes, vault_types.TeamInfo, Optional[Tuple[str, ...]], Optional[rsa.RSAPrivateKey]) -> None
         self.team_key = team_key            # type: bytes
@@ -108,11 +108,13 @@ class VaultData:
 
     @staticmethod
     def _find_entities(entity_dict, criteria):
-        # type: (Dict[str, TSearch], str) -> Iterable[TSearch.info]
+        # type: (Dict[str, TSearch], str) -> Iterable[TInfo]
         words = list(utils.tokenize_searchable_text(criteria))
         if words:
             found = False
             for entity in entity_dict.values():
+                if entity.words is None:
+                    continue
                 for entity_word in entity.words:
                     for search_word in words:
                         if len(search_word) <= len(entity_word):
@@ -137,7 +139,7 @@ class VaultData:
         return len(self._records)
 
     def find_records(self, criteria):   # type: (str) -> Iterable[vault_record.KeeperRecordInfo]
-        for e in self._find_entities(self._records, criteria):
+        for e in self._find_entities(self._records, criteria):  # type: vault_record.KeeperRecordInfo
             yield e
 
     def load_record(self, record_uid):   # type: (str) -> Optional[vault_record.KeeperRecord]
@@ -164,7 +166,7 @@ class VaultData:
         return len(self._shared_folders)
 
     def find_shared_folders(self, criteria):   # type: (str) -> Iterable[vault_types.SharedFolderInfo]
-        for e in self._find_entities(self._shared_folders, criteria):
+        for e in self._find_entities(self._shared_folders, criteria):   # type: vault_types.SharedFolderInfo
             yield e
 
     def load_shared_folder(self, shared_folder_uid):    # type: (str) -> Optional[vault_types.SharedFolder]
@@ -194,7 +196,7 @@ class VaultData:
         return len(self._teams)
 
     def find_teams(self, criteria):   # type: (str) -> Iterable[vault_types.TeamInfo]
-        for e in self._find_entities(self._teams, criteria):
+        for e in self._find_entities(self._teams, criteria):  # type: vault_types.TeamInfo
             yield e
 
     def load_team(self, team_uid):   # type: (str) -> Optional[vault_types.Team]
@@ -275,8 +277,8 @@ class VaultData:
         except Exception as e:
             self._logger.error('Decrypt record \"%s\" key error: %s', record_key.record_uid, e)
 
-    def rebuild_data(self, changes):   # type: (Optional[RebuildTask]) -> None
-        full_rebuild = not changes or changes.is_full_sync
+    def rebuild_data(self, changes):   # type: (RebuildTask) -> None
+        full_rebuild = changes.is_full_sync
 
         self._teams.clear()
         for t in self.storage.teams.get_all():
@@ -353,7 +355,7 @@ class VaultData:
                                if x.user_type == storage_types.SharedFolderUserType.User)),
                     records=sum((1 for _ in shared_folder.record_permissions)),
                 )
-                sf_words = set()
+                sf_words = set()    # type: Set[str]
                 sf_words.update(utils.tokenize_searchable_text(shared_folder.name))
                 sf_words.update((x.user_id.lower() for x in shared_folder.user_permissions))
 
@@ -435,8 +437,8 @@ class VaultData:
             record_uid = record.record_uid
             if record_uid in entity_keys:
                 try:
-                    record_key = entity_keys[record_uid]
-                    kr = vault_extensions.load_keeper_record(record, record_key)
+                    key_bytes = entity_keys[record_uid]
+                    kr = vault_extensions.load_keeper_record(record, key_bytes)
                     if kr:
                         record_type = kr.record_type if isinstance(kr, vault_record.TypedRecord) else ''
                         description = vault_extensions.get_record_description(kr)
@@ -456,7 +458,7 @@ class VaultData:
                             shared=record.shared, has_attachments=has_attachments)
 
                         words = set(vault_extensions.get_record_words(kr))
-                        self._records[record_uid] = LoadedRecord(key=record_key, info=info, words=tuple(words))
+                        self._records[record_uid] = LoadedRecord(key=key_bytes, info=info, words=tuple(words))
                 except Exception as e:
                     raise e
                     # self._logger.warning('Load record \"%s\" error: %s', record_uid, e)

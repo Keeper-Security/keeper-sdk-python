@@ -14,7 +14,7 @@ from typing import Optional, Iterable, Union, Callable, List, Set
 
 from . import vault_extensions, record_facades, vault_online
 from .vault_record import PasswordRecord, TypedRecord, TypedField
-from .vault_types import RecordPath, Folder
+from .vault_types import RecordPath
 from .. import utils, crypto
 from ..errors import KeeperApiError
 from ..proto import record_pb2
@@ -30,11 +30,12 @@ def add_record_to_folder(vault, record, folder_uid=None):
     folder = vault.get_folder(folder_uid) if folder_uid else None
     folder_key = None  # type: Optional[bytes]
     if folder and folder.folder_type in {'shared_folder', 'shared_folder_folder'}:
+        assert folder.folder_scope_uid is not None
         folder_key = vault.get_shared_folder_key(folder.folder_scope_uid)
 
     data_key = vault.keeper_auth.auth_context.data_key
     if isinstance(record, PasswordRecord):
-        rq = {
+        rq_v2 = {
             'command': 'record_add',
             'record_uid': record.record_uid,
             'record_key': utils.base64_url_encode(crypto.encrypt_aes_v1(record_key, data_key)),
@@ -43,13 +44,13 @@ def add_record_to_folder(vault, record, folder_uid=None):
             'how_long_ago': 0,
         }
         if folder:
-            rq['folder_uid'] = folder.folder_uid
+            rq_v2['folder_uid'] = folder.folder_uid
         if folder_key:
-            rq['folder_key'] = utils.base64_url_encode(crypto.encrypt_aes_v1(record_key, folder_key))
+            rq_v2['folder_key'] = utils.base64_url_encode(crypto.encrypt_aes_v1(record_key, folder_key))
         data = vault_extensions.extract_password_record_data(record)
-        rq['data'] = utils.base64_url_encode(crypto.encrypt_aes_v1(json.dumps(data).encode(), record_key))
+        rq_v2['data'] = utils.base64_url_encode(crypto.encrypt_aes_v1(json.dumps(data).encode(), record_key))
         extra = vault_extensions.extract_password_record_extras(record)
-        rq['extra'] = utils.base64_url_encode(crypto.encrypt_aes_v1(json.dumps(extra).encode(), record_key))
+        rq_v2['extra'] = utils.base64_url_encode(crypto.encrypt_aes_v1(json.dumps(extra).encode(), record_key))
         if record.attachments:
             file_ids = []
             for atta in record.attachments:
@@ -57,11 +58,11 @@ def add_record_to_folder(vault, record, folder_uid=None):
                 if atta.thumbnails:
                     for thumb in atta.thumbnails:
                         file_ids.append(thumb.id)
-            rq['file_ids'] = file_ids
+            rq_v2['file_ids'] = file_ids
 
-        rs = vault.keeper_auth.execute_auth_command(rq)
-        if 'revision' in rs:
-            vault.schedule_audit_data(record, rs['revision'])
+        rs_v2 = vault.keeper_auth.execute_auth_command(rq_v2)
+        if 'revision' in rs_v2:
+            vault.schedule_audit_data(record, rs_v2['revision'])
         if record.attachments:
             for atta in record.attachments:
                 vault.schedule_audit_event(
@@ -107,12 +108,13 @@ def add_record_to_folder(vault, record, folder_uid=None):
                 add_record.audit.data = crypto.encrypt_ec(
                     json.dumps(audit_data).encode('utf-8'), vault.keeper_auth.auth_context.enterprise_ec_public_key)
 
-        rq = record_pb2.RecordsAddRequest()
-        rq.client_time = utils.current_milli_time()
-        rq.records.append(add_record)
-        rs = vault.keeper_auth.execute_auth_rest(
-            'vault/records_add', rq, response_type=record_pb2.RecordsModifyResponse)
-        record_rs = next((x for x in rs.records if utils.base64_url_encode(x.record_uid) == record.record_uid), None)
+        rq_v3 = record_pb2.RecordsAddRequest()
+        rq_v3.client_time = utils.current_milli_time()
+        rq_v3.records.append(add_record)
+        rs_v3 = vault.keeper_auth.execute_auth_rest(
+            'vault/records_add', rq_v3, response_type=record_pb2.RecordsModifyResponse)
+        assert rs_v3 is not None
+        record_rs = next((x for x in rs_v3.records if utils.base64_url_encode(x.record_uid) == record.record_uid), None)
         if record_rs:
             if record_rs.status == record_pb2.RS_SUCCESS:
                 file_facade = record_facades.FileRefRecordFacade()
@@ -239,7 +241,7 @@ def update_record(vault, record, skip_extra=False):
             else:
                 udata = {}
 
-            file_ids = []
+            file_ids = []    # type: List[str]
             udata['file_ids'] = file_ids
             if record.attachments:
                 for atta in record.attachments:
@@ -249,20 +251,21 @@ def update_record(vault, record, skip_extra=False):
                             file_ids.append(thumb.id)
             record_object['udata'] = udata
 
-        rq = {
+        rqu_v2 = {
             "command": "record_update",
             "client_time": utils.current_milli_time(),
             'update_records': [record_object]
         }
-        rs = vault.keeper_auth.execute_auth_command(rq)
-        update_status = next((x for x in rs.get('update_records', []) if x.get('record_uid') == record.record_uid), None)
+        rsu_v2 = vault.keeper_auth.execute_auth_command(rqu_v2)
+        update_status = next(
+            (x for x in rsu_v2.get('update_records', []) if x.get('record_uid') == record.record_uid), None)
         if update_status:
             record_status = update_status.get('status', 'success')
             if record_status != 'success':
                 raise KeeperApiError(record_status, update_status.get('message', ''))
 
         if bool(status & (RecordChangeStatus.Title | RecordChangeStatus.URL)):
-            revision = rs.get('revision') or 0
+            revision = rsu_v2.get('revision') or 0
             vault.schedule_audit_data(record, revision)
         prev_file_refs = set((x.id for x in existing_record.attachments or []))
         new_file_refs = set((x.id for x in record.attachments or []))
@@ -308,30 +311,31 @@ def update_record(vault, record, skip_extra=False):
                     ur.audit.data = crypto.encrypt_ec(
                         json.dumps(audit_data).encode('utf-8'), vault.keeper_auth.auth_context.enterprise_ec_public_key)
 
-        rq = record_pb2.RecordsUpdateRequest()
-        rq.client_time = utils.current_milli_time()
-        rq.records.append(ur)
+        rqu_v3 = record_pb2.RecordsUpdateRequest()
+        rqu_v3.client_time = utils.current_milli_time()
+        rqu_v3.records.append(ur)
 
-        rs = vault.keeper_auth.execute_auth_rest(
-            'vault/records_update', rq, response_type=record_pb2.RecordsModifyResponse)
-        rs_status = next((x for x in rs.records if record_uid_bytes == x.record_uid), None)
+        rsu_v3 = vault.keeper_auth.execute_auth_rest(
+            'vault/records_update', rqu_v3, response_type=record_pb2.RecordsModifyResponse)
+        assert rsu_v3 is not None
+        rs_status = next((x for x in rsu_v3.records if record_uid_bytes == x.record_uid), None)
         if rs_status and rs_status.status != record_pb2.RecordModifyResult.RS_SUCCESS:
             raise KeeperApiError(rs_status.status, rs_status.message)
 
-        prev_file_refs = set()   # type: Set[str]
-        new_file_refs = set()    # type: Set[str]
+        prev_refs = set()   # type: Set[str]
+        new_refs = set()    # type: Set[str]
         file_refs = existing_record.get_typed_field('fileRef')
         if isinstance(file_refs, TypedField) and isinstance(file_refs.value, list):
             for uid in file_refs.value:
-                prev_file_refs.add(uid)
+                prev_refs.add(uid)
         file_refs = record.get_typed_field('fileRef')
         if isinstance(file_refs, TypedField) and isinstance(file_refs.value, list):
             for uid in file_refs.value:
-                new_file_refs.add(uid)
-        for file_id in new_file_refs.difference(prev_file_refs):
+                new_refs.add(uid)
+        for file_id in new_refs.difference(prev_refs):
             vault.schedule_audit_event(
                 'file_attachment_uploaded', record_uid=record.record_uid, attachment_id=file_id)
-        for file_id in prev_file_refs.difference(new_file_refs):
+        for file_id in prev_refs.difference(new_refs):
             vault.schedule_audit_event(
                 'file_attachment_deleted', record_uid=record.record_uid, attachment_id=file_id)
     else:
@@ -366,6 +370,7 @@ def delete_vault_objects(vault, vault_objects, confirm=None):
                     if folder.parent_uid:
                         obj['from_uid'] = folder.parent_uid
                     elif folder.folder_type == 'shared_folder_folder':
+                        assert folder.folder_scope_uid is not None
                         obj['from_uid'] = folder.folder_scope_uid
                     objects.append(obj)
                 continue
@@ -385,7 +390,7 @@ def delete_vault_objects(vault, vault_objects, confirm=None):
             if not to_delete.record_uid:
                 raise ValueError('Cannot be empy')
 
-            folder = None    # type: Optional[Folder]
+            folder = None
             if to_delete.folder_uid:
                 folder = vault.get_folder(to_delete.folder_uid)
                 if not folder:

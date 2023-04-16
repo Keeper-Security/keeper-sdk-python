@@ -13,12 +13,12 @@ KeyTypes = Union[str, int, bytes]
 @dataclass
 class FieldSchema:
     name: str
-    type: Type
+    type: type
     element_type: Optional[Type] = None
 
 
 class TableSchema:
-    def __init__(self):
+    def __init__(self):                 # type: () -> None
         self.table_name = ''            # type: str
         self.class_type = type(object)  # type: Type
         self.columns = []               # type: List[str]
@@ -111,7 +111,7 @@ class TableSchema:
                     primary_key,        # type: Sequence[str]
                     indexes=None,       # type: Optional[Dict[str, Union[str, Sequence[str]]]]
                     owner_column=None,  # type: Optional[str]
-                    owner_type=None     # type: Optional[Type[str, int]]
+                    owner_type=None     # type: Optional[Type[Union[str, int]]]
                     ):                  # type: (...) -> TableSchema
         schema = cls()
         schema.class_type = class_type

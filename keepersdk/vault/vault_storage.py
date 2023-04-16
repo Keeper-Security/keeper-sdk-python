@@ -53,7 +53,7 @@ class IVaultStorage(abc.ABC):
 
     @property
     @abc.abstractmethod
-    def user_emails(self):    # type: () -> ILinkStorage[storage_types.StorageUserEmail, str]
+    def user_emails(self):    # type: () -> ILinkStorage[storage_types.StorageUserEmail, str, str]
         pass
 
     @property

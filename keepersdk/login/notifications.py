@@ -13,7 +13,7 @@ import json
 import threading
 from typing import Optional, TypeVar, Generic, Callable, List, Dict, Any
 
-import websocket
+import websocket   # type: ignore
 
 from .. import crypto, utils
 from ..proto import push_pb2
@@ -23,7 +23,7 @@ M = TypeVar('M')
 
 
 class FanOut(Generic[M]):
-    def __init__(self):
+    def __init__(self):              # type: () -> None
         self._callbacks = []         # type: List[Callable[[M], Optional[bool]]]
         self._is_completed = False   # type: bool
 

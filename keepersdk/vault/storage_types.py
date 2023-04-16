@@ -172,10 +172,10 @@ class StorageFolderRecordLink(IUidLink):
 
 
 class BreachWatchRecord(IUid):
-    def __init__(self):
+    def __init__(self):           # type: () -> None
         self.record_uid = ''      # type: str
         self.data = b''           # type: bytes
-        self.type = ''            # type: str
+        self.type = 0             # type: int
         self.revision = 0         # type: int
 
     def uid(self):
@@ -189,7 +189,7 @@ class RecordTypeScope:
 
 
 class StorageRecordType(IUid):
-    def __init__(self):
+    def __init__(self):                        # type: () -> None
         self.id = 0                            # type: int
         self.scope = RecordTypeScope.Standard  # type: int
         self.content = ''                      # type: str

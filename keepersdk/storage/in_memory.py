@@ -19,7 +19,7 @@ GetUid = Callable[[Any], KeyType]
 
 class InMemoryEntityStorage(IEntityStorage):
     def __init__(self, get_uid=None):   # type: (Optional[GetUid]) -> None
-        self._items = {}
+        self._items = {}                # type: Dict[KeyType, Any]
         self.get_uid = get_uid
 
     def get_entity(self, uid):

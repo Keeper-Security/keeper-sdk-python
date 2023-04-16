@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import data_vault
 from keepersdk import crypto, utils, errors
-from keepersdk.login import endpoint, auth, configuration, notifications
+from keepersdk.login import endpoint, configuration, notifications, login_auth
 from keepersdk.proto import APIRequest_pb2
 
 
@@ -165,7 +165,7 @@ class TestLogin(TestCase):
         mock.side_effect = Exception
         keeper_endpoint._communicate_keeper = mock
 
-        return auth.LoginAuth(keeper_endpoint)
+        return login_auth.LoginAuth(keeper_endpoint)
 
     @staticmethod
     def reset_stops():
@@ -176,22 +176,22 @@ class TestLogin(TestCase):
     def test_success_flow(self):
         TestLogin.reset_stops()
 
-        login_auth = self.get_auth_sync()
-        login_auth.login(data_vault.UserName)
-        self.assertTrue(isinstance(login_auth.login_step, auth.LoginStepConnected))
+        auth = self.get_auth_sync()
+        auth.login(data_vault.UserName)
+        self.assertTrue(isinstance(auth.login_step, login_auth.LoginStepConnected))
 
     def test_register_device(self):
         TestLogin.reset_stops()
 
-        login_auth = self.get_auth_sync()
-        config = login_auth.keeper_endpoint.get_configuration_storage().get()
+        auth = self.get_auth_sync()
+        config = auth.keeper_endpoint.get_configuration_storage().get()
         device_token = utils.base64_url_encode(data_vault.DeviceId)
         config.devices().delete(device_token)
-        login_auth.keeper_endpoint.get_configuration_storage().put(config)
+        auth.keeper_endpoint.get_configuration_storage().put(config)
 
-        login_auth.login(data_vault.UserName)
-        self.assertTrue(isinstance(login_auth.login_step, auth.LoginStepConnected))
-        config = login_auth.keeper_endpoint.get_configuration_storage().get()
+        auth.login(data_vault.UserName)
+        self.assertTrue(isinstance(auth.login_step, login_auth.LoginStepConnected))
+        config = auth.keeper_endpoint.get_configuration_storage().get()
         uc = config.users().get(data_vault.UserName)
         self.assertIsNotNone(uc)
         ld = uc.last_device
@@ -201,8 +201,8 @@ class TestLogin(TestCase):
     def test_region_redirect(self):
         TestLogin.reset_stops()
 
-        login_auth = self.get_auth_sync()
-        config = login_auth.keeper_endpoint.get_configuration_storage().get()
+        auth = self.get_auth_sync()
+        config = auth.keeper_endpoint.get_configuration_storage().get()
         device_token = utils.base64_url_encode(data_vault.DeviceId)
         idc = config.devices().get(device_token)
         self.assertIsNotNone(idc)
@@ -212,149 +212,147 @@ class TestLogin(TestCase):
         dc.public_key = idc.public_key
         config.devices().put(dc)
         config.last_server = 'other.company.com'
-        login_auth.keeper_endpoint.get_configuration_storage().put(config)
+        auth.keeper_endpoint.get_configuration_storage().put(config)
 
-        login_auth.login(data_vault.UserName)
-        self.assertTrue(isinstance(login_auth.login_step, auth.LoginStepConnected))
-        self.assertEqual(login_auth.keeper_endpoint.server, data_vault.DefaultEnvironment)
+        auth.login(data_vault.UserName)
+        self.assertTrue(isinstance(auth.login_step, login_auth.LoginStepConnected))
+        self.assertEqual(auth.keeper_endpoint.server, data_vault.DefaultEnvironment)
 
     def test_device_approve_email_code(self):
         TestLogin.reset_stops()
         TestLogin.StopAtDeviceApproval = True
 
-        login_auth = self.get_auth_sync()
-        login_auth.login(data_vault.UserName)
-        step = login_auth.login_step
-        self.assertIsInstance(step, auth.LoginStepDeviceApproval)
-        step.send_push(auth.DeviceApprovalChannel.Email)
-        step.send_code(auth.DeviceApprovalChannel.Email, data_vault.DeviceVerificationEmailCode)
-        self.assertIsInstance(login_auth.login_step, auth.LoginStepConnected)
+        auth = self.get_auth_sync()
+        auth.login(data_vault.UserName)
+        step = auth.login_step
+        self.assertIsInstance(step, login_auth.LoginStepDeviceApproval)
+        step.send_push(login_auth.DeviceApprovalChannel.Email)
+        step.send_code(login_auth.DeviceApprovalChannel.Email, data_vault.DeviceVerificationEmailCode)
+        self.assertIsInstance(auth.login_step, login_auth.LoginStepConnected)
 
     def test_device_approve_email_push(self):
         TestLogin.reset_stops()
         TestLogin.StopAtDeviceApproval = True
 
         event = threading.Event()
-        login_auth = self.get_auth_sync()
+        auth = self.get_auth_sync()
 
         def set_if_connected():
-            if isinstance(login_auth.login_step, auth.LoginStepConnected):
+            if isinstance(auth.login_step, login_auth.LoginStepConnected):
                 event.set()
 
-        login_auth.on_next_step = set_if_connected
-        login_auth.login(data_vault.UserName)
-        step = login_auth.login_step
-        self.assertIsInstance(step, auth.LoginStepDeviceApproval)
-        step.send_push(auth.DeviceApprovalChannel.Email)
+        auth.on_next_step = set_if_connected
+        auth.login(data_vault.UserName)
+        step = auth.login_step
+        self.assertIsInstance(step, login_auth.LoginStepDeviceApproval)
+        step.send_push(login_auth.DeviceApprovalChannel.Email)
 
         def send_push():
             if TestLogin.StopAtDeviceApproval:
                 TestLogin.StopAtDeviceApproval = False
-            login_auth.push_notifications.push({
-                'command': 'device_verified',
-            })
+            auth.push_notifications.push({'command': 'device_verified'})
         threading.Thread(daemon=True, target=send_push).start()
         event.wait(1)
 
-        self.assertTrue(isinstance(login_auth.login_step, auth.LoginStepConnected))
+        self.assertTrue(isinstance(auth.login_step, login_auth.LoginStepConnected))
 
     def test_device_approve_keeper_push(self):
         TestLogin.reset_stops()
         TestLogin.StopAtDeviceApproval = True
 
         event = threading.Event()
-        login_auth = self.get_auth_sync()
+        auth = self.get_auth_sync()
 
         def set_if_connected():
-            if isinstance(login_auth.login_step, auth.LoginStepConnected):
+            if isinstance(auth.login_step, login_auth.LoginStepConnected):
                 event.set()
 
-        login_auth.on_next_step = set_if_connected
-        login_auth.login(data_vault.UserName)
-        step = login_auth.login_step
-        self.assertIsInstance(step, auth.LoginStepDeviceApproval)
-        step.send_push(auth.DeviceApprovalChannel.KeeperPush)
+        auth.on_next_step = set_if_connected
+        auth.login(data_vault.UserName)
+        step = auth.login_step
+        self.assertIsInstance(step, login_auth.LoginStepDeviceApproval)
+        step.send_push(login_auth.DeviceApprovalChannel.KeeperPush)
 
         def send_push():
             if TestLogin.StopAtDeviceApproval:
                 TestLogin.StopAtDeviceApproval = False
-            login_auth.push_notifications.push({
+            auth.push_notifications.push({
                 'message': 'device_approved',
                 'approved': True
             })
         threading.Thread(daemon=True, target=send_push).start()
         event.wait(1)
 
-        self.assertIsInstance(login_auth.login_step, auth.LoginStepConnected)
+        self.assertIsInstance(auth.login_step, login_auth.LoginStepConnected)
 
     def test_two_factor_code(self):
         TestLogin.reset_stops()
         TestLogin.StopAtTwoFactor = True
 
-        login_auth = self.get_auth_sync()
-        login_auth.login(data_vault.UserName)
-        step = login_auth.login_step
-        self.assertIsInstance(step, auth.LoginStepTwoFactor)
+        auth = self.get_auth_sync()
+        auth.login(data_vault.UserName)
+        step = auth.login_step
+        self.assertIsInstance(step, login_auth.LoginStepTwoFactor)
         channels = list(step.get_channels())
         step.send_code(channels[0].channel_uid, data_vault.TwoFactorOneTimeToken)
-        self.assertIsInstance(login_auth.login_step, auth.LoginStepConnected)
+        self.assertIsInstance(auth.login_step, login_auth.LoginStepConnected)
 
     def test_provided_password(self):
         TestLogin.reset_stops()
         TestLogin.StopAtPassword = True
 
-        login_auth = self.get_auth_sync()
-        config = login_auth.keeper_endpoint.get_configuration_storage().get()
+        auth = self.get_auth_sync()
+        config = auth.keeper_endpoint.get_configuration_storage().get()
         iuc = config.users().get(data_vault.UserName)
         self.assertIsInstance(iuc, configuration.IUserConfiguration)
         uc = configuration.UserConfiguration(iuc)
         uc.password = data_vault.UserPassword
         config.users().put(uc)
-        login_auth.keeper_endpoint.get_configuration_storage().put(config)
-        login_auth.login(data_vault.UserName)
-        self.assertIsInstance(login_auth.login_step, auth.LoginStepConnected)
+        auth.keeper_endpoint.get_configuration_storage().put(config)
+        auth.login(data_vault.UserName)
+        self.assertIsInstance(auth.login_step, login_auth.LoginStepConnected)
 
     def test_password(self):
         TestLogin.reset_stops()
         TestLogin.StopAtPassword = True
 
-        login_auth = self.get_auth_sync()
-        login_auth.login(data_vault.UserName)
-        step = login_auth.login_step
-        self.assertIsInstance(step, auth.LoginStepPassword)
+        auth = self.get_auth_sync()
+        auth.login(data_vault.UserName)
+        step = auth.login_step
+        self.assertIsInstance(step, login_auth.LoginStepPassword)
         step.verify_password(data_vault.UserPassword)
-        self.assertIsInstance(login_auth.login_step, auth.LoginStepConnected)
+        self.assertIsInstance(auth.login_step, login_auth.LoginStepConnected)
 
     def test_alternate_password(self):
         TestLogin.reset_stops()
         TestLogin.StopAtPassword = True
 
-        login_auth = self.get_auth_sync()
-        login_auth.alternate_password = True
-        login_auth.login(data_vault.UserName)
-        step = login_auth.login_step
-        self.assertIsInstance(step, auth.LoginStepPassword)
+        auth = self.get_auth_sync()
+        auth.alternate_password = True
+        auth.login(data_vault.UserName)
+        step = auth.login_step
+        self.assertIsInstance(step, login_auth.LoginStepPassword)
         step.verify_password(data_vault.UserAlternatePassword)
-        self.assertIsInstance(login_auth.login_step, auth.LoginStepConnected)
+        self.assertIsInstance(auth.login_step, login_auth.LoginStepConnected)
 
     def test_biometrics(self):
         TestLogin.reset_stops()
         TestLogin.StopAtPassword = True
 
-        login_auth = self.get_auth_sync()
-        login_auth.login(data_vault.UserName)
-        step = login_auth.login_step
-        self.assertIsInstance(step, auth.LoginStepPassword)
+        auth = self.get_auth_sync()
+        auth.login(data_vault.UserName)
+        step = auth.login_step
+        self.assertIsInstance(step, login_auth.LoginStepPassword)
         step.verify_biometric_key(data_vault.UserBiometricKey)
-        self.assertIsInstance(login_auth.login_step, auth.LoginStepConnected)
+        self.assertIsInstance(auth.login_step, login_auth.LoginStepConnected)
 
     def test_invalid_password(self):
         TestLogin.reset_stops()
         TestLogin.StopAtPassword = True
 
-        login_auth = self.get_auth_sync()
-        login_auth.login(data_vault.UserName)
-        step = login_auth.login_step
-        self.assertIsInstance(step, auth.LoginStepPassword)
+        auth = self.get_auth_sync()
+        auth.login(data_vault.UserName)
+        step = auth.login_step
+        self.assertIsInstance(step, login_auth.LoginStepPassword)
         with self.assertRaises(errors.AuthFailedError):
             step.verify_password('wrong password')

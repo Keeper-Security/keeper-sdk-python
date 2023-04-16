@@ -33,7 +33,7 @@ def _to_key_type(key_type):  # type: (enterprise_pb2.EncryptedKeyType) -> str
 
 
 class LegacyEnterpriseData(EnterpriseData):
-    def __init__(self):
+    def __init__(self):   # type: () -> None
         self._enterprise = EnterpriseInfo()
         self._data_types = {
             enterprise_pb2.NODES: _EnterpriseNodeEntity(self._enterprise),
@@ -111,7 +111,7 @@ class LegacyEnterpriseData(EnterpriseData):
         }
 
     def get_missing_role_keys(self):   # type: () -> List[int]
-        role_ids = set()
+        role_ids = set()   # type: Set[int]
         managed_nodes = self._data_types[enterprise_pb2.MANAGED_NODES]
         if isinstance(managed_nodes, _Entities):
             role_ids.update((x['role_id'] for x in managed_nodes.entities.values() if 'role_id' in x))
@@ -233,14 +233,14 @@ class _EnterpriseDataEntity(_EnterpriseBaseDataType, _Entities):
         return d
 
     @staticmethod
-    def _set_or_remove(obj, key, value):  # type: (dict, str, any) -> None
+    def _set_or_remove(obj, key, value):  # type: (dict, str, Any) -> None
         if value is not None:
             obj[key] = value
         else:
             if key in obj:
                 obj.pop(key)
 
-    def register_link(self, keeper_entity_id_name, parser):  # type: (str, _EnterpriseDataEntity) -> None
+    def register_link(self, keeper_entity_id_name, parser):  # type: (str, _EnterpriseBaseDataType) -> None
         if isinstance(parser, _EnterpriseLink):
             self._links.append((keeper_entity_id_name, parser))
 
@@ -296,7 +296,8 @@ class _EnterpriseNodeEntity(_EnterpriseDataEntity):
     def get_keeper_entity_key(self, entity):
         return str(entity.get('node_id'))
 
-    def get_proto_entity_key(self, entity):  # type: (enterprise_pb2.Node) -> str
+    def get_proto_entity_key(self, entity):
+        assert isinstance(entity, enterprise_pb2.Node)
         return str(entity.nodeId)
 
     def get_entity_type(self):
@@ -339,7 +340,8 @@ class _EnterpriseUserEntity(_EnterpriseDataEntity):
     def get_keeper_entity_key(self, entity):  # type: (dict) -> str
         return str(entity.get('enterprise_user_id'))
 
-    def get_proto_entity_key(self, entity):  # type: (enterprise_pb2.User) -> str
+    def get_proto_entity_key(self, entity):
+        assert isinstance(entity, enterprise_pb2.User)
         return str(entity.enterpriseUserId)
 
     def get_entity_type(self):
@@ -360,10 +362,11 @@ class _EnterpriseTeamEntity(_EnterpriseDataEntity):
         self._set_or_remove(keeper_entity, 'encrypted_data', proto_entity.encryptedData)
         self._set_or_remove(keeper_entity, 'encrypted_team_key', proto_entity.encryptedTeamKey)
 
-    def get_keeper_entity_key(self, entity):  # type: (dict) -> any
+    def get_keeper_entity_key(self, entity):  # type: (dict) -> Any
         return entity.get('team_uid')
 
-    def get_proto_entity_key(self, entity):  # type: (enterprise_pb2.Team) -> any
+    def get_proto_entity_key(self, entity):
+        assert isinstance(entity, enterprise_pb2.Team)
         return utils.base64_url_encode(entity.teamUid)
 
     def get_entity_type(self):
@@ -398,7 +401,8 @@ class _EnterpriseRoleEntity(_EnterpriseDataEntity):
     def get_keeper_entity_key(self, entity):  # type: (dict) -> str
         return str(entity.get('role_id'))
 
-    def get_proto_entity_key(self, entity):  # type: (enterprise_pb2.Role) -> str
+    def get_proto_entity_key(self, entity):
+        assert isinstance(entity, enterprise_pb2.Role)
         return str(entity.roleId)
 
     def get_entity_type(self):
@@ -471,10 +475,11 @@ class _EnterpriseLicenseEntity(_EnterpriseDataEntity):
         self._set_or_remove(keeper_entity, 'next_billing_date',
                             proto_entity.nextBillingDate if proto_entity.nextBillingDate > 0 else None)
 
-    def get_keeper_entity_key(self, entity):  # type: (dict) -> any
+    def get_keeper_entity_key(self, entity):  # type: (dict) -> Any
         return str(entity.get('enterprise_license_id'))
 
-    def get_proto_entity_key(self, entity):  # type: (enterprise_pb2.License) -> str
+    def get_proto_entity_key(self, entity):
+        assert isinstance(entity, enterprise_pb2.License)
         return str(entity.enterpriseLicenseId)
 
     def get_entity_type(self):
@@ -492,9 +497,10 @@ class _EnterpriseQueuedTeamEntity(_EnterpriseDataEntity):
         self._set_or_remove(keeper_entity, 'encrypted_data', proto_entity.encryptedData)
 
     def get_keeper_entity_key(self, entity):  # type: (dict) -> str
-        return entity.get('team_uid')
+        return entity['team_uid']
 
-    def get_proto_entity_key(self, entity):  # type: (enterprise_pb2.QueuedTeam) -> str
+    def get_proto_entity_key(self, entity):
+        assert isinstance(entity, enterprise_pb2.QueuedTeam)
         return utils.base64_url_encode(entity.teamUid)
 
     def get_entity_type(self):
@@ -517,7 +523,8 @@ class _EnterpriseScimEntity(_EnterpriseDataEntity):
     def get_keeper_entity_key(self, entity):  # type: (dict) -> str
         return str(entity.get('scim_id'))
 
-    def get_proto_entity_key(self, entity):  # type: (enterprise_pb2.Scim) -> str
+    def get_proto_entity_key(self, entity):
+        assert isinstance(entity, enterprise_pb2.Scim)
         return str(entity.scimId)
 
     def get_entity_type(self):
@@ -540,7 +547,8 @@ class _EnterpriseSsoServiceEntity(_EnterpriseDataEntity):
     def get_keeper_entity_key(self, entity):  # type: (dict) -> str
         return str(entity.get('sso_service_provider_id'))
 
-    def get_proto_entity_key(self, entity):  # type: (enterprise_pb2.SsoService) -> str
+    def get_proto_entity_key(self, entity):
+        assert isinstance(entity, enterprise_pb2.SsoService)
         return str(entity.ssoServiceProviderId)
 
     def get_entity_type(self):
@@ -561,7 +569,8 @@ class _EnterpriseBridgeEntity(_EnterpriseDataEntity):
     def get_keeper_entity_key(self, entity):  # type: (dict) -> str
         return str(entity.get('bridge_id'))
 
-    def get_proto_entity_key(self, entity):  # type: (enterprise_pb2.Bridge) -> str
+    def get_proto_entity_key(self, entity):
+        assert isinstance(entity, enterprise_pb2.Bridge)
         return str(entity.bridgeId)
 
     def get_entity_type(self):
@@ -581,7 +590,8 @@ class _EnterpriseEmailProvisionEntity(_EnterpriseDataEntity):
     def get_keeper_entity_key(self, entity):  # type: (dict) -> str
         return str(entity.get('id'))
 
-    def get_proto_entity_key(self, entity):  # type: (enterprise_pb2.EmailProvision) -> str
+    def get_proto_entity_key(self, entity):
+        assert isinstance(entity, enterprise_pb2.EmailProvision)
         return str(entity.id)
 
     def get_entity_type(self):
@@ -601,7 +611,8 @@ class _EnterpriseTeamUserEntity(_EnterpriseDataEntity, _EnterpriseLink):
     def get_keeper_entity_key(self, entity):  # type: (dict) -> str
         return f'{entity.get("team_uid")}:{entity.get("enterprise_user_id")}'
 
-    def get_proto_entity_key(self, entity):  # type: (enterprise_pb2.TeamUser) -> str
+    def get_proto_entity_key(self, entity):
+        assert isinstance(entity, enterprise_pb2.TeamUser)
         return f'{utils.base64_url_encode(entity.teamUid)}:{entity.enterpriseUserId}'
 
     def get_entity_type(self):
@@ -619,7 +630,8 @@ class _EnterpriseRoleUserEntity(_EnterpriseDataEntity, _EnterpriseLink):
     def get_keeper_entity_key(self, entity):  # type: (dict) -> str
         return f'{entity.get("role_id")}:{entity.get("enterprise_user_id")}'
 
-    def get_proto_entity_key(self, entity):  # type: (enterprise_pb2.RoleUser) -> str
+    def get_proto_entity_key(self, entity):
+        assert isinstance(entity, enterprise_pb2.RoleUser)
         return f'{entity.roleId}:{entity.enterpriseUserId}'
 
     def get_entity_type(self):
@@ -637,7 +649,8 @@ class _EnterpriseRoleTeamEntity(_EnterpriseDataEntity, _EnterpriseLink):
     def get_keeper_entity_key(self, entity):  # type: (dict) -> str
         return f'{entity.get("role_id")}:{entity.get("team_uid")}'
 
-    def get_proto_entity_key(self, entity):  # type: (enterprise_pb2.RoleTeam) -> str
+    def get_proto_entity_key(self, entity):
+        assert isinstance(entity, enterprise_pb2.RoleTeam)
         return f'{entity.role_id}:{utils.base64_url_encode(entity.teamUid)}'
 
     def get_entity_type(self):
@@ -656,7 +669,8 @@ class _EnterpriseManagedNodeEntity(_EnterpriseDataEntity, _EnterpriseLink):
     def get_keeper_entity_key(self, entity):  # type: (dict) -> str
         return f'{entity.get("role_id")}:{entity.get("managed_node_id")}'
 
-    def get_proto_entity_key(self, entity):  # type: (enterprise_pb2.ManagedNode) -> str
+    def get_proto_entity_key(self, entity):
+        assert isinstance(entity, enterprise_pb2.ManagedNode)
         return f'{entity.roleId}:{entity.managedNodeId}'
 
     def get_entity_type(self):
@@ -675,7 +689,8 @@ class _EnterpriseRolePrivilegeEntity(_EnterpriseDataEntity, _EnterpriseLink):
     def get_keeper_entity_key(self, entity):  # type: (dict) -> str
         return f'{entity.get("role_id")}:{entity.get("managed_node_id")}:{entity.get("privilege")}'
 
-    def get_proto_entity_key(self, entity):  # type: (enterprise_pb2.RolePrivilege) -> str
+    def get_proto_entity_key(self, entity):
+        assert isinstance(entity, enterprise_pb2.RolePrivilege)
         return f'{entity.roleId}:{entity.managedNodeId}:{entity.privilegeType}'
 
     def get_entity_type(self):
@@ -711,7 +726,8 @@ class _EnterpriseManagedCompanyEntity(_EnterpriseDataEntity):
     def get_keeper_entity_key(self, entity):  # type: (dict) -> str
         return str(entity.get('mc_enterprise_id'))
 
-    def get_proto_entity_key(self, entity):  # type: (enterprise_pb2.ManagedCompany) -> str
+    def get_proto_entity_key(self, entity):
+        assert isinstance(entity, enterprise_pb2.ManagedCompany)
         return str(entity.mcEnterpriseId)
 
     def get_entity_type(self):
@@ -740,7 +756,8 @@ class _EnterpriseAdminApprovalRequestEntity(_EnterpriseDataEntity):
     def get_keeper_entity_key(self, entity):  # type: (dict) -> str
         return f'{entity.get("enterprise_user_id")}:{entity.get("device_id")}'
 
-    def get_proto_entity_key(self, entity):  # type: (enterprise_pb2.DeviceRequestForAdminApproval) -> str
+    def get_proto_entity_key(self, entity):
+        assert isinstance(entity, enterprise_pb2.DeviceRequestForAdminApproval)
         return f'{entity.enterpriseUserId}:{entity.deviceId}'
 
     def get_entity_type(self):
@@ -758,7 +775,8 @@ class _EnterpriseUserAliasEntity(_EnterpriseDataEntity):
     def get_keeper_entity_key(self, entity):  # type: (dict) -> str
         return entity['username']
 
-    def get_proto_entity_key(self, entity):  # type: (enterprise_pb2.UserAlias) -> str
+    def get_proto_entity_key(self, entity):
+        assert isinstance(entity, enterprise_pb2.UserAlias)
         return entity.username
 
     def get_entity_type(self):
@@ -777,7 +795,8 @@ class _EnterpriseRoleEnforcements(_EnterpriseDataEntity, _EnterpriseLink):
     def get_keeper_entity_key(self, entity):  # type: (dict) -> str
         return f'{entity["role_id"]}:{entity["enforcement_type"]}'
 
-    def get_proto_entity_key(self, entity):  # type: (enterprise_pb2.RoleEnforcement) -> str
+    def get_proto_entity_key(self, entity):
+        assert isinstance(entity, enterprise_pb2.RoleEnforcement)
         return f'{entity.roleId}:{entity.enforcementType}'
 
     def get_entity_type(self):

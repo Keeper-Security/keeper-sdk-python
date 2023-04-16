@@ -61,10 +61,10 @@ def prepare_attachment_download(vault, record_uid, attachment_name=None):
         return
 
     if isinstance(record, (TypedRecord, FileRecord)):
-        rq = record_pb2.FilesGetRequest()
-        rq.for_thumbnails = False
+        rq_v3 = record_pb2.FilesGetRequest()
+        rq_v3.for_thumbnails = False
         if isinstance(record, FileRecord):
-            rq.record_uids.append(utils.base64_url_decode(record.record_uid))
+            rq_v3.record_uids.append(utils.base64_url_decode(record.record_uid))
         elif isinstance(record, TypedRecord):
             facade = FileRefRecordFacade()
             facade.record = record
@@ -73,16 +73,17 @@ def prepare_attachment_download(vault, record_uid, attachment_name=None):
                     file_record = vault.load_record(file_uid)
                     if isinstance(file_record, FileRecord):
                         if attachment_name:
-                            atta = attachment_name.lower()
-                            if attachment_name != file_uid and file_record.title.lower() != atta and \
-                                    file_record.file_name.lower() != atta:
+                            name_l = attachment_name.lower()
+                            if attachment_name != file_uid and file_record.title.lower() != name_l and \
+                                    file_record.file_name.lower() != name_l:
                                 continue
-                        rq.record_uids.append(utils.base64_url_decode(file_uid))
+                        rq_v3.record_uids.append(utils.base64_url_decode(file_uid))
 
-        if len(rq.record_uids) > 0:
-            rs = vault.keeper_auth.execute_auth_rest(
-                'vault/files_download', rq, response_type=record_pb2.FilesGetResponse)
-            for file_status in rs.files:
+        if len(rq_v3.record_uids) > 0:
+            rs_v3 = vault.keeper_auth.execute_auth_rest(
+                'vault/files_download', rq_v3, response_type=record_pb2.FilesGetResponse)
+            assert rs_v3 is not None
+            for file_status in rs_v3.files:
                 file_uid = utils.base64_url_encode(file_status.record_uid)
                 if file_status.status == record_pb2.FG_SUCCESS:
                     file_record = vault.load_record(file_uid)
@@ -106,15 +107,15 @@ def prepare_attachment_download(vault, record_uid, attachment_name=None):
                     continue
             attachments.append(atta)
         if len(attachments) > 0:
-            rq = {
+            rq_v2 = {
                 'command': 'request_download',
                 'file_ids': [x.id for x in attachments],
                 'record_uid': record_uid,
             }
-            resolve_record_access_path(vault.storage, rq)
-            rs = vault.keeper_auth.execute_auth_command(rq)
-            if rs['result'] == 'success':
-                for attachment, dl in zip(attachments, rs['downloads']):
+            resolve_record_access_path(vault.storage, rq_v2)
+            rs_v2 = vault.keeper_auth.execute_auth_command(rq_v2)
+            if rs_v2['result'] == 'success':
+                for attachment, dl in zip(attachments, rs_v2['downloads']):
                     if 'url' in dl:
                         adr = AttachmentDownloadRequest()
                         adr.title = attachment.title if attachment.title else attachment.name
@@ -125,7 +126,7 @@ def prepare_attachment_download(vault, record_uid, attachment_name=None):
 
 
 class UploadTask(abc.ABC):
-    def __init__(self):
+    def __init__(self):         # type: () -> None
         self.mime_type = ''
         self.size = 0
         self.name = ''
@@ -239,8 +240,8 @@ def upload_attachments(vault, record, attachments):
 
     elif isinstance(record, TypedRecord):
         cryptor.is_gcm = True
-        rq = record_pb2.FilesAddRequest()
-        rq.client_time = utils.current_milli_time()
+        rq_files = record_pb2.FilesAddRequest()
+        rq_files.client_time = utils.current_milli_time()
         file_keys = {}   # type: Dict[bytes, bytes]
         file_tasks = {}   # type: Dict[bytes, UploadTask]
         for task in attachments:
@@ -263,13 +264,15 @@ def upload_attachments(vault, record, attachments):
                 file_data['thumbnail_size'] = len(task.thumbnail)
                 file.thumbSize = len(task.thumbnail) + 100
             file.data = crypto.encrypt_aes_v2(json.dumps(file_data).encode(), file_key)
-            rq.files.append(file)
+            rq_files.files.append(file)
 
-        rs = vault.keeper_auth.execute_auth_rest('vault/files_add', rq, response_type=record_pb2.FilesAddResponse)
+        rs_files = vault.keeper_auth.execute_auth_rest(
+            'vault/files_add', rq_files, response_type=record_pb2.FilesAddResponse)
+        assert rs_files is not None
 
         facade = FileRefRecordFacade()
         facade.record = record
-        for uo in rs.files:
+        for uo in rs_files.files:
             file_uid = uo.record_uid
             task = file_tasks[file_uid]
             if uo.status != record_pb2.FA_SUCCESS:

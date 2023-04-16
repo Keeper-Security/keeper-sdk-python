@@ -16,7 +16,7 @@ import logging
 import math
 import re
 
-from typing import Iterator, Callable
+from typing import Iterator, Callable, Optional
 
 from urllib.parse import urlparse
 
@@ -82,20 +82,6 @@ def create_auth_verifier(password, salt, iterations):  # type: (str, bytes, int)
     derived_key = crypto.derive_key_v1(password, salt, iterations)
     enc_iter = int.to_bytes(iterations, length=3, byteorder='big', signed=False)
     return b'\x01' + enc_iter + salt + derived_key
-
-
-VALID_URL_SCHEME_CHARS = '+-.:'
-
-
-def is_url(test_str):   # type: (str) -> bool
-    if isinstance(test_str, str):
-        url_parts = test_str.split('://')
-        url_scheme = url_parts[0]
-        valid_scheme = all(c.isalnum or c in VALID_URL_SCHEME_CHARS for c in url_scheme)
-        if len(test_str.split()) == 1 and len(url_parts) > 1 and valid_scheme:
-            return True
-
-    return False
 
 
 EMAIL_PATTERN = r"(^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$)"
@@ -205,7 +191,7 @@ def password_score(password):   # type: (str) -> int
         for j in range(pwd_len):
             if i != j and password[i] == password[j]:
                 char_exists = True
-                rep_inc += pwd_len / abs(i - j)
+                rep_inc += pwd_len // abs(i - j)
         if char_exists:
             rep_count += 1
             unq_count = pwd_len - rep_count
@@ -237,11 +223,12 @@ def password_score(password):   # type: (str) -> int
                     else:
                         op = oc
 
-    symbols = {x[1]: x[0] for x in enumerate('!@#$%^&*()_+[]\\{}|;\':\",./<>?')}
+    symbol_lookup = {x[1]: x[0] for x in enumerate('!@#$%^&*()_+[]\\{}|;\':\",./<>?')}
     cnt = 0
-    for chunk in chunk_text(password, symbols.__contains__):
+    for chunk in chunk_text(password, symbol_lookup.__contains__):
         if len(chunk) >= 3:
-            offsets = [x if x >= 0 else x + cnt for x in offset_char(chunk, lambda y, z: symbols[y] - symbols[z])]
+            offsets = [x if x >= 0 else x + cnt
+                       for x in offset_char(chunk, lambda y, z: symbol_lookup[y] - symbol_lookup[z])]
             op = offsets[0]
             for oc in offsets[1:]:
                 if oc == op:
@@ -256,17 +243,20 @@ def password_score(password):   # type: (str) -> int
     return score if 0 <= score <= 100 else 0 if score < 0 else 100
 
 
-def size_to_str(size):     # type: (int) -> str
+def size_to_str(size):     # type: (Optional[int]) -> str
+    if size is None:
+        return ''
     if size < 2000:
         return f'{size} b'
-    size = size / 1024
-    if size < 1000:
-        return f'{size:.2f} Kb'
-    size = size / 1024
-    if size < 1000:
-        return f'{size:.2f} Mb'
-    size = size / 1024
-    return f'{size:,.2f} Gb'
+    sz = float(size)
+    sz = sz / 1024
+    if sz < 1000:
+        return f'{sz:.2f} Kb'
+    sz = sz / 1024
+    if sz < 1000:
+        return f'{sz:.2f} Mb'
+    sz = sz / 1024
+    return f'{sz:,.2f} Gb'
 
 
 SEARCHABLE_CHARACTERS = {x for x in '\'"`-_+$@%^&'}

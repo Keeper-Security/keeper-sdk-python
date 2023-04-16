@@ -37,14 +37,14 @@ class SharedFolderInfo:
 
 
 class SharedFolderRecord:
-    def __init__(self):
+    def __init__(self):              # type: () -> None
         self.record_uid = ''         # type: str
         self.can_edit = False        # type: bool
         self.can_share = False       # type: bool
 
 
 class SharedFolderPermission:
-    def __init__(self):
+    def __init__(self):                             # type: () -> None
         self.user_id = ''                           # type: str
         self.user_type = SharedFolderUserType.User  # type: int
         self.manage_records = False                 # type: bool
@@ -52,7 +52,7 @@ class SharedFolderPermission:
 
 
 class SharedFolder:
-    def __init__(self):
+    def __init__(self):                        # type: () -> None
         self.shared_folder_uid = ''            # type: str
         self.name = ''                         # type: str
         self.default_manage_records = False    # type: bool
@@ -63,18 +63,14 @@ class SharedFolder:
         self.record_permissions = []           # type: List[SharedFolderRecord]
 
     @staticmethod
-    def load(store_sf, records, users, shared_folder_key):
-        """
-        :type store_sf: StorageSharedFolder
-        :type records: Iterable[StorageRecordKey]
-        :type users: Iterable[StorageSharedFolderPermission]
-        :type shared_folder_key: bytes
-        :rtype: SharedFolder
-        """
+    def load(store_sf,     # type: StorageSharedFolder
+             records,      # type: Iterable[StorageRecordKey]
+             users,        # type: Iterable[StorageSharedFolderPermission]
+             shared_folder_key  # type: bytes
+             ):            # type: (...) -> SharedFolder
         shared_folder_uid = store_sf.shared_folder_uid
         shared_folder = SharedFolder()
         shared_folder.shared_folder_uid = shared_folder_uid
-        shared_folder.shared_folder_key = shared_folder_key
         shared_folder.default_manage_records = store_sf.default_manage_records
         shared_folder.default_manage_users = store_sf.default_manage_users
         shared_folder.default_can_edit = store_sf.default_can_edit
@@ -120,7 +116,7 @@ class TeamInfo:
 
 
 class Team:
-    def __init__(self):
+    def __init__(self):               # type: () -> None
         self.team_uid = ''            # type: str
         self.name = ''                # type: str
         self.restrict_edit = False    # type: bool
@@ -145,7 +141,7 @@ FolderType = Literal['user_folder', 'shared_folder', 'shared_folder_folder']
 
 
 class Folder:
-    def __init__(self):
+    def __init__(self):                   # type: () -> None
         self.folder_uid = ''              # type: str
         self.folder_type = 'user_folder'  # type: FolderType
         self.folder_key = b''             # type: bytes
@@ -164,7 +160,7 @@ class RecordTypeField:
 
 
 class RecordType:
-    def __init__(self):
+    def __init__(self):        # type: () -> None
         self.id = 0
         self.scope = RecordTypeScope.Standard
         self.name = ''
@@ -190,4 +186,4 @@ class RecordType:
                 rfs.append(record_field)
 
             record_type.fields = rfs
-        return RecordType
+        return record_type

@@ -10,21 +10,25 @@
 #
 
 import json
-import logging
 import locale
-from typing import Optional, Dict, Any
-
+import logging
 import requests
 
+from typing import Optional, Dict, Any, Type, TypeVar
 from urllib.parse import urlunparse
+
 from google.protobuf.json_format import MessageToJson
+from google.protobuf.message import Message
 
 from . import configuration, notifications
 from .. import crypto, utils
+from .. import errors
 from ..constants import DEFAULT_KEEPER_SERVER, DEFAULT_DEVICE_NAME, CLIENT_VERSION
 from ..proto import APIRequest_pb2
 
-from .. import errors
+
+TRQ = TypeVar('TRQ', bound=Message)
+TRS = TypeVar('TRS', bound=Message)
 
 
 def encrypt_with_keeper_key(data, key_id):
@@ -58,7 +62,10 @@ def prepare_api_request(key_id, transmission_key, payload=None, session_token=No
 
 
 class KeeperEndpoint(object):
-    def __init__(self, configuration_storage, keeper_server=None):
+    def __init__(self,
+                 configuration_storage,   # type: configuration.IConfigurationStorage
+                 keeper_server=None       # type: Optional[str]
+                 ):  # type: (...) -> None
         self.client_version = CLIENT_VERSION     # type: str
         self.device_name = DEFAULT_DEVICE_NAME   # type: str
         self.locale = resolve_locale()           # type: str
@@ -87,11 +94,11 @@ class KeeperEndpoint(object):
             self._server_key_id = sc.server_key_id
         else:
             self._server = keeper_server
-            self._server_key_id = None
+            self._server_key_id = 7
 
     @property
     def server_key_id(self):
-        return self._server_key_id or 1
+        return self._server_key_id or 7
 
     def get_configuration_storage(self):
         return self._storage
@@ -103,7 +110,7 @@ class KeeperEndpoint(object):
                             endpoint,           # type: str
                             payload,            # type: Optional[bytes]
                             session_token=None  # type: Optional[bytes]
-                            ):
+                            ):                  # type: (...) -> Optional[bytes]
         logger = utils.get_logger()
 
         key_id = self.server_key_id
@@ -162,6 +169,7 @@ class KeeperEndpoint(object):
         raise errors.KeeperError('Failed to execute Keeper API request')
 
     def execute_rest(self, rest_endpoint, request, response_type=None, session_token=None):
+        # type: (str, Optional[TRQ], Optional[Type[TRS]], Optional[bytes]) -> Optional[TRS]
         logger = utils.get_logger()
         if logger.level <= logging.DEBUG:
             js = MessageToJson(request) if request else ''
@@ -295,7 +303,7 @@ SERVER_PUBLIC_KEYS = {
 
     17: crypto.load_ec_public_key(utils.base64_url_decode(
         'BFX68cb97m9_sweGdOVavFM3j5ot6gveg6xT4BtGahfGhKib-zdZyO9pwvv1cBda9ahkSzo1BQ4NVXp9qRyqVGU')),
-}
+}  # type: Dict[int, Any]
 
 KEEPER_LANGUAGES = {
     "ar": "ar_AE",
@@ -319,13 +327,14 @@ KEEPER_LANGUAGES = {
     "zh": "zh_CN",
     "zh-HK": "zh_HK",
     "zh-TW": "zh_TW"
-}
+}  # type: Dict[str, str]
 
 
 def resolve_locale():  # type: () -> str
     system_locale = locale.getdefaultlocale()
-    if system_locale[0] in KEEPER_LANGUAGES:
-        return KEEPER_LANGUAGES[system_locale[0]]
-    if system_locale[0] in KEEPER_LANGUAGES.values():
-        return system_locale[0]
+    if system_locale[0]:
+        if system_locale[0] in KEEPER_LANGUAGES:
+            return KEEPER_LANGUAGES[system_locale[0]]
+        if system_locale[0] in KEEPER_LANGUAGES.values():
+            return system_locale[0]
     return 'en_US'

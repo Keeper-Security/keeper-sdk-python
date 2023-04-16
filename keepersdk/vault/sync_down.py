@@ -26,9 +26,9 @@ def sync_down_request(keeper_auth, storage, sync_record_types=False):
     # type: (auth.KeeperAuth, vault_storage.IVaultStorage, bool) -> vault_data.RebuildTask
     logger = utils.get_logger()
 
-    email_lookup = {}   # type: Dict[str, Optional[str]]
+    email_lookup = {}  # type: Dict[str, Optional[str]]
 
-    def get_account_uid_by_email(email):     # type: (str) -> Optional[str]
+    def get_account_uid_by_email(email):  # type: (str) -> Optional[str]
         nonlocal email_lookup
         if email not in email_lookup:
             link = next(storage.user_emails.get_links_for_object(email), None)
@@ -42,12 +42,13 @@ def sync_down_request(keeper_auth, storage, sync_record_types=False):
     rq = SyncDown_pb2.SyncDownRequest()
     done = False
     token = storage.continuation_token
-    result = None   # type: Optional[vault_data.RebuildTask]
-    record_owners = {}   # type: Dict[str, bool]
+    result = None  # type: Optional[vault_data.RebuildTask]
+    record_owners = {}  # type: Dict[str, bool]
     while not done:
         if token:
             rq.continuationToken = token
         response = keeper_auth.execute_auth_rest('vault/sync_down', rq, response_type=SyncDown_pb2.SyncDownResponse)
+        assert response is not None
         done = not response.hasMore
         token = response.continuationToken
         if response.cacheStatus == SyncDown_pb2.CLEAR:
@@ -62,7 +63,7 @@ def sync_down_request(keeper_auth, storage, sync_record_types=False):
             storage.record_keys.delete_links(((x, storage.personal_scope_uid) for x in record_uids))
 
             # linked records
-            record_links = []   # type: List[types.IUidLink]
+            record_links = []  # type: List[types.IUidLink]
             for record_uid in record_uids:
                 record_links.extend(storage.record_keys.get_links_for_object(record_uid))
             storage.record_keys.delete_links(record_links)
@@ -94,7 +95,7 @@ def sync_down_request(keeper_auth, storage, sync_record_types=False):
 
         if len(response.removedTeams) > 0:
             removed_teams = [utils.base64_url_encode(x) for x in response.removedTeams]
-            sf_links = []    # type: List[types.IUidLink]
+            sf_links = []  # type: List[types.IUidLink]
             for team_uid in removed_teams:
                 sf_links.extend(storage.shared_folder_keys.get_links_for_object(team_uid))
             result.add_shared_folders((x.subject_uid() for x in sf_links))
@@ -104,7 +105,7 @@ def sync_down_request(keeper_auth, storage, sync_record_types=False):
 
         if len(response.removedSharedFolders) > 0:
             removed_shared_folders = [utils.base64_url_encode(x) for x in response.removedSharedFolders]
-            rec_links = []    # type: List[types.IUidLink]
+            rec_links = []  # type: List[types.IUidLink]
             for shared_folder_uid in removed_shared_folders:
                 rec_links.extend(storage.record_keys.get_links_for_object(shared_folder_uid))
             result.add_shared_folders(removed_shared_folders)
@@ -122,17 +123,17 @@ def sync_down_request(keeper_auth, storage, sync_record_types=False):
             del links
 
         if len(response.removedUserFolders) > 0:
-            folder_uids = [utils.base64_url_encode(x) for x in response.removedUserFolders]
-            storage.folder_records.delete_links_for_subjects(folder_uids)
-            storage.folders.delete_uids(folder_uids)
-            del folder_uids
+            uids = [utils.base64_url_encode(x) for x in response.removedUserFolders]
+            storage.folder_records.delete_links_for_subjects(uids)
+            storage.folders.delete_uids(uids)
+            del uids
 
         if len(response.removedSharedFolderFolders) > 0:
-            folder_uids = [utils.base64_url_encode(x.folderUid or x.sharedFolderUid)
-                           for x in response.removedSharedFolderFolders]
-            storage.folder_records.delete_links_for_subjects(folder_uids)
-            storage.folders.delete_uids(folder_uids)
-            del folder_uids
+            uids = [utils.base64_url_encode(x.folderUid or x.sharedFolderUid)
+                    for x in response.removedSharedFolderFolders]
+            storage.folder_records.delete_links_for_subjects(uids)
+            storage.folders.delete_uids(uids)
+            del uids
 
         if len(response.removedUserFolderSharedFolders) > 0:
             shared_folder_uids = [utils.base64_url_encode(x.sharedFolderUid)
@@ -156,7 +157,7 @@ def sync_down_request(keeper_auth, storage, sync_record_types=False):
         if len(response.recordMetaData) > 0:
             record_owners.update(((utils.base64_url_encode(x.recordUid), x.owner) for x in response.recordMetaData))
 
-            def to_record_key(rmd):   # type: (SyncDown_pb2.RecordMetaData) -> Optional[StorageRecordKey]
+            def to_record_key(rmd):  # type: (SyncDown_pb2.RecordMetaData) -> Optional[StorageRecordKey]
                 r_uid = utils.base64_url_encode(rmd.recordUid)
                 key_type = rmd.recordKeyType
                 record_key = rmd.recordKey
@@ -166,16 +167,18 @@ def sync_down_request(keeper_auth, storage, sync_record_types=False):
                     elif key_type == record_pb2.ENCRYPTED_BY_DATA_KEY:
                         record_key = crypto.decrypt_aes_v1(record_key, keeper_auth.auth_context.data_key)
                     elif key_type == record_pb2.ENCRYPTED_BY_PUBLIC_KEY:
+                        assert keeper_auth.auth_context.rsa_private_key is not None
                         record_key = crypto.decrypt_rsa(record_key, keeper_auth.auth_context.rsa_private_key)
                     elif key_type == record_pb2.ENCRYPTED_BY_DATA_KEY_GCM:
                         record_key = crypto.decrypt_aes_v2(record_key, keeper_auth.auth_context.data_key)
                     elif key_type == record_pb2.ENCRYPTED_BY_PUBLIC_KEY_ECC:
+                        assert keeper_auth.auth_context.ec_private_key is not None
                         record_key = crypto.decrypt_ec(record_key, keeper_auth.auth_context.ec_private_key)
                     else:
-                        record_key = None
+                        record_key = b''
                         logger.error(f'Record metadata UID %s: unsupported key type %d', r_uid, key_type)
 
-                    if record_key is not None:
+                    if record_key:
                         sr_key = StorageRecordKey()
                         sr_key.record_uid = r_uid
                         sr_key.record_key = crypto.encrypt_aes_v2(record_key, keeper_auth.auth_context.client_key)
@@ -192,7 +195,7 @@ def sync_down_request(keeper_auth, storage, sync_record_types=False):
             storage.record_keys.put_links(record_meta_data)
 
         if len(response.recordLinks) > 0:
-            def to_link_key(rec):   # type: (SyncDown_pb2.RecordLink) -> StorageRecordKey
+            def to_link_key(rec):  # type: (SyncDown_pb2.RecordLink) -> StorageRecordKey
                 record_key = StorageRecordKey()
                 record_key.record_uid = utils.base64_url_encode(rec.childRecordUid)
                 record_key.record_key = rec.recordKey
@@ -208,7 +211,7 @@ def sync_down_request(keeper_auth, storage, sync_record_types=False):
             del link_keys
 
         if len(response.records) > 0:
-            def to_record(rec):    # type: (SyncDown_pb2.Record) -> StorageRecord
+            def to_record(rec):  # type: (SyncDown_pb2.Record) -> StorageRecord
                 record = StorageRecord()
                 record.record_uid = utils.base64_url_encode(rec.recordUid)
                 record.version = rec.version
@@ -229,7 +232,7 @@ def sync_down_request(keeper_auth, storage, sync_record_types=False):
             del recs
 
         if len(response.nonSharedData) > 0:
-            def to_non_shared_data(nsd):   # type: (SyncDown_pb2.NonSharedData) -> StorageNonSharedData
+            def to_non_shared_data(nsd):  # type: (SyncDown_pb2.NonSharedData) -> StorageNonSharedData
                 s_nsd = StorageNonSharedData()
                 s_nsd.record_uid = utils.base64_url_encode(nsd.recordUid)
                 s_nsd.data = nsd.data
@@ -251,14 +254,14 @@ def sync_down_request(keeper_auth, storage, sync_record_types=False):
             storage.user_emails.put_links(user_emails)
 
         if len(response.sharedFolders) > 0:
-            sfs = [utils.base64_url_encode(x.sharedFolderUid) for x in response.sharedFolders
-                   if x.cacheStatus == SyncDown_pb2.CLEAR]
-            storage.shared_folder_keys.delete_links_for_subjects(sfs)
-            storage.shared_folder_permissions.delete_links_for_subjects(sfs)
-            del sfs
+            uids = [utils.base64_url_encode(x.sharedFolderUid) for x in response.sharedFolders
+                    if x.cacheStatus == SyncDown_pb2.CLEAR]
+            storage.shared_folder_keys.delete_links_for_subjects(uids)
+            storage.shared_folder_permissions.delete_links_for_subjects(uids)
+            del uids
 
         if len(response.teams) > 0:
-            sf_removed_keys = []   # type: List[types.UidLink]
+            sf_removed_keys = []  # type: List[types.UidLink]
             for team in response.teams:
                 team_uid = utils.base64_url_encode(team.teamUid)
                 sf_removed_keys.extend(
@@ -276,15 +279,17 @@ def sync_down_request(keeper_auth, storage, sync_record_types=False):
                     if key_type == record_pb2.ENCRYPTED_BY_DATA_KEY:
                         team_key = crypto.decrypt_aes_v1(team_key, keeper_auth.auth_context.data_key)
                     elif key_type == record_pb2.ENCRYPTED_BY_PUBLIC_KEY:
+                        assert keeper_auth.auth_context.rsa_private_key is not None
                         team_key = crypto.decrypt_rsa(team_key, keeper_auth.auth_context.rsa_private_key)
                     elif key_type == record_pb2.ENCRYPTED_BY_DATA_KEY_GCM:
                         team_key = crypto.decrypt_aes_v2(team_key, keeper_auth.auth_context.data_key)
                     elif key_type == record_pb2.ENCRYPTED_BY_PUBLIC_KEY_ECC:
+                        assert keeper_auth.auth_context.ec_private_key is not None
                         team_key = crypto.decrypt_ec(team_key, keeper_auth.auth_context.ec_private_key)
                     else:
-                        team_key = None
+                        team_key = b''
                         logger.debug('Team UID %s: unsupported key type %d', team_uid, key_type)
-                    if team_key is not None:
+                    if team_key:
                         encrypted_team_key = crypto.encrypt_aes_v2(team_key, keeper_auth.auth_context.client_key)
                         s_team = StorageTeam()
                         s_team.team_uid = utils.base64_url_encode(sync_down_team.teamUid)
@@ -298,11 +303,12 @@ def sync_down_request(keeper_auth, storage, sync_record_types=False):
                         return s_team
                 except Exception as e:
                     logger.error('Team %s key decrypt error: %s', team_uid, e)
+
             storage.teams.put_entities((y for y in (to_team(x) for x in response.teams) if y))
 
             sf_keys = []  # type: List[StorageSharedFolderKey]
 
-            def to_shared_folder_key(sfk):    # type: (SyncDown_pb2.SharedFolderKey) -> StorageSharedFolderKey
+            def to_shared_folder_key_team(sfk):  # type: (SyncDown_pb2.SharedFolderKey) -> StorageSharedFolderKey
                 sshk = StorageSharedFolderKey()
                 sshk.shared_folder_uid = utils.base64_url_encode(sfk.sharedFolderUid)
                 sshk.team_uid = team_uid
@@ -310,12 +316,12 @@ def sync_down_request(keeper_auth, storage, sync_record_types=False):
                 sshk.shared_folder_key = sfk.sharedFolderKey
                 return sshk
 
-            sf_keys.extend((to_shared_folder_key(k) for team in response.teams for k in team.sharedFolderKeys))
+            sf_keys.extend((to_shared_folder_key_team(k) for team in response.teams for k in team.sharedFolderKeys))
             storage.shared_folder_keys.put_links(sf_keys)
             del sf_keys
 
         if len(response.sharedFolders) > 0:
-            def to_shared_folder(shared_folder):    # type: (SyncDown_pb2.SharedFolder) -> StorageSharedFolder
+            def to_shared_folder(shared_folder):  # type: (SyncDown_pb2.SharedFolder) -> StorageSharedFolder
                 s_sf = StorageSharedFolder()
                 s_sf.shared_folder_uid = utils.base64_url_encode(shared_folder.sharedFolderUid)
                 s_sf.owner_account_uid = utils.base64_url_encode(shared_folder.ownerAccountUid)
@@ -343,16 +349,18 @@ def sync_down_request(keeper_auth, storage, sync_record_types=False):
                             shared_folder_key = crypto.decrypt_aes_v1(
                                 shared_folder_key, keeper_auth.auth_context.data_key)
                         elif key_type == record_pb2.ENCRYPTED_BY_PUBLIC_KEY:
+                            assert keeper_auth.auth_context.rsa_private_key is not None
                             shared_folder_key = crypto.decrypt_rsa(
                                 shared_folder_key, keeper_auth.auth_context.rsa_private_key)
                         elif key_type == record_pb2.ENCRYPTED_BY_DATA_KEY_GCM:
                             shared_folder_key = crypto.decrypt_aes_v2(
                                 shared_folder_key, keeper_auth.auth_context.data_key)
                         elif key_type == record_pb2.ENCRYPTED_BY_PUBLIC_KEY_ECC:
+                            assert keeper_auth.auth_context.ec_private_key is not None
                             shared_folder_key = crypto.decrypt_ec(
                                 shared_folder_key, keeper_auth.auth_context.ec_private_key)
                         else:
-                            shared_folder_key = None
+                            shared_folder_key = b''
                             logger.warning('Shared Folder UID %s: wrong key type %d}', shared_folder_uid, key_type)
                         if shared_folder_key:
                             shared_folder_key = \
@@ -425,11 +433,11 @@ def sync_down_request(keeper_auth, storage, sync_record_types=False):
             del rsfrs
 
         if len(response.removedSharedFolderUsers) > 0:
-            rsfus = []   # type: List[types.IUidLink]
+            rsfus = []  # type: List[types.IUidLink]
             for x in response.removedSharedFolderUsers:
                 shf_uid = utils.base64_url_encode(x.sharedFolderUid)
                 if len(x.accountUid) > 0:
-                    account_uid = utils.base64_url_encode(x.accountUid)
+                    account_uid = utils.base64_url_encode(x.accountUid)  # type: Optional[str]
                 else:
                     account_uid = get_account_uid_by_email(x.username)
                 if account_uid:
@@ -443,20 +451,22 @@ def sync_down_request(keeper_auth, storage, sync_record_types=False):
             ) for x in response.removedSharedFolderTeams))
 
         if len(response.userFolders) > 0:
-            def to_user_folder(uf):   # type: (SyncDown_pb2.UserFolder) -> Optional[StorageFolder]
+            def to_user_folder(uf):  # type: (SyncDown_pb2.UserFolder) -> Optional[StorageFolder]
                 key_type = uf.keyType
                 key = uf.userFolderKey
                 try:
                     if key_type == record_pb2.ENCRYPTED_BY_DATA_KEY:
                         key = crypto.decrypt_aes_v1(key, keeper_auth.auth_context.data_key)
                     elif key_type == record_pb2.ENCRYPTED_BY_DATA_KEY:
+                        assert keeper_auth.auth_context.rsa_private_key is not None
                         key = crypto.decrypt_rsa(key, keeper_auth.auth_context.rsa_private_key)
                     elif key_type == record_pb2.ENCRYPTED_BY_DATA_KEY_GCM:
                         key = crypto.decrypt_aes_v2(key, keeper_auth.auth_context.data_key)
                     elif key_type == record_pb2.ENCRYPTED_BY_PUBLIC_KEY_ECC:
+                        assert keeper_auth.auth_context.ec_private_key is not None
                         key = crypto.decrypt_ec(key, keeper_auth.auth_context.ec_private_key)
                     else:
-                        key = None
+                        key = b''
                         logger.warning('User Folder UID %s: wrong key type %d}', shared_folder_uid, key_type)
                     if key:
                         key = crypto.encrypt_aes_v2(key, keeper_auth.auth_context.client_key)
@@ -486,7 +496,7 @@ def sync_down_request(keeper_auth, storage, sync_record_types=False):
                 (to_user_folder_shared_folders(x) for x in response.userFolderSharedFolders))
 
         if len(response.sharedFolderFolders) > 0:
-            def to_shared_folder_folder(sff):   # type: (SyncDown_pb2.SharedFolderFolder) -> StorageFolder
+            def to_shared_folder_folder(sff):  # type: (SyncDown_pb2.SharedFolderFolder) -> StorageFolder
                 s_f = StorageFolder()
                 s_f.folder_uid = utils.base64_url_encode(sff.folderUid)
                 s_f.shared_folder_uid = utils.base64_url_encode(sff.sharedFolderUid)
@@ -500,7 +510,7 @@ def sync_down_request(keeper_auth, storage, sync_record_types=False):
             storage.folders.put_entities((to_shared_folder_folder(x) for x in response.sharedFolderFolders))
 
         if len(response.userFolderRecords) > 0:
-            def to_user_folder_record(ufr):   # type: (SyncDown_pb2.UserFolderRecord) -> StorageFolderRecordLink
+            def to_user_folder_record(ufr):  # type: (SyncDown_pb2.UserFolderRecord) -> StorageFolderRecordLink
                 s_frl = StorageFolderRecordLink()
                 s_frl.folder_uid = utils.base64_url_encode(ufr.folderUid) \
                     if ufr.folderUid else storage.personal_scope_uid
@@ -522,18 +532,19 @@ def sync_down_request(keeper_auth, storage, sync_record_types=False):
                 (to_shared_folder_folder_records(x) for x in response.sharedFolderFolderRecords))
 
         if len(response.sharingChanges) > 0:
-            def set_shared():   # type: () -> Iterable[StorageRecord]
-                for sharing_change in response.sharingChanges:
+            def set_shared(changes):  # type: (Iterable[SyncDown_pb2.SharingChange]) -> Iterable[StorageRecord]
+                for sharing_change in changes:
                     r_uid = utils.base64_url_encode(sharing_change.recordUid)
                     record = storage.records.get_entity(r_uid)
                     if record:
                         record.shared = sharing_change.shared
                         yield record
-            storage.records.put_entities(set_shared())
+
+            storage.records.put_entities(set_shared(response.sharingChanges))
             result.add_records((utils.base64_url_encode(x.recordUid) for x in response.sharingChanges))
 
         if len(response.breachWatchRecords) > 0:
-            def to_breach_watch_record(bwr):   # type: (SyncDown_pb2.BreachWatchRecord) -> BreachWatchRecord
+            def to_breach_watch_record(bwr):  # type: (SyncDown_pb2.BreachWatchRecord) -> BreachWatchRecord
                 bw_record = BreachWatchRecord()
                 bw_record.record_uid = utils.base64_url_encode(bwr.recordUid)
                 bw_record.data = bwr.data
@@ -555,19 +566,22 @@ def sync_down_request(keeper_auth, storage, sync_record_types=False):
             storage.records.put_entities(records)
 
     if sync_record_types:
-        rq = record_pb2.RecordTypesRequest()
-        rq.standard = True
-        rq.user = True
-        rq.enterprise = True
-        rs = keeper_auth.execute_auth_rest('vault/get_record_types', rq, response_type=record_pb2.RecordTypesResponse)
+        rt_rq = record_pb2.RecordTypesRequest()
+        rt_rq.standard = True
+        rt_rq.user = True
+        rt_rq.enterprise = True
+        rt_rs = keeper_auth.execute_auth_rest(
+            'vault/get_record_types', rt_rq, response_type=record_pb2.RecordTypesResponse)
+        assert rt_rs is not None
 
-        def to_record_type(rt):   # type: (record_pb2.RecordType) -> StorageRecordType
+        def to_record_type(rt):  # type: (record_pb2.RecordType) -> StorageRecordType
             record_type = StorageRecordType()
             record_type.id = rt.recordTypeId
             record_type.content = rt.content
             record_type.scope = rt.scope
             return record_type
 
-        storage.record_types.put_entities((to_record_type(x) for x in rs.recordTypes))
+        storage.record_types.put_entities((to_record_type(x) for x in rt_rs.recordTypes))
 
+    assert result is not None
     return result
