@@ -1,0 +1,4 @@
+
+DEFAULT_KEEPER_SERVER = 'keepersecurity.com'
+DEFAULT_DEVICE_NAME = 'Python Keeper API'
+CLIENT_VERSION = 'c16.9.0'

@@ -1,0 +1,5 @@
+certifi
+requests>=2.27.0
+cryptography>=36.0.0
+protobuf>=4.21.1
+websocket-client>=1.3.0
