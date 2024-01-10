@@ -549,7 +549,8 @@ def logout(context: KeeperParams):
             transmission_key = utils.generate_aes_key()
             api_rq = endpoint.prepare_api_request(
                 context.auth.keeper_endpoint.server_key_id, transmission_key, sso_rq.SerializeToString(),
-                auth_context.session_token, context.auth.keeper_endpoint.locale or 'en_US')
+                session_token=auth_context.session_token,
+                keeper_locale=context.auth.keeper_endpoint.locale or 'en_US')
             sp_url_query.append(('payload', utils.base64_url_encode(api_rq.SerializeToString())))
         else:
             sp_url_query.append(('embedded', ''))

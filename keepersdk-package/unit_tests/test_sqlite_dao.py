@@ -4,7 +4,7 @@ from unittest import TestCase
 from dataclasses import dataclass, field
 
 from keepersdk import crypto, utils, sqlite_dao
-from keepersdk.storage import sqlite, types
+from keepersdk.storage import sqlite, storage_types
 from keepersdk.vault import storage_types
 from keepersdk.proto import enterprise_pb2
 

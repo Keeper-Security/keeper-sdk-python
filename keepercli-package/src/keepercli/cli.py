@@ -1,14 +1,15 @@
 import logging
 import sys
-from typing import Optional, Any, Iterable
+from typing import Optional, Any, Iterable, List
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import History
 
-from . import prompt_utils, constants, api, login, autocomplete
+from . import prompt_utils, api, autocomplete
 from .commands import command_completer, base, command_history
 from .helpers import folder_utils, report_utils
 from .params import KeeperParams
+from keepersdk import constants
 
 if sys.platform == 'win32':
     from colorama import just_fix_windows_console
@@ -48,6 +49,7 @@ def do_command(command_line: str, context: KeeperParams, commands: base.CliComma
 
 def loop(context: KeeperParams, commands: base.CliCommands):
     prompt_session: Optional[PromptSession] = None
+    command_queue: List[str] = []
 
     def get_prompt() -> str:
         if context.batch_mode:
@@ -57,8 +59,9 @@ def loop(context: KeeperParams, commands: base.CliCommands):
         if context.vault is None:
             return context.auth.auth_context.username
 
-        folder_path = context.vault.root_folder.name
-        path = folder_utils.get_folder_path(context.vault, folder_uid=context.current_folder)
+        vault_data = context.vault.vault_data
+        folder_path = vault_data.root_folder.name
+        path = folder_utils.get_folder_path(vault_data, folder_uid=context.current_folder)
         if path:
              folder_path += '/' + path
 
@@ -67,10 +70,23 @@ def loop(context: KeeperParams, commands: base.CliCommands):
         return folder_path
 
     logger = api.get_logger()
+
     if not context.batch_mode:
+        if sys.stdin.isatty() and sys.stdout.isatty():
+            from prompt_toolkit.enums import EditingMode
+            from prompt_toolkit.shortcuts import CompleteStyle
+            completer = command_completer.CommandCompleter(commands, autocomplete.standard_completer(context))
+            prompt_session = PromptSession(
+                multiline=False, editing_mode=EditingMode.VI, complete_style=CompleteStyle.MULTI_COLUMN,
+                complete_while_typing=False, completer=completer, auto_suggest=None, key_bindings=prompt_utils.kb,
+                history=KeeperHistory())
+
         if context.username:
-            login.LoginFlow.login(context)
-            # TODO check enforcements
+            options = '--resume-session'
+            if context.password:
+                options += ' --pass="{0}"'.format(context.password.replace('"', '\\"'))
+            cmd = 'login ' + options + ' ' + context.username
+            command_queue.append(cmd)
         else:
             if context.server:
                 logger.info('Current Keeper region: %s', context.server)
@@ -82,32 +98,26 @@ def loop(context: KeeperParams, commands: base.CliCommands):
     else:
         logger.setLevel(logging.DEBUG if context.debug else logging.WARNING)
 
-    if sys.stdin.isatty() and sys.stdout.isatty():
-        from prompt_toolkit.enums import EditingMode
-        from prompt_toolkit.shortcuts import CompleteStyle
-        completer = command_completer.CommandCompleter(commands, autocomplete.standard_completer(context))
-        prompt_session = PromptSession(
-            multiline=False, editing_mode=EditingMode.VI, complete_style=CompleteStyle.MULTI_COLUMN,
-            complete_while_typing=False, completer=completer, auto_suggest=None, key_bindings=prompt_utils.kb,
-            history=KeeperHistory())
-
     while True:
         if context.auth:
             context.auth.on_idle()
 
-        prompt = get_prompt()
-        if prompt:
-            prompt += '> '
-        try:
-            if prompt_session:
-                command = prompt_session.prompt(prompt)
-            else:
-                command = input(prompt)
-        except EOFError:
-            return 0
-        except KeyboardInterrupt:
-            prompt_utils.output_text('')
-            continue
+        if len(command_queue) > 0:
+            command = command_queue.pop(0)
+        else:
+            prompt = get_prompt()
+            if prompt:
+                prompt += '> '
+            try:
+                if prompt_session:
+                    command = prompt_session.prompt(prompt)
+                else:
+                    command = input(prompt)
+            except EOFError:
+                return 0
+            except KeyboardInterrupt:
+                prompt_utils.output_text('')
+                continue
         command = command.strip()
         if not command:
             continue
@@ -123,10 +133,8 @@ def loop(context: KeeperParams, commands: base.CliCommands):
             logger.info('> %s', command)
         error_no = 1
         try:
-            if context.sync_data:
-                if context.vault:
-                    context.vault.sync_down()
-                context.sync_data = False
+            if context.vault and context.vault.sync_requested:
+                context.vault.sync_down()
             result = do_command(command, context, commands)
             error_no = 0
             if result:

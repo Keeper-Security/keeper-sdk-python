@@ -1,3 +1,4 @@
+import abc
 import concurrent.futures
 import enum
 import time
@@ -8,6 +9,13 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPubl
 
 from . import endpoint, notifications
 from .. import errors
+
+
+class IKeeperAuth(abc.ABC):
+    @property
+    @abc.abstractmethod
+    def keeper_auth(self)-> 'KeeperAuth':
+        pass
 
 
 class SessionTokenRestriction(enum.IntFlag):

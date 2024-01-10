@@ -2,7 +2,7 @@ from unittest import TestCase
 
 from keepersdk import crypto, utils
 from keepersdk.vault import storage_types, memory_storage
-from keepersdk.storage import types
+from keepersdk.storage import storage_types
 
 
 class TestMemoryStorage(TestCase):

@@ -22,8 +22,8 @@ class _FolderMixin:
     def resolve_single_folder(folder_name: Optional[str], context: KeeperParams):
         if not folder_name:
             raise base.CommandError('Folder cannot be empty')
-
-        folder = context.vault.get_folder(folder_name)
+        assert context.vault is not None
+        folder = context.vault.vault_data.get_folder(folder_name)
         if not folder:
             folder, pattern = folder_utils.try_resolve_path(context, folder_name)
             if pattern:
@@ -71,6 +71,7 @@ class FolderListCommand(base.ArgparseCommand):
             yield l[i:i + n]
 
     def execute(self, context: KeeperParams, **kwargs):
+        assert context.vault is not None
         show_folders = kwargs['folders'] if 'folders' in kwargs else None
         show_records = kwargs['records'] if 'records' in kwargs else None
         show_detail = kwargs['detail'] if 'detail' in kwargs else False
@@ -83,9 +84,9 @@ class FolderListCommand(base.ArgparseCommand):
             folder, pattern = folder_utils.try_resolve_path(context, kwargs['pattern'])
         else:
             if context.current_folder:
-                folder = context.vault.get_folder(context.current_folder) or context.vault.root_folder
+                folder = context.vault.vault_data.get_folder(context.current_folder) or context.vault.vault_data.root_folder
             else:
-                folder = context.vault.root_folder
+                folder = context.vault.vault_data.root_folder
 
         regex: Optional[Callable[[str], Any]] = None
         if pattern:
@@ -96,7 +97,7 @@ class FolderListCommand(base.ArgparseCommand):
 
         if show_folders:
             for folder_uid in folder.subfolders:
-                f = context.vault.get_folder(folder_uid)
+                f = context.vault.vault_data.get_folder(folder_uid)
                 if f:
                     if regex:
                         ff = next((x for x in FolderListCommand.folder_match_strings(f) if regex(x)), None)
@@ -106,7 +107,7 @@ class FolderListCommand(base.ArgparseCommand):
 
         if show_records:
             for record_uid in folder.records:
-                record_info = context.vault.get_record(record_uid)
+                record_info = context.vault.vault_data.get_record(record_uid)
                 if not record_info:
                     continue
                 if record_info.version not in (2, 3):
@@ -195,6 +196,7 @@ class FolderTreeCommand(base.ArgparseCommand, _FolderMixin):
         show_shares: bool = kwargs.get('shares') is True
 
         def tree_node(node: vault_types.Folder) -> Tuple[str, dict]:
+            assert context.vault is not None
             name = node.name
             children: dict = OrderedDict()
             if verbose and node.folder_uid:
@@ -203,13 +205,13 @@ class FolderTreeCommand(base.ArgparseCommand, _FolderMixin):
             if node.folder_type == 'shared_folder':
                 name += f' {Style.BRIGHT}[Shared]{Style.NORMAL}'
                 if show_shares:
-                    sf = context.vault.load_shared_folder(node.folder_uid)
+                    sf = context.vault.vault_data.load_shared_folder(node.folder_uid)
                     if sf:
                         for up in sf.user_permissions:
                             perm_text = FolderTreeCommand.user_permission_to_text(up.manage_users, up.manage_records)
                             if up.user_type == vault_types.SharedFolderUserType.User:
                                 perm_type = 'User'
-                                user = context.vault.get_user_email(up.user_id)
+                                user = context.vault.vault_data.get_user_email(up.user_id)
                                 if user:
                                     perm_name = user.username
                                     if verbose:
@@ -218,7 +220,7 @@ class FolderTreeCommand(base.ArgparseCommand, _FolderMixin):
                                     perm_name = up.user_id
                             else:
                                 perm_type = 'Team'
-                                team = context.vault.get_team(up.user_id)
+                                team = context.vault.vault_data.get_team(up.user_id)
                                 if team:
                                     perm_name = team.name
                                     if verbose:
@@ -227,11 +229,11 @@ class FolderTreeCommand(base.ArgparseCommand, _FolderMixin):
                                     perm_name = f'({up.user_id})'
                             children[f'{Style.DIM}{perm_name}: {perm_text} [{perm_type}]{Style.NORMAL}'] = {}
 
-            subfolders = [y for y in (context.vault.get_folder(x) for x in node.subfolders) if y is not None]
+            subfolders = [y for y in (context.vault.vault_data.get_folder(x) for x in node.subfolders) if y is not None]
             subfolders.sort(key=lambda x: x.name.casefold())
             children.update((tree_node(x) for x in subfolders))
             if show_records:
-                records = [y.title for y in (context.vault.get_record(x) for x in node.records) if y is not None]
+                records = [y.title for y in (context.vault.vault_data.get_record(x) for x in node.records) if y is not None]
                 records.sort(key=lambda x: x.casefold())
                 children.update(((f'{Style.DIM}{x} [Record]{Style.NORMAL}', {}) for x in records))
 
@@ -293,7 +295,7 @@ class FolderMakeCommand(base.ArgparseCommand):
         super().__init__(FolderMakeCommand.parser)
 
     def execute(self, context: KeeperParams, **kwargs):
-        assert context.auth
+        assert context.vault is not None
         name = kwargs.get('folder')
         if not name:
             raise base.CommandError('Folder cannot be empty')
@@ -344,7 +346,6 @@ class FolderMakeCommand(base.ArgparseCommand):
         try:
             folder_uid = folder_management.add_folder(
                 context.vault, folder_name, is_shared_folder, base_folder.folder_uid, manage_users, manage_records, can_edit, can_share)
-            context.sync_data = True
             context.environment_variables[constants.LAST_FOLDER_UID] = folder_uid
             if is_shared_folder:
                 context.environment_variables[constants.LAST_SHARED_FOLDER_UID] = folder_uid
@@ -365,7 +366,8 @@ class FolderRemoveCommand(base.ArgparseCommand):
     def __init__(self) -> None:
         super().__init__(FolderRemoveCommand.parser)
 
-    def execute(self, context: KeeperParams, **kwargs):
+    def execute(self, context: KeeperParams, **kwargs) -> None:
+        assert context.vault is not None
         folder_uids = set()
         pattern_list = kwargs.get('pattern')
         if not isinstance(pattern_list, (tuple, list, set)):
@@ -379,7 +381,7 @@ class FolderRemoveCommand(base.ArgparseCommand):
                 else:
                     regex = re.compile(fnmatch.translate(name)).match
                     for uid in base_folder.subfolders:
-                        f = context.vault.get_folder(uid)
+                        f = context.vault.vault_data.get_folder(uid)
                         if f is None:
                             continue
                         if regex(f.name):
@@ -393,18 +395,18 @@ class FolderRemoveCommand(base.ArgparseCommand):
 
         if len(folder_uids) > 1:
             for folder_uid in list(folder_uids):
-                f = context.vault.get_folder(folder_uid)
-                while f.parent_uid:
+                f = context.vault.vault_data.get_folder(folder_uid)
+                while f and f.parent_uid:
                     if f.parent_uid in folder_uids:
                         folder_uids.remove(folder_uid)
                         break
-                    f = context.vault.get_folder(f.parent_uid)
+                    f = context.vault.vault_data.get_folder(f.parent_uid)
 
         force = kwargs.get('force') is True
         quiet = kwargs.get('quiet') is True
 
         if not quiet or not force:
-            names = [folder_utils.get_folder_path(context.vault, x) for x in folder_uids]
+            names = [folder_utils.get_folder_path(context.vault.vault_data, x) for x in folder_uids]
             names.sort()
             prompt_utils.output_text(f'\nThe following folder(s) will be removed:\n{", ".join((x for x in names if x))}\n')
         def delete_confirmation(delete_summary: str) -> bool:
@@ -418,7 +420,6 @@ class FolderRemoveCommand(base.ArgparseCommand):
 
         try:
             record_management.delete_vault_objects(context.vault, list(folder_uids), delete_confirmation)
-            context.sync_data = True
         except Exception as e:
             raise base.CommandError(str(e))
 
@@ -433,7 +434,8 @@ class FolderRenameCommand(base.ArgparseCommand, _FolderMixin):
     def __init__(self) -> None:
         super().__init__(FolderRenameCommand.parser)
 
-    def execute(self, context: KeeperParams, **kwargs):
+    def execute(self, context: KeeperParams, **kwargs) -> None:
+        assert context.vault is not None
         folder = self.resolve_single_folder(kwargs.get('folder'), context)
         if not folder:
             raise base.CommandError('Enter the path or UID of existing folder.')
@@ -447,7 +449,6 @@ class FolderRenameCommand(base.ArgparseCommand, _FolderMixin):
         try:
             folder_management.update_folder(context.vault, folder.folder_uid, new_name)
             api.get_logger().info('Folder \"%s\" has been renamed to \"%s\"', folder.name, new_name)
-            context.sync_data = True
         except Exception as e:
             raise base.CommandError(str(e))
 
@@ -471,7 +472,8 @@ class FolderMoveCommand(base.ArgparseCommand, _FolderMixin):
     def __init__(self) -> None:
         super().__init__(FolderMoveCommand.parser)
 
-    def execute(self, context, **kwargs):
+    def execute(self, context: KeeperParams, **kwargs) -> None:
+        assert context.vault is not None
         logger = api.get_logger()
         src_paths = kwargs.get('src')
         dst_path = kwargs.get('dst')
@@ -493,11 +495,11 @@ class FolderMoveCommand(base.ArgparseCommand, _FolderMixin):
         source_uids = set()
         source_records: Dict[str, Set[str]] = {}
         for src_path in src_paths:
-            folder = context.vault.get_folder(src_path)
+            folder = context.vault.vault_data.get_folder(src_path)
             if folder:
                 source_uids.add(src_path)
                 continue
-            record = context.vault.get_record(src_path)
+            record = context.vault.vault_data.get_record(src_path)
             if record:
                 source_uids.add(src_path)
                 continue
@@ -512,12 +514,12 @@ class FolderMoveCommand(base.ArgparseCommand, _FolderMixin):
                     added = False
                     if kwargs.get('recursive') is True:
                         for folder_uid in folder.subfolders:
-                            sub_f = context.vault.get_folder(folder_uid)
-                            if regex(sub_f.name):
+                            sub_f = context.vault.vault_data.get_folder(folder_uid)
+                            if sub_f and regex(sub_f.name):
                                 added = True
                                 source_uids.add(sub_f.folder_uid)
                     for record_uid in folder.records:
-                        record = context.vault.get_record(record_uid)
+                        record = context.vault.vault_data.get_record(record_uid)
                         if record:
                             if regex(record.title):
                                 added = True
@@ -539,4 +541,3 @@ class FolderMoveCommand(base.ArgparseCommand, _FolderMixin):
                                              is_link=kwargs.get('link') is True,
                                              can_edit=can_edit, can_share=can_share,
                                              on_warning=on_warning)
-        context.sync_data = True

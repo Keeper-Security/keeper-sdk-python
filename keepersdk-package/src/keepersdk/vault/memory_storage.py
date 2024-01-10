@@ -22,6 +22,7 @@ class InMemoryVaultStorage(IVaultStorage):
         self._folder_records = InMemoryLinkStorage[storage_types.StorageFolderRecordLink, str, str]()
 
         self._breach_watch_records = InMemoryEntityStorage[storage_types.BreachWatchRecord, str]()
+        self._breach_watch_security_data = InMemoryEntityStorage[storage_types.BreachWatchSecurityData, str]()
 
     @property
     def user_settings(self):
@@ -79,6 +80,10 @@ class InMemoryVaultStorage(IVaultStorage):
     def breach_watch_records(self):
         return self._breach_watch_records
 
+    @property
+    def breach_watch_security_data(self):
+        return self._breach_watch_security_data
+
     def clear(self):
         self._user_settings.delete()
         self._records.clear()
@@ -96,3 +101,4 @@ class InMemoryVaultStorage(IVaultStorage):
         self._folder_records.clear()
 
         self._breach_watch_records.clear()
+        self._breach_watch_security_data.clear()

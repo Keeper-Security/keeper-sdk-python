@@ -19,6 +19,7 @@ from ..proto import record_pb2
 
 class AttachmentDownloadRequest:
     def __init__(self) -> None:
+        self.file_id = ''
         self.url = ''
         self.encryption_key = b''
         self.title = ''
@@ -43,9 +44,10 @@ class AttachmentDownloadRequest:
             self.download_to_stream(file_stream)
 
 
-def prepare_attachment_download(vault: vault_online.VaultOnline, record_uid: str,
+def prepare_attachment_download(vault: vault_online.VaultOnline,
+                                record_uid: str,
                                 attachment_name: Optional[str]=None) -> Iterator[AttachmentDownloadRequest]:
-    record = vault.load_record(record_uid)
+    record = vault.vault_data.load_record(record_uid)
     if not record:
         utils.get_logger().warning('Record UID \"%s\" not found.', record_uid)
         return
@@ -60,7 +62,7 @@ def prepare_attachment_download(vault: vault_online.VaultOnline, record_uid: str
             facade.record = record
             if isinstance(facade.file_ref, list):
                 for file_uid in facade.file_ref:
-                    file_record = vault.load_record(file_uid)
+                    file_record = vault.vault_data.load_record(file_uid)
                     if isinstance(file_record, FileRecord):
                         if attachment_name:
                             name_l = attachment_name.lower()
@@ -76,12 +78,13 @@ def prepare_attachment_download(vault: vault_online.VaultOnline, record_uid: str
             for file_status in rs_v3.files:
                 file_uid = utils.base64_url_encode(file_status.record_uid)
                 if file_status.status == record_pb2.FG_SUCCESS:
-                    file_record = vault.load_record(file_uid)
+                    file_record = vault.vault_data.load_record(file_uid)
                     if isinstance(file_record, FileRecord):
                         adr = AttachmentDownloadRequest()
+                        adr.file_id = file_uid
                         adr.url = file_status.url
                         adr.success_status_code = file_status.success_status_code
-                        encryption_key = vault.get_record_key(file_uid)
+                        encryption_key = vault.vault_data.get_record_key(file_uid)
                         assert encryption_key is not None
                         adr.encryption_key = encryption_key
                         adr.title = file_record.title if file_record.title else file_record.file_name
@@ -104,12 +107,13 @@ def prepare_attachment_download(vault: vault_online.VaultOnline, record_uid: str
                 'file_ids': [x.id for x in attachments],
                 'record_uid': record_uid,
             }
-            resolve_record_access_path(vault.storage, rq_v2)
+            resolve_record_access_path(vault.vault_data.storage, rq_v2)
             rs_v2 = vault.keeper_auth.execute_auth_command(rq_v2)
             if rs_v2['result'] == 'success':
                 for attachment, dl in zip(attachments, rs_v2['downloads']):
                     if 'url' in dl:
                         adr = AttachmentDownloadRequest()
+                        adr.file_id = attachment.id
                         adr.title = attachment.title if attachment.title else attachment.name
                         adr.url = dl['url']
                         adr.encryption_key = utils.base64_url_decode(attachment.key)
@@ -164,7 +168,8 @@ class FileUploadTask(UploadTask):
         yield open(self.file_path, 'r')
 
 
-def upload_attachments(vault: vault_online.VaultOnline, record: Union[PasswordRecord, TypedRecord],
+def upload_attachments(vault: vault_online.VaultOnline,
+                       record: Union[PasswordRecord, TypedRecord],
                        attachments: List[UploadTask]) -> None:
     cryptor = crypto.StreamCrypter()
     if isinstance(record, PasswordRecord):

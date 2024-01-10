@@ -37,10 +37,12 @@ def sanitize_bool_field_value(value: Any) -> bool:
 class KeeperRecordInfo:
     record_uid: str
     version: int
+    revision: int
     record_type: str
     title: str
+    url: str
     description: str
-    client_time_modified: int
+    owner: bool
     shared: bool
     has_attachments: bool
 

@@ -32,14 +32,14 @@ class Uid(IUid[str]):
 
 
 @dataclass(frozen=True)
-class UidLink(IUidLink[str, str]):
-    _subject_uid: str
-    _object_uid: str
+class UidLink(IUidLink[KS, KO]):
+    _subject_uid: KS
+    _object_uid: KO
 
-    def subject_uid(self) -> str:
+    def subject_uid(self) -> KS:
         return self._subject_uid
 
-    def object_uid(self) -> str:
+    def object_uid(self) -> KO:
         return self._object_uid
 
 

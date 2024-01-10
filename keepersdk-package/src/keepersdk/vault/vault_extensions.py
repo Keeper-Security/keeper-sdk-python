@@ -4,9 +4,7 @@ import json
 import math
 from typing import Optional, Dict, Union, Set, Any, Iterable, List
 
-from . import record_types, vault_storage, storage_types
-from .vault_record import KeeperRecord, PasswordRecord, TypedRecord, TypedField, FileRecord, ApplicationRecord
-from .vault_types import RecordType
+from . import record_types, vault_storage, storage_types, vault_record, vault_types
 from .. import utils, crypto
 
 
@@ -21,16 +19,16 @@ def resolve_record_access_path(storage: vault_storage.IVaultStorage, path: Dict[
             continue
         if for_share and not rmd.can_share:
             continue
-        if rmd.shared_folder_uid == storage.personal_scope_uid:
+        if rmd.encrypter_uid == storage.personal_scope_uid:
             return True
-        for sfmd in storage.shared_folder_keys.get_links_for_subject(rmd.shared_folder_uid):
+        for sfmd in storage.shared_folder_keys.get_links_for_subject(rmd.encrypter_uid):
             shared_folder = storage.shared_folders.get_entity(sfmd.shared_folder_uid)
             if not shared_folder:
                 continue
-            if sfmd.team_uid == storage.personal_scope_uid:
+            if sfmd.encrypter_uid == storage.personal_scope_uid:
                 path['shared_folder_uid'] = sfmd.shared_folder_uid
                 return True
-            team = storage.teams.get_entity(sfmd.team_uid)
+            team = storage.teams.get_entity(sfmd.encrypter_uid)
             if not team:
                 continue
             if for_edit and team.restrict_edit:
@@ -38,14 +36,14 @@ def resolve_record_access_path(storage: vault_storage.IVaultStorage, path: Dict[
             if for_share and team.restrict_share:
                 continue
             path['shared_folder_uid'] = sfmd.shared_folder_uid
-            path['team_uid'] = sfmd.team_uid
+            path['team_uid'] = sfmd.encrypter_uid
             return True
 
     return False
 
 
-def extract_password_record_data(record: PasswordRecord) -> Dict[str, Any]:
-    if isinstance(record, PasswordRecord):
+def extract_password_record_data(record: vault_record.PasswordRecord) -> Dict[str, Any]:
+    if isinstance(record, vault_record.PasswordRecord):
         return {
             'title': record.title,
             'secret1': record.login,
@@ -62,9 +60,9 @@ def extract_password_record_data(record: PasswordRecord) -> Dict[str, Any]:
         raise Exception(f'extract_password_record_data: Invalid object type')
 
 
-def extract_password_record_extras(record: PasswordRecord,
+def extract_password_record_extras(record: vault_record.PasswordRecord,
                                    existing_extra: Optional[Dict[str, Any]]=None) -> Dict[str, Any]:
-    if isinstance(record, PasswordRecord):
+    if isinstance(record, vault_record.PasswordRecord):
         extra = existing_extra if isinstance(existing_extra, dict) else {}
 
         if 'fields' not in extra:
@@ -102,14 +100,14 @@ def extract_password_record_extras(record: PasswordRecord,
         raise Exception(f'extract_password_record_extra: Invalid record type')
 
 
-def extract_typed_field(field: TypedField) -> Dict[str, Any]:
+def extract_typed_field(field: vault_record.TypedField) -> Dict[str, Any]:
     field_values = []
     field_type: Optional[record_types.FieldType] = None
     multiple = record_types.Multiple.Optional
 
-    if field.type in record_types.RecordFieldIds:
-        field_id = record_types.RecordFieldIds[field.type]
-        multiple = record_types.RecordFieldIds[field.type].multiple
+    if field.type in record_types.RecordFields:
+        field_id = record_types.RecordFields[field.type]
+        multiple = record_types.RecordFields[field.type].multiple
         if field_id.type in record_types.FieldTypes:
             field_type = record_types.FieldTypes[field_id.type]
     elif field.type in record_types.FieldTypes:
@@ -143,7 +141,7 @@ def extract_typed_field(field: TypedField) -> Dict[str, Any]:
     return result
 
 
-def extract_typed_record_data(record: TypedRecord, schema: Optional[RecordType]) -> Dict[str, Any]:
+def extract_typed_record_data(record: vault_record.TypedRecord, schema: Optional[vault_types.RecordType]) -> Dict[str, Any]:
     data: Dict[str, Any] = {
         'type': (schema.name if schema else record.record_type) or 'authentication',
         'title': record.title or '',
@@ -161,7 +159,7 @@ def extract_typed_record_data(record: TypedRecord, schema: Optional[RecordType])
                 data['fields'][index] = extract_typed_field(field)
             else:
                 data['custom'].append(extract_typed_field(field))
-        nones = [i for i, x in data['fields'] if x is None]
+        nones = [i for i in range(len(data['fields'])) if data['fields'][i] is None]
         for index in nones:
             rt_field = schema.fields[index]
             data['fields'][index] = {
@@ -177,7 +175,7 @@ def extract_typed_record_data(record: TypedRecord, schema: Optional[RecordType])
     return data
 
 
-def extract_file_record_data(record: FileRecord) -> Dict[str, Any]:
+def extract_file_record_data(record: vault_record.FileRecord) -> Dict[str, Any]:
     return {
         'title': record.title or '',
         'type': record.mime_type,
@@ -187,18 +185,28 @@ def extract_file_record_data(record: FileRecord) -> Dict[str, Any]:
     }
 
 
-def extract_audit_data(record: Union[KeeperRecord, TypedRecord]) -> Optional[Dict[str, Any]]:
-    url = ''
-    if isinstance(record, PasswordRecord):
+def extract_audit_data( record: Union[vault_record.KeeperRecord, vault_record.TypedRecord, vault_record.KeeperRecordInfo]) -> Optional[Dict[str, Any]]:
+    if isinstance(record, vault_record.PasswordRecord):
+        title = record.title
         url = record.link
-    elif isinstance(record, TypedRecord):
+        record_type = ''
+    elif isinstance(record, vault_record.TypedRecord):
+        title = record.title
         url_field = record.get_typed_field('url')
         if url_field:
             url = url_field.get_default_value(str)
+        else:
+            url = ''
+        record_type = record.record_type
+    elif isinstance(record, vault_record.KeeperRecordInfo):
+        title = record.title
+        url = record.url
+        record_type = record.record_type
     else:
         return None
 
-    title = record.title or ''
+    if title is None:
+        title = ''
     if url:
         url = utils.url_strip(url)
     else:
@@ -211,15 +219,14 @@ def extract_audit_data(record: Union[KeeperRecord, TypedRecord]) -> Optional[Dic
     audit_data = {
         'title': title
     }
-    if isinstance(record, TypedRecord):
-        audit_data['record_type'] = record.record_type
-
+    if record_type:
+        audit_data['record_type'] = record_type
     if url:
         audit_data['url'] = utils.url_strip(url)
     return audit_data
 
 
-def extract_typed_record_refs(record: TypedRecord) -> Set[str]:
+def extract_typed_record_refs(record: vault_record.TypedRecord) -> Set[str]:
     refs = set()
     for field in itertools.chain(record.fields, record.custom):
         if field.type in {'fileRef', 'addressRef', 'cardRef'}:
@@ -238,14 +245,14 @@ def get_padded_json_bytes(data: Dict[str, Any]) -> bytes:
     return data_str.encode('utf-8')
 
 
-def get_record_description(record: KeeperRecord) -> str:
+def get_record_description(record: vault_record.KeeperRecord) -> str:
     comps: List[str] = []
 
-    if isinstance(record, PasswordRecord):
+    if isinstance(record, vault_record.PasswordRecord):
         comps.extend((record.login or '', record.link or ''))
         return ' @ '.join((str(x) for x in comps if x))
 
-    if isinstance(record, TypedRecord):
+    if isinstance(record, vault_record.TypedRecord):
         field = next((x for x in record.fields if x.type == 'login'), None)
         if field:
             value = field.get_default_value()
@@ -328,14 +335,14 @@ def get_record_description(record: KeeperRecord) -> str:
                 comps.extend((value.get('first', ''), value.get('middle', ''), value.get('last', '')))
                 return ' '.join((str(x) for x in comps if x))
 
-    if isinstance(record, FileRecord):
+    if isinstance(record, vault_record.FileRecord):
         comps.extend((record.file_name, utils.size_to_str(record.size)))
         return ': '.join((str(x) for x in comps if x))
 
     return ''
 
 
-def load_keeper_record(record: storage_types.StorageRecord, record_key: bytes) -> Optional[KeeperRecord]:
+def load_keeper_record(record: storage_types.StorageRecord, record_key: bytes) -> Optional[vault_record.KeeperRecord]:
     if record.version in {0, 1, 2}:
         data_bytes = crypto.decrypt_aes_v1(record.data, record_key)
         data_dict = json.loads(data_bytes.decode())
@@ -357,24 +364,24 @@ def load_keeper_record(record: storage_types.StorageRecord, record_key: bytes) -
         except:
             pass
 
-    k_record: KeeperRecord
+    k_record: vault_record.KeeperRecord
     if record.version in {0, 1, 2}:
-        k_record = PasswordRecord()
+        k_record = vault_record.PasswordRecord()
     elif record.version == 3:
-        k_record = TypedRecord()
+        k_record = vault_record.TypedRecord()
     elif record.version == 4:
-        k_record = FileRecord()
+        k_record = vault_record.FileRecord()
         if udata_dict:
             k_record.storage_size = udata_dict.get('file_size')
     elif record.version == 5:
-        k_record = ApplicationRecord()
+        k_record = vault_record.ApplicationRecord()
     elif record.version == 6:
-        k_record = TypedRecord()
+        k_record = vault_record.TypedRecord()
     else:
         return None
 
     k_record.record_uid = record.record_uid
-    k_record.client_time_modified = record.client_modified_time
+    k_record.client_time_modified = record.modified_time
 
     k_record.load_record_data(data_dict, extra_dict)
 
@@ -386,19 +393,19 @@ FIELD_TYPE_TO_SKIP = {'secret', 'otp', 'privateKey'}
 FIELD_TYPE_ENTIRE = {'email'}
 
 
-def get_record_words(record: KeeperRecord) -> Iterable[str]:
-    if isinstance(record, KeeperRecord):
+def get_record_words(record: vault_record.KeeperRecord) -> Iterable[str]:
+    if isinstance(record, vault_record.KeeperRecord):
         for record_field, field_label, values in record.enumerate_fields():
             if field_label:
                 for t in utils.tokenize_searchable_text(field_label.lower()):
                     yield t
             if not values:
                 continue
-            if record_field in record_types.RecordFieldIds:
+            if record_field in record_types.RecordFields:
                 if record_field in RECORD_FIELD_ID_TO_SKIP:
                     continue
                 else:
-                    record_field = record_types.RecordFieldIds[record_field].type
+                    record_field = record_types.RecordFields[record_field].type
             if record_field in record_types.FieldTypes:
                 if record_field in FIELD_TYPE_TO_SKIP:
                     continue
@@ -429,10 +436,10 @@ def get_record_words(record: KeeperRecord) -> Iterable[str]:
                                     yield t
 
 
-def adjust_typed_record(record: TypedRecord, record_type: RecordType) -> bool:
-    if not isinstance(record, TypedRecord):
+def adjust_typed_record(record: vault_record.TypedRecord, record_type: vault_types.RecordType) -> bool:
+    if not isinstance(record, vault_record.TypedRecord):
         return False
-    if not isinstance(record_type, RecordType):
+    if not isinstance(record_type, vault_types.RecordType):
         return False
 
     new_fields = []
@@ -444,7 +451,7 @@ def adjust_typed_record(record: TypedRecord, record_type: RecordType) -> bool:
             return False
         schema_label = schema_field.label
         required = schema_field.required
-        ignore_label = schema_field.type in record_types.RecordFieldIds
+        ignore_label = schema_field.type in record_types.RecordFields
         field = next((x for x in old_fields if x.type == schema_field.type and
                       (ignore_label or (x.label or '') == schema_label)), None)
         if field:
@@ -464,7 +471,7 @@ def adjust_typed_record(record: TypedRecord, record_type: RecordType) -> bool:
             should_rebuild = True
             continue
 
-        field = TypedField.create_schema_field(schema_field)
+        field = vault_record.TypedField.create_schema_field(schema_field)
         new_fields.append(field)
         should_rebuild = True
 

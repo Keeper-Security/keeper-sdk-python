@@ -1,9 +1,7 @@
-import abc
-import enum
 from dataclasses import dataclass
-from typing import Iterable
 
-from ..storage.types import IUid, IUidLink
+from ..storage.storage_types import IUid, IUidLink
+
 
 @dataclass
 class UserSettings:
@@ -13,14 +11,14 @@ class UserSettings:
     profile_url: str = ''
 
 
-class KeyType:
-    DataKey = 1             # AES GSM: user client key
-    RsaPrivateKey = 2       # RSA: user RSA key
-    EcPrivateKey = 3        # EC: user ECC key
-    SharedFolderKey = 5     # AES GSM: shared folder key
-    TeamKey = 5             # AES GSM: team key
-    TeamRsaPrivateKey = 6   # RSA: team rsa private key
-    RecordKey = 7           # AES GSM: record key
+class StorageKeyType:
+    UserClientKey_AES_GCM = 1    # AES GCM: user client key
+    # UserPrivateKey_RSA = 2            # RSA: user RSA key
+    # EcPrivateKey = 3        # EC: user EC key
+    SharedFolderKey_AES_Any = 4     # AES GCM: shared folder key
+    TeamKey_AES_GCM = 5             # AES GCM: team key
+    # TeamRsaPrivateKey = 6   # RSA: team rsa private key
+    RecordKey_AES_GCM = 7           # AES GCM: record key
 
 
 class StorageRecord(IUid):
@@ -28,13 +26,11 @@ class StorageRecord(IUid):
         self.record_uid = ''
         self.revision = 0
         self.version = 0
-        self.client_modified_time = 0
+        self.modified_time = 0
         self.data = b''
         self.extra = b''
         self.udata = ''
         self.shared = False
-        self.owner = False
-        self.owner_account_id = b''
 
     def uid(self):
         return self.record_uid
@@ -55,40 +51,14 @@ class StorageSharedFolder(IUid):
         self.revision = 0
         self.name = b''
         self.data = b''
-        self.owner_account_uid = ''
         self.default_manage_records = False
         self.default_manage_users = False
         self.default_can_edit = False
         self.default_can_share = False
+        self.owner_account_uid = ''
 
     def uid(self):
         return self.shared_folder_uid
-
-
-class StorageFolder(IUid):
-    def __init__(self) -> None:
-        self.folder_uid = ''
-        self.parent_uid = ''
-        self.folder_type = ''
-        self.folder_key = b''
-        self.shared_folder_uid = ''
-        self.revision = 0
-        self.data = b''
-
-    def uid(self):
-        return self.folder_uid
-
-
-@dataclass
-class StorageUserEmail(IUidLink):
-    account_uid: str = ''
-    email: str = ''
-
-    def subject_uid(self):
-        return self.account_uid
-
-    def object_uid(self):
-        return self.email
 
 
 @dataclass
@@ -106,28 +76,72 @@ class StorageTeam(IUid):
         return self.team_uid
 
 
+class StorageFolder(IUid):
+    def __init__(self) -> None:
+        self.folder_uid = ''
+        self.parent_uid = ''
+        self.folder_type = ''
+        self.folder_key = b''
+        self.key_type = 0
+        self.shared_folder_uid = ''
+        self.revision = 0
+        self.data = b''
+
+    def uid(self):
+        return self.folder_uid
+
+
+class RecordTypeScope:
+    Standard = 0
+    User = 1
+    Enterprise = 2
+
+
+class StorageRecordType(IUid):
+    def __init__(self) -> None:
+        self.name = ''
+        self.id = 0
+        self.scope = 0
+        self.content = ''
+
+    def uid(self):
+        return self.name
+
+@dataclass
+class StorageUserEmail(IUidLink):
+    account_uid: str = ''
+    email: str = ''
+
+    def subject_uid(self):
+        return self.account_uid
+
+    def object_uid(self):
+        return self.email
+
+
 class StorageRecordKey(IUidLink):
     def __init__(self) -> None:
         self.record_uid = ''
-        # TODO rename to owner UID
-        self.shared_folder_uid = ''
-        self.key_type = KeyType.DataKey
+        self.encrypter_uid = ''
+        self.key_type = 0
         self.record_key = b''
         self.can_share = False
         self.can_edit = False
+        self.expiration_time = 0
+        self.owner = False
         self.owner_account_uid = ''
 
     def subject_uid(self):
         return self.record_uid
 
     def object_uid(self):
-        return self.shared_folder_uid
+        return self.encrypter_uid
 
 
 class StorageSharedFolderKey(IUidLink):
     def __init__(self) -> None:
         self.shared_folder_uid = ''
-        self.team_uid = ''
+        self.encrypter_uid = ''
         self.key_type = 0
         self.shared_folder_key = b''
 
@@ -135,7 +149,7 @@ class StorageSharedFolderKey(IUidLink):
         return self.shared_folder_uid
 
     def object_uid(self):
-        return self.team_uid
+        return self.encrypter_uid
 
 
 class SharedFolderUserType:
@@ -150,7 +164,7 @@ class StorageSharedFolderPermission(IUidLink):
         self.user_type = 0
         self.manage_records = False
         self.manage_users = False
-        self.expiration = 0
+        self.expiration_time = 0
 
     def subject_uid(self):
         return self.shared_folder_uid
@@ -159,7 +173,7 @@ class StorageSharedFolderPermission(IUidLink):
         return self.user_uid
 
 
-class StorageFolderRecordLink(IUidLink):
+class StorageFolderRecord(IUidLink):
     def __init__(self) -> None:
         self.folder_uid = ''
         self.record_uid = ''
@@ -182,38 +196,10 @@ class BreachWatchRecord(IUid):
         return self.record_uid
 
 
-class RecordTypeScope:
-    Standard = 0
-    User = 1
-    Enterprise = 2
-
-
-class StorageRecordType(IUid):
+class BreachWatchSecurityData(IUid):
     def __init__(self) -> None:
-        self.id = 0
-        self.scope: int = RecordTypeScope.Standard
-        self.content = ''
+        self.record_uid = ''
+        self.revision = 0
 
     def uid(self):
-        return self.id
-
-
-class PendingShareAction(enum.Enum):
-    ACCEPT = 1
-    DENY = 2
-    IGNORE = 3
-
-
-class IPendingShares(abc.ABC):
-    @abc.abstractmethod
-    def pending_shares(self) -> Iterable[str]:
-        pass
-
-    @abc.abstractmethod
-    def set_pending_shares(self, shares: Iterable[str]) -> None:
-        pass
-
-    @abc.abstractmethod
-    def resolve_pending_shares(self, shares: Iterable[str], action: PendingShareAction) -> None:
-        pass
-
+        return self.record_uid

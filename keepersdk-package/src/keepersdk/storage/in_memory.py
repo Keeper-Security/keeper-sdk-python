@@ -1,5 +1,5 @@
 from typing import Dict, Any, Callable, Optional, Generic
-from .types import IEntityStorage, ILinkStorage, IRecordStorage, IUidLink, IUid, T, K, KS, KO
+from .storage_types import IEntityStorage, ILinkStorage, IRecordStorage, IUidLink, IUid, T, K, KS, KO
 
 
 class InMemoryRecordStorage(Generic[T], IRecordStorage[T]):

@@ -17,6 +17,9 @@ FieldTypes: Dict[str, FieldType] = {x.name: x for x in (
     FieldType('email', '', 'valid email address plus tag'),
     FieldType('secret', '', 'the field value is masked'),
     FieldType('otp', '', 'captures the seed, displays QR code'),
+    FieldType('login', '', 'Login field, detected as the website login for browser extension or KFFA.'),
+    FieldType('password', '', 'Field value is masked and allows for generation. Also complexity enforcements.'),
+    FieldType('dropdown', '', 'list of text choices'),
 
     FieldType('date', 0, 'calendar date with validation, stored as unix milliseconds'),
     FieldType('checkbox', False, 'on/off checkbox'),
@@ -37,6 +40,14 @@ FieldTypes: Dict[str, FieldType] = {x.name: x for x in (
     FieldType('fileRef', '', 'reference to the file field on another record'),
     FieldType('addressRef', '', 'reference to the address field on another record'),
     FieldType('cardRef', '', 'reference to the card record type'),
+    FieldType('recordRef', '', 'reference to other record'),
+
+    FieldType('pamResources', {'controllerUid': '', 'folderUid': '', 'resourceRef': []},
+              'PAM resources'),
+    FieldType('schedule', {'type': '', 'utcTime': '', 'month': '', }, 'schedule information'),
+    FieldType('passkey', {'privateKey': {}, 'credentialId': '', 'signCount': 0, 'userId': '', 'relyingParty': '',
+                          'username': '', 'createdDate': 0}, 'passwordless login passkey'),
+    FieldType('script', {'fileRef': '', 'command': '', 'recordRef': [], }, 'Post rotation script'),
 )}
 
 
@@ -47,24 +58,35 @@ class Multiple(enum.Enum):
 
 
 @dataclass(frozen=True)
-class RecordFieldId:
+class RecordField:
     name: str
     type: str
     multiple: Multiple
 
 
-RecordFieldIds: Dict[str, RecordFieldId] = {x.name: x for x in (
-    RecordFieldId('authentication', 'text', Multiple.Never),
-    RecordFieldId('password', 'secret', Multiple.Never),
-    RecordFieldId('company', 'text', Multiple.Never),
-    RecordFieldId('licenseNumber', 'multiline', Multiple.Never),
-    RecordFieldId('accountNumber', 'text', Multiple.Never),
-    RecordFieldId('note', 'multiline', Multiple.Never),
-    RecordFieldId('oneTimeCode', 'otp', Multiple.Never),
-    RecordFieldId('keyPair', 'privateKey', Multiple.Never),
-    RecordFieldId('pinCode', 'secret', Multiple.Never),
-    RecordFieldId('expirationDate', 'date', Multiple.Never),
-    RecordFieldId('birthDate', 'date', Multiple.Never),
-    RecordFieldId('fileRef', 'fileRef', Multiple.Always),
-    RecordFieldId('securityQuestion', 'securityQuestion', Multiple.Always),
+RecordFields: Dict[str, RecordField] = {x.name: x for x in (
+    RecordField('login', 'login', Multiple.Never),
+    RecordField('password', 'secret', Multiple.Never),
+    RecordField('company', 'text', Multiple.Never),
+    RecordField('licenseNumber', 'multiline', Multiple.Never),
+    RecordField('accountNumber', 'text', Multiple.Never),
+    RecordField('bankAccount', 'bankAccount', Multiple.Never),
+    RecordField('note', 'multiline', Multiple.Never),
+    RecordField('oneTimeCode', 'otp', Multiple.Never),
+    RecordField('keyPair', 'privateKey', Multiple.Never),
+    RecordField('pinCode', 'secret', Multiple.Never),
+    RecordField('expirationDate', 'date', Multiple.Never),
+    RecordField('birthDate', 'date', Multiple.Never),
+    RecordField('securityQuestion', 'securityQuestion', Multiple.Always),
+    RecordField('fileRef', 'fileRef', Multiple.Always),
+
+    RecordField('pamResources', 'pamResources', Multiple.Never),
+    RecordField('pamHostname', 'host', Multiple.Never),
+    RecordField('databaseType', 'dropdown', Multiple.Never),
+    RecordField('directoryType', 'dropdown', Multiple.Never),
+
 )}
+
+for ft in FieldTypes.values():
+    if ft.name not in RecordFields:
+        RecordFields[ft.name] = RecordField(ft.name, ft.name, Multiple.Optional)

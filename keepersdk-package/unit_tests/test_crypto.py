@@ -5,7 +5,6 @@ from keepersdk import crypto, utils
 
 
 class TestCrypto(TestCase):
-
     def test_encrypt_transform(self):
         key = utils.generate_aes_key()
         data = bytearray(999)

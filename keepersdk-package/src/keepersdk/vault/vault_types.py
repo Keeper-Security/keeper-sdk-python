@@ -1,6 +1,6 @@
 import json
-from typing import List, Optional, Set, Iterable, Sequence
 from dataclasses import dataclass
+from typing import List, Optional, Set, Iterable, Sequence
 
 from cryptography.hazmat.primitives.asymmetric import rsa
 
@@ -152,7 +152,7 @@ class RecordType:
         self.scope: int = RecordTypeScope.Standard
         self.name = ''
         self.description = ''
-        self.fields: Sequence[RecordTypeField] = []
+        self.fields: List[RecordTypeField] = []
 
     @classmethod
     def load(cls, store_record_type: StorageRecordType)-> 'RecordType':

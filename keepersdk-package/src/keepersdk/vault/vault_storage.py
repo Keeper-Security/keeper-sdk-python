@@ -1,6 +1,6 @@
 import abc
 
-from ..storage.types import IEntityStorage, ILinkStorage, IRecordStorage
+from ..storage.storage_types import IEntityStorage, ILinkStorage, IRecordStorage
 from . import storage_types
 
 
@@ -67,12 +67,17 @@ class IVaultStorage(abc.ABC):
 
     @property
     @abc.abstractmethod
-    def folder_records(self) -> ILinkStorage[storage_types.StorageFolderRecordLink, str, str]:
+    def folder_records(self) -> ILinkStorage[storage_types.StorageFolderRecord, str, str]:
         pass
 
     @property
     @abc.abstractmethod
     def breach_watch_records(self) -> IEntityStorage[storage_types.BreachWatchRecord, str]:
+        pass
+
+    @property
+    @abc.abstractmethod
+    def breach_watch_security_data(self) -> IEntityStorage[storage_types.BreachWatchSecurityData, str]:
         pass
 
     @abc.abstractmethod

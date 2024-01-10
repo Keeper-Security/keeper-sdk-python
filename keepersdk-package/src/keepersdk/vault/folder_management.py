@@ -8,11 +8,12 @@ from .. import utils, crypto, errors
 def add_folder(vault: vault_online.VaultOnline, folder_name: str, is_shared_folder: bool=False,
                parent_uid: Optional[str]=None, manage_records: Optional[bool]=None, manage_users: Optional[bool]=None,
                can_share: Optional[bool]=None, can_edit: Optional[bool]=None) -> str:
+    vault_data = vault.vault_data
     parent_type = 'user_folder'
     folder_type = 'user_folder'
     shared_folder_uid = None
     if parent_uid:
-        folder = vault.get_folder(parent_uid)
+        folder = vault_data.get_folder(parent_uid)
         if folder is None:
             raise errors.KeeperError(f'Parent folder UID \"{parent_uid}\" not found.')
         parent_type = folder.folder_type
@@ -29,7 +30,7 @@ def add_folder(vault: vault_online.VaultOnline, folder_name: str, is_shared_fold
             folder_type = "shared_folder_folder"
     if folder_type == 'shared_folder_folder':
         assert shared_folder_uid is not None
-        encryption_key = vault.get_shared_folder_key(shared_folder_uid)
+        encryption_key = vault_data.get_shared_folder_key(shared_folder_uid)
         if encryption_key is None:
             raise errors.KeeperError('Shared folder key cannot be resolved.')
     else:
@@ -67,18 +68,19 @@ def update_folder(vault: vault_online.VaultOnline, folder_uid: str, folder_name:
                   manage_records: Optional[bool]=None, manage_users: Optional[bool]=None,
                   can_share: Optional[bool]=None, can_edit: Optional[bool]=None) -> None:
 
+    vault_data = vault.vault_data
     logger = utils.get_logger()
-    folder = vault.get_folder(folder_uid)
+    folder = vault_data.get_folder(folder_uid)
     if folder is None:
         raise ValueError(f'Folder {folder_uid} does not exist')
 
     encrypted_data: Optional[bytes] = None
     if folder.folder_type == 'shared_folder':
-        sf = vault.storage.shared_folders.get_entity(folder.folder_uid)
+        sf = vault_data.storage.shared_folders.get_entity(folder.folder_uid)
         if sf:
             encrypted_data = sf.data
     else:
-        f = vault.storage.folders.get_entity(folder.folder_uid)
+        f = vault_data.storage.folders.get_entity(folder.folder_uid)
         if f:
             encrypted_data = f.data
     data = {'name': folder_name}
@@ -100,7 +102,7 @@ def update_folder(vault: vault_online.VaultOnline, folder_uid: str, folder_name:
         'data': utils.base64_url_encode(crypto.encrypt_aes_v1(json.dumps(data).encode(), folder.folder_key)),
     }
     if folder.folder_type == 'shared_folder':
-        shared_folder = vault.load_shared_folder(folder_uid)
+        shared_folder = vault_data.load_shared_folder(folder_uid)
         if shared_folder is None:
             raise ValueError(f'Shared Folder {folder_uid} does not exist')
         rq['shared_folder_uid'] = folder_uid

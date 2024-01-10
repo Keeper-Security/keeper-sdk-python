@@ -31,11 +31,15 @@ def encrypt_with_keeper_key(data: bytes, key_id: int) -> bytes:
         raise errors.KeeperApiError('invalid_key_id', f'Key ID \"{key_id}\" is not valid.')
 
 
-def prepare_api_request(key_id: int, transmission_key: bytes, payload: Optional[bytes] = None,
+def prepare_api_request(key_id: int, transmission_key: bytes,
+                        payload: Optional[bytes] = None,
+                        *,
                         session_token: Optional[bytes] = None,
-                        keeper_locale: Optional[str] = None) -> APIRequest_pb2.ApiRequest:
+                        keeper_locale: Optional[str] = None,
+                        payload_version: Optional[int] = None) -> APIRequest_pb2.ApiRequest:
     api_payload = APIRequest_pb2.ApiRequestPayload()
-    api_payload.apiVersion = 3
+    if isinstance(payload_version, int):
+        api_payload.apiVersion = payload_version
     if session_token:
         api_payload.encryptedSessionToken = session_token
     if payload:
@@ -109,8 +113,10 @@ class KeeperEndpoint(object):
     def get_push_server(self):
         return f'push.services.{self.server}'
 
-    def _communicate_keeper(self, endpoint: str, payload: Optional[bytes],
-                            session_token: Optional[bytes] = None) -> Optional[bytes]:
+    def _communicate_keeper(self, endpoint: str,
+                            payload: Optional[bytes],
+                            session_token: Optional[bytes] = None,
+                            payload_version: Optional[int] = None) -> Optional[bytes]:
         logger = utils.get_logger()
 
         key_id = self.server_key_id
@@ -118,7 +124,10 @@ class KeeperEndpoint(object):
         while attempt < 3:
             attempt += 1
 
-            api_request = prepare_api_request(key_id, self._transmission_key, payload, session_token, self.locale)
+            api_request = prepare_api_request(key_id, self._transmission_key, payload,
+                                              session_token=session_token,
+                                              keeper_locale=self.locale,
+                                              payload_version=payload_version)
 
             if endpoint.startswith('https://'):
                 url = endpoint
@@ -151,7 +160,10 @@ class KeeperEndpoint(object):
                 error_rs = rs.json()
                 if 'error' in error_rs:
                     error_code = error_rs['error']
-                    error_message = error_rs.get('message') or error_rs.get('additional_info')
+                    error_message = error_rs.get('message') or ''
+                    additional_info = error_rs.get('additional_info')
+                    if additional_info:
+                        error_message += f'({additional_info})'
                     if error_code == 'key':
                         if 'key_id' in error_rs:
                             key_id = error_rs['key_id']
@@ -170,8 +182,13 @@ class KeeperEndpoint(object):
 
         raise errors.KeeperError('Failed to execute Keeper API request')
 
-    def execute_rest(self, rest_endpoint: str, request: Optional[TRQ], response_type: Optional[Type[TRS]] = None,
-                     session_token: Optional[bytes] = None) -> Optional[TRS]:
+    def execute_rest(self, rest_endpoint: str,
+                     request: Optional[TRQ],
+                     response_type: Optional[Type[TRS]] = None,
+                     *,
+                     session_token: Optional[bytes] = None,
+                     payload_version: Optional[int] = None
+                     ) -> Optional[TRS]:
         logger = utils.get_logger()
         if logger.level <= logging.DEBUG:
             js = MessageToJson(request) if request else ''
@@ -179,7 +196,7 @@ class KeeperEndpoint(object):
 
         rs_data = self._communicate_keeper(
             endpoint=rest_endpoint, payload=request.SerializeToString() if request else None,
-            session_token=session_token)
+            session_token=session_token, payload_version=payload_version)
         if rs_data and response_type:
             rs = response_type()
             rs.ParseFromString(rs_data)

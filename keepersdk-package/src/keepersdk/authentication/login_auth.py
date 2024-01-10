@@ -680,6 +680,8 @@ def _post_login(logged_auth: keeper_auth.KeeperAuth) -> None:
     rs = auth_utils.load_account_summary(logged_auth)
 
     assert rs is not None
+    if rs.license.enterpriseId:
+        logged_auth.auth_context.enterprise_id = rs.license.enterpriseId
     logged_auth.auth_context.settings.update(MessageToDict(rs.settings))
     logged_auth.auth_context.license.update(MessageToDict(rs.license))
     enf = MessageToDict(rs.Enforcements)

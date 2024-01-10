@@ -2,7 +2,7 @@ import argparse
 import fnmatch
 import re
 
-from typing import Set, Dict
+from typing import Set, Dict, List, Any
 
 from . import base
 from ..params import KeeperParams
@@ -21,12 +21,13 @@ class RecordListCommand(base.ArgparseCommand):
         super().__init__(RecordListCommand.parser)
 
     def execute(self, context: KeeperParams, **kwargs):
+        assert context.vault is not None
         verbose = kwargs.get('verbose') is True
         fmt = kwargs.get('format', 'table')
         search_text = kwargs.get('search_text')
         record_types = kwargs.get('record_type')
+        record_version = set()
         if record_types:
-            record_version = set()
             record_type = set()
             if isinstance(record_types, str):
                 record_types = [record_types]
@@ -36,18 +37,18 @@ class RecordListCommand(base.ArgparseCommand):
                 elif rt == 'file':
                     record_version.update((3, 4))
                     record_type.add('file')
-                elif rt == 'general':
+                elif rt in ('general', 'legacy'):
                     record_version.update((1, 2))
-                if rt == 'pam':
+                elif rt == 'pam':
                     record_version.add(6)
                 else:
                     record_version.update((3, 6))
                     record_type.add(rt)
         else:
-            record_version = None if verbose else (1, 2, 3)
+            record_version.update((1, 2, 3))
             record_type = None
 
-        records = [x for x in context.vault.find_records(
+        records = [x for x in context.vault.vault_data.find_records(
             criteria=search_text, record_type=record_type, record_version=record_version)]
         if any(records):
             headers = ['record_uid', 'type', 'title', 'description', 'shared']
@@ -57,7 +58,7 @@ class RecordListCommand(base.ArgparseCommand):
             for record in records:
                 row = [record.record_uid, record.record_type, record.title, record.description, record.shared]
                 table.append(row)
-            table.sort(key=lambda x: (x[2] or '').lower())
+            table.sort(key=lambda x: str(x[2] or '').lower())
 
             return report_utils.dump_report_data(table, headers, fmt=fmt, filename=kwargs.get('output'),
                                     row_number=True, column_width=None if verbose else 40)
@@ -104,7 +105,7 @@ class ShortcutListCommand(base.ArgparseCommand):
 
     def execute(self, context: KeeperParams, **kwargs):
         assert context.vault is not None
-        records = ShortcutCommand.get_record_shortcuts(context.vault)
+        records = ShortcutCommand.get_record_shortcuts(context.vault.vault_data)
         if len(records) == 0:
             raise base.CommandError('Vault does not have shortcuts')
 
@@ -118,15 +119,15 @@ class ShortcutListCommand(base.ArgparseCommand):
         target = kwargs.get('target')
         recursive = kwargs.get('recursive') is True
         if target:
-            record = context.vault.get_record(target)
+            record = context.vault.vault_data.get_record(target)
             if record is not None:
                 if record.record_uid in records:
                     uid_to_show.add(record.record_uid)
             else:
-                folder = context.vault.get_folder(target)
+                folder = context.vault.vault_data.get_folder(target)
                 if folder is not None:
                     if recursive:
-                        vault_utils.traverse_folder_tree(context.vault, folder, add_records)
+                        vault_utils.traverse_folder_tree(context.vault.vault_data, folder, add_records)
                     else:
                         add_records(folder)
                 else:
@@ -135,13 +136,13 @@ class ShortcutListCommand(base.ArgparseCommand):
                         regex = re.compile(fnmatch.translate(path)).match
                         for record_uid in folder.records:
                             if record_uid in records:
-                                record = context.vault.get_record(record_uid)
+                                record = context.vault.vault_data.get_record(record_uid)
                                 if record and record.version in (2, 3):
                                     if regex(record.title):
                                         uid_to_show.add(folder.folder_uid)
                     else:
                         if recursive:
-                            vault_utils.traverse_folder_tree(context.vault, folder, add_records)
+                            vault_utils.traverse_folder_tree(context.vault.vault_data, folder, add_records)
                         else:
                             add_records(folder)
 
@@ -160,21 +161,21 @@ class ShortcutListCommand(base.ArgparseCommand):
         folders = set()
         for f in records.values():
             folders.update(f)
-        folder_names = {x: folder_utils.get_folder_path(context.vault, x) for x in folders}
+        folder_names = {x: folder_utils.get_folder_path(context.vault.vault_data, x) for x in folders}
         del folders
 
         table = []
         fmt = kwargs.get('format')
         for record_uid, folder_uids in records.items():
-            record = context.vault.get_record(record_uid)
+            record = context.vault.vault_data.get_record(record_uid)
             if record:
-                fs = {folder_names.get(y.folder_uid): y for y in (context.vault.get_folder(x) if x else context.vault.root_folder for x in folder_uids) if y is not None}
-                f = []
+                fs = {(folder_names.get(y.folder_uid) or ''): y for y in (context.vault.vault_data.get_folder(x) if x else context.vault.vault_data.root_folder for x in folder_uids) if y is not None}
+                fo: List[Any] = []
                 for folder_path in sorted(fs.keys()):
                     folder =  fs[folder_path]
                     is_shared = False if folder.folder_type == 'user_folder' else True
                     if fmt == 'json':
-                        f.append({
+                        fo.append({
                             'folder_uid': folder.folder_uid,
                             'path': f'/{folder_path}',
                             'shared': is_shared
@@ -184,8 +185,8 @@ class ShortcutListCommand(base.ArgparseCommand):
                         folder_name += '/' + folder_path
                         if verbose and folder.folder_uid:
                             folder_name += f' ({folder.folder_uid})'
-                        f.append(folder_name)
-                table.append([record.record_uid, record.title, f])
+                        fo.append(folder_name)
+                table.append([record.record_uid, record.title, fo])
 
         headers = ['record_uid', 'record_title', 'folder']
         if fmt != 'json':
@@ -203,21 +204,22 @@ class ShortcutKeepCommand(base.ArgparseCommand):
     def __init__(self):
         super().__init__(ShortcutKeepCommand.parser)
 
-    def execute(self, context, **kwargs):
+    def execute(self, context: KeeperParams, **kwargs) -> None:
+        assert context.vault is not None
         target = kwargs.get('target')
         if not target:
             raise base.CommandError(f'Target parameter cannot be empty')
 
-        records = ShortcutCommand.get_record_shortcuts(context.vault)
-        to_keep: Dict[str, str] = {}  # Dict[record_uid, folder_uid]
+        records = ShortcutCommand.get_record_shortcuts(context.vault.vault_data)
+        to_keep: Dict[str, str] = {}
 
-        record = context.vault.get_record(target)
+        record = context.vault.vault_data.get_record(target)
         if record:
             if record.record_uid in records:
                 if (context.current_folder or '') in records[record.record_uid]:
                     to_keep[record.record_uid] = context.current_folder or ''
         else:
-            folder = context.vault.get_folder(target)
+            folder = context.vault.vault_data.get_folder(target)
             if folder:
                 for record_uid in folder.records.intersection(records.keys()):
                     if folder.folder_uid in records[record_uid]:
@@ -228,7 +230,7 @@ class ShortcutKeepCommand(base.ArgparseCommand):
                     pattern = '*'
                 regex = re.compile(fnmatch.translate(pattern)).match
                 for record_uid in folder.records.intersection(records.keys()):
-                    record = context.vault.get_record(record_uid)
+                    record = context.vault.vault_data.get_record(record_uid)
                     if record and regex(record.title):
                         if folder.folder_uid in records[record_uid]:
                             to_keep[record_uid] = folder.folder_uid
@@ -251,11 +253,11 @@ class ShortcutKeepCommand(base.ArgparseCommand):
             table = []
             headers = ['Record UID', 'Record Title', 'Folder to Keep', 'Folder(s) to Delete']
             for record_uid, folder_uid in to_keep.items():
-                record = context.vault.get_record(record_uid)
+                record = context.vault.vault_data.get_record(record_uid)
                 folders = records[record_uid]
                 table.append([record_uid, record.title if record else '',
-                       '/' + folder_utils.get_folder_path(context.vault, folder_uid),
-                       ['/' + folder_utils.get_folder_path(context.vault, x) for x in folders]])
+                       '/' + folder_utils.get_folder_path(context.vault.vault_data, folder_uid),
+                       ['/' + folder_utils.get_folder_path(context.vault.vault_data, x) for x in folders]])
                 report_utils.dump_report_data(table, headers, title='Delete Shortcuts Changes')
         else:
             def delete_confirm(message: str) -> bool:
@@ -268,4 +270,3 @@ class ShortcutKeepCommand(base.ArgparseCommand):
             to_delete = [vault_types.RecordPath(folder_uid=folder_uid, record_uid=record_uid)
                          for record_uid in records.keys() for folder_uid in records[record_uid]]
             record_management.delete_vault_objects(context.vault, to_delete, delete_confirm)
-            context.sync_data = True

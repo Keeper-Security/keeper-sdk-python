@@ -4,6 +4,8 @@ from typing import List, Tuple, Optional
 from datetime import timedelta
 from urllib.parse import urlparse
 
+from keepersdk.constants import KEEPER_PUBLIC_HOSTS
+
 MSP_FILE_PLANS = [
     (4, 'STORAGE_100GB', '100GB'),
     (7, 'STORAGE_1000GB', '1TB'),
@@ -246,16 +248,6 @@ if sys.platform.startswith('win'):
     OS_WHICH_CMD = 'where'
 else:
     OS_WHICH_CMD = 'which'
-
-
-KEEPER_PUBLIC_HOSTS = {
-    'US': 'keepersecurity.com',
-    'EU': 'keepersecurity.eu',
-    'AU': 'keepersecurity.com.au',
-    'CA': 'keepersecurity.ca',
-    'JP': 'keepersecurity.jp',
-    'GOV': 'govcloud.keepersecurity.us'
-}
 
 
 def get_abbrev_by_host(host):

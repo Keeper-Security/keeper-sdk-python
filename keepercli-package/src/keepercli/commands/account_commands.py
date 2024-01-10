@@ -1,16 +1,11 @@
 import argparse
 import datetime
-import logging
-import os
-import platform
-import sys
 from typing import Tuple, Optional, List, Any
 
-from keepersdk import constants
 from keepersdk.authentication import auth_utils
 from keepersdk.proto import AccountSummary_pb2
 from . import base
-from .. import params, login, api, versioning, __version__
+from .. import params, login, api
 from ..helpers import parse_utils, timeout_utils, report_utils
 
 
@@ -18,6 +13,8 @@ class LoginCommand(base.ArgparseCommand):
     login_parser = argparse.ArgumentParser(prog='login', description='Login to Keeper')
     login_parser.add_argument('--sso-password', dest='sso_password', action='store_true',
                               help='force master password for SSO accounts')
+    login_parser.add_argument('--resume-session', dest='resume_session', action='store_true',
+                              help='resumes current login session')
     login_parser.add_argument('-p', '--pass', dest='password', action='store', help='master password')
     login_parser.add_argument('email', metavar='EMAIL',  help='account email')
 
@@ -27,8 +24,11 @@ class LoginCommand(base.ArgparseCommand):
     def execute(self, context: params.KeeperParams, **kwargs):
         username = kwargs.get('email') or ''
         password = kwargs.get('password') or ''
-        login.LoginFlow.login(context, username=username, password=password, resume_session=False,
+        resume_session = kwargs.get('resume_session') is True
+        login.LoginFlow.login(context, username=username, password=password, resume_session=resume_session,
                               sso_master_password=kwargs.get('sso_password') is True)
+
+        # TODO check enforcements
 
 
 class LogoutCommand(base.ArgparseCommand):
@@ -257,81 +257,12 @@ class WhoamiCommand(base.ArgparseCommand):
 
             if kwargs.get('verbose', False):
                 if context.vault:
-                    table.append(['Records', context.vault.record_count])
-                    if context.vault.shared_folder_count > 0:
-                        table.append(['Shared Folders', context.vault.shared_folder_count])
-                    if context.vault.team_count > 0 > 0:
-                        table.append(['Teams', context.vault.team_count])
+                    table.append(['Records', context.vault.vault_data.record_count])
+                    if context.vault.vault_data.shared_folder_count > 0:
+                        table.append(['Shared Folders', context.vault.vault_data.shared_folder_count])
+                    if context.vault.vault_data.team_count > 0:
+                        table.append(['Teams', context.vault.vault_data.team_count])
 
             report_utils.dump_report_data(table, ('key', 'value'), no_header=True, right_align=(0,))
         else:
             logger.warning('Not logged in')
-
-
-class VersionCommand(base.ArgparseCommand):
-    version_parser = argparse.ArgumentParser(prog='version', description='Displays version of the installed Commander')
-    version_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', help='verbose output')
-    version_parser.add_argument('-p', '--packages', action='store_true', help='Show installed Python packages')
-
-    def __init__(self):
-        super().__init__(VersionCommand.version_parser)
-
-    def execute(self, context, **kwargs):
-        logger = api.get_logger()
-        version_details = versioning.is_up_to_date_version()
-        is_verbose = kwargs.get('verbose', False)
-        show_packages = kwargs.get('packages', False)
-
-        this_app_version = __version__
-
-        if version_details.get('is_up_to_date') is None:
-            this_app_version = f'{this_app_version} (Current version)'
-
-        table = []
-        table.append(['Commander Version', this_app_version])
-        if is_verbose:
-            if context.auth:
-                table.append(['API Client Version', context.auth.keeper_endpoint.client_version])
-            else:
-                table.append(['API Client Version', constants.CLIENT_VERSION])
-            table.append(['Python Version', sys.version.replace("\n", "")])
-            if version_details.get('is_up_to_date') is None:
-                logger.debug("It appears that Commander is up to date")
-            elif not version_details.get('is_up_to_date'):
-                latest_version = version_details.get('current_github_version')
-                table.append(["Latest version", latest_version])
-
-            p = platform.system()
-            if p == 'Darwin':
-                p = 'MacOS'
-            table.append(['Operating System', f'{p} ({platform.release()})'])
-            table.append(['Working directory', os.getcwd()])
-            table.append(['Package directory', os.path.dirname(api.__file__)])
-            table.append(['Config. File', context.config_filename])
-            table.append(['Executable', sys.executable])
-
-        if logger.isEnabledFor(logging.DEBUG) or show_packages:
-            ver = sys.version_info
-            if ver.major >= 3 and ver.minor >= 8:
-                import importlib.metadata
-                dist = importlib.metadata.packages_distributions()
-                packages = {}
-                for pack in dist.values():
-                    if isinstance(pack, list) and len(pack) > 0:
-                        name = pack[0]
-                        if name in packages:
-                            continue
-                        try:
-                            version = importlib.metadata.version(name)
-                            packages[name] = version
-                        except Exception as e:
-                            logger.debug('Get package %s version error: %s', name, e)
-                packs = [f'{x[0]}=={x[1]}' for x in packages.items()]
-                packs.sort(key=lambda x: x.lower())
-                table.append(['Packages', packs])
-            else:
-                table.append(['Packages', 'Not supported'])
-        if versioning.is_binary_app():
-            table.append(["Installation path", sys._MEIPASS])
-
-        return report_utils.dump_report_data(table, ('key', 'value'), no_header=True)

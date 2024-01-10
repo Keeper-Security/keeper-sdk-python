@@ -37,10 +37,12 @@ class SqliteVaultStorage(vault_storage.IVaultStorage):
         folder_schema = sqlite_dao.TableSchema.load_schema(
             storage_types.StorageFolder, 'folder_uid', owner_column=self.owner_column, owner_type=bytes)
         folder_record_schema = sqlite_dao.TableSchema.load_schema(
-            storage_types.StorageFolderRecordLink, ['folder_uid', 'record_uid'],
+            storage_types.StorageFolderRecord, ['folder_uid', 'record_uid'],
             indexes={'RecordUID': ['record_uid']}, owner_column=self.owner_column, owner_type=bytes)
         breach_watch_record_schema = sqlite_dao.TableSchema.load_schema(
             storage_types.BreachWatchRecord, 'record_uid', owner_column=self.owner_column, owner_type=bytes)
+        breach_watch_security_data_schema = sqlite_dao.TableSchema.load_schema(
+            storage_types.BreachWatchSecurityData, 'record_uid', owner_column=self.owner_column, owner_type=bytes)
 
         record_type_schema = sqlite_dao.TableSchema.load_schema(
             storage_types.StorageRecordType, 'id', owner_column=self.owner_column, owner_type=bytes)
@@ -49,7 +51,8 @@ class SqliteVaultStorage(vault_storage.IVaultStorage):
                                    (settings_schema, team_schema, record_schema, shared_folder_schema,
                                     non_shared_data_schema, record_key_schema, shared_folder_key_schema,
                                     shared_folder_permission_schema, user_email_schema, folder_schema,
-                                    folder_record_schema, breach_watch_record_schema, record_type_schema))
+                                    folder_record_schema, breach_watch_record_schema, breach_watch_security_data_schema,
+                                    record_type_schema))
 
         self._settings_storage = sqlite.SqliteRecordStorage(
             self.get_connection, settings_schema, owner=self.vault_owner)
@@ -82,6 +85,9 @@ class SqliteVaultStorage(vault_storage.IVaultStorage):
 
         self._breach_watch_records = sqlite.SqliteEntityStorage(
             self.get_connection, breach_watch_record_schema, owner=self.vault_owner)
+
+        self._breach_watch_security_data = sqlite.SqliteEntityStorage(
+            self.get_connection, breach_watch_security_data_schema, owner=self.vault_owner)
 
     @property
     def user_settings(self):
@@ -139,6 +145,10 @@ class SqliteVaultStorage(vault_storage.IVaultStorage):
     def breach_watch_records(self):
         return self._breach_watch_records
 
+    @property
+    def breach_watch_security_data(self):
+        return self._breach_watch_security_data
+
     def clear(self):
         self._settings_storage.delete_all()
         self._records.delete_all()
@@ -152,6 +162,7 @@ class SqliteVaultStorage(vault_storage.IVaultStorage):
         self._folders.delete_all()
         self._folder_records.delete_all()
         self._breach_watch_records.delete_all()
+        self._breach_watch_security_data.delete_all()
         self._user_emails.delete_all()
 
     def close(self) -> None:

@@ -115,6 +115,7 @@ class ParseError(Exception):
 
 class ArgparseCommand(ICliCommand, abc.ABC):
     def __init__(self, parser: argparse.ArgumentParser):
+        super().__init__()
         if parser.exit != ArgparseCommand.suppress_exit:
             setattr(parser, 'exit', ArgparseCommand.suppress_exit)
         if parser.error != ArgparseCommand.raise_parse_exception:

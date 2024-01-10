@@ -1,11 +1,10 @@
-import functools
-import shlex
 from typing import Iterable, Optional, Callable
 
 from prompt_toolkit import completion
 
 from . import base
 from .. import autocomplete
+
 
 class CommandCompleter(completion.Completer):
     def __init__(self,

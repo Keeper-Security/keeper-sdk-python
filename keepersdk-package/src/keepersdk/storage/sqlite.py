@@ -1,11 +1,11 @@
 import sqlite3
 from typing import Callable, Union, Iterable, Tuple, Optional
 
-from . import types
+from . import storage_types
 from .. import sqlite_dao
 
 
-class SqliteEntityStorage(sqlite_dao.SqliteStorage, types.IEntityStorage):
+class SqliteEntityStorage(sqlite_dao.SqliteStorage, storage_types.IEntityStorage):
     def __init__(self, get_connection: Callable[[], sqlite3.Connection], schema: sqlite_dao.TableSchema,
                  owner: Optional[sqlite_dao.KeyTypes]=None) -> None:
         super(SqliteEntityStorage, self).__init__(get_connection, schema, owner)
@@ -27,7 +27,7 @@ class SqliteEntityStorage(sqlite_dao.SqliteStorage, types.IEntityStorage):
         self.delete_by_filter(self.schema.primary_key, uids, multiple_criteria=True)
 
 
-class SqliteLinkStorage(sqlite_dao.SqliteStorage, types.ILinkStorage):
+class SqliteLinkStorage(sqlite_dao.SqliteStorage, storage_types.ILinkStorage):
     def __init__(self, get_connection: Callable[[], sqlite3.Connection], schema: sqlite_dao.TableSchema,
                  owner: Optional[sqlite_dao.KeyTypes]=None) -> None:
         super(SqliteLinkStorage, self).__init__(get_connection, schema, owner)
@@ -49,9 +49,9 @@ class SqliteLinkStorage(sqlite_dao.SqliteStorage, types.ILinkStorage):
         self.put(links)
 
     @staticmethod
-    def expand_link_to_tuple(links: Iterable[Union[types.IUidLink, Tuple[str, str]]]) -> Iterable[Tuple[str, str]]:
+    def expand_link_to_tuple(links: Iterable[Union[storage_types.IUidLink, Tuple[str, str]]]) -> Iterable[Tuple[str, str]]:
         for link in links:
-            if isinstance(link, types.IUidLink):
+            if isinstance(link, storage_types.IUidLink):
                 yield link.subject_uid(), link.object_uid()
             elif isinstance(link, (list, tuple)) and len(link) == 2:
                 yield link[0], link[1]
@@ -81,7 +81,7 @@ class SqliteLinkStorage(sqlite_dao.SqliteStorage, types.ILinkStorage):
             yield link
 
 
-class SqliteRecordStorage(sqlite_dao.SqliteStorage, types.IRecordStorage):
+class SqliteRecordStorage(sqlite_dao.SqliteStorage, storage_types.IRecordStorage):
     def __init__(self, get_connection: Callable[[], sqlite3.Connection], schema: sqlite_dao.TableSchema,
                  owner: Optional[sqlite_dao.KeyTypes]) -> None:
         super(SqliteRecordStorage, self).__init__(get_connection, schema, owner)

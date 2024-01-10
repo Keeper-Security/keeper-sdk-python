@@ -1,9 +1,9 @@
 import os
+import sqlite3
 import unittest
 
-from keepersdk.enterprise import legacy_enterprise, loader
+from keepersdk.enterprise import enterprise_loader, sqlite_enterprise_storage
 from keepersdk.authentication import configuration, login_auth, endpoint
-from keepersdk.proto import enterprise_pb2
 
 
 class MyTestCase(unittest.TestCase):
@@ -22,14 +22,9 @@ class MyTestCase(unittest.TestCase):
 
     def test_load_enterprise(self):
         keeper_auth = self.get_keeper_auth()
-        l_enterprise = legacy_enterprise.LegacyEnterpriseData()
+        connection = sqlite3.Connection(':memory:')
+        storage = sqlite_enterprise_storage.SqliteEnterpriseStorage(lambda: connection, keeper_auth.auth_context.enterprise_id)
+        e_loader = enterprise_loader.EnterpriseLoader(keeper_auth, storage)
+        affected = e_loader.load()
 
-        e_loader = loader.EnterpriseLoader(l_enterprise)
-        affected = e_loader.load(keeper_auth)
-        if enterprise_pb2.MANAGED_NODES in affected:
-            role_uids = l_enterprise.get_missing_role_keys()
-            if len(role_uids) > 0:
-                e_loader.load_role_keys(keeper_auth, role_uids)
-        enterprise_data = {}
-        l_enterprise.synchronize(enterprise_data, affected)
-        self.assertTrue(len(enterprise_data) > 0)
+        self.assertTrue(len(affected) > 0)

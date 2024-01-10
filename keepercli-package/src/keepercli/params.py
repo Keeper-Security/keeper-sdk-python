@@ -116,7 +116,6 @@ class KeeperParams(ParamsConfig, configuration.IConfigurationStorage):
         self.current_folder: Optional[str] = None
         self._sqlite_connection: Optional[sqlite3.Connection] = None
         self._environment_variables: Dict[str, Any] = {}
-        self.sync_data = False
 
     def clear_session(self) -> None:
         self.shadow_config.clear()
@@ -144,7 +143,7 @@ class KeeperParams(ParamsConfig, configuration.IConfigurationStorage):
         if value:
             self._auth = value
             storage = sqlite_storage.SqliteVaultStorage(self._get_connection, self._auth.auth_context.account_uid)
-            self._vault = vault_online.VaultOnline(self._auth, storage)
+            self._vault = vault_online.get_vault_online(self._auth, storage)
             self.vault_down()
             if self._auth.auth_context.is_enterprise_admin:
                 enterprise_id = self._auth.auth_context.license.get('enterpriseId')
@@ -174,8 +173,7 @@ class KeeperParams(ParamsConfig, configuration.IConfigurationStorage):
         return self._sqlite_connection
 
     @property
-    def vault(self) -> vault_online.VaultOnline:
-        assert self._vault is not None
+    def vault(self) -> Optional[vault_online.VaultOnline]:
         return self._vault
 
     def get(self) -> configuration.JsonKeeperConfiguration:

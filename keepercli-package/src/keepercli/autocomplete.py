@@ -37,31 +37,33 @@ def standard_completer(context: KeeperParams) -> Callable[[str, str], Iterable[s
 
 
 def _path_completer(context: KeeperParams, prefix: str) -> Iterable[str]:
-    folder, pattern = folder_utils.try_resolve_path(context, prefix)
-    pattern = pattern.casefold()
-    path = prefix[:len(prefix) - len(pattern)]
-    if path and not path.endswith('/'):
-        path += '/'
-    if folder:
-        for f_uid in folder.subfolders:
-            sf = context.vault.get_folder(f_uid)
-            if sf and sf.name.casefold().startswith(pattern):
-                yield path + sf.name + '/'
-        for r_uid in folder.records:
-            r = context.vault.get_record(r_uid)
-            if r and r.title.casefold().startswith(pattern):
-                yield path + r.title
+    if context.vault is not None:
+        folder, pattern = folder_utils.try_resolve_path(context, prefix)
+        pattern = pattern.casefold()
+        path = prefix[:len(prefix) - len(pattern)]
+        if path and not path.endswith('/'):
+            path += '/'
+        if folder:
+            for f_uid in folder.subfolders:
+                sf = context.vault.vault_data.get_folder(f_uid)
+                if sf and sf.name.casefold().startswith(pattern):
+                    yield path + sf.name + '/'
+            for r_uid in folder.records:
+                r = context.vault.vault_data.get_record(r_uid)
+                if r and r.title.casefold().startswith(pattern):
+                    yield path + r.title
 
 
 def _folder_completer(context: KeeperParams, prefix: str) -> Iterable[str]:
-    folder, pattern = folder_utils.try_resolve_path(context, prefix)
-    pattern = pattern.casefold()
-    path = prefix[:len(prefix) - len(pattern)]
-    if folder:
-        for f_uid in folder.subfolders:
-            sf = context.vault.get_folder(f_uid)
-            if sf and sf.name.casefold().startswith(pattern):
-                yield path + sf.name
+    if context.vault is not None:
+        folder, pattern = folder_utils.try_resolve_path(context, prefix)
+        pattern = pattern.casefold()
+        path = prefix[:len(prefix) - len(pattern)]
+        if folder:
+            for f_uid in folder.subfolders:
+                sf = context.vault.vault_data.get_folder(f_uid)
+                if sf and sf.name.casefold().startswith(pattern):
+                    yield path + sf.name
 
 
 def split_text(text: str) -> List[Tuple[int, int]]:

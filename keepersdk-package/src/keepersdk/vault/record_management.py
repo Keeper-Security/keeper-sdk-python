@@ -1,12 +1,12 @@
 import enum
 import json
-from typing import Optional, Iterable, Union, Callable, List, Set, Dict, Any
+from typing import Optional, Iterable, Union, Callable, List, Set, Dict
 
 from . import vault_extensions, record_facades, vault_online, vault_utils, vault_types
 from .vault_record import PasswordRecord, TypedRecord, TypedField
 from .. import utils, crypto
 from ..errors import KeeperApiError
-from ..proto import record_pb2
+from ..proto import record_pb2, client_pb2
 
 
 def add_record_to_folder(vault: vault_online.VaultOnline, record: Union[PasswordRecord, TypedRecord],
@@ -16,11 +16,16 @@ def add_record_to_folder(vault: vault_online.VaultOnline, record: Union[Password
 
     record_key = utils.generate_aes_key()
 
-    folder = vault.get_folder(folder_uid) if folder_uid else None
+    vault_data = vault.vault_data
+
+    folder = vault_data.get_folder(folder_uid) if folder_uid else None
     folder_key: Optional[bytes] = None
     if folder and folder.folder_type in {'shared_folder', 'shared_folder_folder'}:
         assert folder.folder_scope_uid is not None
-        folder_key = vault.get_shared_folder_key(folder.folder_scope_uid)
+        folder_key = vault_data.get_shared_folder_key(folder.folder_scope_uid)
+
+    adp = vault.audit_data_plugin()
+    caep = vault.client_audit_event_plugin()
 
     data_key = vault.keeper_auth.auth_context.data_key
     if isinstance(record, PasswordRecord):
@@ -49,13 +54,14 @@ def add_record_to_folder(vault: vault_online.VaultOnline, record: Union[Password
                         file_ids.append(thumb.id)
             rq_v2['file_ids'] = file_ids
 
-        rs_v2 = vault.keeper_auth.execute_auth_command(rq_v2)
-        if 'revision' in rs_v2:
-            vault.schedule_audit_data(record, rs_v2['revision'])
+        vault.keeper_auth.execute_auth_command(rq_v2)
+        if adp:
+            adp.schedule_audit_data((record.record_uid,))
         if record.attachments:
-            for atta in record.attachments:
-                vault.schedule_audit_event(
-                    'file_attachment_uploaded', record_uid=record.record_uid, attachment_id=atta.id)
+            if caep:
+                for atta in record.attachments:
+                    caep.schedule_audit_event(
+                        'file_attachment_uploaded', record_uid=record.record_uid, attachment_id=atta.id)
 
     elif isinstance(record, TypedRecord):
         add_record = record_pb2.RecordAdd()
@@ -72,7 +78,7 @@ def add_record_to_folder(vault: vault_online.VaultOnline, record: Union[Password
             if folder_key:
                 add_record.folder_key = crypto.encrypt_aes_v2(record_key, folder_key)
 
-        data = vault_extensions.extract_typed_record_data(record, vault.get_record_type_by_name(record.record_type))
+        data = vault_extensions.extract_typed_record_data(record, vault_data.get_record_type_by_name(record.record_type))
         json_data = vault_extensions.get_padded_json_bytes(data)
         add_record.data = crypto.encrypt_aes_v2(json_data, record_key)
 
@@ -82,7 +88,7 @@ def add_record_to_folder(vault: vault_online.VaultOnline, record: Union[Password
             if record.linked_keys:
                 ref_record_key = record.linked_keys.get(ref)
             if not ref_record_key:
-                ref_record_key = vault.get_record_key(ref)
+                ref_record_key = vault.vault_data.get_record_key(ref)
 
             if ref_record_key:
                 link = record_pb2.RecordLink()
@@ -106,18 +112,37 @@ def add_record_to_folder(vault: vault_online.VaultOnline, record: Union[Password
         record_rs = next((x for x in rs_v3.records if utils.base64_url_encode(x.record_uid) == record.record_uid), None)
         if record_rs:
             if record_rs.status == record_pb2.RS_SUCCESS:
-                file_facade = record_facades.FileRefRecordFacade()
-                file_facade.record = record
-                if isinstance(file_facade.file_ref, list):
-                    for file_uid in file_facade.file_ref:
-                        vault.schedule_audit_event(
-                            'file_attachment_uploaded', record_uid=record.record_uid, attachment_id=file_uid)
+                if caep:
+                    file_facade = record_facades.FileRefRecordFacade()
+                    file_facade.record = record
+                    if isinstance(file_facade.file_ref, list):
+                        for file_uid in file_facade.file_ref:
+                            caep.schedule_audit_event(
+                                'file_attachment_uploaded', record_uid=record.record_uid, attachment_id=file_uid)
             else:
                 status = record_pb2.RecordModifyResult.Name(record_rs.status)   # type: ignore
                 raise KeeperApiError(status, record_rs.message)
-
     else:
         raise ValueError('Unsupported Keeper record')
+
+    record_password = vault_utils.extract_password(record)
+    if record_password:
+        bwp = vault.breach_watch_plugin()
+        bw_status: Optional[int] = None
+        if bwp:
+            bw_password = bwp.scan_and_store_record_status(record.record_uid, record_key, record_password)
+            if bw_password:
+                bw_status = bw_password.status
+                if bw_password.status == client_pb2.WEAK:
+                    utils.get_logger().info('High-Risk password detected. Record UID: %s', record.record_uid)
+                    if caep:
+                        caep.schedule_audit_event('bw_record_high_risk')
+
+        sap = vault.security_audit_plugin()
+        if sap:
+            score = utils.password_score(record_password)
+            url = vault_utils.extract_url(record)
+            sap.schedule_security_data(record.record_uid, score, url, bw_status)
 
     vault.sync_requested = True
     vault.run_pending_jobs()
@@ -182,11 +207,12 @@ def compare_records(record1: Union[PasswordRecord, TypedRecord],
 
 def update_record(vault: vault_online.VaultOnline, record: Union[PasswordRecord, TypedRecord],
                   skip_extra: bool=False) -> None:
-    record_key = vault.get_record_key(record.record_uid)
+
+    record_key = vault.vault_data.get_record_key(record.record_uid)
     if not record_key:
         raise Exception(f'Record Update: {record.record_uid}: record key cannot be resolved.')
 
-    storage_record = vault.storage.records.get_entity(record.record_uid)
+    storage_record = vault.vault_data.storage.records.get_entity(record.record_uid)
     if not storage_record:
         raise Exception(f'Record Update: {record.record_uid} not found.')
 
@@ -198,6 +224,9 @@ def update_record(vault: vault_online.VaultOnline, record: Union[PasswordRecord,
     else:
         raise Exception(f'Record {record.record_uid}: Invalid record type.')
 
+    adp = vault.audit_data_plugin()
+    caep = vault.client_audit_event_plugin()
+
     if isinstance(record, PasswordRecord) and isinstance(existing_record, PasswordRecord):
         record_object = {
             'record_uid': record.record_uid,
@@ -205,7 +234,7 @@ def update_record(vault: vault_online.VaultOnline, record: Union[PasswordRecord,
             'revision': storage_record.revision,
             'client_modified_time': utils.current_milli_time(),
         }
-        vault_extensions.resolve_record_access_path(vault.storage, record_object, for_edit=True)
+        vault_extensions.resolve_record_access_path(vault.vault_data.storage, record_object, for_edit=True)
 
         data = vault_extensions.extract_password_record_data(record)
         record_object['data'] = utils.base64_url_encode(
@@ -254,17 +283,17 @@ def update_record(vault: vault_online.VaultOnline, record: Union[PasswordRecord,
             if record_status != 'success':
                 raise KeeperApiError(record_status, update_status.get('message', ''))
 
-        if bool(status & (RecordChangeStatus.Title | RecordChangeStatus.URL)):
-            revision = rsu_v2.get('revision') or 0
-            vault.schedule_audit_data(record, revision)
+        if adp and bool(status & (RecordChangeStatus.Title | RecordChangeStatus.URL)):
+            adp.schedule_audit_data((record.record_uid,))
         prev_file_refs = set((x.id for x in existing_record.attachments or []))
         new_file_refs = set((x.id for x in record.attachments or []))
-        for file_id in new_file_refs.difference(prev_file_refs):
-            vault.schedule_audit_event(
-                'file_attachment_uploaded', record_uid=record.record_uid, attachment_id=file_id)
-        for file_id in prev_file_refs.difference(new_file_refs):
-            vault.schedule_audit_event(
-                'file_attachment_deleted', record_uid=record.record_uid, attachment_id=file_id)
+        if caep:
+            for file_id in new_file_refs.difference(prev_file_refs):
+                caep.schedule_audit_event(
+                    'file_attachment_uploaded', record_uid=record.record_uid, attachment_id=file_id)
+            for file_id in prev_file_refs.difference(new_file_refs):
+                caep.schedule_audit_event(
+                    'file_attachment_deleted', record_uid=record.record_uid, attachment_id=file_id)
 
     elif isinstance(record, TypedRecord) and isinstance(existing_record, TypedRecord):
         record_uid_bytes = utils.base64_url_decode(record.record_uid)
@@ -273,7 +302,7 @@ def update_record(vault: vault_online.VaultOnline, record: Union[PasswordRecord,
         ur.client_modified_time = utils.current_milli_time()
         ur.revision = storage_record.revision
 
-        data = vault_extensions.extract_typed_record_data(record, vault.get_record_type_by_name(record.record_type))
+        data = vault_extensions.extract_typed_record_data(record, vault.vault_data.get_record_type_by_name(record.record_type))
         json_data = vault_extensions.get_padded_json_bytes(data)
         ur.data = crypto.encrypt_aes_v2(json_data, record_key)
 
@@ -284,7 +313,7 @@ def update_record(vault: vault_online.VaultOnline, record: Union[PasswordRecord,
             if record.linked_keys and ref_record_uid in record.linked_keys:
                 ref_record_key = record.linked_keys[ref_record_uid]
             if not ref_record_key:
-                ref_record_key = vault.get_record_key(ref_record_uid)
+                ref_record_key = vault.vault_data.get_record_key(ref_record_uid)
             if ref_record_key:
                 link = record_pb2.RecordLink()
                 link.record_uid = utils.base64_url_decode(ref_record_uid)
@@ -323,23 +352,48 @@ def update_record(vault: vault_online.VaultOnline, record: Union[PasswordRecord,
         if isinstance(file_refs, TypedField) and isinstance(file_refs.value, list):
             for uid in file_refs.value:
                 new_refs.add(uid)
-        for file_id in new_refs.difference(prev_refs):
-            vault.schedule_audit_event(
-                'file_attachment_uploaded', record_uid=record.record_uid, attachment_id=file_id)
-        for file_id in prev_refs.difference(new_refs):
-            vault.schedule_audit_event(
-                'file_attachment_deleted', record_uid=record.record_uid, attachment_id=file_id)
+        if caep:
+            for file_id in new_refs.difference(prev_refs):
+                caep.schedule_audit_event(
+                    'file_attachment_uploaded', record_uid=record.record_uid, attachment_id=file_id)
+            for file_id in prev_refs.difference(new_refs):
+                caep.schedule_audit_event(
+                    'file_attachment_deleted', record_uid=record.record_uid, attachment_id=file_id)
     else:
         raise ValueError('Unsupported Keeper record')
 
-    vault.sync_requested = True
     if bool(status & RecordChangeStatus.Password):
-        vault.schedule_audit_event('record_password_change', record_uid=record.record_uid)
+        if caep:
+            caep.schedule_audit_event('record_password_change', record_uid=record.record_uid)
 
+        sap = vault.security_audit_plugin()
+        record_password = vault_utils.extract_password(record)
+        if record_password:
+            bwp = vault.breach_watch_plugin()
+            bw_status: Optional[int] = None
+            if bwp:
+                bw_password = bwp.scan_and_store_record_status(record.record_uid, record_key, record_password)
+                if bw_password:
+                    bw_status = bw_password.status
+                    if bw_password.status == client_pb2.WEAK:
+                        utils.get_logger().info('High-Risk password detected. Record UID: %s', record.record_uid)
+                        if caep:
+                            caep.schedule_audit_event('bw_record_high_risk')
+
+            if sap:
+                score = utils.password_score(record_password)
+                url = vault_utils.extract_url(record)
+                sap.schedule_security_data(record.record_uid, score, url, bw_status)
+        else:
+            if sap:
+                sap.schedule_security_data_delete(record.record_uid)
+
+    vault.sync_requested = True
     vault.run_pending_jobs()
 
 
-def delete_vault_objects(vault: vault_online.VaultOnline, vault_objects: Iterable[Union[str, vault_types.RecordPath]],
+def delete_vault_objects(vault: vault_online.VaultOnline,
+                         vault_objects: Iterable[Union[str, vault_types.RecordPath]],
                          confirm: Optional[Callable[[str], bool]]=None) -> None:
     shared_folders = set()
     objects: List[dict] = []
@@ -347,7 +401,7 @@ def delete_vault_objects(vault: vault_online.VaultOnline, vault_objects: Iterabl
         if not to_delete:
             raise ValueError('Delete by UID: Cannot be empty')
         if isinstance(to_delete, str):
-            folder = vault.get_folder(to_delete)
+            folder = vault.vault_data.get_folder(to_delete)
             if folder:
                 if folder.folder_type == 'shared_folder':
                     shared_folders.add(to_delete)
@@ -365,7 +419,7 @@ def delete_vault_objects(vault: vault_online.VaultOnline, vault_objects: Iterabl
                         obj['from_uid'] = folder.folder_scope_uid
                     objects.append(obj)
                 continue
-            record = vault.get_record(to_delete)
+            record = vault.vault_data.get_record(to_delete)
             # TODO resolve folder
             if record:
                 obj = {
@@ -383,10 +437,10 @@ def delete_vault_objects(vault: vault_online.VaultOnline, vault_objects: Iterabl
 
             folder = None
             if to_delete.folder_uid:
-                folder = vault.get_folder(to_delete.folder_uid)
+                folder = vault.vault_data.get_folder(to_delete.folder_uid)
                 if not folder:
                     raise ValueError(f'Folder \"{to_delete.folder_uid}\" not found')
-            record = vault.get_record(to_delete.record_uid)
+            record = vault.vault_data.get_record(to_delete.record_uid)
             if not record:
                 raise ValueError(f'Record \"{to_delete.record_uid}\" not found')
             obj = {
@@ -450,18 +504,18 @@ def move_vault_objects(vault: vault_online.VaultOnline,
                        on_warning: Optional[Callable[[str], None]] = None) -> None:
 
     logger = utils.get_logger()
-    dst_folder = vault.get_folder(dst_folder_uid) if dst_folder_uid else vault.root_folder
+    dst_folder = vault.vault_data.get_folder(dst_folder_uid) if dst_folder_uid else vault.vault_data.root_folder
     if not dst_folder:
         raise ValueError(f'Destination folder \"{dst_folder_uid}\" not found')
-    dst_encryption_key: Optional[bytes]
+    dst_encryption_key: Optional[bytes] = None
     if dst_folder.folder_type == 'user_folder':
         dst_scope_uid = ''
         dst_encryption_key = vault.keeper_auth.auth_context.data_key
     else:
         dst_scope_uid = dst_folder.folder_scope_uid or ''
-        dst_encryption_key = vault.get_shared_folder_key(dst_scope_uid)
-        if not dst_encryption_key:
-            raise ValueError(f'Destination shared folder key \"{dst_scope_uid}\" not found')
+        dst_encryption_key = vault.vault_data.get_shared_folder_key(dst_scope_uid)
+    if dst_encryption_key is None:
+        raise ValueError(f'Destination shared folder key \"{dst_scope_uid}\" not found')
 
     dst_records: Set[str] = set(dst_folder.records)
 
@@ -485,7 +539,7 @@ def move_vault_objects(vault: vault_online.VaultOnline,
     for src in src_objects:
         if isinstance(src, vault_types.RecordPath):
             src_folder_uid = src.folder_uid
-            src_folder = vault.get_folder(src_folder_uid) if src_folder_uid else vault.root_folder
+            src_folder = vault.vault_data.get_folder(src_folder_uid) if src_folder_uid else vault.vault_data.root_folder
             if not src_folder:
                 notify_on_error(f'Source folder \"{src_folder_uid}\" not found')
                 continue
@@ -506,14 +560,14 @@ def move_vault_objects(vault: vault_online.VaultOnline,
                     record_to_move[src_folder_uid] = set()
                 record_to_move[src_folder_uid].add(src_record_uid)
         else:
-            folder = vault.get_folder(src)
+            folder = vault.vault_data.get_folder(src)
             if folder:
                 if folder.folder_uid == dst_folder_uid:
                     notify_on_warning(f'Source and destination folders are the same.')
                 else:
                     folder_uid_to_move.add(folder.folder_uid)
             else:
-                record = vault.get_record(src)
+                record = vault.vault_data.get_record(src)
                 if record:
                     record_uid_to_move.add(record.record_uid)
                 else:
@@ -522,7 +576,7 @@ def move_vault_objects(vault: vault_online.VaultOnline,
     record_uid: str
     if len(record_uid_to_move) > 0:
         for record_uid in record_uid_to_move:
-            folders = vault_utils.get_folders_for_record(vault, record_uid)
+            folders = vault_utils.get_folders_for_record(vault.vault_data, record_uid)
             if record_uid in dst_folder.subfolders:
                 notify_on_warning(f'Destination folder already contains record \"{record_uid}\".')
             else:
@@ -576,7 +630,7 @@ def move_vault_objects(vault: vault_online.VaultOnline,
                 record_to_move[folder_uid] = set(all_records[to_copy:])
                 all_records = all_records[:to_copy]
 
-            folder = vault.get_folder(folder_uid) if folder_uid else vault.root_folder
+            folder = vault.vault_data.get_folder(folder_uid) if folder_uid else vault.vault_data.root_folder
             assert folder is not None
             if folder.folder_type == 'user_folder':
                 src_scope_uid = ''
@@ -584,14 +638,14 @@ def move_vault_objects(vault: vault_online.VaultOnline,
                 src_scope_uid = folder.folder_scope_uid or ''
 
             for record_uid in all_records:
-                record = vault.get_record(record_uid)
+                record = vault.vault_data.get_record(record_uid)
                 if not record:
                     notify_on_error(f'Cannot get record \"{record_uid}\".')
                     continue
 
                 if src_scope_uid != dst_scope_uid:
                     if record.record_uid not in transition_keys:
-                        record_key = vault.get_record_key(record.record_uid)
+                        record_key = vault.vault_data.get_record_key(record.record_uid)
                         if record_key:
                             if record.version >= 3:
                                 key = crypto.encrypt_aes_v2(record_key, dst_encryption_key)
@@ -638,7 +692,7 @@ def move_vault_objects(vault: vault_online.VaultOnline,
             rq['to_uid'] = dst_folder.folder_uid
 
         for folder_uid in folder_uid_to_move:
-            folder = vault.get_folder(folder_uid)
+            folder = vault.vault_data.get_folder(folder_uid)
             assert folder is not None
             if folder.folder_type == 'user_folder':
                 src_scope_uid = ''
@@ -646,22 +700,23 @@ def move_vault_objects(vault: vault_online.VaultOnline,
                 src_scope_uid = folder.folder_scope_uid or ''
             if src_scope_uid != dst_scope_uid:
                 def prepare_transition_keys(f: vault_types.Folder):
+                    assert dst_encryption_key is not None
                     t_folder_key = crypto.encrypt_aes_v1(f.folder_key, dst_encryption_key)
                     transition_keys[f.folder_uid] = utils.base64_url_encode(t_folder_key)
                     if f.records:
                         for record_uid in f.records:
                             if record_uid not in transition_keys:
-                                record = vault.get_record(record_uid)
+                                record = vault.vault_data.get_record(record_uid)
                                 if record:
-                                    record_key = vault.get_record_key(record_uid)
+                                    record_key = vault.vault_data.get_record_key(record_uid)
                                     if record_key:
                                         if record.version >= 3:
                                             t_record_key = crypto.encrypt_aes_v2(record_key, dst_encryption_key)
                                         else:
                                             t_record_key = crypto.encrypt_aes_v1(record_key, dst_encryption_key)
                                         transition_keys[f.folder_uid] = utils.base64_url_encode(t_record_key)
-                vault_utils.traverse_folder_tree(vault, folder, prepare_transition_keys)
-            parent_folder = vault.get_folder(folder.parent_uid) if folder.parent_uid else vault.root_folder
+                vault_utils.traverse_folder_tree(vault.vault_data, folder, prepare_transition_keys)
+            parent_folder = vault.vault_data.get_folder(folder.parent_uid) if folder.parent_uid else vault.vault_data.root_folder
             assert parent_folder is not None
             mo = {
                 'uid': folder_uid,

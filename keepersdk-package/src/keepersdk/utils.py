@@ -29,10 +29,14 @@ def current_milli_time() -> int:
 
 
 def base64_url_decode(s: str) -> bytes:
+    if len(s) == 0:
+        return b''
     return base64.urlsafe_b64decode(s + '==')
 
 
 def base64_url_encode(b: bytes) -> str:
+    if len(b) == 0:
+        return ''
     bs = base64.urlsafe_b64encode(b)
     return bs.rstrip(b'=').decode('utf-8')
 
@@ -71,6 +75,11 @@ def create_auth_verifier(password: str, salt: bytes, iterations: int) -> bytes:
     derived_key = crypto.derive_key_v1(password, salt, iterations)
     enc_iter = int.to_bytes(iterations, length=3, byteorder='big', signed=False)
     return b'\x01' + enc_iter + salt + derived_key
+
+
+_breach_watch_key = base64_url_decode('phl9kdMA_gkJkSfeOYWpX-FOyvfh-APhdSFecIDMyfI')
+def breach_watch_hash(password: str) -> bytes:
+    return crypto.hmac_sha512(_breach_watch_key, f'password:{password}'.encode('utf-8'))
 
 
 VALID_URL_SCHEME_CHARS = '+-.:'

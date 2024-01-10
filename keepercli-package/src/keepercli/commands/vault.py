@@ -13,7 +13,6 @@ class SyncDownCommand(base.ArgparseCommand):
         force = kwargs.get('force') is True
         context.vault.sync_down(force)
 
-        context.sync_data = False
         # TODO pending shares
         # accepted = False
         # if len(params.pending_share_requests) > 0:
@@ -34,7 +33,5 @@ class SyncDownCommand(base.ArgparseCommand):
         #
         #     params.pending_share_requests.clear()
         #
-        #     if accepted:
-        #         params.sync_data = True
 
 

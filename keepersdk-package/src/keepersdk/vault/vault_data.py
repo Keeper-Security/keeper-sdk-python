@@ -1,3 +1,4 @@
+import dataclasses
 import itertools
 import json
 from typing import Iterable, Dict, Set, Optional, List, Tuple, TypeVar, Generic, Union
@@ -13,6 +14,7 @@ class RebuildTask:
         self.is_full_sync = is_full_sync
         self.records: Set[str] = set()
         self.shared_folders: Set[str] = set()
+        self.record_types_loaded = False
 
     def add_record(self, record_uid: str) -> None:
         if self.is_full_sync:
@@ -28,6 +30,12 @@ class RebuildTask:
         if self.is_full_sync:
             return
         self.shared_folders.update(shared_folder_uids)
+
+
+@dataclasses.dataclass(frozen=True)
+class RecordOwner:
+    owner: bool
+    owner_account_id: str
 
 
 TInfo = TypeVar('TInfo')
@@ -273,25 +281,16 @@ class VaultData:
     def _decrypt_shared_folder_key(self, sf_key: storage_types.StorageSharedFolderKey) -> Optional[bytes]:
         try:
             key_bytes = sf_key.shared_folder_key
-            if sf_key.key_type == storage_types.KeyType.DataKey:
+            if sf_key.key_type == storage_types.StorageKeyType.UserClientKey_AES_GCM:
                 return crypto.decrypt_aes_v2(key_bytes, self.client_key)
 
-            if sf_key.key_type in {storage_types.KeyType.TeamKey, storage_types.KeyType.TeamRsaPrivateKey}:
-                team = self._teams.get(sf_key.team_uid)
+            if sf_key.key_type == storage_types.StorageKeyType.TeamKey_AES_GCM:
+                team = self._teams.get(sf_key.encrypter_uid)
                 if team is not None:
-                    if sf_key.key_type == storage_types.KeyType.TeamKey:
-                        if len(key_bytes) < 100:
-                            if len(key_bytes) == 60:
-                                return crypto.decrypt_aes_v2(key_bytes, team.team_key)
-                            else:
-                                return crypto.decrypt_aes_v1(key_bytes, team.team_key)
-                        elif team.rsa_private_key is not None:
-                            return crypto.decrypt_rsa(key_bytes, team.rsa_private_key)
-                    if sf_key.key_type == storage_types.KeyType.TeamRsaPrivateKey and team.rsa_private_key is not None:
-                        return crypto.decrypt_rsa(key_bytes, team.rsa_private_key)
+                    return crypto.decrypt_aes_v2(key_bytes, team.team_key)
                 else:
                     self._logger.warning('Decrypt shared folder \"%s\" key: Team \"%s\" not found',
-                                         sf_key.shared_folder_uid, sf_key.team_uid)
+                                         sf_key.shared_folder_uid, sf_key.encrypter_uid)
             else:
                 self._logger.warning('Decrypt shared folder \"%s\" key: Decryption algorithm is not found',
                                      sf_key.shared_folder_uid)
@@ -301,11 +300,11 @@ class VaultData:
     def decrypt_record_key(self, record_key: storage_types.StorageRecordKey) -> Optional[bytes]:
         try:
             key_bytes = record_key.record_key
-            if record_key.key_type == storage_types.KeyType.DataKey:
+            if record_key.key_type == storage_types.StorageKeyType.UserClientKey_AES_GCM:
                 return crypto.decrypt_aes_v2(key_bytes, self.client_key)
 
-            if record_key.key_type == storage_types.KeyType.SharedFolderKey:
-                shared_folder = self._shared_folders.get(record_key.shared_folder_uid)
+            if record_key.key_type == storage_types.StorageKeyType.SharedFolderKey_AES_Any:
+                shared_folder = self._shared_folders.get(record_key.encrypter_uid)
                 if shared_folder:
                     if len(key_bytes) == 60:
                         return crypto.decrypt_aes_v2(key_bytes, shared_folder.shared_folder_key)
@@ -313,7 +312,7 @@ class VaultData:
                         return crypto.decrypt_aes_v1(key_bytes, shared_folder.shared_folder_key)
                 else:
                     self._logger.warning('Decrypt record \"%s\" key: Shared folder \"%s\" not found',
-                                         record_key.record_uid, record_key.shared_folder_uid)
+                                         record_key.record_uid, record_key.encrypter_uid)
             else:
                 self._logger.warning('Decrypt record \"%s\" key: Decryption algorithm is not found',
                                      record_key.record_uid)
@@ -434,7 +433,7 @@ class VaultData:
 
         entity_keys.clear()
         record_key_encrypted: List[storage_types.StorageRecordKey] = []
-
+        record_owners: Dict[str, RecordOwner] = {}
         def record_keys_to_decrypt()-> Iterable[storage_types.StorageRecordKey]:
             if full_rebuild:
                 for srk in self.storage.record_keys.get_all_links():
@@ -447,21 +446,22 @@ class VaultData:
         for record_key in record_keys_to_decrypt():
             if record_key.record_uid in entity_keys:
                 continue
-            if record_key.key_type == storage_types.KeyType.RecordKey:
+            if record_key.key_type == storage_types.StorageKeyType.RecordKey_AES_GCM:
                 record_key_encrypted.append(record_key)
             else:
                 key = self.decrypt_record_key(record_key)
                 if key:
                     entity_keys[record_key.record_uid] = key
+                    record_owners[record_key.record_uid] = RecordOwner(owner=record_key.owner, owner_account_id=record_key.owner_account_uid)
 
         for record_key in record_key_encrypted:
             if record_key.record_uid in entity_keys:
                 continue
             host_record_key = None
-            if record_key.shared_folder_uid in entity_keys:
-                host_record_key = entity_keys[record_key.shared_folder_uid]
-            elif record_key.shared_folder_uid in self._records:
-                host_record_key = self._records[record_key.shared_folder_uid].record_key
+            if record_key.encrypter_uid in entity_keys:
+                host_record_key = entity_keys[record_key.encrypter_uid]
+            elif record_key.encrypter_uid in self._records:
+                host_record_key = self._records[record_key.encrypter_uid].record_key
             if host_record_key:
                 try:
                     key_bytes = record_key.record_key
@@ -474,7 +474,7 @@ class VaultData:
                     self._logger.warning('Decrypt record \"%s\" key error: %s', record_key.record_uid, e)
             else:
                 self._logger.error('Decrypt record \"%s\" key: Parent record \"%s\" not found',
-                                   record_key.record_uid, record_key.shared_folder_uid)
+                                   record_key.record_uid, record_key.encrypter_uid)
 
         def records_to_load() -> Iterable[storage_types.StorageRecord]:
             nonlocal full_rebuild
@@ -495,12 +495,17 @@ class VaultData:
                     key_bytes = entity_keys[record_uid]
                     kr = vault_extensions.load_keeper_record(record, key_bytes)
                     if kr:
+                        url = ''
                         if isinstance(kr, vault_record.TypedRecord):
                             record_type = kr.record_type
+                            url_field = next((x for x in kr.fields if x.type == 'url' and x.value), None)
+                            if url_field:
+                                url = url_field.get_default_value(str)
                         elif isinstance(kr, vault_record.FileRecord):
                             record_type = 'file'
                         elif isinstance(kr, vault_record.PasswordRecord):
                             record_type = 'legacy'
+                            url = kr.link
                         elif isinstance(kr, vault_record.ApplicationRecord):
                             record_type = 'ksm'
                         else:
@@ -516,10 +521,13 @@ class VaultData:
                         elif isinstance(kr, vault_record.PasswordRecord):
                             if kr.attachments and len(kr.attachments) > 0:
                                 has_attachments = True
+                        owner = False
+                        if record.record_uid in record_owners:
+                            owner = record_owners[record.record_uid].owner
                         info = vault_record.KeeperRecordInfo(
-                            record_uid=record.record_uid, version=record.version, record_type=record_type,
-                            title=kr.title, description=description, client_time_modified=record.client_modified_time,
-                            shared=record.shared, has_attachments=has_attachments)
+                            record_uid=record.record_uid, version=record.version, revision=record.revision,
+                            record_type=record_type, title=kr.title, url=url, description=description,
+                            owner=owner, shared=record.shared, has_attachments=has_attachments)
 
                         words = set(vault_extensions.get_record_words(kr))
                         self._records[record_uid] = LoadedRecord(key=key_bytes, info=info, words=tuple(words))
@@ -533,6 +541,27 @@ class VaultData:
             self.storage.record_keys.delete_links_for_subjects(uid_to_remove)
             self.storage.breach_watch_records.delete_uids(uid_to_remove)
             self.storage.records.delete_uids(uid_to_remove)
+
+        if len(self._keeper_record_types) == 0 or changes.record_types_loaded:
+            self._keeper_record_types.clear()
+            for srt in self.storage.record_types.get_all():
+                rt = vault_types.RecordType()
+                rt.id = srt.id
+                rt.scope = srt.scope
+                try:
+                    content = json.loads(srt.content)
+                    rt.name = content['$id']
+                    rt.description = content.get('description')
+                    for srtf in content['fields']:
+                        rtf = vault_types.RecordTypeField()
+                        rtf.type = srtf['$ref']
+                        rtf.label = srtf.get('label') or ''
+                        rtf.required = srtf.get('required') is True
+                        rt.fields.append(rtf)
+                except Exception as e:
+                    utils.get_logger().debug('Error loading record type: %s', e)
+                if rt.name:
+                    self._keeper_record_types[rt.name] = rt
 
         self.build_folders()
 
