@@ -174,15 +174,17 @@ class EnterpriseLoader(enterprise_types.IEnterpriseLoader):
 
                 for edd in ed.data:
                     storage_key: Optional[str]
+                    storage_data: Optional[bytes]
                     if ed.delete:
-                        storage_key = plugin.delete_data(edd)
+                        storage_key, storage_data = plugin.delete_data(edd)
                     else:
-                        storage_key = plugin.store_data(edd, tree_key)
+                        storage_key, storage_data = plugin.store_data(edd, tree_key)
                     if storage_key:
-                        if ed.delete:
-                            remove_from_storage.append((ed.entity, storage_key))
+                        if isinstance(storage_data, bytes) and len(storage_data) > 0:
+                            ed = enterprise_types.EnterpriseEntityData(type=ed.entity, key=storage_key, data=storage_data)
+                            add_to_storage.append(ed)
                         else:
-                            add_to_storage.append(enterprise_types.EnterpriseEntityData(type=ed.entity, key=storage_key, data=edd))
+                            remove_from_storage.append((ed.entity, storage_key))
 
             self._continuation_token = rs_data.continuationToken
             if not rs_data.hasMore:

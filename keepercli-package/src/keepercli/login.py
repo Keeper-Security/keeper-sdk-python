@@ -538,7 +538,7 @@ def logout(context: KeeperParams):
     if auth_context.sso_login_info and auth_context.sso_login_info.idp_session_id:
         sso_url = auth_context.sso_login_info.sso_url
         sp_url_builder = urllib.parse.urlparse(sso_url)
-        sp_url_query = urllib.parse.parse_qsl(sp_url_builder.query)
+        sp_url_query = urllib.parse.parse_qsl(sp_url_builder.query, keep_blank_values=True)
         session_id = auth_context.sso_login_info.idp_session_id
         if auth_context.sso_login_info.is_cloud:
             sso_rq = ssocloud_pb2.SsoCloudRequest()

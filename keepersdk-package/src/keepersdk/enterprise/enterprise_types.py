@@ -1,7 +1,7 @@
 import abc
 import enum
 from dataclasses import dataclass
-from typing import Generic, Iterable, List, Optional, Set, Type, Dict
+from typing import Generic, Iterable, List, Optional, Set, Type, Dict, Tuple
 
 import attrs
 
@@ -641,10 +641,10 @@ class IEnterpriseLoader(abc.ABC):
 
 class IEnterpriseDataPlugin(abc.ABC):
     @abc.abstractmethod
-    def store_data(self, data: bytes, key: bytes) -> str:
+    def store_data(self, data: bytes, key: bytes) -> Tuple[str, bytes]:
         pass
     @abc.abstractmethod
-    def delete_data(self, data: bytes) -> str:
+    def delete_data(self, data: bytes) -> Tuple[str, bytes]:
         pass
 
     @abc.abstractmethod
@@ -669,12 +669,12 @@ class IEnterprisePlugin(Generic[T], IEnterpriseDataPlugin, abc.ABC):
     def storage_key(self, entity: T) -> str:
         pass
 
-    def store_data(self, data: bytes, key: bytes) -> str:
+    def store_data(self, data: bytes, key: bytes) -> Tuple[str, bytes]:
         e = self.convert_entity(data, key)
         self.put_entity(e)
-        return self.storage_key(e)
+        return self.storage_key(e), data
 
-    def delete_data(self, data: bytes) -> str:
+    def delete_data(self, data: bytes) -> Tuple[str, bytes]:
         e = self.convert_entity(data, None)
         self.delete_entity(e)
-        return self.storage_key(e)
+        return self.storage_key(e), b''
