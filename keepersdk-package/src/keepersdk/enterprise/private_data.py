@@ -276,11 +276,11 @@ class RolePrivilegeLink(enterprise_types.IEnterpriseLink[enterprise_types.RolePr
         rp.set_by_name(proto_entity.privilegeType, value)
         return get_storage_key(proto_entity.roleId, proto_entity.managedNodeId, proto_entity.privilegeType)
 
-    def store_data(self, data: bytes, key: bytes) -> str:
-        return self._store_value(data, True)
+    def store_data(self, data: bytes, key: bytes) -> Tuple[str, bytes]:
+        return self._store_value(data, True), data
 
-    def delete_data(self, data: bytes) -> str:
-        return self._store_value(data, False)
+    def delete_data(self, data: bytes) -> Tuple[str, bytes]:
+        return self._store_value(data, False), b''
 
     def delete_all_privileges(self, role_id: int, managed_node_id: int) -> None:
         if self._data is not None:

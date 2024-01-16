@@ -19,7 +19,7 @@ class InMemoryVaultStorage(IVaultStorage):
         self._shared_folder_permissions = InMemoryLinkStorage[storage_types.StorageSharedFolderPermission, str, str]()
 
         self._folders = InMemoryEntityStorage[storage_types.StorageFolder, str]()
-        self._folder_records = InMemoryLinkStorage[storage_types.StorageFolderRecordLink, str, str]()
+        self._folder_records = InMemoryLinkStorage[storage_types.StorageFolderRecord, str, str]()
 
         self._breach_watch_records = InMemoryEntityStorage[storage_types.BreachWatchRecord, str]()
         self._breach_watch_security_data = InMemoryEntityStorage[storage_types.BreachWatchSecurityData, str]()

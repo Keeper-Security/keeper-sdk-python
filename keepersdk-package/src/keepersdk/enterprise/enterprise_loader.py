@@ -181,8 +181,8 @@ class EnterpriseLoader(enterprise_types.IEnterpriseLoader):
                         storage_key, storage_data = plugin.store_data(edd, tree_key)
                     if storage_key:
                         if isinstance(storage_data, bytes) and len(storage_data) > 0:
-                            ed = enterprise_types.EnterpriseEntityData(type=ed.entity, key=storage_key, data=storage_data)
-                            add_to_storage.append(ed)
+                            entity_data = enterprise_types.EnterpriseEntityData(type=ed.entity, key=storage_key, data=storage_data)
+                            add_to_storage.append(entity_data)
                         else:
                             remove_from_storage.append((ed.entity, storage_key))
 
@@ -235,7 +235,7 @@ class EnterpriseLoader(enterprise_types.IEnterpriseLoader):
         rtp = self._enterprise_data.role_team_plugin
         for rtl in role_teams:
             rtp.delete_entity(rtl)
-            yield enterprise_pb2.TEAM_USERS, rtp.storage_key(rtl)
+            yield enterprise_pb2.ROLE_TEAMS, rtp.storage_key(rtl)
 
     def _delete_role_links(self) -> Iterable[Tuple[int, str]]:
         assert self._enterprise_data is not None

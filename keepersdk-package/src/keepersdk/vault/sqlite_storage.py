@@ -23,11 +23,11 @@ class SqliteVaultStorage(vault_storage.IVaultStorage):
         non_shared_data_schema = sqlite_dao.TableSchema.load_schema(
             storage_types.StorageNonSharedData, 'record_uid', owner_column=self.owner_column, owner_type=bytes)
         record_key_schema = sqlite_dao.TableSchema.load_schema(
-            storage_types.StorageRecordKey, ['record_uid', 'shared_folder_uid'],
-            indexes={'SharedFolderUID': ['shared_folder_uid']}, owner_column=self.owner_column, owner_type=bytes)
+            storage_types.StorageRecordKey, ['record_uid', 'encrypter_uid'],
+            indexes={'EncrypterUID': ['encrypter_uid']}, owner_column=self.owner_column, owner_type=bytes)
         shared_folder_key_schema = sqlite_dao.TableSchema.load_schema(
-            storage_types.StorageSharedFolderKey, ['shared_folder_uid', 'team_uid'],
-            indexes={'TeamUID': ['team_uid']}, owner_column=self.owner_column, owner_type=bytes)
+            storage_types.StorageSharedFolderKey, ['shared_folder_uid', 'encrypter_uid'],
+            indexes={'EncrypterUID': ['encrypter_uid']}, owner_column=self.owner_column, owner_type=bytes)
         shared_folder_permission_schema = sqlite_dao.TableSchema.load_schema(
             storage_types.StorageSharedFolderPermission, ['shared_folder_uid', 'user_uid'],
             indexes={'UserUID': ['user_uid']}, owner_column=self.owner_column, owner_type=bytes)

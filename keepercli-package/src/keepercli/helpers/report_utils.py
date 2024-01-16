@@ -128,7 +128,11 @@ def dump_report_data(data: List[List[Any]],
         reverse = kwargs.get('sort_desc') is True
         key_fn = detect_column_type((x[sort_by] for x in data if 0 <= sort_by < len(x)))
         if callable(key_fn):
-            data.sort(key=lambda r: key_fn(r[sort_by] if 0 <= sort_by < len(r) else None), reverse=reverse)
+            def key_func(r: List[Any]) -> Any:
+                if isinstance(r, list) :
+                    if 0 <= sort_by < len(r):
+                        return key_fn(r[sort_by])
+            data.sort(key=key_func, reverse=reverse)
 
     if fmt == 'csv':
         if filename:

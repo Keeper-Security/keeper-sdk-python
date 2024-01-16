@@ -4,7 +4,7 @@ import sqlite3
 from typing import Dict, Optional, Any, Type
 
 from keepersdk.authentication import configuration, endpoint, keeper_auth
-from keepersdk.enterprise import loader, sqlite_enterprise_storage, legacy_enterprise
+from keepersdk.enterprise import sqlite_enterprise_storage, enterprise_data, enterprise_loader
 from keepersdk.vault import vault_online, sqlite_storage
 
 
@@ -111,8 +111,7 @@ class KeeperParams(ParamsConfig, configuration.IConfigurationStorage):
         self._auth: Optional[keeper_auth.KeeperAuth] = None
         self._vault: Optional[vault_online.VaultOnline] = None
         self._enterprise: Optional[Dict] = None
-        self._enterprise_data: Optional[legacy_enterprise.LegacyEnterpriseData] = None
-        self._enterprise_loader: Optional[loader.EnterpriseLoader] = None
+        self._enterprise_loader: Optional[enterprise_loader.EnterpriseLoader] = None
         self.current_folder: Optional[str] = None
         self._sqlite_connection: Optional[sqlite3.Connection] = None
         self._environment_variables: Dict[str, Any] = {}
@@ -122,7 +121,6 @@ class KeeperParams(ParamsConfig, configuration.IConfigurationStorage):
         self.current_folder = None
         self._enterprise = None
         self._enterprise_loader = None
-        self._enterprise_data = None
         if self._vault:
             self._vault.close()
         self._vault = None
@@ -150,9 +148,7 @@ class KeeperParams(ParamsConfig, configuration.IConfigurationStorage):
                 assert isinstance(enterprise_id, int)
                 enterprise_storage = sqlite_enterprise_storage.SqliteEnterpriseStorage(
                     self._get_connection, enterprise_id)
-                self._enterprise_data = legacy_enterprise.LegacyEnterpriseData()
-                self._enterprise_loader = loader.EnterpriseLoader(self._enterprise_data, enterprise_storage)
-                self._enterprise = {}
+                self._enterprise_loader = enterprise_loader.EnterpriseLoader(self._auth, enterprise_storage)
                 self.enterprise_down()
 
     def vault_down(self):
@@ -161,8 +157,7 @@ class KeeperParams(ParamsConfig, configuration.IConfigurationStorage):
 
     def enterprise_down(self):
         if self._auth and self._enterprise_loader:
-            affected = self._enterprise_loader.load(self._auth)
-            self._enterprise_data.synchronize(self._enterprise, affected)
+            affected = self._enterprise_loader.load()
 
     def _get_connection(self) -> sqlite3.Connection:
         if self._sqlite_connection is None:
