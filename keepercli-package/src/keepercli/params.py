@@ -4,7 +4,7 @@ import sqlite3
 from typing import Dict, Optional, Any, Type
 
 from keepersdk.authentication import configuration, endpoint, keeper_auth
-from keepersdk.enterprise import sqlite_enterprise_storage, enterprise_data, enterprise_loader
+from keepersdk.enterprise import sqlite_enterprise_storage, enterprise_types, enterprise_loader
 from keepersdk.vault import vault_online, sqlite_storage
 
 
@@ -110,7 +110,6 @@ class KeeperParams(ParamsConfig, configuration.IConfigurationStorage):
         super().__init__(config_filename, config)
         self._auth: Optional[keeper_auth.KeeperAuth] = None
         self._vault: Optional[vault_online.VaultOnline] = None
-        self._enterprise: Optional[Dict] = None
         self._enterprise_loader: Optional[enterprise_loader.EnterpriseLoader] = None
         self.current_folder: Optional[str] = None
         self._sqlite_connection: Optional[sqlite3.Connection] = None
@@ -119,7 +118,6 @@ class KeeperParams(ParamsConfig, configuration.IConfigurationStorage):
     def clear_session(self) -> None:
         self.shadow_config.clear()
         self.current_folder = None
-        self._enterprise = None
         self._enterprise_loader = None
         if self._vault:
             self._vault.close()
@@ -170,6 +168,11 @@ class KeeperParams(ParamsConfig, configuration.IConfigurationStorage):
     @property
     def vault(self) -> Optional[vault_online.VaultOnline]:
         return self._vault
+
+    @property
+    def enterprise_data(self) -> Optional[enterprise_types.IEnterpriseData]:
+        if self._enterprise_loader is not None:
+            return self._enterprise_loader.enterprise_data
 
     def get(self) -> configuration.JsonKeeperConfiguration:
         return configuration.JsonKeeperConfiguration(self.config)
