@@ -35,9 +35,8 @@ class EnterpriseLoader(enterprise_types.IEnterpriseLoader):
             tree_key = self.enterprise_data.enterprise_info.tree_key
             rq_rk = enterprise_pb2.GetEnterpriseDataKeysRequest()
             rq_rk.roleId.extend(role_ids)
-            rs_rk = self.keeper_auth.execute_auth_rest(
-                'enterprise/get_enterprise_data_keys', rq_rk,
-                response_type=enterprise_pb2.GetEnterpriseDataKeysResponse)
+            rs_rk = self.keeper_auth.execute_auth_rest('enterprise/get_enterprise_data_keys', rq_rk,
+                                                       response_type=enterprise_pb2.GetEnterpriseDataKeysResponse)
             assert rs_rk is not None
             if len(rs_rk.reEncryptedRoleKey) > 0:
                 for rk2 in rs_rk.reEncryptedRoleKey:
@@ -69,7 +68,7 @@ class EnterpriseLoader(enterprise_types.IEnterpriseLoader):
 
         if self._enterprise_data is None:
             self._enterprise_data = EnterpriseData()
-            enterprise_info = self._enterprise_data.enterprise_info()
+            enterprise_info = self._enterprise_data.enterprise_info
 
             auth_context = self._keeper_auth.auth_context
 
@@ -125,7 +124,7 @@ class EnterpriseLoader(enterprise_types.IEnterpriseLoader):
                 enterprise_info._ec_key = ec_private
 
         enterprise_data = self._enterprise_data
-        tree_key = enterprise_data.enterprise_info().tree_key
+        tree_key = enterprise_data.enterprise_info.tree_key
         if self._continuation_token is None:
             if self._storage is not None:
                 settings = self._storage.settings.load()
@@ -139,7 +138,7 @@ class EnterpriseLoader(enterprise_types.IEnterpriseLoader):
         stored_entities: Set[int] = set()
         deleted_entities: Set[int] = set()
 
-        enterprise_info = self._enterprise_data.enterprise_info()
+        enterprise_info = self._enterprise_data.enterprise_info
         add_to_storage: List[enterprise_types.EnterpriseEntityData] = []
         remove_from_storage: List[Tuple[int, str]] = []
         while True:
@@ -197,9 +196,9 @@ class EnterpriseLoader(enterprise_types.IEnterpriseLoader):
             settings.continuation_token = self._continuation_token
             self._storage.settings.store(settings)
 
-        if enterprise_data.root_node is None:
+        if enterprise_data._root_node is None:
             n: enterprise_types.Node
-            for n in enterprise_data.nodes().get_all_entities():
+            for n in enterprise_data.nodes.get_all_entities():
                 if n.parent_id is None or n.parent_id == 0:
                     enterprise_data._root_node = n
                     break
@@ -223,15 +222,15 @@ class EnterpriseLoader(enterprise_types.IEnterpriseLoader):
 
     def _delete_team_links(self) -> Iterable[Tuple[int, str]]:
         assert self._enterprise_data is not None
-        team_uids = {x.team_uid for x in self._enterprise_data.teams().get_all_entities()}
+        team_uids = {x.team_uid for x in self._enterprise_data.teams.get_all_entities()}
 
-        team_users = [x for x in self._enterprise_data.team_users().get_all_links() if x.team_uid not in team_uids]
+        team_users = [x for x in self._enterprise_data.team_users.get_all_links() if x.team_uid not in team_uids]
         tup = self._enterprise_data.team_user_plugin
         for tul in team_users:
             tup.delete_entity(tul)
             yield enterprise_pb2.TEAM_USERS, tup.storage_key(tul)
 
-        role_teams = [x for x in self._enterprise_data.role_teams().get_all_links() if x.team_uid not in team_uids]
+        role_teams = [x for x in self._enterprise_data.role_teams.get_all_links() if x.team_uid not in team_uids]
         rtp = self._enterprise_data.role_team_plugin
         for rtl in role_teams:
             rtp.delete_entity(rtl)
@@ -239,27 +238,27 @@ class EnterpriseLoader(enterprise_types.IEnterpriseLoader):
 
     def _delete_role_links(self) -> Iterable[Tuple[int, str]]:
         assert self._enterprise_data is not None
-        role_ids = {x.role_id for x in self._enterprise_data.roles().get_all_entities()}
+        role_ids = {x.role_id for x in self._enterprise_data.roles.get_all_entities()}
 
-        role_enfs = [x for x in self._enterprise_data.role_enforcements().get_all_links() if x.role_id not in role_ids]
+        role_enfs = [x for x in self._enterprise_data.role_enforcements.get_all_links() if x.role_id not in role_ids]
         rep = self._enterprise_data.role_enforcement_plugin
         for rel in role_enfs:
             rep.delete_entity(rel)
             yield enterprise_pb2.ROLE_ENFORCEMENTS, rep.storage_key(rel)
 
-        role_teams = [x for x in self._enterprise_data.role_teams().get_all_links() if x.role_id not in role_ids]
+        role_teams = [x for x in self._enterprise_data.role_teams.get_all_links() if x.role_id not in role_ids]
         rtp = self._enterprise_data.role_team_plugin
         for rtl in role_teams:
             rtp.delete_entity(rtl)
             yield enterprise_pb2.ROLE_TEAMS, rtp.storage_key(rtl)
 
-        role_users = [x for x in self._enterprise_data.role_users().get_all_links() if x.role_id not in role_ids]
+        role_users = [x for x in self._enterprise_data.role_users.get_all_links() if x.role_id not in role_ids]
         rup = self._enterprise_data.role_user_plugin
         for rul in role_users:
             rup.delete_entity(rul)
             yield enterprise_pb2.ROLE_USERS, rup.storage_key(rul)
 
-        role_privs = [x for x in self._enterprise_data.role_privileges().get_all_links() if x.role_id not in role_ids]
+        role_privs = [x for x in self._enterprise_data.role_privileges.get_all_links() if x.role_id not in role_ids]
         rpp = self._enterprise_data.role_privilege_plugin
         for rpl in role_privs:
             rpp.delete_all_privileges(rpl.role_id, rpl.managed_node_id)
@@ -268,8 +267,8 @@ class EnterpriseLoader(enterprise_types.IEnterpriseLoader):
 
     def _delete_managed_node_links(self) -> Iterable[Tuple[int, str]]:
         assert self._enterprise_data is not None
-        mn_ids = {(x.role_id, x.managed_node_id) for x in self._enterprise_data.managed_nodes().get_all_links()}
-        role_privs = [x for x in self._enterprise_data.role_privileges().get_all_links() if
+        mn_ids = {(x.role_id, x.managed_node_id) for x in self._enterprise_data.managed_nodes.get_all_links()}
+        role_privs = [x for x in self._enterprise_data.role_privileges.get_all_links() if
                       (x.role_id, x.managed_node_id) not in mn_ids]
         rpp = self._enterprise_data.role_privilege_plugin
         for rpl in role_privs:
@@ -279,21 +278,21 @@ class EnterpriseLoader(enterprise_types.IEnterpriseLoader):
 
     def _delete_user_links(self) -> Iterable[Tuple[int, str]]:
         assert self._enterprise_data is not None
-        user_ids = {x.enterprise_user_id for x in self._enterprise_data.users().get_all_entities()}
+        user_ids = {x.enterprise_user_id for x in self._enterprise_data.users.get_all_entities()}
 
-        role_users = [x for x in self._enterprise_data.role_users().get_all_links() if x.enterprise_user_id not in user_ids]
+        role_users = [x for x in self._enterprise_data.role_users.get_all_links() if x.enterprise_user_id not in user_ids]
         rup = self._enterprise_data.role_user_plugin
         for rul in role_users:
             rup.delete_entity(rul)
             yield enterprise_pb2.ROLE_USERS, rup.storage_key(rul)
 
-        team_users = [x for x in self._enterprise_data.team_users().get_all_links() if x.enterprise_user_id not in user_ids]
+        team_users = [x for x in self._enterprise_data.team_users.get_all_links() if x.enterprise_user_id not in user_ids]
         tup = self._enterprise_data.team_user_plugin
         for tul in team_users:
             tup.delete_entity(tul)
             yield enterprise_pb2.TEAM_USERS, tup.storage_key(tul)
 
-        user_aliases = [x for x in self._enterprise_data.user_aliases().get_all_links() if x.enterprise_user_id not in user_ids]
+        user_aliases = [x for x in self._enterprise_data.user_aliases.get_all_links() if x.enterprise_user_id not in user_ids]
         uap = self._enterprise_data.user_alias_plugin
         for ual in user_aliases:
             uap.delete_entity(ual)

@@ -129,6 +129,8 @@ def dump_report_data(data: List[List[Any]],
         key_fn = detect_column_type((x[sort_by] for x in data if 0 <= sort_by < len(x)))
         if callable(key_fn):
             def key_func(r: List[Any]) -> Any:
+                assert sort_by is not None
+                assert key_fn is not None
                 if isinstance(r, list) :
                     if 0 <= sort_by < len(r):
                         return key_fn(r[sort_by])

@@ -80,63 +80,83 @@ class EnterpriseData(enterprise_types.IEnterpriseData):
     def get_supported_entities(self) -> Iterable[int]:
         yield from self._entities.keys()
 
+    @property
     def enterprise_info(self):
         return self._enterprise_info
 
     @property
     def root_node(self):
+        assert self._root_node is not None
         return self._root_node
 
+    @property
     def nodes(self):
         return self._nodes
 
+    @property
     def roles(self):
         return self._roles
 
+    @property
     def users(self):
         return self._users
 
+    @property
     def teams(self):
         return self._teams
 
+    @property
     def queued_teams(self):
         return self._queued_teams
 
+    @property
     def role_users(self):
         return self._role_users
 
+    @property
     def role_privileges(self):
         return self._role_privileges
 
+    @property
     def role_enforcements(self):
         return self._role_enforcements
 
+    @property
     def role_teams(self):
         return self._role_teams
 
+    @property
     def team_users(self):
         return self._team_users
 
+    @property
     def queued_team_users(self):
         return self._queued_team_users
 
+    @property
     def licenses(self):
         return self._licenses
 
+    @property
     def managed_nodes(self):
         return self._managed_nodes
 
+    @property
     def managed_companies(self):
         return self._managed_companies
 
+    @property
     def user_aliases(self):
         return self._user_aliases
 
+    @property
     def bridges(self):
         return self._bridges
 
+    @property
     def scims(self):
         return self._scims
 
+    @property
     def sso_services(self):
         return self._sso_services

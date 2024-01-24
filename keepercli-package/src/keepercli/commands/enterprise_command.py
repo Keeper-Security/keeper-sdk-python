@@ -1,3 +1,4 @@
+import datetime
 from typing import Set, List, Dict, Iterable
 
 from keepersdk.enterprise import enterprise_types
@@ -5,13 +6,26 @@ from ..params import KeeperParams
 
 
 class EnterpriseMixin:
+    @staticmethod
+    def get_user_status_dict(user: enterprise_types.User) -> str:
+        if user.status == 'active':
+            if user.lock == 0:
+                if isinstance(user.account_share_expiration, int) and user.account_share_expiration > 0:
+                    expire_at = datetime.datetime.fromtimestamp(user.account_share_expiration // 1000.0)
+                    return 'Blocked' if expire_at < datetime.datetime.now() else 'Pending Transfer'
+                else:
+                    return 'Active'
+            else:
+                return 'Locked' if user.lock == 1 else 'Disabled'
+        else:
+            return 'Invited'
 
     @staticmethod
-    def filter_managed_nodes(context: KeeperParams, managed_nodes: Dict[int, Set[int]], root_node_id: int) -> Dict[int, Set[int]]:
-        subnodes = EnterpriseMixin.get_subnodes(context)
+    def filter_managed_nodes(enterprise_data: enterprise_types.IEnterpriseData, managed_nodes: Dict[int, Set[int]], root_node_id: int) -> Dict[int, Set[int]]:
+        subnodes = EnterpriseMixin.get_subnodes(enterprise_data)
 
         result: Dict[int, Set[int]] = {}
-        for node_id, s_nodes in managed_nodes:
+        for node_id, s_nodes in managed_nodes.items():
             if node_id == root_node_id:
                 result[node_id] = set(s_nodes)
             elif node_id in s_nodes:
@@ -27,10 +41,10 @@ class EnterpriseMixin:
         return result
 
     @staticmethod
-    def get_subnodes(context: KeeperParams) ->  Dict[int, Set[int]]:
+    def get_subnodes(enterprise_data: enterprise_types.IEnterpriseData) ->  Dict[int, Set[int]]:
         subnodes: Dict[int, Set[int]] = {}
-        for x in context.enterprise_data.nodes.get_all_entities():
-            if x.parent_id > 0:
+        for x in enterprise_data.nodes.get_all_entities():
+            if isinstance(x.parent_id, int) and x.parent_id > 0:
                 if x.parent_id not in subnodes:
                     subnodes[x.parent_id] = set()
                 subnodes[x.parent_id].add(x.node_id)
@@ -53,23 +67,23 @@ class EnterpriseMixin:
         return result
 
     @staticmethod
-    def get_managed_nodes_for_user(context: KeeperParams, username: str) -> Dict[int, bool]:
+    def get_managed_nodes_for_user(enterprise_data: enterprise_types.IEnterpriseData, username: str) -> Dict[int, bool]:
         result: Dict[int, bool] = {}
 
-        enterprise_user_id = next((x.enterprise_user_id for x in context.enterprise_data.users.get_all_entities()
+        enterprise_user_id = next((x.enterprise_user_id for x in enterprise_data.users.get_all_entities()
                                    if x.username == username), None)
         if enterprise_user_id is None:
             return result
 
-        user_roles = {x.role_id for x in context.enterprise_data.role_users.get_all_links()
+        user_roles = {x.role_id for x in enterprise_data.role_users.get_all_links()
                       if x.enterprise_user_id == enterprise_user_id}
 
-        for x in context.enterprise_data.managed_nodes.get_all_links():
+        for x in enterprise_data.managed_nodes.get_all_links():
             if x.role_id not in user_roles:
                 continue
-            if x.managed_node_id == context.enterprise_data.root_node.node_id and x.cascade_node_management:
+            if x.managed_node_id == enterprise_data.root_node.node_id and x.cascade_node_management:
                 result.clear()
-                result[context.enterprise_data.root_node.node_id] = True
+                result[enterprise_data.root_node.node_id] = True
                 break
 
             if x.managed_node_id not in result:

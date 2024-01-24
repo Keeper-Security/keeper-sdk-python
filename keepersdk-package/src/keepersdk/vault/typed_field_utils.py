@@ -1,10 +1,59 @@
-from typing import Optional
+import json
+from typing import Optional, Tuple, List
+
+from . import vault_record
 
 class TypedFieldMixin:
     week_days = ('SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY')
     occurrences = ('FIRST', 'SECOND', 'THIRD', 'FOURTH', 'LAST')
     months = ('JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER',
               'NOVEMBER', 'DECEMBER')
+
+    @staticmethod
+    def export_typed_field(field: vault_record.TypedField) -> Tuple[str, str]:
+        field_name = f'${field.type}'
+        if field.label:
+            field_name += f':{field.label}'
+        field_values: List[str] = []
+        if isinstance(field.value, list) and len(field.value) > 0:
+            for value in field.value:
+                v: Optional[str] = None
+                if isinstance(value, str):
+                    v = value
+                elif isinstance(value, int):
+                    v = str(value)
+                elif isinstance(value, bool):
+                    if value:
+                        v = '1'
+                elif isinstance(value, dict):
+                    if field.type == 'host':
+                        v = TypedFieldMixin.export_host_field(value)
+                    elif field.type == 'phone':
+                        v = TypedFieldMixin.export_phone_field(value)
+                    elif field.type == 'address':
+                        v = TypedFieldMixin.export_address_field(value)
+                    elif field.type == 'name':
+                        v = TypedFieldMixin.export_name_field(value)
+                    elif field.type == 'securityQuestion':
+                        v = TypedFieldMixin.export_q_and_a_field(value)
+                    elif field.type == 'paymentCard':
+                        v = TypedFieldMixin.export_card_field(value)
+                    elif field.type == 'bankAccount':
+                        v = TypedFieldMixin.export_account_field(value)
+                    elif field.type == 'schedule':
+                        v = TypedFieldMixin.export_schedule_field(value)
+                    else:
+                        v = json.dumps(value, sort_keys=True, skipkeys=True)
+                if v:
+                    field_values.append(v)
+
+        if len(field_values) == 0:
+            return field_name, ''
+        elif len(field_values) == 1:
+            return field_name, field_values[0]
+        else:
+            field_values.sort()
+            return field_name, '\n'.join(field_values)
 
     @staticmethod
     def get_cron_week_day(text: Optional[str]) -> Optional[int]:

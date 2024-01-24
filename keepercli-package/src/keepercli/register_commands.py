@@ -39,3 +39,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('delete-attachment', record_edit.RecordUpdateCommand(), base.CommandScope.Vault)
         commands.register_command('download-attachment', record_edit.RecordDownloadAttachmentCommand(), base.CommandScope.Vault, 'da')
         commands.register_command('upload-attachment', record_edit.RecordUploadAttachmentCommand(), base.CommandScope.Vault, 'ua')
+
+    if not scopes or bool(scopes & base.CommandScope.Enterprise):
+        from .commands import enterprise_info
+        commands.register_command('enterprise-info', enterprise_info.EnterpriseInfoCommand(), base.CommandScope.Vault, 'ei')
