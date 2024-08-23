@@ -131,3 +131,5 @@ dmypy.json
 
 *.json
 .DS_Store
+*.db
+*.sqlite

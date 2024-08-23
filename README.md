@@ -1,3 +1,7 @@
+[![PyPI](https://img.shields.io/pypi/v/keepersdk)](https://pypi.org/project/keepersdk/)
+[![License](https://img.shields.io/pypi/l/keepersdk)](https://github.com/Keeper-Security/keeper-sdk-python/blob/master/LICENSE)
+![Python](https://img.shields.io/pypi/pyversions/keepersdk)
+![License](https://img.shields.io/pypi/status/keepersdk)
 # Keeper-Security/keeper-sdk-python
 ### Keeper SDK for Python
 

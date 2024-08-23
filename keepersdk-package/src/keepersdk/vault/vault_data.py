@@ -1,0 +1,829 @@
+import dataclasses
+import itertools
+import json
+from typing import Iterable, Dict, Set, Optional, List, Tuple, TypeVar, Generic, Union, Any
+
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
+
+from . import vault_types, vault_storage, vault_record, storage_types, vault_extensions
+from .. import crypto, utils
+from ..proto import breachwatch_pb2, client_pb2
+
+
+class RebuildTask:
+    def __init__(self, is_full_sync: bool) -> None:
+        self.is_full_sync = is_full_sync
+        self.records: Set[str] = set()
+        self.shared_folders: Set[str] = set()
+        self.record_types_loaded = False
+
+    def add_record(self, record_uid: str) -> None:
+        if self.is_full_sync:
+            return
+        self.records.add(record_uid)
+
+    def add_records(self, record_uids: Iterable[str]) -> None:
+        if self.is_full_sync:
+            return
+        self.records.update(record_uids)
+
+    def add_shared_folders(self, shared_folder_uids: Iterable[str]) -> None:
+        if self.is_full_sync:
+            return
+        self.shared_folders.update(shared_folder_uids)
+
+
+@dataclasses.dataclass(frozen=True)
+class RecordOwner:
+    owner: bool
+    owner_account_id: str
+
+
+TInfo = TypeVar('TInfo')
+
+
+class EntitySearch(Generic[TInfo]):
+    info: TInfo
+    words: Optional[Tuple[str, ...]]
+
+
+TSearch = TypeVar('TSearch', bound=EntitySearch)
+
+
+class LoadedRecord(EntitySearch[vault_record.KeeperRecordInfo]):
+    def __init__(self, key: bytes, info: vault_record.KeeperRecordInfo, words: Optional[Tuple[str, ...]]=None) -> None:
+        self.record_key = key
+        self.info = info
+        self.words = words
+
+
+class LoadedSharedFolder(EntitySearch[vault_types.SharedFolderInfo]):
+    def __init__(self, key: bytes, info: vault_types.SharedFolderInfo, words: Optional[Tuple[str, ...]]=None) -> None:
+        self.shared_folder_key = key
+        self.info = info
+        self.words = words
+
+
+class LoadedTeam(EntitySearch[vault_types.TeamInfo]):
+    def __init__(self, team_key: bytes,
+                 info: vault_types.TeamInfo,
+                 words: Optional[Tuple[str, ...]] = None,
+                 rsa_key: Optional[rsa.RSAPrivateKey] = None,
+                 ec_key: Optional[ec.EllipticCurvePrivateKey] = None) -> None:
+        self.team_key = team_key
+        self.info = info
+        self.rsa_private_key = rsa_key
+        self.ec_private_key = ec_key
+        self.words = words
+
+
+class LoadedUserEmail(EntitySearch[vault_types.UserInfo]):
+    def __init__(self, info: vault_types.UserInfo, words: Optional[Tuple[str, ...]] = None) -> None:
+        self.info = info
+        self.words = words
+
+
+class VaultData:
+    def __init__(self, client_key: bytes, storage: vault_storage.IVaultStorage) -> None:
+        self._storage = storage
+        self._client_key = client_key
+        self._records: Dict[str, LoadedRecord] = {}
+        self._shared_folders: Dict[str, LoadedSharedFolder] = {}
+        self._teams: Dict[str, LoadedTeam] = {}
+        self._user_email: Dict[str, LoadedUserEmail] = {}
+        self._folders: Dict[str, vault_types.Folder] = {}
+        self._keeper_record_types: Dict[str, vault_types.RecordType] = {}
+        self._custom_record_types: List[vault_types.RecordType] = []
+        self._breach_watch_records: Dict[str, vault_types.BreachWatchInfo] = {}
+        self._root_folder: vault_types.Folder = vault_types.Folder()
+        self._root_folder.name = 'My Vault'
+        self._logger = utils.get_logger()
+
+        task = RebuildTask(True)
+        self.rebuild_data(task)
+
+    def close(self):
+        if self._storage:
+            self._storage.close()
+
+    @property
+    def storage(self):
+        return self._storage
+
+    @property
+    def client_key(self):
+        return self._client_key
+
+    @staticmethod
+    def _match_entity(entity_words: Optional[Tuple[str, ...]], words: Optional[Union[str, List[str]]]) -> bool:
+        if not words:
+            return True
+        if not entity_words:
+            return False
+        if isinstance(words, str):
+            words = list(utils.tokenize_searchable_text(words))
+        elif isinstance(words, list):
+            return False
+        for entity_word in entity_words:
+            for search_word in words:
+                if len(search_word) <= len(entity_word):
+                    if search_word in entity_word:
+                        return True
+        return False
+
+    @staticmethod
+    def _find_entities(entity_dict: Dict[str, TSearch], criteria: Optional[str]) -> Iterable[TInfo]:
+        words: Optional[List[str]] = None
+        if criteria and isinstance(criteria, str):
+            words = list(utils.tokenize_searchable_text(criteria))
+
+        for entity in entity_dict.values():
+            if words:
+                if not VaultData._match_entity(entity.words, words):
+                    continue
+            yield entity.info
+
+    def get_record(self, record_uid: str) -> Optional[vault_record.KeeperRecordInfo]:
+        rec = self._records.get(record_uid)
+        if rec:
+            return rec.info
+
+    def records(self) -> Iterable[vault_record.KeeperRecordInfo]:
+        return (x.info for x in self._records.values())
+
+    @property
+    def record_count(self) -> int:
+        return len(self._records)
+
+    def find_records(self, *,
+                     criteria: Optional[str]=None,
+                     record_type: Optional[Union[str, Iterable[str]]],
+                     record_version: Optional[Union[int, Iterable[int]]]
+                     ) -> Iterable[vault_record.KeeperRecordInfo]:
+
+        type_filter: Optional[Set[str]] = None
+        if record_type:
+            type_filter = set()
+            if isinstance(record_type, str):
+                type_filter.add(record_type)
+            if isinstance(record_type, Iterable):
+                type_filter.update(record_type)
+
+        version_filter: Optional[Set[int]] = None
+        if record_version:
+            version_filter = set()
+            if isinstance(record_version, int):
+                version_filter.add(record_version)
+            if isinstance(record_version, Iterable):
+                version_filter.update((x for x in record_version if isinstance(x, int)))
+
+        words: Optional[List[str]] = None
+        if criteria and isinstance(criteria, str):
+            words = list(utils.tokenize_searchable_text(criteria))
+
+        for e in self._records.values():
+            if version_filter and e.info.version not in version_filter:
+                continue
+            if type_filter and e.info.record_type not in type_filter:
+                continue
+            if words and not self._match_entity(e.words, words):
+                continue
+            yield e.info
+
+    def load_record(self, record_uid: str) -> Optional[vault_record.KeeperRecord]:
+        record_key = self.get_record_key(record_uid)
+        if record_key:
+            storage_record = self.storage.records.get_entity(record_uid)
+            if storage_record:
+                return load_keeper_record(storage_record, record_key)
+
+    def get_record_key(self, record_uid: str) -> Optional[bytes]:
+        if record_uid in self._records:
+            return self._records[record_uid].record_key
+
+    def get_shared_folder(self, shared_folder_uid: str) -> Optional[vault_types.SharedFolderInfo]:
+        sf = self._shared_folders.get(shared_folder_uid)
+        if sf:
+            return sf.info
+
+    def shared_folders(self) -> Iterable[vault_types.SharedFolderInfo]:
+        return (x.info for x in self._shared_folders.values())
+
+    @property
+    def shared_folder_count(self) -> int:
+        return len(self._shared_folders)
+
+    def find_shared_folders(self, criteria: str) -> Iterable[vault_types.SharedFolderInfo]:
+        e: vault_types.SharedFolderInfo
+        for e in self._find_entities(self._shared_folders, criteria):
+            yield e
+
+    def load_shared_folder(self, shared_folder_uid: str) -> Optional[vault_types.SharedFolder]:
+        if shared_folder_uid in self._shared_folders:
+            shared_folder_key = self._shared_folders[shared_folder_uid].shared_folder_key
+            sf = self.storage.shared_folders.get_entity(shared_folder_uid)
+            if sf:
+                return load_keeper_shared_folder(
+                    self, storage_shared_folder=sf,
+                    storage_records=self.storage.record_keys.get_links_by_object(sf.shared_folder_uid),
+                    storage_users=self.storage.shared_folder_permissions.get_links_by_subject(sf.shared_folder_uid),
+                    shared_folder_key=shared_folder_key)
+
+    def get_shared_folder_key(self, shared_folder_uid: str) -> Optional[bytes]:
+        if shared_folder_uid in self._shared_folders:
+            return self._shared_folders[shared_folder_uid].shared_folder_key
+
+    def user_emails(self) -> Iterable[vault_types.UserInfo]:
+        return (x.info for x in self._user_email.values())
+
+    def get_user_email(self, account_uid: str) -> Optional[vault_types.UserInfo]:
+        u = self._user_email.get(account_uid)
+        if u:
+            return u.info
+
+    def get_team(self, team_uid: str) -> Optional[vault_types.TeamInfo]:
+        t = self._teams.get(team_uid)
+        if t:
+            return t.info
+
+    def get_team_key(self, team_uid: str) -> Optional[bytes]:
+        t = self._teams.get(team_uid)
+        if t:
+            return t.team_key
+
+    def teams(self) -> Iterable[vault_types.TeamInfo]:
+        return (x.info for x in self._teams.values())
+
+    @property
+    def team_count(self) -> int:
+        return len(self._teams)
+
+    def find_teams(self, criteria: str) -> Iterable[vault_types.TeamInfo]:
+        e: vault_types.TeamInfo
+        for e in self._find_entities(self._teams, criteria):
+            yield e
+
+    def load_team(self, team_uid: str) -> Optional[vault_types.Team]:
+        if team_uid in self._teams:
+            team_key = self._teams[team_uid].team_key
+            storage_team = self.storage.teams.get_entity(team_uid)
+            return load_keeper_team(storage_team, team_key)
+
+    def get_folder(self, folder_uid: str) -> Optional[vault_types.Folder]:
+        return self._folders.get(folder_uid) if folder_uid else None
+
+    def folders(self) -> Iterable[vault_types.Folder]:
+        for folder in self._folders.values():
+            yield folder
+
+    def get_record_types(self) -> Iterable[vault_types.RecordType]:
+        return itertools.chain(self._keeper_record_types.values(), self._custom_record_types)
+
+    def get_record_type_by_name(self, name: str) -> Optional[vault_types.RecordType]:
+        rt = self._keeper_record_types.get(name.lower())
+        if not rt:
+            lname = name.lower()
+            rt = next((x for x in self._custom_record_types if x.name.lower() == lname), None)
+        return rt
+
+    @property
+    def root_folder(self) -> vault_types.Folder:
+        return self._root_folder
+
+    def _decrypt_shared_folder_key(self, sf_key: storage_types.StorageSharedFolderKey) -> Optional[bytes]:
+        try:
+            key_bytes = sf_key.shared_folder_key
+            if sf_key.key_type == storage_types.StorageKeyType.UserClientKey_AES_GCM:
+                return crypto.decrypt_aes_v2(key_bytes, self.client_key)
+
+            if sf_key.key_type == storage_types.StorageKeyType.TeamKey_AES_GCM:
+                team = self._teams.get(sf_key.encrypter_uid)
+                if team is not None:
+                    return crypto.decrypt_aes_v2(key_bytes, team.team_key)
+                else:
+                    self._logger.warning('Decrypt shared folder \"%s\" key: Team \"%s\" not found',
+                                         sf_key.shared_folder_uid, sf_key.encrypter_uid)
+            else:
+                self._logger.warning('Decrypt shared folder \"%s\" key: Decryption algorithm is not found',
+                                     sf_key.shared_folder_uid)
+        except Exception as e:
+            self._logger.error('Decrypt shared folder \"%s\" key error: %s', sf_key.shared_folder_uid, e)
+
+    def decrypt_record_key(self, record_key: storage_types.StorageRecordKey) -> Optional[bytes]:
+        try:
+            key_bytes = record_key.record_key
+            if record_key.key_type == storage_types.StorageKeyType.UserClientKey_AES_GCM:
+                return crypto.decrypt_aes_v2(key_bytes, self.client_key)
+
+            if record_key.key_type == storage_types.StorageKeyType.SharedFolderKey_AES_Any:
+                shared_folder = self._shared_folders.get(record_key.encrypter_uid)
+                if shared_folder:
+                    if len(key_bytes) == 60:
+                        return crypto.decrypt_aes_v2(key_bytes, shared_folder.shared_folder_key)
+                    else:
+                        return crypto.decrypt_aes_v1(key_bytes, shared_folder.shared_folder_key)
+                else:
+                    self._logger.warning('Decrypt record \"%s\" key: Shared folder \"%s\" not found',
+                                         record_key.record_uid, record_key.encrypter_uid)
+            else:
+                self._logger.warning('Decrypt record \"%s\" key: Decryption algorithm is not found',
+                                     record_key.record_uid)
+        except Exception as e:
+            self._logger.error('Decrypt record \"%s\" key error: %s', record_key.record_uid, e)
+
+    def breach_watch_records(self) -> Iterable[vault_types.BreachWatchInfo]:
+        yield from self._breach_watch_records.values()
+
+    def get_breach_watch_record(self, record_uid: str) -> Optional[vault_types.BreachWatchInfo]:
+        return self._breach_watch_records.get(record_uid)
+
+    def build_breach_watch(self) -> None:
+        self._breach_watch_records.clear()
+        for sbwr in self.storage.breach_watch_records.get_all_entities():
+            if sbwr.type != breachwatch_pb2.BreachWatchInfoType.RECORD:
+                continue
+            record_uid = sbwr.record_uid
+            record_key = self.get_record_key(record_uid)
+            if not record_key:
+                continue
+            try:
+                decrypted_data = crypto.decrypt_aes_v2(sbwr.data, record_key)
+                data_obj = client_pb2.BreachWatchData()
+                data_obj.ParseFromString(decrypted_data)
+                status = client_pb2.BWStatus.GOOD
+                resolved = 0
+                total = len(data_obj.passwords)
+                if total > 0:
+                    found = False
+                    if total > 1:
+                        kr = self.load_record(record_uid)
+                        if kr:
+                            password = kr.extract_password()
+                            if password:
+                                bwr = next((x for x in data_obj.passwords if x.value == password), None)
+                                if bwr:
+                                    status = bwr.status
+                                    resolved = bwr.resolved
+                                    found = True
+                    if not found:
+                        status = data_obj.passwords[0].status
+                        resolved = data_obj.passwords[0].resolved
+                self._breach_watch_records[record_uid] = vault_types.BreachWatchInfo(
+                    record_uid=record_uid, status=status, resolved=resolved, total=total)
+            except Exception as e:
+                self._logger.debug('Decrypt BreachWatch data error: %s', e)
+
+    def rebuild_data(self, changes: RebuildTask) -> None:
+        full_rebuild = changes.is_full_sync
+
+        self._user_email.clear()
+        for u in self.storage.user_emails.get_all_links():
+            user_info = vault_types.UserInfo(account_uid=u.account_uid, username=u.email)
+            words = set(utils.tokenize_searchable_text(u.email))
+            self._user_email[user_info.account_uid] = LoadedUserEmail(user_info, tuple(words))
+
+        self._teams.clear()
+        for t in self.storage.teams.get_all_entities():
+            team_uid = None
+            try:
+                team_key = crypto.decrypt_aes_v2(t.team_key, self.client_key)
+                team = load_keeper_team(t, team_key)
+                team_info = vault_types.TeamInfo(team_uid=team.team_uid, name=team.name)
+                words = set(utils.tokenize_searchable_text(team.name))
+                self._teams[team_info.team_uid] = LoadedTeam(
+                    team_key=team_key, info=team_info, words=tuple(words), rsa_key=team.rsa_private_key,
+                    ec_key=team.ec_private_key)
+            except Exception as e:
+                self._logger.warning('Error loading Team UID %s: %s', team_uid, e)
+
+        if not full_rebuild and len(self._shared_folders) > 20:
+            if len(changes.shared_folders) * 4 > len(self._shared_folders):
+                full_rebuild = True
+
+        entity_keys: Dict[str, bytes] = {}
+
+        if full_rebuild:
+            self._shared_folders.clear()
+        else:
+            for shared_folder_uid in changes.shared_folders:
+                if shared_folder_uid in self._shared_folders:
+                    changes.add_records(
+                        (x.record_uid for x in self.storage.record_keys.get_links_by_object(shared_folder_uid)))
+                    del self._shared_folders[shared_folder_uid]
+
+        entity_keys.clear()
+        if full_rebuild:
+            for sf_key in self.storage.shared_folder_keys.get_all_links():
+                if sf_key.shared_folder_uid in entity_keys:
+                    continue
+                key = self._decrypt_shared_folder_key(sf_key)
+                if key:
+                    entity_keys[sf_key.shared_folder_uid] = key
+        else:
+            for shared_folder_uid in changes.shared_folders:
+                if shared_folder_uid in entity_keys:
+                    continue
+                for sf_key in self.storage.shared_folder_keys.get_links_by_subject(shared_folder_uid):
+                    key = self._decrypt_shared_folder_key(sf_key)
+                    if key:
+                        entity_keys[sf_key.shared_folder_uid] = key
+                        break
+
+        def shared_folders_to_load() -> Iterable[storage_types.StorageSharedFolder]:
+            nonlocal full_rebuild
+            if full_rebuild:
+                for _sf in self.storage.shared_folders.get_all_entities():
+                    yield _sf
+            else:
+                for _sf_uid in changes.shared_folders:
+                    _osf = self.storage.shared_folders.get_entity(_sf_uid)
+                    if _osf:
+                        yield _osf
+
+        uid_to_remove: Set[str] = set()
+        for sf in shared_folders_to_load():
+            if sf.shared_folder_uid in entity_keys:
+                sf_key = entity_keys[sf.shared_folder_uid]
+                shared_folder = load_keeper_shared_folder(
+                    self, storage_shared_folder=sf,
+                    storage_records=self.storage.record_keys.get_links_by_object(sf.shared_folder_uid),
+                    storage_users=self.storage.shared_folder_permissions.get_links_by_subject(sf.shared_folder_uid),
+                    shared_folder_key=sf_key)
+
+                sf_info = vault_types.SharedFolderInfo(
+                    shared_folder_uid=shared_folder.shared_folder_uid,
+                    name=shared_folder.name,
+                    teams=sum((1 for x in shared_folder.user_permissions
+                               if x.user_type == storage_types.SharedFolderUserType.Team)),
+                    users=sum((1 for x in shared_folder.user_permissions
+                               if x.user_type == storage_types.SharedFolderUserType.User)),
+                    records=sum((1 for _ in shared_folder.record_permissions)),
+                )
+                sf_words: Set[str] = set()
+                sf_words.update(utils.tokenize_searchable_text(shared_folder.name))
+                for x in shared_folder.user_permissions:
+                    sf_words.update(x.user_uid)
+                    if x.name:
+                        sf_words.update(utils.tokenize_searchable_text(x.name))
+
+                self._shared_folders[sf_info.shared_folder_uid] = \
+                    LoadedSharedFolder(key=sf_key, info=sf_info, words=tuple(sf_words))
+            else:
+                uid_to_remove.add(sf.shared_folder_uid)
+
+        if len(uid_to_remove) > 0:
+            self.storage.shared_folders.delete_uids(uid_to_remove)
+            self.storage.record_keys.delete_links_for_objects(uid_to_remove)
+            self.storage.shared_folder_keys.delete_links_for_subjects(uid_to_remove)
+            self.storage.shared_folder_permissions.delete_links_for_subjects(uid_to_remove)
+            # delete sub folders
+            sf_to_remove = set(uid_to_remove)
+            sffs = [x.folder_uid for x in self.storage.folders.get_all_entities()
+                    if x.shared_folder_uid and x.shared_folder_uid in sf_to_remove]
+            self.storage.folders.delete_uids(sffs)
+            self.storage.folder_records.delete_links_for_subjects(sffs)
+
+        if full_rebuild:
+            self._records.clear()
+        else:
+            for record_uid in changes.records:
+                if record_uid in self._records:
+                    del self._records[record_uid]
+
+        entity_keys.clear()
+        record_key_encrypted: List[storage_types.StorageRecordKey] = []
+        record_owners: Dict[str, RecordOwner] = {}
+
+        def record_keys_to_decrypt()-> Iterable[storage_types.StorageRecordKey]:
+            if full_rebuild:
+                for srk in self.storage.record_keys.get_all_links():
+                    yield srk
+            else:
+                for r_uid in changes.records:
+                    for srk in self.storage.record_keys.get_links_by_subject(r_uid):
+                        yield srk
+
+        for record_key in record_keys_to_decrypt():
+            if record_key.record_uid in entity_keys:
+                continue
+            if record_key.key_type == storage_types.StorageKeyType.RecordKey_AES_GCM:
+                record_key_encrypted.append(record_key)
+            else:
+                key = self.decrypt_record_key(record_key)
+                if key:
+                    entity_keys[record_key.record_uid] = key
+                    record_owners[record_key.record_uid] = RecordOwner(owner=record_key.owner, owner_account_id=record_key.owner_account_uid)
+
+        for record_key in record_key_encrypted:
+            if record_key.record_uid in entity_keys:
+                continue
+            host_record_key = None
+            if record_key.encrypter_uid in entity_keys:
+                host_record_key = entity_keys[record_key.encrypter_uid]
+            elif record_key.encrypter_uid in self._records:
+                host_record_key = self._records[record_key.encrypter_uid].record_key
+            if host_record_key:
+                try:
+                    key_bytes = record_key.record_key
+                    if len(key_bytes) == 60:
+                        key = crypto.decrypt_aes_v2(key_bytes, host_record_key)
+                    else:
+                        key = crypto.decrypt_aes_v1(key_bytes, host_record_key)
+                    entity_keys[record_key.record_uid] = key
+                except Exception as e:
+                    self._logger.warning('Decrypt record \"%s\" key error: %s', record_key.record_uid, e)
+            else:
+                self._logger.error('Decrypt record \"%s\" key: Parent record \"%s\" not found',
+                                   record_key.record_uid, record_key.encrypter_uid)
+
+        def records_to_load() -> Iterable[storage_types.StorageRecord]:
+            nonlocal full_rebuild
+            if full_rebuild:
+                for _r in self.storage.records.get_all_entities():
+                    yield _r
+            else:
+                for _r_uid in changes.records:
+                    _or = self.storage.records.get_entity(_r_uid)
+                    if _or:
+                        yield _or
+
+        uid_to_remove.clear()
+        for record in records_to_load():
+            record_uid = record.record_uid
+            if record_uid in entity_keys:
+                try:
+                    key_bytes = entity_keys[record_uid]
+                    kr = load_keeper_record(record, key_bytes)
+                    if kr:
+                        if isinstance(kr, vault_record.TypedRecord):
+                            record_type = kr.record_type
+                        elif isinstance(kr, vault_record.FileRecord):
+                            record_type = 'file'
+                        elif isinstance(kr, vault_record.PasswordRecord):
+                            record_type = 'legacy'
+                        elif isinstance(kr, vault_record.ApplicationRecord):
+                            record_type = 'ksm'
+                        else:
+                            record_type = ''
+                        description = vault_extensions.get_record_description(kr)
+                        flags = vault_record.RecordFlags(0)
+                        has_attachments = False
+                        if isinstance(kr, vault_record.TypedRecord):
+                            file_field = kr.get_typed_field('fileRef')
+                            if isinstance(file_field, vault_record.TypedField):
+                                attachments = file_field.get_external_value()
+                                if attachments:
+                                    has_attachments = True
+                        elif isinstance(kr, vault_record.PasswordRecord):
+                            if kr.attachments and len(kr.attachments) > 0:
+                                has_attachments = True
+                        if has_attachments:
+                            flags |= vault_record.RecordFlags.HasAttachments
+                        owner = False
+                        if record.record_uid in record_owners:
+                            owner = record_owners[record.record_uid].owner
+                        if owner:
+                            flags |= vault_record.RecordFlags.IsOwner
+                        if record.shared:
+                            flags |= vault_record.RecordFlags.IsShared
+                        password = kr.extract_password()
+                        if password:
+                            flags |= vault_record.RecordFlags.HasPassword
+                        url = kr.extract_url()
+                        if url:
+                            flags |= vault_record.RecordFlags.HasUrl
+                        info = vault_record.KeeperRecordInfo(
+                            record_uid=record.record_uid, version=record.version, revision=record.revision,
+                            record_type=record_type, title=kr.title, description=description, flags=flags)
+
+                        words = set(vault_extensions.get_record_words(kr))
+                        self._records[record_uid] = LoadedRecord(key=key_bytes, info=info, words=tuple(words))
+                except Exception as e:
+                    raise e
+                    # self._logger.warning('Load record \"%s\" error: %s', record_uid, e)
+            else:
+                uid_to_remove.add(record_uid)
+
+        if len(uid_to_remove) > 0:
+            self.storage.record_keys.delete_links_for_subjects(uid_to_remove)
+            self.storage.breach_watch_records.delete_uids(uid_to_remove)
+            self.storage.records.delete_uids(uid_to_remove)
+
+        if len(self._keeper_record_types) == 0 or changes.record_types_loaded:
+            self._keeper_record_types.clear()
+            for srt in self.storage.record_types.get_all_entities():
+                rt = vault_types.RecordType()
+                rt.id = srt.id
+                rt.scope = srt.scope
+                try:
+                    content = json.loads(srt.content)
+                    rt.name = content['$id']
+                    rt.description = content.get('description')
+                    for srtf in content['fields']:
+                        rtf = vault_types.RecordTypeField()
+                        rtf.type = srtf['$ref']
+                        rtf.label = srtf.get('label') or ''
+                        rtf.required = srtf.get('required') is True
+                        rt.fields.append(rtf)
+                except Exception as e:
+                    utils.get_logger().debug('Error loading record type: %s', e)
+                if rt.name:
+                    self._keeper_record_types[rt.name.lower()] = rt
+
+        self.build_breach_watch()
+        self.build_folders()
+
+    def build_folders(self) -> None:
+        logger = utils.get_logger()
+        self._folders.clear()
+
+        self._root_folder.records.clear()
+        self._root_folder.subfolders.clear()
+
+        self._folders[self.root_folder.folder_uid] = self._root_folder
+        for fol in self.storage.folders.get_all_entities():
+            folder = vault_types.Folder()
+            folder.folder_uid = fol.folder_uid
+            folder.parent_uid = fol.parent_uid
+            folder.folder_type = fol.folder_type
+
+            try:
+                data = None
+                if folder.folder_type == 'user_folder':
+                    folder.folder_key = crypto.decrypt_aes_v2(fol.folder_key, self.client_key)
+                    data = crypto.decrypt_aes_v1(fol.data, folder.folder_key)
+                else:
+                    folder.folder_scope_uid = fol.shared_folder_uid
+                    shared_folder = self._shared_folders.get(fol.shared_folder_uid)
+                    if shared_folder:
+                        if folder.folder_type == 'shared_folder_folder':
+                            folder.folder_key = crypto.decrypt_aes_v1(fol.folder_key, shared_folder.shared_folder_key)
+                            data = crypto.decrypt_aes_v1(fol.data, folder.folder_key)
+                        else:
+                            folder.folder_key = shared_folder.shared_folder_key
+                            if fol.data:
+                                data = crypto.decrypt_aes_v1(fol.data, folder.folder_key)
+                            else:
+                                folder.name = shared_folder.info.name
+                if data:
+                    data_dict = json.loads(data.decode('utf-8'))
+                    if 'name' in data_dict:
+                        folder.name = data_dict['name']
+            except Exception as e:
+                self._logger.debug('Folder %s name decrypt error: %s', folder.folder_uid, e)
+
+            if not folder.name:
+                folder.name = folder.folder_uid
+            self._folders[folder.folder_uid] = folder
+
+        lost_folders: Set[str] = set()
+        for folder_uid, folder in self._folders.items():
+            if folder_uid:
+                parent: Optional[vault_types.Folder] = None
+                if folder.parent_uid:
+                    parent = self._folders.get(folder.parent_uid)
+                    if parent is None:
+                        logger.debug('Folder UID "%s": Parent Folder UID "%s" not found. Try default.',
+                                     folder.folder_uid, folder.parent_uid)
+                        if folder.folder_type == 'shared_folder_folder':
+                            if folder.folder_scope_uid is not None:
+                                parent = self._folders.get(folder.folder_scope_uid)
+                        else:
+                            parent = self._root_folder
+                else:
+                    if folder.folder_type == 'shared_folder_folder':
+                        if folder.folder_scope_uid is not None:
+                            parent = self._folders.get(folder.folder_scope_uid)
+                    else:
+                        parent = self._root_folder
+
+                if parent:
+                    parent.subfolders.add(folder.folder_uid)
+                else:
+                    lost_folders.add(folder.folder_uid)
+                    self._logger.warning('Folder UID "%s": Parent folder "%s" cannot be resolved',
+                                         folder.folder_uid, folder.parent_uid)
+
+        for link in self.storage.folder_records.get_all_links():
+            record_uid = link.record_uid
+            if record_uid:
+                folder_uid = link.folder_uid
+                folder = self._folders[folder_uid] if folder_uid in self._folders else self._root_folder
+                folder.records.add(record_uid)
+
+
+def load_keeper_shared_folder(vault: VaultData, *,
+                              storage_shared_folder: storage_types.StorageSharedFolder,
+                              storage_records: Iterable[storage_types.StorageRecordKey],
+                              storage_users: Iterable[storage_types.StorageSharedFolderPermission],
+                              shared_folder_key: bytes) -> vault_types.SharedFolder:
+    shared_folder_uid = storage_shared_folder.shared_folder_uid
+    shared_folder = vault_types.SharedFolder()
+    shared_folder.shared_folder_uid = shared_folder_uid
+    shared_folder.default_manage_records = storage_shared_folder.default_manage_records
+    shared_folder.default_manage_users = storage_shared_folder.default_manage_users
+    shared_folder.default_can_edit = storage_shared_folder.default_can_edit
+    shared_folder.default_can_share = storage_shared_folder.default_can_share
+    if storage_shared_folder.data:
+        try:
+            decrypted_data = crypto.decrypt_aes_v1(storage_shared_folder.data, shared_folder_key)
+            data = json.loads(decrypted_data.decode())
+            if 'name' in data:
+                shared_folder.name = data['name']
+        except Exception as e:
+            utils.get_logger().debug('Error decrypting Shared Folder %s data: %s', shared_folder_uid, e)
+    if not shared_folder.name:
+        try:
+            dec_name = crypto.decrypt_aes_v1(storage_shared_folder.name, shared_folder_key)
+            shared_folder.name = dec_name.decode('utf-8')
+        except Exception as e:
+            utils.get_logger().debug('Error decrypting Shared Folder %s name: %s', shared_folder_uid, e)
+    if not shared_folder.name:
+        shared_folder.name = shared_folder_uid
+
+    for up in storage_users:
+        sf_p = vault_types.SharedFolderPermission()
+        sf_p.user_type = up.user_type
+        sf_p.user_uid = up.user_uid
+        sf_p.manage_records = up.manage_records
+        sf_p.manage_users = up.manage_users
+        if sf_p.user_type == vault_types.SharedFolderUserType.User:
+            account_info = vault.get_user_email(sf_p.user_uid)
+            if account_info:
+                sf_p.name = account_info.username
+        else:
+            team_info = vault.get_team(sf_p.user_uid)
+            if team_info:
+                sf_p.name = team_info.name
+        shared_folder.user_permissions.append(sf_p)
+
+    for rp in storage_records:
+        sf_r = vault_types.SharedFolderRecord()
+        sf_r.record_uid = rp.record_uid
+        sf_r.can_edit = rp.can_edit
+        sf_r.can_share = rp.can_share
+        shared_folder.record_permissions.append(sf_r)
+
+    return shared_folder
+
+
+def load_keeper_team(storage_team: storage_types.StorageTeam, team_key: bytes) -> vault_types.Team:
+    team = vault_types.Team()
+    team.team_uid = storage_team.team_uid
+    team.name = storage_team.name
+    team.restrict_edit = storage_team.restrict_edit
+    team.restrict_view = storage_team.restrict_view
+    team.restrict_share = storage_team.restrict_share
+    if storage_team.rsa_private_key:
+        rsa_private_key = crypto.decrypt_aes_v1(storage_team.rsa_private_key, team_key)
+        team.rsa_private_key = crypto.load_rsa_private_key(rsa_private_key)
+    if storage_team.ec_private_key:
+        ec_private_key = crypto.decrypt_aes_v2(storage_team.ec_private_key, team_key)
+        team.ec_private_key = crypto.load_ec_private_key(ec_private_key)
+    return team
+
+
+def load_keeper_record(record: storage_types.StorageRecord, record_key: bytes) -> Optional[vault_record.KeeperRecord]:
+    if record.version in {0, 1, 2}:
+        data_bytes = crypto.decrypt_aes_v1(record.data, record_key)
+        data_dict = json.loads(data_bytes.decode())
+    elif record.version in {3, 4, 5}:
+        data_bytes = crypto.decrypt_aes_v2(record.data, record_key)
+        data_dict = json.loads(data_bytes.decode())
+    else:
+        return None
+
+    extra_dict: Optional[Dict[str, Any]] = None
+    if record.extra:
+        extra_bytes = crypto.decrypt_aes_v1(record.extra, record_key)
+        extra_dict = json.loads(extra_bytes.decode())
+
+    udata_dict: Optional[Dict[str, Any]] = None
+    if record.udata:
+        try:
+            udata_dict = json.loads(record.udata)
+        except Exception as e:
+            utils.get_logger().debug('Parse record \"%s\" Udata error: %s ', record.record_uid, e)
+
+    k_record: vault_record.KeeperRecord
+    if record.version in {0, 1, 2}:
+        k_record = vault_record.PasswordRecord()
+    elif record.version == 3:
+        k_record = vault_record.TypedRecord()
+    elif record.version == 4:
+        k_record = vault_record.FileRecord()
+        if udata_dict:
+            k_record.storage_size = udata_dict.get('file_size')
+    elif record.version == 5:
+        k_record = vault_record.ApplicationRecord()
+    elif record.version == 6:
+        k_record = vault_record.TypedRecord()
+    else:
+        return None
+
+    k_record.record_uid = record.record_uid
+    k_record.client_time_modified = record.modified_time
+
+    k_record.load_record_data(data_dict, extra_dict)
+
+    return k_record

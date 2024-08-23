@@ -1,0 +1,58 @@
+from datetime import timedelta
+from re import findall
+
+from .. import constants
+
+
+def parse_timeout(timeout_input: str) -> timedelta:
+    """Parse timeout input to return instance of timedelta
+
+    timeout_input(str): String to parse for one or more integer values followed by time unit names. The allowed time
+        units are found in the list constants.TIMEOUT_ALLOWED_UNITS. Any substring from the beginning of the allowed
+        unit may be provided. If no time unit names are included, then the default time unit from
+        constants.TIMEOUT_DEFAULT_UNIT is used. An error is raised if a unit name in timeout_input is unrecognized.
+    Returns instance of timedelta from the unit values and names.
+    """
+    if timeout_input.strip().isnumeric():
+        tdelta_kwargs = {constants.TIMEOUT_DEFAULT_UNIT: int(timeout_input)}
+    else:
+        all_units = constants.TIMEOUT_ALLOWED_UNITS
+        tdelta_kwargs = {}
+        for v, input_unit in findall(r'(\d+)\s*([a-zA-Z]+)\s*', timeout_input):
+            key_match = [t for t in all_units if t.startswith(input_unit)]
+            if len(key_match) == 0:
+                raise ValueError(
+                    f'{input_unit} is not allowed as a unit for the timeout value. '
+                    f'Valid units for the timeout value are {constants.TIMEOUT_ALLOWED_UNITS}.'
+                )
+            tdelta_kwargs[key_match[0]] = int(v)
+    return timedelta(**tdelta_kwargs)
+
+
+def format_timeout(timeout_delta: timedelta) -> str:
+    """Format timeout as instance of timedelta for output to console
+
+    timeout_delta(timedelta): Timeout setting as instance of timedelta.
+    Returns string with value and names of time units separated by commas. If all unit values are zero,
+        then the string '0' is returned.
+    """
+    if timeout_delta == timedelta(0):
+        return '0'
+    else:
+        days = timeout_delta.days
+        secs = timeout_delta.seconds
+        hours, secs = divmod(secs, 3600)
+        mins, secs = divmod(secs, 60)
+        components = [(days, 'days'), (hours, 'hours'), (mins, 'minutes')]
+        nonzero_units = [f'{v} {k[:-1] if v == 1 else k}' for v, k in components if v != 0]
+        return ', '.join(nonzero_units)
+
+
+def get_timeout_setting_from_delta(timeout_delta: timedelta) -> str:
+    """Get timeout setting in minutes to be used in an API call to the Keeper backend
+
+    timeout_delta(timedelta): Timeout setting as instance of timedelta.
+    Returns string representation of the integer value of timeout minutes.
+    """
+    timeout_seconds = int(timeout_delta.total_seconds() // 60)
+    return str(timeout_seconds)
