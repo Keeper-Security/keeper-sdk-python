@@ -3,13 +3,8 @@ from unittest import TestCase
 
 from keepersdk import crypto, utils
 
-from cryptography.hazmat.primitives import serialization
 
 class TestCrypto(TestCase):
-    def test_key(self):
-        rr = utils.base64_url_encode(crypto.get_random_bytes(32))
-        pass
-
     def test_rsa_invalid_key(self):
         encrypted_text = "NePhr5g-Ee8oyYrPZUlsYanKmVKC1GTCFk-t0JoHm_ceQlZjBMd-_qZb-73_n-hSyJtkzQUa6jmoPLNlkVkukiiKMOFD93V4N4_1yxjyLMHp2RMHZJjszJwiqZ0JAjySpFOSJ5owYUrSVyhIgl6d3a_l_dbTxRNqy2UYMkMeSSJv2LjufxUyf5eYpPloWWWx8WSqizXuCo3hDfe0RtIRNshKAx1I1Xc6pixib58lIRtD0NzO6jsGyyGbdlqI6W0olkSvZpBVU5edqmAhclXLoeNF5xK7jYuGxqBFxrhKCwRcbaSOI-1DdyTYdj5LC_MmB5QXi-Lc_RoGs0g5sTIP"
         private_key_text = "MIIEogIBAAKCAQBc7ja0E2D3FqTgrCMl-W_wjyH8FfFOlfiIbUC5U2iW_8zeo6KyHI-O47XF7uniILOQmj7q02qR8jPdWwYzGRfQyASDbk41nWUrEGr-RQ6bht_jRJNOYiwIza5kr06mcgoXjsRBzNhhMsTl-aTZaBRUGVBx0mLdic70E_0W9dKyHJvbBfSPxJto7hCuu93yViIN2w_QSNrOzagFFZGhdz-BzrOybuUhoBE18cARTdPUZ_UlU_vIymORTHbBvneqXZ2Ua6ohsc7_AM38FYlftkJBNDGnH_UruLGd6kLzGszzdchxexjjE488rahibXDvMbl3-hR1OyL2-6q_uPi5whhpAgMBAAECggEAORHVqFrqRnOyh4NPBogbtXjBHyV-jotNGMM3Z1iQt4KaFvQY-xbNFqxCui5RlZwNijUfhGiXXs-GCF9Y_FJhrMbY9rnr78McGQk5G7PfF6YJonE_oXhqoHFnss9yFoecKQF1Bw-8plxeTPk1wonHSipNm8jfDDwQSxZnbA1E-joW4Gy9MchmE96pS2OxrN8y2MpEhKMz_fkCbUjUj5-ipP8hYJr-WbpcnyeWDgFS3j7xuB31312yroWEgaQ_a8hbVM6gyqn2DuLjcYImCR38ZK39vBtqc9j9E_7Cl_BSfGR7FFmoIVndW60XQFEJJgxAZhbusYjAb59H6UfDRz4tjQKBgQCsdEvXrUP3Rx_7juvVEt6k8MbdDBuERvDlz-1KMEXa_3e5TZStgU1-MNcF98Kx9lHqHd7TZuCmsFf4wnvVZLhO9AH6uR7VvOCXtnqfbiZG54YpQzYty4o_EqM-TosPaRaF6-z6YnBtSUS74qUDzKa3RKbpO66zstM3CfsPsJzLFwKBgQCJ82p4_1g4Oh-ro0HNWH42u3XNN83YynPmSkeYCTaEhMVfVx4EOh7LuPV4itt7U9SkcWkFhGw1abwZC4m9cEHzsVOFR5Hk5Gnke7MGHRHTjat_olYcb5wYE1p3KcZOa6Zoa4J52UliehbE6e3HpcF8P3PiJ_16QvUn3hIl7UhofwKBgQCJTHnJd6_h4mWLMSl_VWufI_cfq_EIajaGsPk5lJ85ESVviV2ymXxp2FaI8M24Q-TJoQhzhLec3k7bxXMz3OGEMm6U_-eVwa-J-gU8g0TENLYyiclLwn4JYzxGcd_y3_bHnqLoYZEi4S9w6qv4D2o4BNdiX1rixJ-2dSLGRhU-9wKBgFENbh-Nl93heL41-_GU7wNlfT-IbC_WM-a4-fvAXgHaqMTtwLsnEvULxV5_55k8lhHQeK4_MfzoFRZ6CwH9NSLjq3kBphzgf785VuRerByqfntNfF7UzNfwdxTQvK1S3sE3eb_yBQYRSdOExqqpH1fLSGE2sd3l_XjhJ7SVCBgtAoGAGhV87Flduuxm29U28EWIBAZGJnABgZocEdc6xTj_3fdEW1CSZXLL5fR27OPeO_esDhZKgFsNrHw8bdNFXtiWLNECwPleLhEYnmQHbd40hZ6mAQu899i_OVIyzgXtkqS1-nD3uLTl8VRxxOmi3NhnaQrr6Kl2Ou6kVYyvfO8AoVg"
@@ -95,6 +90,22 @@ class TestCrypto(TestCase):
         encryption_key = crypto.ec_shared_key(public_key, private_key)
         encoded_key = utils.base64_url_encode(encryption_key)
         self.assertEqual(encoded_key, "liPcydc_ZsUiIFB1k4KCMTeqr_8N3SKulHpRk_TdGoE")
+
+    def test_sign(self):
+        priv_key = "HIIeyuuRkVGvhtax8mlX7fangaC6DKa2R8VAg5AAtBY"
+        pub_key = "BFHzjwGKkKBg3AvDRlGx4abuKl2-8K-lWnD5dnjA83AEbTWZUvwBoeWrC3DnVXf48trQmP0rbW2P4ShF9XRKEmk"
+        data1 = utils.base64_url_decode('nm-8mRG7xYwUG2duaOZzw-ttuqfetWjVIzoridJF0EJOGlDLs1ZWQ7F9mOJ0Hxuy' +
+                                       'dFyojxdxVo1fGwbfwf0Jew07HhGGE5UZ_s57rQvhizDW3F3z9a7EqHRon0EilCbMhIzE')
+        data2 = utils.base64_url_decode('Nt9_Y37C_43eRCRQCptb64zFaJVLcXF1udabOr_fyGXkpjpYeCAI7zVQD4JjewB' +
+                                        'CP1Xp7D6dx-pxdRWkhDEnVhJ3fzezi8atmmzvf2ICfkDK0IHHB8iNSx_R1Ru8To' +
+                                        'zb-IdavT3wKi7nKSJLDdt-dk-Mw7bCewpZtg4wY-1UQw')
+
+        private_key = crypto.load_ec_private_key(utils.base64_url_decode(priv_key))
+        public_key = crypto.load_ec_public_key(utils.base64_url_decode(pub_key))
+        expected_signature = utils.base64_url_decode(
+            'MEUCIFzZeuXLGT7kNxoQwGDTMP1KA_l8Vne35Um021by_PEgAiEA7EeCzC6qclI94wXdVC4X_KCZjxUorzu_XvWLqGYaEPs')
+        is_valid = crypto.verify_ec(expected_signature, data1 + data2, public_key)
+        self.assertTrue(is_valid)
 
 
 _test_public_key = "MIIBCgKCAQEAqR0AjmBXo371pYmvS1NM8nXlbAv5qUbPYuV6KVwKjN3T8WX5K6HD" \

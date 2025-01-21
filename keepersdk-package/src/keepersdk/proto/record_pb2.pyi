@@ -543,16 +543,18 @@ class FilesGetResponse(_message.Message):
     def __init__(self, files: _Optional[_Iterable[_Union[FileGetStatus, _Mapping]]] = ...) -> None: ...
 
 class ApplicationAddRequest(_message.Message):
-    __slots__ = ("app_uid", "record_key", "client_modified_time", "data")
+    __slots__ = ("app_uid", "record_key", "client_modified_time", "data", "audit")
     APP_UID_FIELD_NUMBER: _ClassVar[int]
     RECORD_KEY_FIELD_NUMBER: _ClassVar[int]
     CLIENT_MODIFIED_TIME_FIELD_NUMBER: _ClassVar[int]
     DATA_FIELD_NUMBER: _ClassVar[int]
+    AUDIT_FIELD_NUMBER: _ClassVar[int]
     app_uid: bytes
     record_key: bytes
     client_modified_time: int
     data: bytes
-    def __init__(self, app_uid: _Optional[bytes] = ..., record_key: _Optional[bytes] = ..., client_modified_time: _Optional[int] = ..., data: _Optional[bytes] = ...) -> None: ...
+    audit: RecordAudit
+    def __init__(self, app_uid: _Optional[bytes] = ..., record_key: _Optional[bytes] = ..., client_modified_time: _Optional[int] = ..., data: _Optional[bytes] = ..., audit: _Optional[_Union[RecordAudit, _Mapping]] = ...) -> None: ...
 
 class GetRecordDataWithAccessInfoRequest(_message.Message):
     __slots__ = ("clientTime", "recordUid", "recordDetailsInclude")

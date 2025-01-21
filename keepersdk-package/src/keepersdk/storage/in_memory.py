@@ -1,4 +1,4 @@
-from typing import Dict, Any, Callable, Optional, Generic
+from typing import Dict, Any, Callable, Optional, Generic, Iterable
 from .storage_types import IEntityStorage, ILinkStorage, IRecordStorage, IUidLink, IUid, T, K, KS, KO
 
 
@@ -28,7 +28,7 @@ class InMemoryEntityStorage(Generic[T, K], IEntityStorage[T, K]):
         for item in self._items.values():
             yield item
 
-    def put_entities(self, entities):
+    def put_entities(self, entities: Iterable[T]) -> None:
         for entity in entities:
             if isinstance(entity, IUid):
                 uid = entity.uid()
@@ -89,7 +89,7 @@ class InMemoryLinkStorage(Generic[T, KS, KO], ILinkStorage[T, KS, KO]):
                 if object_uid in self._links[subject_uid]:
                     del self._links[subject_uid][object_uid]
 
-    def delete_links_for_subjects(self, subject_uids):
+    def delete_links_by_subjects(self, subject_uids):
         for subject_uid in subject_uids:
             if subject_uid in self._links:
                 del self._links[subject_uid]

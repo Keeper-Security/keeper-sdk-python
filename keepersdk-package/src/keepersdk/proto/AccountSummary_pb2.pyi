@@ -115,7 +115,7 @@ class SyncLog(_message.Message):
     def __init__(self, countryName: _Optional[str] = ..., secondsAgo: _Optional[int] = ..., deviceName: _Optional[str] = ..., countryCode: _Optional[str] = ..., deviceUID: _Optional[bytes] = ..., ipAddress: _Optional[str] = ...) -> None: ...
 
 class License(_message.Message):
-    __slots__ = ("subscriptionCode", "productTypeId", "productTypeName", "expirationDate", "secondsUntilExpiration", "maxDevices", "filePlanType", "bytesUsed", "bytesTotal", "secondsUntilStorageExpiration", "storageExpirationDate", "hasAutoRenewableAppstoreSubscription", "accountType", "uploadsRemaining", "enterpriseId", "chatEnabled", "auditAndReportingEnabled", "breachWatchFeatureDisable", "accountUid", "allowPersonalLicense", "licensedBy", "email", "breachWatchEnabled", "breachWatchScanned", "breachWatchExpiration", "breachWatchDateCreated", "error")
+    __slots__ = ("subscriptionCode", "productTypeId", "productTypeName", "expirationDate", "secondsUntilExpiration", "maxDevices", "filePlanType", "bytesUsed", "bytesTotal", "secondsUntilStorageExpiration", "storageExpirationDate", "hasAutoRenewableAppstoreSubscription", "accountType", "uploadsRemaining", "enterpriseId", "chatEnabled", "auditAndReportingEnabled", "breachWatchFeatureDisable", "accountUid", "allowPersonalLicense", "licensedBy", "email", "breachWatchEnabled", "breachWatchScanned", "breachWatchExpiration", "breachWatchDateCreated", "error", "expiration", "storageExpiration", "uploadsCount", "units", "pendingEnterprise")
     SUBSCRIPTIONCODE_FIELD_NUMBER: _ClassVar[int]
     PRODUCTTYPEID_FIELD_NUMBER: _ClassVar[int]
     PRODUCTTYPENAME_FIELD_NUMBER: _ClassVar[int]
@@ -143,6 +143,11 @@ class License(_message.Message):
     BREACHWATCHEXPIRATION_FIELD_NUMBER: _ClassVar[int]
     BREACHWATCHDATECREATED_FIELD_NUMBER: _ClassVar[int]
     ERROR_FIELD_NUMBER: _ClassVar[int]
+    EXPIRATION_FIELD_NUMBER: _ClassVar[int]
+    STORAGEEXPIRATION_FIELD_NUMBER: _ClassVar[int]
+    UPLOADSCOUNT_FIELD_NUMBER: _ClassVar[int]
+    UNITS_FIELD_NUMBER: _ClassVar[int]
+    PENDINGENTERPRISE_FIELD_NUMBER: _ClassVar[int]
     subscriptionCode: str
     productTypeId: int
     productTypeName: str
@@ -170,7 +175,12 @@ class License(_message.Message):
     breachWatchExpiration: int
     breachWatchDateCreated: int
     error: Result
-    def __init__(self, subscriptionCode: _Optional[str] = ..., productTypeId: _Optional[int] = ..., productTypeName: _Optional[str] = ..., expirationDate: _Optional[str] = ..., secondsUntilExpiration: _Optional[int] = ..., maxDevices: _Optional[int] = ..., filePlanType: _Optional[int] = ..., bytesUsed: _Optional[int] = ..., bytesTotal: _Optional[int] = ..., secondsUntilStorageExpiration: _Optional[int] = ..., storageExpirationDate: _Optional[str] = ..., hasAutoRenewableAppstoreSubscription: bool = ..., accountType: _Optional[int] = ..., uploadsRemaining: _Optional[int] = ..., enterpriseId: _Optional[int] = ..., chatEnabled: bool = ..., auditAndReportingEnabled: bool = ..., breachWatchFeatureDisable: bool = ..., accountUid: _Optional[bytes] = ..., allowPersonalLicense: bool = ..., licensedBy: _Optional[str] = ..., email: _Optional[str] = ..., breachWatchEnabled: bool = ..., breachWatchScanned: bool = ..., breachWatchExpiration: _Optional[int] = ..., breachWatchDateCreated: _Optional[int] = ..., error: _Optional[_Union[Result, _Mapping]] = ...) -> None: ...
+    expiration: int
+    storageExpiration: int
+    uploadsCount: int
+    units: int
+    pendingEnterprise: bool
+    def __init__(self, subscriptionCode: _Optional[str] = ..., productTypeId: _Optional[int] = ..., productTypeName: _Optional[str] = ..., expirationDate: _Optional[str] = ..., secondsUntilExpiration: _Optional[int] = ..., maxDevices: _Optional[int] = ..., filePlanType: _Optional[int] = ..., bytesUsed: _Optional[int] = ..., bytesTotal: _Optional[int] = ..., secondsUntilStorageExpiration: _Optional[int] = ..., storageExpirationDate: _Optional[str] = ..., hasAutoRenewableAppstoreSubscription: bool = ..., accountType: _Optional[int] = ..., uploadsRemaining: _Optional[int] = ..., enterpriseId: _Optional[int] = ..., chatEnabled: bool = ..., auditAndReportingEnabled: bool = ..., breachWatchFeatureDisable: bool = ..., accountUid: _Optional[bytes] = ..., allowPersonalLicense: bool = ..., licensedBy: _Optional[str] = ..., email: _Optional[str] = ..., breachWatchEnabled: bool = ..., breachWatchScanned: bool = ..., breachWatchExpiration: _Optional[int] = ..., breachWatchDateCreated: _Optional[int] = ..., error: _Optional[_Union[Result, _Mapping]] = ..., expiration: _Optional[int] = ..., storageExpiration: _Optional[int] = ..., uploadsCount: _Optional[int] = ..., units: _Optional[int] = ..., pendingEnterprise: bool = ...) -> None: ...
 
 class AddOn(_message.Message):
     __slots__ = ("licenseKeyId", "name", "expirationDate", "createdDate", "isTrial", "enabled", "scanned", "featureDisable")

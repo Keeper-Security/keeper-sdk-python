@@ -10,7 +10,7 @@ from google.protobuf.json_format import MessageToDict
 
 from . import endpoint, configuration, notifications, keeper_auth, auth_utils
 from .. import crypto, utils, errors
-from ..proto import APIRequest_pb2, breachwatch_pb2, push_pb2, ssocloud_pb2
+from ..proto import APIRequest_pb2, breachwatch_pb2, ssocloud_pb2
 
 
 class ILoginStep(abc.ABC):
@@ -585,6 +585,9 @@ def _store_configuration(login: LoginAuth) -> None:
     if not isc:
         sc = configuration.ServerConfiguration(login.keeper_endpoint.server)
         sc.server_key_id = login.keeper_endpoint.server_key_id
+    elif isc.server_key_id != login.keeper_endpoint.server_key_id:
+        sc = configuration.ServerConfiguration(login.keeper_endpoint.server)
+        sc.server_key_id = login.keeper_endpoint.server_key_id
     if sc:
         config.servers().put(sc)
 
@@ -614,7 +617,13 @@ def _redirect_to_region(login: LoginAuth, region_host: str) -> None:
 def _ensure_push_notifications(login: LoginAuth) -> None:
     if login.push_notifications:
         return
-    login.push_notifications = login.keeper_endpoint.connect_to_push_server(login.context.message_session_uid, login.context.device_token)
+
+    keeper_pushes = notifications.KeeperPushNotifications()
+    transmission_key = utils.generate_aes_key()
+    url = login.keeper_endpoint.get_push_url(transmission_key, login.context.device_token, login.context.message_session_uid)
+    keeper_pushes.connect_to_push_channel(url, transmission_key)
+    login.push_notifications = keeper_pushes
+
 
 def _get_session_token_scope(session_token_type: APIRequest_pb2.SessionTokenType) -> keeper_auth.SessionTokenRestriction:
     if session_token_type == APIRequest_pb2.SessionTokenType.ACCOUNT_RECOVERY:
@@ -743,8 +752,7 @@ def _on_logged_in(login: LoginAuth, response: APIRequest_pb2.LoginResponse,
     _post_login(logged_auth)
 
     if auth_context.session_token_restriction == keeper_auth.SessionTokenRestriction.Unrestricted:
-        logged_auth.push_notifications = keeper_endpoint.connect_to_push_server(
-            login.context.message_session_uid, login.context.device_token, auth_context.session_token)
+        logged_auth.start_pushes()
 
     login.login_step = _ConnectedLoginStep(logged_auth)
     logged_auth.on_idle()

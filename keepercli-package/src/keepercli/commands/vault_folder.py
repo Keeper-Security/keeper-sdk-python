@@ -127,7 +127,7 @@ class FolderListCommand(base.ArgparseCommand):
                 table = []
                 headers = ['Flags', 'UID', 'Name', 'Type']
                 if len(folders) > 0:
-                    folders.sort(key=lambda f: f.name.casefold())
+                    folders.sort(key=lambda fo: fo.name.casefold())
                     for x in folders:
                         flag = 'f--'
                         flag += 'S' if x.folder_type != 'user_folder' else '-'

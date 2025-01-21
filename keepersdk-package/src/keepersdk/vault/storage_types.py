@@ -80,6 +80,7 @@ class StorageTeam(IUid):
 class StorageFolder(IUid):
     def __init__(self) -> None:
         self.folder_uid = ''
+        # TODO
         self.parent_uid = ''
         self.folder_type = ''
         self.folder_key = b''

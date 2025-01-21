@@ -1,14 +1,14 @@
 import argparse
-import base64
-from typing import Any, Set, List
+from typing import Any, Set
+
+from keepersdk.proto import client_pb2
+from keepersdk.vault import vault_record
 
 from . import base
 from .. import api
 from ..helpers import report_utils, record_utils
 from ..params import KeeperParams
-from keepersdk.proto import client_pb2, breachwatch_pb2
-from keepersdk.vault import vault_record
-from keepersdk import crypto, utils
+
 
 class BreachWatchCommand(base.GroupCommand):
     def __init__(self):

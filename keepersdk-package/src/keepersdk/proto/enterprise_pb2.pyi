@@ -61,6 +61,7 @@ class EnterpriseDataEntity(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     USER_ALIASES: _ClassVar[EnterpriseDataEntity]
     COMPLIANCE_REPORT_CRITERIA_AND_FILTER: _ClassVar[EnterpriseDataEntity]
     COMPLIANCE_REPORTS: _ClassVar[EnterpriseDataEntity]
+    QUEUED_TEAM_USERS_INCLUDING_PENDING: _ClassVar[EnterpriseDataEntity]
 
 class CacheStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -99,6 +100,8 @@ class EnterpriseFlagType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     FORBID_KEY_TYPE_2: _ClassVar[EnterpriseFlagType]
     CONSOLE_ONBOARDED: _ClassVar[EnterpriseFlagType]
     FORBID_ACCOUNT_TRANSFER: _ClassVar[EnterpriseFlagType]
+    NPS_POPUP_OPT_OUT: _ClassVar[EnterpriseFlagType]
+    SHOW_USER_ONBOARD: _ClassVar[EnterpriseFlagType]
 
 class UserUpdateStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -179,6 +182,7 @@ DEVICES_REQUEST_FOR_ADMIN_APPROVAL: EnterpriseDataEntity
 USER_ALIASES: EnterpriseDataEntity
 COMPLIANCE_REPORT_CRITERIA_AND_FILTER: EnterpriseDataEntity
 COMPLIANCE_REPORTS: EnterpriseDataEntity
+QUEUED_TEAM_USERS_INCLUDING_PENDING: EnterpriseDataEntity
 KEEP: CacheStatus
 CLEAR: CacheStatus
 NO_KEY: BackupKeyType
@@ -202,6 +206,8 @@ ENTERPRISE_LOCKED: EnterpriseFlagType
 FORBID_KEY_TYPE_2: EnterpriseFlagType
 CONSOLE_ONBOARDED: EnterpriseFlagType
 FORBID_ACCOUNT_TRANSFER: EnterpriseFlagType
+NPS_POPUP_OPT_OUT: EnterpriseFlagType
+SHOW_USER_ONBOARD: EnterpriseFlagType
 USER_UPDATE_OK: UserUpdateStatus
 USER_UPDATE_ACCESS_DENIED: UserUpdateStatus
 OK: AuditUserStatus
@@ -549,20 +555,22 @@ class SpecialProvisioning(_message.Message):
     def __init__(self, url: _Optional[str] = ..., name: _Optional[str] = ...) -> None: ...
 
 class GeneralDataEntity(_message.Message):
-    __slots__ = ("enterpriseName", "restrictVisibility", "specialProvisioning", "userPrivilege", "distributor", "forbidAccountTransfer")
+    __slots__ = ("enterpriseName", "restrictVisibility", "specialProvisioning", "userPrivilege", "distributor", "forbidAccountTransfer", "showUserOnboard")
     ENTERPRISENAME_FIELD_NUMBER: _ClassVar[int]
     RESTRICTVISIBILITY_FIELD_NUMBER: _ClassVar[int]
     SPECIALPROVISIONING_FIELD_NUMBER: _ClassVar[int]
     USERPRIVILEGE_FIELD_NUMBER: _ClassVar[int]
     DISTRIBUTOR_FIELD_NUMBER: _ClassVar[int]
     FORBIDACCOUNTTRANSFER_FIELD_NUMBER: _ClassVar[int]
+    SHOWUSERONBOARD_FIELD_NUMBER: _ClassVar[int]
     enterpriseName: str
     restrictVisibility: bool
     specialProvisioning: SpecialProvisioning
     userPrivilege: UserPrivilege
     distributor: bool
     forbidAccountTransfer: bool
-    def __init__(self, enterpriseName: _Optional[str] = ..., restrictVisibility: bool = ..., specialProvisioning: _Optional[_Union[SpecialProvisioning, _Mapping]] = ..., userPrivilege: _Optional[_Union[UserPrivilege, _Mapping]] = ..., distributor: bool = ..., forbidAccountTransfer: bool = ...) -> None: ...
+    showUserOnboard: bool
+    def __init__(self, enterpriseName: _Optional[str] = ..., restrictVisibility: bool = ..., specialProvisioning: _Optional[_Union[SpecialProvisioning, _Mapping]] = ..., userPrivilege: _Optional[_Union[UserPrivilege, _Mapping]] = ..., distributor: bool = ..., forbidAccountTransfer: bool = ..., showUserOnboard: bool = ...) -> None: ...
 
 class Node(_message.Message):
     __slots__ = ("nodeId", "parentId", "bridgeId", "scimId", "licenseId", "encryptedData", "duoEnabled", "rsaEnabled", "ssoServiceProviderId", "restrictVisibility", "ssoServiceProviderIds")
@@ -835,7 +843,7 @@ class MSPContact(_message.Message):
     def __init__(self, enterpriseId: _Optional[int] = ..., enterpriseName: _Optional[str] = ...) -> None: ...
 
 class LicenseAddOn(_message.Message):
-    __slots__ = ("name", "enabled", "isTrial", "expiration", "created", "seats", "activationTime", "includedInProduct", "apiCallCount")
+    __slots__ = ("name", "enabled", "isTrial", "expiration", "created", "seats", "activationTime", "includedInProduct", "apiCallCount", "tierDescription")
     NAME_FIELD_NUMBER: _ClassVar[int]
     ENABLED_FIELD_NUMBER: _ClassVar[int]
     ISTRIAL_FIELD_NUMBER: _ClassVar[int]
@@ -845,6 +853,7 @@ class LicenseAddOn(_message.Message):
     ACTIVATIONTIME_FIELD_NUMBER: _ClassVar[int]
     INCLUDEDINPRODUCT_FIELD_NUMBER: _ClassVar[int]
     APICALLCOUNT_FIELD_NUMBER: _ClassVar[int]
+    TIERDESCRIPTION_FIELD_NUMBER: _ClassVar[int]
     name: str
     enabled: bool
     isTrial: bool
@@ -854,7 +863,8 @@ class LicenseAddOn(_message.Message):
     activationTime: int
     includedInProduct: bool
     apiCallCount: int
-    def __init__(self, name: _Optional[str] = ..., enabled: bool = ..., isTrial: bool = ..., expiration: _Optional[int] = ..., created: _Optional[int] = ..., seats: _Optional[int] = ..., activationTime: _Optional[int] = ..., includedInProduct: bool = ..., apiCallCount: _Optional[int] = ...) -> None: ...
+    tierDescription: str
+    def __init__(self, name: _Optional[str] = ..., enabled: bool = ..., isTrial: bool = ..., expiration: _Optional[int] = ..., created: _Optional[int] = ..., seats: _Optional[int] = ..., activationTime: _Optional[int] = ..., includedInProduct: bool = ..., apiCallCount: _Optional[int] = ..., tierDescription: _Optional[str] = ...) -> None: ...
 
 class MCDefault(_message.Message):
     __slots__ = ("mcProduct", "addOns", "filePlanType", "maxLicenses", "fixedMaxLicenses")

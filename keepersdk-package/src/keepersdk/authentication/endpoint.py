@@ -1,23 +1,23 @@
-import abc
 import base64
 import json
 import locale
 import logging
+import os
 import time
 import warnings
-from typing import Optional, Dict, Any, Type, TypeVar, Callable
-from urllib.parse import urlunparse
+from typing import Optional, Dict, Any, Type, TypeVar
+from urllib.parse import urlunparse, urlparse
 
 import requests
 from google.protobuf.json_format import MessageToJson
 from google.protobuf.message import Message
 from urllib3.exceptions import InsecureRequestWarning
 
-from . import configuration, notifications
+from . import configuration
 from .. import crypto, utils
 from .. import errors
 from ..constants import DEFAULT_KEEPER_SERVER, DEFAULT_DEVICE_NAME, CLIENT_VERSION
-from ..proto import APIRequest_pb2, push_pb2
+from ..proto import APIRequest_pb2, router_pb2, push_pb2
 
 TRQ = TypeVar('TRQ', bound=Message)
 TRS = TypeVar('TRS', bound=Message)
@@ -88,7 +88,6 @@ class KeeperEndpoint(object):
         self._server = ''
         self._server_key_id = 7
         self._storage = configuration_storage
-        self._transmission_key = utils.generate_aes_key()
         if not keeper_server:
             config = configuration_storage.get()
             keeper_server = config.last_server
@@ -107,6 +106,8 @@ class KeeperEndpoint(object):
         if sc:
             self._server = sc.server
             self._server_key_id = sc.server_key_id
+            if self._server_key_id < 7:
+                self._server_key_id = 7
         else:
             self._server = keeper_server
             self._server_key_id = 7
@@ -124,63 +125,62 @@ class KeeperEndpoint(object):
     def get_router_server(self):
         return f'connect.{self.server}'
 
-    def execute_router(self, endpoint: str, *, session_token: bytes,
-                       request: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+    def execute_router_rest(self, endpoint: str, *, session_token: bytes, payload: Optional[bytes] = None) -> Optional[bytes]:
         logger = utils.get_logger()
-        encrypted_session_token = crypto.encrypt_aes_v2(session_token, self._transmission_key)
-        encrypted_transmission_key = encrypt_with_keeper_key(self._transmission_key, self._server_key_id)
+        transmission_key = utils.generate_aes_key()
+        encrypted_session_token = crypto.encrypt_aes_v2(session_token, transmission_key)
+        encrypted_transmission_key = encrypt_with_keeper_key(transmission_key, self._server_key_id)
 
         headers = {
             'TransmissionKey': base64.b64encode(encrypted_transmission_key).decode('ascii'),
             'Authorization': 'KeeperUser ' + base64.b64encode(encrypted_session_token).decode('ascii'),
-            'ClientVersion': self.client_version,
         }
 
-        if endpoint.startswith('https://'):
-            url = endpoint
+        if 'ROUTER_URL' in os.environ:
+            up = urlparse(os.environ['ROUTER_URL'])
+            url_comp = (up.scheme, up.netloc, f'api/user/{endpoint}', None, None, None)
         else:
-            url_comp = ('https', self.get_router_server(), 'api/user/' + endpoint, None, None, None)
-            url = urlunparse(url_comp)
+            url_comp = ('https', self.get_router_server(), f'api/user/{endpoint}', None, None, None)
+        url = urlunparse(url_comp)
 
-        if request is None:
-            logger.debug('>>> [ROUTER] GET Request: [%s]', url)
-            response = requests.get(url, headers=headers)
-        else:
-            logger.debug('>>> [ROUTER] POST Request: [%s]', url)
-            body = json.dumps(request)
-            logger.debug('>>> [ROUTER] [RQ] \"%s\": %s', endpoint, body)
-            headers['Content-Type'] = 'application/json'
-            response = requests.post(url, headers=headers, data=body)
+        logger.debug('>>> [ROUTER] POST Request: [%s]', url)
+        if payload is not None:
+            payload = crypto.encrypt_aes_v2(payload, transmission_key)
+        response = requests.post(url, headers=headers, data=payload)
         logger.debug('<<<  [ROUTER] Response Code: [%d]', response.status_code)
 
-        content_type: str = response.headers.get('Content-Type') or ''
         if response.status_code == 200:
-            if content_type == 'application/json':
-                json_rs = response.json()
-                if logger.level <= logging.DEBUG:
-                    js = json.dumps(json_rs)
-                    logger.debug('>>> [ROUTER] [RS] \"%s\": %s', endpoint, js)
-                return json_rs
-            return None
-
-        if content_type.endswith('/text'):
-            message = response.text
+            rs_body = response.content
+            if rs_body:
+                router_response = router_pb2.RouterResponse()
+                router_response.ParseFromString(rs_body)
+                if router_response.responseCode == router_pb2.RouterResponseCode.RRC_OK:
+                    if router_response.encryptedPayload:
+                        return crypto.decrypt_aes_v2(router_response.encryptedPayload, transmission_key)
+                else:
+                    if router_response.responseCode == router_pb2.RouterResponseCode.RRC_BAD_REQUEST:
+                        code = 'bad_request'
+                    elif router_response.responseCode == router_pb2.RouterResponseCode.RRC_NOT_ALLOWED:
+                        code = 'not_allowed'
+                    else:
+                        code = 'router_error'
+                    raise errors.KeeperApiError(code, router_response.errorMessage)
         else:
             message = response.reason
-        raise errors.KeeperApiError('router_error', f'{message}: {response.status_code}')
+            raise errors.KeeperApiError('router_error', f'{message}: {response.status_code}')
 
     def _communicate_keeper(self, endpoint: str,
                             payload: Optional[bytes],
                             session_token: Optional[bytes] = None,
                             payload_version: Optional[int] = None) -> Optional[bytes]:
         logger = utils.get_logger()
-
+        transmission_key = utils.generate_aes_key()
         key_id = self.server_key_id
         attempt = 0
         while attempt < 3:
             attempt += 1
 
-            api_request = prepare_api_request(key_id, self._transmission_key, payload,
+            api_request = prepare_api_request(key_id, transmission_key, payload,
                                               session_token=session_token,
                                               keeper_locale=self.locale,
                                               payload_version=payload_version)
@@ -211,7 +211,7 @@ class KeeperEndpoint(object):
                     self._storage.put(config)
 
                 rs_body = rs.content
-                return crypto.decrypt_aes_v2(rs_body, self._transmission_key) if rs_body else None
+                return crypto.decrypt_aes_v2(rs_body, transmission_key) if rs_body else None
             elif content_type.startswith('application/json'):
                 error_rs = rs.json()
                 if 'error' in error_rs:
@@ -282,29 +282,19 @@ class KeeperEndpoint(object):
             rs = json.loads(rs_str)
             return rs
 
-    def connect_to_push_server(self,
-                               session_uid: bytes,
-                               device_token: bytes,
-                               data: Optional[bytes] = None
-                               ) -> notifications.KeeperPushNotifications:
+    def get_push_url(self, transmission_key: bytes, device_token: bytes, message_session_uid: bytes) -> str:
+        rq = push_pb2.WssConnectionRequest()
+        rq.messageSessionUid = message_session_uid
+        rq.encryptedDeviceToken = device_token
+        rq.deviceTimeStamp = utils.current_milli_time()
+        payload = rq.SerializeToString()
 
-        def get_push_url(transmission_key: bytes) -> str:
-            rq = push_pb2.WssConnectionRequest()
-            rq.messageSessionUid = session_uid
-            rq.encryptedDeviceToken = device_token
-            rq.deviceTimeStamp = utils.current_milli_time()
-            payload = rq.SerializeToString()
-
-            api_rq = prepare_api_request(self.server_key_id, transmission_key, payload)
-            push_server = self.get_push_server()
-            url_comp = ('wss', push_server, '/wss_open_connection/' + utils.base64_url_encode(api_rq.SerializeToString()),
-                        None, None, None)
-            push_url = urlunparse(url_comp)
-            return str(push_url)
-
-        keeper_pushes = notifications.KeeperPushNotifications()
-        keeper_pushes.connect_to_push_channel(get_push_url, data)
-        return keeper_pushes
+        api_rq = prepare_api_request(self.server_key_id, transmission_key, payload)
+        push_server = self.get_push_server()
+        push_url = '/wss_open_connection/' + utils.base64_url_encode(api_rq.SerializeToString())
+        url_comp = ('wss', push_server, push_url, None, None, None)
+        push_url = urlunparse(url_comp)
+        return str(push_url)
 
 
 SERVER_PUBLIC_KEYS: Dict[int, Any] = {

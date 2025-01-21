@@ -946,7 +946,7 @@ class RecordDownloadAttachmentCommand(base.ArgparseCommand):
                 if os.path.isfile(name):
                     base_name, ext = os.path.splitext(file_name)
                     name = os.path.join(subfolder_path, f'{base_name}({atta.file_id}){ext}')
-                atta.download_to_file(name)
+                atta.download_to_file(str(name))
 
 
 class RecordUploadAttachmentCommand(base.ArgparseCommand):

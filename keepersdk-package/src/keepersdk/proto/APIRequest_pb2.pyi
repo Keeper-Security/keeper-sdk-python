@@ -72,6 +72,7 @@ class SessionTokenType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     ENTERPRISE_CREATION: _ClassVar[SessionTokenType]
     EXPIRED_BUT_ALLOWED_TO_SYNC: _ClassVar[SessionTokenType]
     ACCEPT_FAMILY_INVITE: _ClassVar[SessionTokenType]
+    ENTERPRISE_CREATION_PURCHASED: _ClassVar[SessionTokenType]
     EMERGENCY_ACCESS: _ClassVar[SessionTokenType]
 
 class Version(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
@@ -237,6 +238,13 @@ class ApplicationShareType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     SHARE_TYPE_RECORD: _ClassVar[ApplicationShareType]
     SHARE_TYPE_FOLDER: _ClassVar[ApplicationShareType]
 
+class TimeLimitedAccessType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    INVALID_TIME_LIMITED_ACCESS_TYPE: _ClassVar[TimeLimitedAccessType]
+    USER_ACCESS_TO_RECORD: _ClassVar[TimeLimitedAccessType]
+    USER_OR_TEAM_ACCESS_TO_SHAREDFOLDER: _ClassVar[TimeLimitedAccessType]
+    RECORD_ACCESS_TO_SHAREDFOLDER: _ClassVar[TimeLimitedAccessType]
+
 class BackupKeyType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
     BKT_SEC_ANSWER: _ClassVar[BackupKeyType]
@@ -296,6 +304,7 @@ SUPPORT_SERVER: SessionTokenType
 ENTERPRISE_CREATION: SessionTokenType
 EXPIRED_BUT_ALLOWED_TO_SYNC: SessionTokenType
 ACCEPT_FAMILY_INVITE: SessionTokenType
+ENTERPRISE_CREATION_PURCHASED: SessionTokenType
 EMERGENCY_ACCESS: SessionTokenType
 invalid_version: Version
 default_version: Version
@@ -406,6 +415,10 @@ jp: Region
 ca: Region
 SHARE_TYPE_RECORD: ApplicationShareType
 SHARE_TYPE_FOLDER: ApplicationShareType
+INVALID_TIME_LIMITED_ACCESS_TYPE: TimeLimitedAccessType
+USER_ACCESS_TO_RECORD: TimeLimitedAccessType
+USER_OR_TEAM_ACCESS_TO_SHAREDFOLDER: TimeLimitedAccessType
+RECORD_ACCESS_TO_SHAREDFOLDER: TimeLimitedAccessType
 BKT_SEC_ANSWER: BackupKeyType
 BKT_PASSPHRASE_HASH: BackupKeyType
 SUCCESS: GenericStatus
@@ -1610,7 +1623,7 @@ class PasswordRules(_message.Message):
     def __init__(self, ruleType: _Optional[str] = ..., match: bool = ..., pattern: _Optional[str] = ..., description: _Optional[str] = ..., minimum: _Optional[int] = ..., value: _Optional[str] = ...) -> None: ...
 
 class GetDataKeyBackupV3Response(_message.Message):
-    __slots__ = ("dataKeyBackup", "dataKeyBackupDate", "publicKey", "encryptedPrivateKey", "clientKey", "encryptedSessionToken", "passwordRules", "passwordRulesIntro", "minimumPbkdf2Iterations")
+    __slots__ = ("dataKeyBackup", "dataKeyBackupDate", "publicKey", "encryptedPrivateKey", "clientKey", "encryptedSessionToken", "passwordRules", "passwordRulesIntro", "minimumPbkdf2Iterations", "keyType")
     DATAKEYBACKUP_FIELD_NUMBER: _ClassVar[int]
     DATAKEYBACKUPDATE_FIELD_NUMBER: _ClassVar[int]
     PUBLICKEY_FIELD_NUMBER: _ClassVar[int]
@@ -1620,6 +1633,7 @@ class GetDataKeyBackupV3Response(_message.Message):
     PASSWORDRULES_FIELD_NUMBER: _ClassVar[int]
     PASSWORDRULESINTRO_FIELD_NUMBER: _ClassVar[int]
     MINIMUMPBKDF2ITERATIONS_FIELD_NUMBER: _ClassVar[int]
+    KEYTYPE_FIELD_NUMBER: _ClassVar[int]
     dataKeyBackup: bytes
     dataKeyBackupDate: int
     publicKey: bytes
@@ -1629,7 +1643,8 @@ class GetDataKeyBackupV3Response(_message.Message):
     passwordRules: _containers.RepeatedCompositeFieldContainer[PasswordRules]
     passwordRulesIntro: str
     minimumPbkdf2Iterations: int
-    def __init__(self, dataKeyBackup: _Optional[bytes] = ..., dataKeyBackupDate: _Optional[int] = ..., publicKey: _Optional[bytes] = ..., encryptedPrivateKey: _Optional[bytes] = ..., clientKey: _Optional[bytes] = ..., encryptedSessionToken: _Optional[bytes] = ..., passwordRules: _Optional[_Iterable[_Union[PasswordRules, _Mapping]]] = ..., passwordRulesIntro: _Optional[str] = ..., minimumPbkdf2Iterations: _Optional[int] = ...) -> None: ...
+    keyType: _enterprise_pb2.KeyType
+    def __init__(self, dataKeyBackup: _Optional[bytes] = ..., dataKeyBackupDate: _Optional[int] = ..., publicKey: _Optional[bytes] = ..., encryptedPrivateKey: _Optional[bytes] = ..., clientKey: _Optional[bytes] = ..., encryptedSessionToken: _Optional[bytes] = ..., passwordRules: _Optional[_Iterable[_Union[PasswordRules, _Mapping]]] = ..., passwordRulesIntro: _Optional[str] = ..., minimumPbkdf2Iterations: _Optional[int] = ..., keyType: _Optional[_Union[_enterprise_pb2.KeyType, str]] = ...) -> None: ...
 
 class GetPublicKeysRequest(_message.Message):
     __slots__ = ("usernames",)
@@ -1748,16 +1763,18 @@ class AppShareAdd(_message.Message):
     def __init__(self, secretUid: _Optional[bytes] = ..., shareType: _Optional[_Union[ApplicationShareType, str]] = ..., encryptedSecretKey: _Optional[bytes] = ..., editable: bool = ...) -> None: ...
 
 class AppShare(_message.Message):
-    __slots__ = ("secretUid", "shareType", "editable", "createdOn")
+    __slots__ = ("secretUid", "shareType", "editable", "createdOn", "data")
     SECRETUID_FIELD_NUMBER: _ClassVar[int]
     SHARETYPE_FIELD_NUMBER: _ClassVar[int]
     EDITABLE_FIELD_NUMBER: _ClassVar[int]
     CREATEDON_FIELD_NUMBER: _ClassVar[int]
+    DATA_FIELD_NUMBER: _ClassVar[int]
     secretUid: bytes
     shareType: ApplicationShareType
     editable: bool
     createdOn: int
-    def __init__(self, secretUid: _Optional[bytes] = ..., shareType: _Optional[_Union[ApplicationShareType, str]] = ..., editable: bool = ..., createdOn: _Optional[int] = ...) -> None: ...
+    data: bytes
+    def __init__(self, secretUid: _Optional[bytes] = ..., shareType: _Optional[_Union[ApplicationShareType, str]] = ..., editable: bool = ..., createdOn: _Optional[int] = ..., data: _Optional[bytes] = ...) -> None: ...
 
 class AddAppClientRequest(_message.Message):
     __slots__ = ("appRecordUid", "encryptedAppKey", "clientId", "lockIp", "firstAccessExpireOn", "accessExpireOn", "id", "appClientType")
@@ -1854,7 +1871,7 @@ class GetAppInfoResponse(_message.Message):
     def __init__(self, appInfo: _Optional[_Iterable[_Union[AppInfo, _Mapping]]] = ...) -> None: ...
 
 class ApplicationSummary(_message.Message):
-    __slots__ = ("appRecordUid", "lastAccess", "recordShares", "folderShares", "folderRecords", "clientCount", "expiredClientCount")
+    __slots__ = ("appRecordUid", "lastAccess", "recordShares", "folderShares", "folderRecords", "clientCount", "expiredClientCount", "username", "appData")
     APPRECORDUID_FIELD_NUMBER: _ClassVar[int]
     LASTACCESS_FIELD_NUMBER: _ClassVar[int]
     RECORDSHARES_FIELD_NUMBER: _ClassVar[int]
@@ -1862,6 +1879,8 @@ class ApplicationSummary(_message.Message):
     FOLDERRECORDS_FIELD_NUMBER: _ClassVar[int]
     CLIENTCOUNT_FIELD_NUMBER: _ClassVar[int]
     EXPIREDCLIENTCOUNT_FIELD_NUMBER: _ClassVar[int]
+    USERNAME_FIELD_NUMBER: _ClassVar[int]
+    APPDATA_FIELD_NUMBER: _ClassVar[int]
     appRecordUid: bytes
     lastAccess: int
     recordShares: int
@@ -1869,7 +1888,9 @@ class ApplicationSummary(_message.Message):
     folderRecords: int
     clientCount: int
     expiredClientCount: int
-    def __init__(self, appRecordUid: _Optional[bytes] = ..., lastAccess: _Optional[int] = ..., recordShares: _Optional[int] = ..., folderShares: _Optional[int] = ..., folderRecords: _Optional[int] = ..., clientCount: _Optional[int] = ..., expiredClientCount: _Optional[int] = ...) -> None: ...
+    username: str
+    appData: bytes
+    def __init__(self, appRecordUid: _Optional[bytes] = ..., lastAccess: _Optional[int] = ..., recordShares: _Optional[int] = ..., folderShares: _Optional[int] = ..., folderRecords: _Optional[int] = ..., clientCount: _Optional[int] = ..., expiredClientCount: _Optional[int] = ..., username: _Optional[str] = ..., appData: _Optional[bytes] = ...) -> None: ...
 
 class GetApplicationsSummaryResponse(_message.Message):
     __slots__ = ("applicationSummary",)
@@ -1894,6 +1915,42 @@ class SendShareInviteRequest(_message.Message):
     EMAIL_FIELD_NUMBER: _ClassVar[int]
     email: str
     def __init__(self, email: _Optional[str] = ...) -> None: ...
+
+class TimeLimitedAccessRequest(_message.Message):
+    __slots__ = ("accountUid", "teamUid", "recordUid", "sharedObjectUid", "timeLimitedAccessType", "expiration")
+    ACCOUNTUID_FIELD_NUMBER: _ClassVar[int]
+    TEAMUID_FIELD_NUMBER: _ClassVar[int]
+    RECORDUID_FIELD_NUMBER: _ClassVar[int]
+    SHAREDOBJECTUID_FIELD_NUMBER: _ClassVar[int]
+    TIMELIMITEDACCESSTYPE_FIELD_NUMBER: _ClassVar[int]
+    EXPIRATION_FIELD_NUMBER: _ClassVar[int]
+    accountUid: _containers.RepeatedScalarFieldContainer[bytes]
+    teamUid: _containers.RepeatedScalarFieldContainer[bytes]
+    recordUid: _containers.RepeatedScalarFieldContainer[bytes]
+    sharedObjectUid: bytes
+    timeLimitedAccessType: TimeLimitedAccessType
+    expiration: int
+    def __init__(self, accountUid: _Optional[_Iterable[bytes]] = ..., teamUid: _Optional[_Iterable[bytes]] = ..., recordUid: _Optional[_Iterable[bytes]] = ..., sharedObjectUid: _Optional[bytes] = ..., timeLimitedAccessType: _Optional[_Union[TimeLimitedAccessType, str]] = ..., expiration: _Optional[int] = ...) -> None: ...
+
+class TimeLimitedAccessStatus(_message.Message):
+    __slots__ = ("uid", "message")
+    UID_FIELD_NUMBER: _ClassVar[int]
+    MESSAGE_FIELD_NUMBER: _ClassVar[int]
+    uid: bytes
+    message: str
+    def __init__(self, uid: _Optional[bytes] = ..., message: _Optional[str] = ...) -> None: ...
+
+class TimeLimitedAccessResponse(_message.Message):
+    __slots__ = ("revision", "userAccessStatus", "teamAccessStatus", "recordAccessStatus")
+    REVISION_FIELD_NUMBER: _ClassVar[int]
+    USERACCESSSTATUS_FIELD_NUMBER: _ClassVar[int]
+    TEAMACCESSSTATUS_FIELD_NUMBER: _ClassVar[int]
+    RECORDACCESSSTATUS_FIELD_NUMBER: _ClassVar[int]
+    revision: int
+    userAccessStatus: _containers.RepeatedCompositeFieldContainer[TimeLimitedAccessStatus]
+    teamAccessStatus: _containers.RepeatedCompositeFieldContainer[TimeLimitedAccessStatus]
+    recordAccessStatus: _containers.RepeatedCompositeFieldContainer[TimeLimitedAccessStatus]
+    def __init__(self, revision: _Optional[int] = ..., userAccessStatus: _Optional[_Iterable[_Union[TimeLimitedAccessStatus, _Mapping]]] = ..., teamAccessStatus: _Optional[_Iterable[_Union[TimeLimitedAccessStatus, _Mapping]]] = ..., recordAccessStatus: _Optional[_Iterable[_Union[TimeLimitedAccessStatus, _Mapping]]] = ...) -> None: ...
 
 class RequestDownloadRequest(_message.Message):
     __slots__ = ("fileNames",)

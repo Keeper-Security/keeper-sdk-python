@@ -1,4 +1,3 @@
-# coding: utf-8
 import logging
 from typing import Optional, List
 
@@ -80,7 +79,7 @@ class Vault(object):
                 shareid = share['id'].decode('utf-8')
                 share_name = share['name'].decode('utf-8')
                 share_name = share_name.strip()
-                shared_folder = LastpassSharedFolder(shareid, share['name'].decode('utf-8'))
+                shared_folder = LastpassSharedFolder(shareid, share_name.decode('utf-8'))
                 self.shared_folders.append(shared_folder)
             elif i.id == b'ATTA':
                 attachment = parser.parse_ATTA(i)

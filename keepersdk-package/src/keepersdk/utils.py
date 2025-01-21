@@ -214,6 +214,7 @@ def password_score(password: str) -> int:
         score -= rep_inc
 
     count = 0
+    consec: Callable[[str], bool]
     for consec in [str.isupper, str.islower, str.isdecimal]:
         for chunk in chunk_text(password, consec):
             length = len(chunk)

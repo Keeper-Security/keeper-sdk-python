@@ -85,13 +85,13 @@ class ILink(Generic[T, KS, KO], abc.ABC):
         pass
 
 
-class IEntityStorage(Generic[T, K], IEntity[T, K]):
+class IEntityStorage(IEntity[T, K]):
     @abc.abstractmethod
-    def put_entities(self, entities: Iterable[T]):
+    def put_entities(self, entities: Iterable[T]) -> None:
         pass
 
     @abc.abstractmethod
-    def delete_uids(self, uids: Iterable[K]):
+    def delete_uids(self, uids: Iterable[K]) -> None:
         pass
 
 

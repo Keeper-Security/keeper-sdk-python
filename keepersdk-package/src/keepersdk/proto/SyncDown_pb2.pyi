@@ -215,7 +215,7 @@ class SharedFolderKey(_message.Message):
     def __init__(self, sharedFolderUid: _Optional[bytes] = ..., sharedFolderKey: _Optional[bytes] = ..., keyType: _Optional[_Union[_record_pb2.RecordKeyType, str]] = ...) -> None: ...
 
 class Team(_message.Message):
-    __slots__ = ("teamUid", "name", "teamKey", "teamKeyType", "teamPrivateKey", "restrictEdit", "restrictShare", "restrictView", "removedSharedFolders", "sharedFolderKeys", "teamEccPrivateKey")
+    __slots__ = ("teamUid", "name", "teamKey", "teamKeyType", "teamPrivateKey", "restrictEdit", "restrictShare", "restrictView", "removedSharedFolders", "sharedFolderKeys", "teamEccPrivateKey", "teamEccPublicKey")
     TEAMUID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     TEAMKEY_FIELD_NUMBER: _ClassVar[int]
@@ -227,6 +227,7 @@ class Team(_message.Message):
     REMOVEDSHAREDFOLDERS_FIELD_NUMBER: _ClassVar[int]
     SHAREDFOLDERKEYS_FIELD_NUMBER: _ClassVar[int]
     TEAMECCPRIVATEKEY_FIELD_NUMBER: _ClassVar[int]
+    TEAMECCPUBLICKEY_FIELD_NUMBER: _ClassVar[int]
     teamUid: bytes
     name: str
     teamKey: bytes
@@ -238,7 +239,8 @@ class Team(_message.Message):
     removedSharedFolders: _containers.RepeatedScalarFieldContainer[bytes]
     sharedFolderKeys: _containers.RepeatedCompositeFieldContainer[SharedFolderKey]
     teamEccPrivateKey: bytes
-    def __init__(self, teamUid: _Optional[bytes] = ..., name: _Optional[str] = ..., teamKey: _Optional[bytes] = ..., teamKeyType: _Optional[_Union[_record_pb2.RecordKeyType, str]] = ..., teamPrivateKey: _Optional[bytes] = ..., restrictEdit: bool = ..., restrictShare: bool = ..., restrictView: bool = ..., removedSharedFolders: _Optional[_Iterable[bytes]] = ..., sharedFolderKeys: _Optional[_Iterable[_Union[SharedFolderKey, _Mapping]]] = ..., teamEccPrivateKey: _Optional[bytes] = ...) -> None: ...
+    teamEccPublicKey: bytes
+    def __init__(self, teamUid: _Optional[bytes] = ..., name: _Optional[str] = ..., teamKey: _Optional[bytes] = ..., teamKeyType: _Optional[_Union[_record_pb2.RecordKeyType, str]] = ..., teamPrivateKey: _Optional[bytes] = ..., restrictEdit: bool = ..., restrictShare: bool = ..., restrictView: bool = ..., removedSharedFolders: _Optional[_Iterable[bytes]] = ..., sharedFolderKeys: _Optional[_Iterable[_Union[SharedFolderKey, _Mapping]]] = ..., teamEccPrivateKey: _Optional[bytes] = ..., teamEccPublicKey: _Optional[bytes] = ...) -> None: ...
 
 class Record(_message.Message):
     __slots__ = ("recordUid", "revision", "version", "shared", "clientModifiedTime", "data", "extra", "udata", "fileSize", "thumbnailSize")

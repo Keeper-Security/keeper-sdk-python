@@ -349,7 +349,7 @@ def get_record_description(record: vault_record.KeeperRecord) -> str:
     return ''
 
 
-def load_keeper_record_type(cls, store_record_type: storage_types.StorageRecordType) -> vault_types.RecordType:
+def load_keeper_record_type(store_record_type: storage_types.StorageRecordType) -> vault_types.RecordType:
     record_type = vault_types.RecordType()
     record_type.id = store_record_type.id
     record_type.scope = store_record_type.scope

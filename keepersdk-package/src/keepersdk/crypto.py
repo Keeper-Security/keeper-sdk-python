@@ -2,8 +2,9 @@ import io
 import secrets
 from typing import Tuple, Optional
 
+from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat import backends
-from cryptography.hazmat.primitives import serialization, asymmetric
+from cryptography.hazmat.primitives import serialization, asymmetric, hashes
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
 from cryptography.hazmat.primitives.ciphers import Cipher
@@ -73,6 +74,12 @@ def load_ec_private_key(private_key: bytes) -> ec.EllipticCurvePrivateKeyWithSer
 
 def load_ec_public_key(public_key: bytes) -> ec.EllipticCurvePublicKeyWithSerialization:
     return ec.EllipticCurvePublicKey.from_encoded_point(_CURVE, public_key)
+
+
+def load_ec_pkcs8_private_key(private_key: bytes) -> ec.EllipticCurvePrivateKey:
+    pk = serialization.load_der_private_key(private_key, password=None, backend=_CRYPTO_BACKEND)
+    assert isinstance(pk, ec.EllipticCurvePrivateKey)
+    return pk
 
 
 def unload_ec_private_key(private_key: ec.EllipticCurvePrivateKeyWithSerialization) -> bytes:
@@ -147,6 +154,16 @@ def decrypt_ec(data: bytes, ec_private_key: ec.EllipticCurvePrivateKey) -> bytes
     encryption_key = ec_shared_key(ephemeral_public_key, ec_private_key)
     return decrypt_aes_v2(data[65:], encryption_key)
 
+
+def sign_ec(data: bytes, ec_private_key: ec.EllipticCurvePrivateKey) -> bytes:
+    return ec_private_key.sign(data, signature_algorithm=ec.ECDSA(algorithm=hashes.SHA256()))
+
+def verify_ec(signature: bytes, data: bytes, ec_public_key: ec.EllipticCurvePublicKey) -> bool:
+    try:
+        ec_public_key.verify(signature, data, signature_algorithm=ec.ECDSA(algorithm=hashes.SHA256()))
+        return True
+    except InvalidSignature:
+        return False
 
 def derive_key_v1(password: str, salt: bytes, iterations: int) -> bytes:
     kdf = PBKDF2HMAC(algorithm=SHA256(), length=32, salt=salt, iterations=iterations, backend=_CRYPTO_BACKEND)

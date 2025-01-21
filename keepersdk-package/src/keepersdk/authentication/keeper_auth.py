@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 import abc
+import asyncio
 import enum
+import json
+import logging
 import time
 from typing import Optional, Dict, Any, List, Type, Set, Iterable
 
 import attrs
 from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePrivateKey, EllipticCurvePublicKey
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
+from google.protobuf.json_format import MessageToJson
 
 from . import endpoint, notifications
-from .. import errors, utils, crypto
+from .. import errors, utils, crypto, background
 from ..proto import APIRequest_pb2
 
 
@@ -99,9 +103,10 @@ class KeeperAuth:
     def __init__(self, keeper_endpoint: endpoint.KeeperEndpoint, auth_context: AuthContext) -> None:
         self.keeper_endpoint = keeper_endpoint
         self.auth_context = auth_context
-        self.push_notifications: Optional[notifications.FanOut[Dict[str, Any]]] = None
+        self._push_notifications = notifications.KeeperPushNotifications()
         self._ttk: Optional[TimeToKeepalive] = None
         self._key_cache: Optional[Dict[str, UserKeys]] = None
+        self._use_pushes = False
 
     def __enter__(self):
         return self
@@ -109,9 +114,13 @@ class KeeperAuth:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
 
+    @property
+    def push_notifications(self) -> notifications.FanOut[Dict[str, Any]]:
+        return self._push_notifications
+
     def close(self) -> None:
         if self.push_notifications and not self.push_notifications.is_completed:
-            self.push_notifications.shutdown()
+            self.stop_pushes()
 
     def _update_ttk(self):
         if self._ttk:
@@ -177,11 +186,44 @@ class KeeperAuth:
 
                 if len(results) < len(chunk):
                     queue = chunk[len(results):] + queue
-
         return responses
 
-    def execute_router(self, path: str, request: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-        return self.keeper_endpoint.execute_router(path, session_token=self.auth_context.session_token, request=request)
+    def execute_router(self, path: str,  request: Optional[endpoint.TRQ], *,
+                       response_type: Optional[Type[endpoint.TRS]]=None) -> Optional[endpoint.TRS]:
+        logger = utils.get_logger()
+        if logger.level <= logging.DEBUG:
+            js = MessageToJson(request) if request else ''
+            logger.debug('>>> [RQ] \"%s\": %s', path, js)
+        payload = request.SerializeToString() if request else None
+        rs_bytes = self.keeper_endpoint.execute_router_rest(
+            path, session_token=self.auth_context.session_token, payload=payload)
+        if response_type:
+            response = response_type()
+            if rs_bytes:
+                response.ParseFromString(rs_bytes)
+            if logger.level <= logging.DEBUG:
+                js = MessageToJson(response)
+                logger.debug('>>> [RS] \"%s\": %s', path, js)
+
+            return response
+
+    def execute_router_json(self, path: str,  request: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        logger = utils.get_logger()
+        payload: Optional[bytes] = None
+        if isinstance(request, dict):
+            js = json.dumps(request)
+            payload = js.encode('utf-8')
+            if logger.level <= logging.DEBUG:
+                logger.debug('>>> [RQ] \"%s\": %s', path, js)
+
+        rs_bytes = self.keeper_endpoint.execute_router_rest(
+            path, session_token=self.auth_context.session_token, payload=payload)
+        if rs_bytes:
+            response = json.loads(rs_bytes)
+            if logger.level <= logging.DEBUG:
+                logger.debug('>>> [RS] \"%s\": %s', path, rs_bytes.decode('utf-8'))
+
+            return response
 
     def load_user_public_keys(self, emails: Iterable[str], send_invites: bool = False) -> Optional[List[str]]:
         s: Set[str] = set((x.casefold() for x in emails))
@@ -273,3 +315,28 @@ class KeeperAuth:
     def get_team_keys(self, team_uid: str) -> Optional[UserKeys]:
         if self._key_cache:
             return self._key_cache.get(team_uid)
+
+    async def _push_server_guard(self):
+        transmission_key = utils.generate_aes_key()
+        self._use_pushes = True
+        try:
+            while self._use_pushes:
+                self.execute_auth_rest('keep_alive', None)
+                url = self.keeper_endpoint.get_push_url(
+                    transmission_key, self.auth_context.device_token, self.auth_context.message_session_uid)
+                await self._push_notifications.main_loop(url, transmission_key, self.auth_context.session_token)
+        except Exception as e:
+            utils.get_logger().debug(e)
+        finally:
+            self._use_pushes = False
+            
+    @property
+    def use_pushes(self) -> bool:
+        return self._use_pushes
+
+    def start_pushes(self):
+        asyncio.run_coroutine_threadsafe(self._push_server_guard(), loop=background.get_loop())
+
+    def stop_pushes(self):
+        self._use_pushes = False
+        self._push_notifications.shutdown()

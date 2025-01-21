@@ -5,7 +5,8 @@ from typing import Optional, Any, Dict
 from fido2.client import Fido2Client, WindowsClient, ClientError, WebAuthnClient
 from fido2.ctap import CtapError
 from fido2.hid import CtapHidDevice
-from fido2.webauthn import PublicKeyCredentialRequestOptions, UserVerificationRequirement
+from fido2.webauthn import PublicKeyCredentialRequestOptions, UserVerificationRequirement, \
+    AuthenticationExtensionsClientOutputs, AuthenticatorAssertionResponse
 
 from keepersdk import utils
 from . import api, prompt_utils
@@ -44,7 +45,7 @@ def yubikey_authenticate(request: Dict[str, Any]):
         client = Fido2Client(dev, origin, verify=verify_rp_id_none)
 
     evt: Optional[threading.Event] = threading.Event()
-    response: Optional[str] = None
+    response: Optional[AuthenticatorAssertionResponse] = None
     def auth_func():
         nonlocal response
         attempt = 0

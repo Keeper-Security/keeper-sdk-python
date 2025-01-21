@@ -383,9 +383,10 @@ class EnterpriseNodeSetLogoCommand(base.ArgparseCommand, enterprise_management.I
         upload_url = rs_logo.get('url')
         assert isinstance(upload_url, str)
         success_status_code = rs_logo.get('success_status_code')
-        file_param = rs_logo.get('file_parameter')
+        file_param: Optional[str] = rs_logo.get('file_parameter')
+        assert file_param is not None
         form_data = rs_logo.get('parameters')
-        assert isinstance(upload_url, dict)
+        assert isinstance(form_data, dict)
         form_data['Content-Type'] = upload_task.mime_type
         with upload_task.open() as task_stream:
             files = {file_param: (None, task_stream, upload_task.mime_type)}

@@ -473,15 +473,15 @@ class VaultData:
 
         if len(uid_to_remove) > 0:
             self.storage.shared_folders.delete_uids(uid_to_remove)
-            self.storage.record_keys.delete_links_for_objects(uid_to_remove)
-            self.storage.shared_folder_keys.delete_links_for_subjects(uid_to_remove)
-            self.storage.shared_folder_permissions.delete_links_for_subjects(uid_to_remove)
+            self.storage.record_keys.delete_links_by_objects(uid_to_remove)
+            self.storage.shared_folder_keys.delete_links_by_subjects(uid_to_remove)
+            self.storage.shared_folder_permissions.delete_links_by_subjects(uid_to_remove)
             # delete sub folders
             sf_to_remove = set(uid_to_remove)
             sffs = [x.folder_uid for x in self.storage.folders.get_all_entities()
                     if x.shared_folder_uid and x.shared_folder_uid in sf_to_remove]
             self.storage.folders.delete_uids(sffs)
-            self.storage.folder_records.delete_links_for_subjects(sffs)
+            self.storage.folder_records.delete_links_by_subjects(sffs)
 
         if full_rebuild:
             self._records.clear()
@@ -605,7 +605,7 @@ class VaultData:
                 uid_to_remove.add(record_uid)
 
         if len(uid_to_remove) > 0:
-            self.storage.record_keys.delete_links_for_subjects(uid_to_remove)
+            self.storage.record_keys.delete_links_by_subjects(uid_to_remove)
             self.storage.breach_watch_records.delete_uids(uid_to_remove)
             self.storage.records.delete_uids(uid_to_remove)
 

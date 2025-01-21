@@ -9,5 +9,5 @@
 # Contact: commander@keepersecurity.com
 #
 
-__version__ = '16.10.14'
+__version__ = '17.0.0'
 

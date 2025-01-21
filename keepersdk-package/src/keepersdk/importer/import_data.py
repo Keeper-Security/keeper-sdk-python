@@ -5,7 +5,7 @@ import json
 import os
 from typing import Optional, List, Any, Union, Iterable
 
-from ..vault import record_types, typed_field_utils, attachment, vault_online, vault_record, batch_operations
+from ..vault import record_types, typed_field_utils, attachment, vault_online, vault_record
 
 PathDelimiter = '\\'
 TWO_FACTOR_CODE = 'TFC:Keeper'

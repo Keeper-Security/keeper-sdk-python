@@ -1,3 +1,4 @@
+import json
 from typing import List, Optional, Iterable, Dict
 
 from . import vault_data, vault_storage
@@ -37,27 +38,15 @@ def sync_down_request(auth: keeper_auth.KeeperAuth,
                       audit_data: Optional[IAuditDataPlugin]=None,
                       sync_record_types: bool=False) -> vault_data.RebuildTask:
     logger = utils.get_logger()
-    email_lookup: Dict[str, Optional[str]] = {}
 
-    def get_account_uid_by_email(email: str) -> Optional[str]:
-        nonlocal email_lookup
-        if email not in email_lookup:
-            link = next(iter(storage.user_emails.get_links_by_object(email)), None)
-            if link:
-                email_lookup[email] = link.email
-            else:
-                email_lookup[email] = None
-
-        return email_lookup[email]
-
-    rq = SyncDown_pb2.SyncDownRequest()
-    done = False
     user_settings = storage.user_settings.load()
     if user_settings is None:
         user_settings = UserSettings()
 
     token = user_settings.continuation_token
     task: Optional[vault_data.RebuildTask] = None
+    done = False
+    rq = SyncDown_pb2.SyncDownRequest()
     while not done:
         rq.continuationToken = token
         response = auth.execute_auth_rest('vault/sync_down', rq, response_type=SyncDown_pb2.SyncDownResponse)
@@ -187,7 +176,7 @@ def sync_down_request(auth: keeper_auth.KeeperAuth,
                     sr_key.owner_account_uid = utils.base64_url_encode(rmd.ownerAccountUid)
                     return sr_key
                 except Exception as e:
-                    logger.error('Metadata for record UID %s key decrypt error: %s', record_uid, e)
+                    logger.debug('Metadata for record UID %s key decrypt error: %s', r_uid, e)
 
             record_meta_data = [y for y in (to_record_key(x) for x in response.recordMetaData) if y]
             task.add_records((x.record_uid for x in record_meta_data))
@@ -541,6 +530,7 @@ def sync_down_request(auth: keeper_auth.KeeperAuth,
     storage.user_settings.store(user_settings)
 
     assert task is not None
+
     if sync_record_types:
         rt_rq = record_pb2.RecordTypesRequest()
         rt_rq.standard = True
@@ -550,14 +540,20 @@ def sync_down_request(auth: keeper_auth.KeeperAuth,
             'vault/get_record_types', rt_rq, response_type=record_pb2.RecordTypesResponse)
         assert rt_rs is not None
 
-        def to_record_type(rt: record_pb2.RecordType) -> StorageRecordType:
+        def to_record_type(rt: record_pb2.RecordType) -> Optional[StorageRecordType]:
+            try:
+                content = json.loads(rt.content)
+            except Exception as e:
+                logger.debug('Error parsing record type: %s', e)
+                return None
             record_type = StorageRecordType()
+            record_type.name = content['$id']
             record_type.id = rt.recordTypeId
             record_type.content = rt.content
             record_type.scope = rt.scope
             return record_type
 
-        storage.record_types.put_entities((to_record_type(x) for x in rt_rs.recordTypes))
+        storage.record_types.put_entities((y for y in (to_record_type(x) for x in rt_rs.recordTypes) if y))
         task.record_types_loaded = True
 
     return task

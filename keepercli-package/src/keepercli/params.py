@@ -6,7 +6,6 @@ from typing import Dict, Optional, Any, Type
 from keepersdk.authentication import configuration, endpoint, keeper_auth
 from keepersdk.enterprise import sqlite_enterprise_storage, enterprise_types, enterprise_loader
 from keepersdk.vault import vault_online, sqlite_storage
-from keepersdk.plugins.pedm import pedm_plugin, agent_plugin
 
 
 class ParamsConfig:
@@ -115,8 +114,6 @@ class KeeperParams(ParamsConfig, configuration.IConfigurationStorage):
         self._enterprise_loader: Optional[enterprise_loader.EnterpriseLoader] = None
         self._sqlite_connection: Optional[sqlite3.Connection] = None
         self._environment_variables: Dict[str, Any] = {}
-        self._pedm_plugin: Optional[pedm_plugin.PedmPlugin] = None
-        self._agent_plugin: Optional[agent_plugin.PedmAgentPlugin] = None
         cert_check = self.certificate_check
         if isinstance(cert_check, bool):
             endpoint.set_certificate_check(cert_check)
@@ -160,22 +157,6 @@ class KeeperParams(ParamsConfig, configuration.IConfigurationStorage):
     def enterprise_loader(self) -> enterprise_types.IEnterpriseLoader:
         assert self._enterprise_loader is not None
         return self._enterprise_loader
-
-    @property
-    def pedm_agent_plugin(self) -> Optional[agent_plugin.PedmAgentPlugin]:
-        return self._agent_plugin
-
-    @pedm_agent_plugin.setter
-    def pedm_agent_plugin(self, value: Optional[agent_plugin.PedmAgentPlugin]) -> None:
-        self._agent_plugin = value
-
-    @property
-    def pedm_plugin(self) -> pedm_plugin.PedmPlugin:
-        if not self._pedm_plugin:
-            assert self._enterprise_loader is not None
-            self._pedm_plugin = pedm_plugin.PedmPlugin(self._enterprise_loader)
-            self._pedm_plugin.sync_down()
-        return self._pedm_plugin
 
     def vault_down(self):
         if self._vault:

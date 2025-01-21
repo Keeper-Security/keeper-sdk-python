@@ -7,7 +7,7 @@ from typing import ClassVar as _ClassVar, Iterable as _Iterable, Optional as _Op
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class MessageType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = []
+    __slots__ = ()
     UNKNOWN: _ClassVar[MessageType]
     DNA: _ClassVar[MessageType]
     SSO: _ClassVar[MessageType]
@@ -30,7 +30,7 @@ DEVICE: MessageType
 TOTP: MessageType
 
 class UserRegistrationRequest(_message.Message):
-    __slots__ = ["messageSessionUid", "userId", "enterpriseId"]
+    __slots__ = ("messageSessionUid", "userId", "enterpriseId")
     MESSAGESESSIONUID_FIELD_NUMBER: _ClassVar[int]
     USERID_FIELD_NUMBER: _ClassVar[int]
     ENTERPRISEID_FIELD_NUMBER: _ClassVar[int]
@@ -40,7 +40,7 @@ class UserRegistrationRequest(_message.Message):
     def __init__(self, messageSessionUid: _Optional[bytes] = ..., userId: _Optional[int] = ..., enterpriseId: _Optional[int] = ...) -> None: ...
 
 class KAToPushServerRequest(_message.Message):
-    __slots__ = ["messageType", "message", "messageSessionUid", "encryptedDeviceToken", "userId", "enterpriseId"]
+    __slots__ = ("messageType", "message", "messageSessionUid", "encryptedDeviceToken", "userId", "enterpriseId")
     MESSAGETYPE_FIELD_NUMBER: _ClassVar[int]
     MESSAGE_FIELD_NUMBER: _ClassVar[int]
     MESSAGESESSIONUID_FIELD_NUMBER: _ClassVar[int]
@@ -56,7 +56,7 @@ class KAToPushServerRequest(_message.Message):
     def __init__(self, messageType: _Optional[_Union[MessageType, str]] = ..., message: _Optional[str] = ..., messageSessionUid: _Optional[bytes] = ..., encryptedDeviceToken: _Optional[_Iterable[bytes]] = ..., userId: _Optional[_Iterable[int]] = ..., enterpriseId: _Optional[_Iterable[int]] = ...) -> None: ...
 
 class WssConnectionRequest(_message.Message):
-    __slots__ = ["messageSessionUid", "encryptedDeviceToken", "deviceTimeStamp"]
+    __slots__ = ("messageSessionUid", "encryptedDeviceToken", "deviceTimeStamp")
     MESSAGESESSIONUID_FIELD_NUMBER: _ClassVar[int]
     ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: _ClassVar[int]
     DEVICETIMESTAMP_FIELD_NUMBER: _ClassVar[int]
@@ -66,7 +66,7 @@ class WssConnectionRequest(_message.Message):
     def __init__(self, messageSessionUid: _Optional[bytes] = ..., encryptedDeviceToken: _Optional[bytes] = ..., deviceTimeStamp: _Optional[int] = ...) -> None: ...
 
 class WssClientResponse(_message.Message):
-    __slots__ = ["messageType", "message"]
+    __slots__ = ("messageType", "message")
     MESSAGETYPE_FIELD_NUMBER: _ClassVar[int]
     MESSAGE_FIELD_NUMBER: _ClassVar[int]
     messageType: MessageType
@@ -74,7 +74,7 @@ class WssClientResponse(_message.Message):
     def __init__(self, messageType: _Optional[_Union[MessageType, str]] = ..., message: _Optional[str] = ...) -> None: ...
 
 class PushServerDeviceRegistrationRequest(_message.Message):
-    __slots__ = ["encryptedDeviceToken", "pushToken", "mobilePushPlatform", "transmissionKey"]
+    __slots__ = ("encryptedDeviceToken", "pushToken", "mobilePushPlatform", "transmissionKey")
     ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: _ClassVar[int]
     PUSHTOKEN_FIELD_NUMBER: _ClassVar[int]
     MOBILEPUSHPLATFORM_FIELD_NUMBER: _ClassVar[int]
@@ -86,7 +86,7 @@ class PushServerDeviceRegistrationRequest(_message.Message):
     def __init__(self, encryptedDeviceToken: _Optional[bytes] = ..., pushToken: _Optional[str] = ..., mobilePushPlatform: _Optional[str] = ..., transmissionKey: _Optional[bytes] = ...) -> None: ...
 
 class SnsMessage(_message.Message):
-    __slots__ = ["messageType", "message"]
+    __slots__ = ("messageType", "message")
     MESSAGETYPE_FIELD_NUMBER: _ClassVar[int]
     MESSAGE_FIELD_NUMBER: _ClassVar[int]
     messageType: MessageType

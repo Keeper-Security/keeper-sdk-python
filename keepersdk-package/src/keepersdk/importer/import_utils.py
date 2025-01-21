@@ -505,7 +505,7 @@ def do_import_vault(vault: vault_online.VaultOnline,
                     result_code = move_rq.get('result_code')
                     error_message = move_rq.get('message')
                     if error_message:
-                        message = f'{result_code}: {error_message}'
+                        error_message = f'{result_code}: {error_message}'
                     else:
                         error_message = f'Result code: {result_code}'
                     utils.get_logger().warning(error_message)

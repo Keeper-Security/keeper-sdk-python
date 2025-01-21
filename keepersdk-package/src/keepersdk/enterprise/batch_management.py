@@ -455,7 +455,7 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
                 raise Exception(f'Unsupported key type: {key_type}')
             data_json = self.fix_data(data)
             return json.loads(data_json.decode('utf-8'))
-        except:
+        except Exception:
             return {}
 
     def _to_node_requests(self) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
