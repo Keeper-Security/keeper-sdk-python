@@ -4,13 +4,13 @@ import os
 import platform
 import sys
 
-from keepersdk import utils, constants
 from prompt_toolkit import shortcuts
 
+from keepersdk import constants
 from . import base, command_history
-from ..params import KeeperParams
-from ..helpers import report_utils
 from .. import api, prompt_utils, versioning, __version__
+from ..helpers import report_utils
+from ..params import KeeperParams
 
 
 class HelpCommand(base.ArgparseCommand):
@@ -51,7 +51,7 @@ class ClearCommand(base.ICliCommand):
 
 class DebugCommand(base.ICliCommand):
     def execute_args(self, context: KeeperParams, args: str, **kwargs):
-        logger = utils.get_logger('keeper')
+        logger = logging.getLogger()
         is_debug = logger.getEffectiveLevel() <= logging.DEBUG
         logger.setLevel((logging.WARNING if context.batch_mode else logging.INFO) if is_debug else logging.DEBUG)
         is_debug = logger.getEffectiveLevel() <= logging.DEBUG

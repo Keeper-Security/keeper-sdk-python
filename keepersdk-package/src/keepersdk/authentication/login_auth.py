@@ -408,6 +408,8 @@ def _ensure_device_token_loaded(login: LoginAuth) -> None:
             except Exception as e:
                 logger.debug('Register device in region error: %s', e)
                 config.devices().delete(device_token)
+                context.device_token = None
+                context.device_private_key = None
         else:
             if context.username:
                 uc = config.users().get(context.username)
@@ -460,9 +462,9 @@ def _register_device_in_region(login_auth: LoginAuth, device_config: configurati
 
     try:
         login_auth.execute_rest('authentication/register_device_in_region', rq)
-    except errors.KeeperApiError as kae:
-        if 'exists' != kae.result_code:
-            raise kae
+    # except errors.KeeperApiError as kae:
+    #     if 'exists' != kae.result_code:
+    #         raise kae
     except errors.InvalidDeviceTokenError as idt:
         if 'public key already exists' != idt.message:
             raise idt
