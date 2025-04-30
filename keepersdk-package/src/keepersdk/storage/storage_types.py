@@ -1,6 +1,6 @@
 import abc
+import attrs
 
-from dataclasses import dataclass
 from typing import TypeVar, Generic, Optional, Union, Tuple, Iterable
 
 K = TypeVar('K', int, str, bytes)
@@ -22,15 +22,14 @@ class IUidLink(Generic[KS, KO], abc.ABC):
         pass
 
 
-@dataclass(frozen=True)
+@attrs.define(frozen=True, order=True)
 class Uid(IUid[str]):
     _uid: str
 
     def uid(self) -> str:
         return self._uid
 
-
-@dataclass(frozen=True)
+@attrs.define(frozen=True, order=True)
 class UidLink(IUidLink[KS, KO]):
     _subject_uid: KS
     _object_uid: KO

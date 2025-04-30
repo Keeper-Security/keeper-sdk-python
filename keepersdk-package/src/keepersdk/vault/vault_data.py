@@ -15,6 +15,7 @@ class RebuildTask:
         self.is_full_sync = is_full_sync
         self.records: Set[str] = set()
         self.shared_folders: Set[str] = set()
+        self.notifications: Set[str] = set()
         self.record_types_loaded = False
 
     def add_record(self, record_uid: str) -> None:
@@ -31,6 +32,11 @@ class RebuildTask:
         if self.is_full_sync:
             return
         self.shared_folders.update(shared_folder_uids)
+
+    def add_notifications(self, notifications_uids: Iterable[str]) -> None:
+        if self.is_full_sync:
+            return
+        self.notifications.update(notifications_uids)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -384,7 +390,7 @@ class VaultData:
 
         self._teams.clear()
         for t in self.storage.teams.get_all_entities():
-            team_uid = None
+            team_uid = t.team_uid
             try:
                 team_key = crypto.decrypt_aes_v2(t.team_key, self.client_key)
                 team = load_keeper_team(t, team_key)

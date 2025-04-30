@@ -121,7 +121,6 @@ class KeeperParams(ParamsConfig, configuration.IConfigurationStorage):
     def clear_session(self) -> None:
         self.shadow_config.clear()
         self.current_folder = None
-        self._pedm_plugin = None
         self._enterprise_loader = None
         if self._vault:
             self._vault.close()

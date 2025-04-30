@@ -306,21 +306,31 @@ class ReEncryptedRoleKey(_message.Message):
     encryptedRoleKey: bytes
     def __init__(self, role_id: _Optional[int] = ..., encryptedRoleKey: _Optional[bytes] = ...) -> None: ...
 
+class ReEncryptedUserDataKey(_message.Message):
+    __slots__ = ("enterpriseUserId", "userEncryptedDataKey")
+    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
+    USERENCRYPTEDDATAKEY_FIELD_NUMBER: _ClassVar[int]
+    enterpriseUserId: int
+    userEncryptedDataKey: bytes
+    def __init__(self, enterpriseUserId: _Optional[int] = ..., userEncryptedDataKey: _Optional[bytes] = ...) -> None: ...
+
 class NodeToManagedCompanyRequest(_message.Message):
-    __slots__ = ("companyId", "nodes", "roles", "users", "roleKeys", "teamKeys")
+    __slots__ = ("companyId", "nodes", "roles", "users", "roleKeys", "teamKeys", "usersDataKeys")
     COMPANYID_FIELD_NUMBER: _ClassVar[int]
     NODES_FIELD_NUMBER: _ClassVar[int]
     ROLES_FIELD_NUMBER: _ClassVar[int]
     USERS_FIELD_NUMBER: _ClassVar[int]
     ROLEKEYS_FIELD_NUMBER: _ClassVar[int]
     TEAMKEYS_FIELD_NUMBER: _ClassVar[int]
+    USERSDATAKEYS_FIELD_NUMBER: _ClassVar[int]
     companyId: int
     nodes: _containers.RepeatedCompositeFieldContainer[ReEncryptedData]
     roles: _containers.RepeatedCompositeFieldContainer[ReEncryptedData]
     users: _containers.RepeatedCompositeFieldContainer[ReEncryptedData]
     roleKeys: _containers.RepeatedCompositeFieldContainer[ReEncryptedRoleKey]
     teamKeys: _containers.RepeatedCompositeFieldContainer[EncryptedTeamKeyRequest]
-    def __init__(self, companyId: _Optional[int] = ..., nodes: _Optional[_Iterable[_Union[ReEncryptedData, _Mapping]]] = ..., roles: _Optional[_Iterable[_Union[ReEncryptedData, _Mapping]]] = ..., users: _Optional[_Iterable[_Union[ReEncryptedData, _Mapping]]] = ..., roleKeys: _Optional[_Iterable[_Union[ReEncryptedRoleKey, _Mapping]]] = ..., teamKeys: _Optional[_Iterable[_Union[EncryptedTeamKeyRequest, _Mapping]]] = ...) -> None: ...
+    usersDataKeys: _containers.RepeatedCompositeFieldContainer[ReEncryptedUserDataKey]
+    def __init__(self, companyId: _Optional[int] = ..., nodes: _Optional[_Iterable[_Union[ReEncryptedData, _Mapping]]] = ..., roles: _Optional[_Iterable[_Union[ReEncryptedData, _Mapping]]] = ..., users: _Optional[_Iterable[_Union[ReEncryptedData, _Mapping]]] = ..., roleKeys: _Optional[_Iterable[_Union[ReEncryptedRoleKey, _Mapping]]] = ..., teamKeys: _Optional[_Iterable[_Union[EncryptedTeamKeyRequest, _Mapping]]] = ..., usersDataKeys: _Optional[_Iterable[_Union[ReEncryptedUserDataKey, _Mapping]]] = ...) -> None: ...
 
 class RoleTeam(_message.Message):
     __slots__ = ("role_id", "teamUid")
@@ -411,7 +421,7 @@ class RoleUsersRemoveResponse(_message.Message):
     def __init__(self, results: _Optional[_Iterable[_Union[RoleUserRemoveResult, _Mapping]]] = ...) -> None: ...
 
 class EnterpriseRegistration(_message.Message):
-    __slots__ = ("encryptedTreeKey", "enterpriseName", "rootNodeData", "adminUserData", "adminName", "roleData", "rsaKeyPair", "numberSeats", "enterpriseType", "rolePublicKey", "rolePrivateKeyEncryptedWithRoleKey", "roleKeyEncryptedWithTreeKey", "eccKeyPair", "allUsersRoleData")
+    __slots__ = ("encryptedTreeKey", "enterpriseName", "rootNodeData", "adminUserData", "adminName", "roleData", "rsaKeyPair", "numberSeats", "enterpriseType", "rolePublicKey", "rolePrivateKeyEncryptedWithRoleKey", "roleKeyEncryptedWithTreeKey", "eccKeyPair", "allUsersRoleData", "roleKeyEncryptedWithUserPublicKey")
     ENCRYPTEDTREEKEY_FIELD_NUMBER: _ClassVar[int]
     ENTERPRISENAME_FIELD_NUMBER: _ClassVar[int]
     ROOTNODEDATA_FIELD_NUMBER: _ClassVar[int]
@@ -426,6 +436,7 @@ class EnterpriseRegistration(_message.Message):
     ROLEKEYENCRYPTEDWITHTREEKEY_FIELD_NUMBER: _ClassVar[int]
     ECCKEYPAIR_FIELD_NUMBER: _ClassVar[int]
     ALLUSERSROLEDATA_FIELD_NUMBER: _ClassVar[int]
+    ROLEKEYENCRYPTEDWITHUSERPUBLICKEY_FIELD_NUMBER: _ClassVar[int]
     encryptedTreeKey: bytes
     enterpriseName: str
     rootNodeData: bytes
@@ -440,7 +451,8 @@ class EnterpriseRegistration(_message.Message):
     roleKeyEncryptedWithTreeKey: bytes
     eccKeyPair: EnterpriseKeyPairRequest
     allUsersRoleData: bytes
-    def __init__(self, encryptedTreeKey: _Optional[bytes] = ..., enterpriseName: _Optional[str] = ..., rootNodeData: _Optional[bytes] = ..., adminUserData: _Optional[bytes] = ..., adminName: _Optional[str] = ..., roleData: _Optional[bytes] = ..., rsaKeyPair: _Optional[_Union[EnterpriseKeyPairRequest, _Mapping]] = ..., numberSeats: _Optional[int] = ..., enterpriseType: _Optional[_Union[EnterpriseType, str]] = ..., rolePublicKey: _Optional[bytes] = ..., rolePrivateKeyEncryptedWithRoleKey: _Optional[bytes] = ..., roleKeyEncryptedWithTreeKey: _Optional[bytes] = ..., eccKeyPair: _Optional[_Union[EnterpriseKeyPairRequest, _Mapping]] = ..., allUsersRoleData: _Optional[bytes] = ...) -> None: ...
+    roleKeyEncryptedWithUserPublicKey: bytes
+    def __init__(self, encryptedTreeKey: _Optional[bytes] = ..., enterpriseName: _Optional[str] = ..., rootNodeData: _Optional[bytes] = ..., adminUserData: _Optional[bytes] = ..., adminName: _Optional[str] = ..., roleData: _Optional[bytes] = ..., rsaKeyPair: _Optional[_Union[EnterpriseKeyPairRequest, _Mapping]] = ..., numberSeats: _Optional[int] = ..., enterpriseType: _Optional[_Union[EnterpriseType, str]] = ..., rolePublicKey: _Optional[bytes] = ..., rolePrivateKeyEncryptedWithRoleKey: _Optional[bytes] = ..., roleKeyEncryptedWithTreeKey: _Optional[bytes] = ..., eccKeyPair: _Optional[_Union[EnterpriseKeyPairRequest, _Mapping]] = ..., allUsersRoleData: _Optional[bytes] = ..., roleKeyEncryptedWithUserPublicKey: _Optional[bytes] = ...) -> None: ...
 
 class DomainPasswordRulesRequest(_message.Message):
     __slots__ = ("username", "verificationCode")
@@ -539,6 +551,30 @@ class EnterpriseUserDataKeys(_message.Message):
     KEYS_FIELD_NUMBER: _ClassVar[int]
     keys: _containers.RepeatedCompositeFieldContainer[EnterpriseUserDataKey]
     def __init__(self, keys: _Optional[_Iterable[_Union[EnterpriseUserDataKey, _Mapping]]] = ...) -> None: ...
+
+class EnterpriseUserDataKeyLight(_message.Message):
+    __slots__ = ("enterpriseUserId", "userEncryptedDataKey", "keyTypeId")
+    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
+    USERENCRYPTEDDATAKEY_FIELD_NUMBER: _ClassVar[int]
+    KEYTYPEID_FIELD_NUMBER: _ClassVar[int]
+    enterpriseUserId: int
+    userEncryptedDataKey: bytes
+    keyTypeId: int
+    def __init__(self, enterpriseUserId: _Optional[int] = ..., userEncryptedDataKey: _Optional[bytes] = ..., keyTypeId: _Optional[int] = ...) -> None: ...
+
+class EnterpriseUserDataKeysByNode(_message.Message):
+    __slots__ = ("nodeId", "keys")
+    NODEID_FIELD_NUMBER: _ClassVar[int]
+    KEYS_FIELD_NUMBER: _ClassVar[int]
+    nodeId: int
+    keys: _containers.RepeatedCompositeFieldContainer[EnterpriseUserDataKeyLight]
+    def __init__(self, nodeId: _Optional[int] = ..., keys: _Optional[_Iterable[_Union[EnterpriseUserDataKeyLight, _Mapping]]] = ...) -> None: ...
+
+class EnterpriseUserDataKeysByNodeResponse(_message.Message):
+    __slots__ = ("keys",)
+    KEYS_FIELD_NUMBER: _ClassVar[int]
+    keys: _containers.RepeatedCompositeFieldContainer[EnterpriseUserDataKeysByNode]
+    def __init__(self, keys: _Optional[_Iterable[_Union[EnterpriseUserDataKeysByNode, _Mapping]]] = ...) -> None: ...
 
 class EnterpriseDataRequest(_message.Message):
     __slots__ = ("continuationToken",)
@@ -843,7 +879,7 @@ class MSPContact(_message.Message):
     def __init__(self, enterpriseId: _Optional[int] = ..., enterpriseName: _Optional[str] = ...) -> None: ...
 
 class LicenseAddOn(_message.Message):
-    __slots__ = ("name", "enabled", "isTrial", "expiration", "created", "seats", "activationTime", "includedInProduct", "apiCallCount", "tierDescription")
+    __slots__ = ("name", "enabled", "isTrial", "expiration", "created", "seats", "activationTime", "includedInProduct", "apiCallCount", "tierDescription", "seatsAllocated")
     NAME_FIELD_NUMBER: _ClassVar[int]
     ENABLED_FIELD_NUMBER: _ClassVar[int]
     ISTRIAL_FIELD_NUMBER: _ClassVar[int]
@@ -854,6 +890,7 @@ class LicenseAddOn(_message.Message):
     INCLUDEDINPRODUCT_FIELD_NUMBER: _ClassVar[int]
     APICALLCOUNT_FIELD_NUMBER: _ClassVar[int]
     TIERDESCRIPTION_FIELD_NUMBER: _ClassVar[int]
+    SEATSALLOCATED_FIELD_NUMBER: _ClassVar[int]
     name: str
     enabled: bool
     isTrial: bool
@@ -864,7 +901,8 @@ class LicenseAddOn(_message.Message):
     includedInProduct: bool
     apiCallCount: int
     tierDescription: str
-    def __init__(self, name: _Optional[str] = ..., enabled: bool = ..., isTrial: bool = ..., expiration: _Optional[int] = ..., created: _Optional[int] = ..., seats: _Optional[int] = ..., activationTime: _Optional[int] = ..., includedInProduct: bool = ..., apiCallCount: _Optional[int] = ..., tierDescription: _Optional[str] = ...) -> None: ...
+    seatsAllocated: int
+    def __init__(self, name: _Optional[str] = ..., enabled: bool = ..., isTrial: bool = ..., expiration: _Optional[int] = ..., created: _Optional[int] = ..., seats: _Optional[int] = ..., activationTime: _Optional[int] = ..., includedInProduct: bool = ..., apiCallCount: _Optional[int] = ..., tierDescription: _Optional[str] = ..., seatsAllocated: _Optional[int] = ...) -> None: ...
 
 class MCDefault(_message.Message):
     __slots__ = ("mcProduct", "addOns", "filePlanType", "maxLicenses", "fixedMaxLicenses")

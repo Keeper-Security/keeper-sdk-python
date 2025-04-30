@@ -1,3 +1,5 @@
+import glob
+import os.path
 from typing import Callable, Iterable, Optional, Tuple, List
 
 from .helpers import folder_utils
@@ -19,6 +21,8 @@ def standard_completer(context: KeeperParams) -> Callable[[str, str], Iterable[s
             meta_completer = _folder_completer
         elif meta == 'PATH':
             meta_completer = _path_completer
+        elif meta == 'FILENAME':
+            meta_completer = _filename_completer
 
         if meta_completer:
             for result in meta_completer(context, prefix):
@@ -64,6 +68,9 @@ def _folder_completer(context: KeeperParams, prefix: str) -> Iterable[str]:
                 sf = context.vault.vault_data.get_folder(f_uid)
                 if sf and sf.name.casefold().startswith(pattern):
                     yield path + sf.name
+
+def _filename_completer(context: KeeperParams, prefix: str) -> Iterable[str]:
+    return glob.glob(os.path.expanduser(f'{prefix}*'))
 
 
 def split_text(text: str) -> List[Tuple[int, int]]:

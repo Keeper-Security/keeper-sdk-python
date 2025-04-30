@@ -39,6 +39,7 @@ class LoginType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     ALTERNATE: _ClassVar[LoginType]
     OFFLINE: _ClassVar[LoginType]
     FORGOT_PASSWORD: _ClassVar[LoginType]
+    PASSKEY_BIO: _ClassVar[LoginType]
 
 class DeviceStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -114,6 +115,9 @@ class LoginState(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     REQUIRES_ACCOUNT_CREATION: _ClassVar[LoginState]
     REQUIRES_DEVICE_ENCRYPTED_DATA_KEY: _ClassVar[LoginState]
     LOGIN_TOKEN_EXPIRED: _ClassVar[LoginState]
+    PASSKEY_INITIATE_CHALLENGE: _ClassVar[LoginState]
+    PASSKEY_AUTH_REQUIRED: _ClassVar[LoginState]
+    PASSKEY_VERIFY_AUTHENTICATION: _ClassVar[LoginState]
     LOGGED_IN: _ClassVar[LoginState]
 
 class EncryptedDataKeyType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
@@ -256,6 +260,17 @@ class GenericStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     INVALID_OBJECT: _ClassVar[GenericStatus]
     ALREADY_EXISTS: _ClassVar[GenericStatus]
     ACCESS_DENIED: _ClassVar[GenericStatus]
+
+class AuthenticatorAttachment(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    CROSS_PLATFORM: _ClassVar[AuthenticatorAttachment]
+    PLATFORM: _ClassVar[AuthenticatorAttachment]
+    ALL_SUPPORTED: _ClassVar[AuthenticatorAttachment]
+
+class PasskeyPurpose(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    PK_LOGIN: _ClassVar[PasskeyPurpose]
+    PK_REAUTH: _ClassVar[PasskeyPurpose]
 ENGLISH: SupportedLanguage
 ARABIC: SupportedLanguage
 BRITISH: SupportedLanguage
@@ -283,6 +298,7 @@ BIO: LoginType
 ALTERNATE: LoginType
 OFFLINE: LoginType
 FORGOT_PASSWORD: LoginType
+PASSKEY_BIO: LoginType
 DEVICE_NEEDS_APPROVAL: DeviceStatus
 DEVICE_OK: DeviceStatus
 DEVICE_DISABLED_BY_USER: DeviceStatus
@@ -334,6 +350,9 @@ AFTER_CLOUD_SSO_LOGIN: LoginState
 REQUIRES_ACCOUNT_CREATION: LoginState
 REQUIRES_DEVICE_ENCRYPTED_DATA_KEY: LoginState
 LOGIN_TOKEN_EXPIRED: LoginState
+PASSKEY_INITIATE_CHALLENGE: LoginState
+PASSKEY_AUTH_REQUIRED: LoginState
+PASSKEY_VERIFY_AUTHENTICATION: LoginState
 LOGGED_IN: LoginState
 NO_KEY: EncryptedDataKeyType
 BY_DEVICE_PUBLIC_KEY: EncryptedDataKeyType
@@ -425,6 +444,11 @@ SUCCESS: GenericStatus
 INVALID_OBJECT: GenericStatus
 ALREADY_EXISTS: GenericStatus
 ACCESS_DENIED: GenericStatus
+CROSS_PLATFORM: AuthenticatorAttachment
+PLATFORM: AuthenticatorAttachment
+ALL_SUPPORTED: AuthenticatorAttachment
+PK_LOGIN: PasskeyPurpose
+PK_REAUTH: PasskeyPurpose
 
 class ApiRequest(_message.Message):
     __slots__ = ("encryptedTransmissionKey", "publicKeyId", "locale", "encryptedPayload", "encryptionType", "recaptcha", "subEnvironment")
@@ -942,15 +966,27 @@ class SecurityData(_message.Message):
     data: bytes
     def __init__(self, uid: _Optional[bytes] = ..., data: _Optional[bytes] = ...) -> None: ...
 
+class SecurityScoreData(_message.Message):
+    __slots__ = ("uid", "data", "revision")
+    UID_FIELD_NUMBER: _ClassVar[int]
+    DATA_FIELD_NUMBER: _ClassVar[int]
+    REVISION_FIELD_NUMBER: _ClassVar[int]
+    uid: bytes
+    data: bytes
+    revision: int
+    def __init__(self, uid: _Optional[bytes] = ..., data: _Optional[bytes] = ..., revision: _Optional[int] = ...) -> None: ...
+
 class SecurityDataRequest(_message.Message):
-    __slots__ = ("recordSecurityData", "masterPasswordSecurityData", "encryptionType")
+    __slots__ = ("recordSecurityData", "masterPasswordSecurityData", "encryptionType", "recordSecurityScoreData")
     RECORDSECURITYDATA_FIELD_NUMBER: _ClassVar[int]
     MASTERPASSWORDSECURITYDATA_FIELD_NUMBER: _ClassVar[int]
     ENCRYPTIONTYPE_FIELD_NUMBER: _ClassVar[int]
+    RECORDSECURITYSCOREDATA_FIELD_NUMBER: _ClassVar[int]
     recordSecurityData: _containers.RepeatedCompositeFieldContainer[SecurityData]
     masterPasswordSecurityData: _containers.RepeatedCompositeFieldContainer[SecurityData]
     encryptionType: _enterprise_pb2.EncryptedKeyType
-    def __init__(self, recordSecurityData: _Optional[_Iterable[_Union[SecurityData, _Mapping]]] = ..., masterPasswordSecurityData: _Optional[_Iterable[_Union[SecurityData, _Mapping]]] = ..., encryptionType: _Optional[_Union[_enterprise_pb2.EncryptedKeyType, str]] = ...) -> None: ...
+    recordSecurityScoreData: _containers.RepeatedCompositeFieldContainer[SecurityScoreData]
+    def __init__(self, recordSecurityData: _Optional[_Iterable[_Union[SecurityData, _Mapping]]] = ..., masterPasswordSecurityData: _Optional[_Iterable[_Union[SecurityData, _Mapping]]] = ..., encryptionType: _Optional[_Union[_enterprise_pb2.EncryptedKeyType, str]] = ..., recordSecurityScoreData: _Optional[_Iterable[_Union[SecurityScoreData, _Mapping]]] = ...) -> None: ...
 
 class SecurityReportIncrementalData(_message.Message):
     __slots__ = ("enterpriseUserId", "currentSecurityData", "currentSecurityDataRevision", "oldSecurityData", "oldSecurityDataRevision", "currentDataEncryptionType", "oldDataEncryptionType")
@@ -1538,6 +1574,12 @@ class UserDataKeyRequest(_message.Message):
     enterpriseUserId: _containers.RepeatedScalarFieldContainer[int]
     def __init__(self, enterpriseUserId: _Optional[_Iterable[int]] = ...) -> None: ...
 
+class UserDataKeyByNodeRequest(_message.Message):
+    __slots__ = ("nodeIds",)
+    NODEIDS_FIELD_NUMBER: _ClassVar[int]
+    nodeIds: _containers.RepeatedScalarFieldContainer[int]
+    def __init__(self, nodeIds: _Optional[_Iterable[int]] = ...) -> None: ...
+
 class EnterpriseUserIdDataKeyPair(_message.Message):
     __slots__ = ("enterpriseUserId", "encryptedDataKey", "keyType")
     ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
@@ -2063,3 +2105,107 @@ class GenericRequestResponse(_message.Message):
     REQUEST_FIELD_NUMBER: _ClassVar[int]
     request: _containers.RepeatedScalarFieldContainer[bytes]
     def __init__(self, request: _Optional[_Iterable[bytes]] = ...) -> None: ...
+
+class PasskeyRegistrationRequest(_message.Message):
+    __slots__ = ("authenticatorAttachment",)
+    AUTHENTICATORATTACHMENT_FIELD_NUMBER: _ClassVar[int]
+    authenticatorAttachment: AuthenticatorAttachment
+    def __init__(self, authenticatorAttachment: _Optional[_Union[AuthenticatorAttachment, str]] = ...) -> None: ...
+
+class PasskeyRegistrationResponse(_message.Message):
+    __slots__ = ("challengeToken", "pkCreationOptions")
+    CHALLENGETOKEN_FIELD_NUMBER: _ClassVar[int]
+    PKCREATIONOPTIONS_FIELD_NUMBER: _ClassVar[int]
+    challengeToken: bytes
+    pkCreationOptions: str
+    def __init__(self, challengeToken: _Optional[bytes] = ..., pkCreationOptions: _Optional[str] = ...) -> None: ...
+
+class PasskeyRegistrationFinalization(_message.Message):
+    __slots__ = ("challengeToken", "authenticatorResponse", "friendlyName")
+    CHALLENGETOKEN_FIELD_NUMBER: _ClassVar[int]
+    AUTHENTICATORRESPONSE_FIELD_NUMBER: _ClassVar[int]
+    FRIENDLYNAME_FIELD_NUMBER: _ClassVar[int]
+    challengeToken: bytes
+    authenticatorResponse: str
+    friendlyName: str
+    def __init__(self, challengeToken: _Optional[bytes] = ..., authenticatorResponse: _Optional[str] = ..., friendlyName: _Optional[str] = ...) -> None: ...
+
+class PasskeyAuthenticationRequest(_message.Message):
+    __slots__ = ("authenticatorAttachment", "passkeyPurpose", "encryptedLoginToken")
+    AUTHENTICATORATTACHMENT_FIELD_NUMBER: _ClassVar[int]
+    PASSKEYPURPOSE_FIELD_NUMBER: _ClassVar[int]
+    ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: _ClassVar[int]
+    authenticatorAttachment: AuthenticatorAttachment
+    passkeyPurpose: PasskeyPurpose
+    encryptedLoginToken: bytes
+    def __init__(self, authenticatorAttachment: _Optional[_Union[AuthenticatorAttachment, str]] = ..., passkeyPurpose: _Optional[_Union[PasskeyPurpose, str]] = ..., encryptedLoginToken: _Optional[bytes] = ...) -> None: ...
+
+class PasskeyAuthenticationResponse(_message.Message):
+    __slots__ = ("pkRequestOptions", "challengeToken", "encryptedLoginToken")
+    PKREQUESTOPTIONS_FIELD_NUMBER: _ClassVar[int]
+    CHALLENGETOKEN_FIELD_NUMBER: _ClassVar[int]
+    ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: _ClassVar[int]
+    pkRequestOptions: str
+    challengeToken: bytes
+    encryptedLoginToken: bytes
+    def __init__(self, pkRequestOptions: _Optional[str] = ..., challengeToken: _Optional[bytes] = ..., encryptedLoginToken: _Optional[bytes] = ...) -> None: ...
+
+class PasskeyValidationRequest(_message.Message):
+    __slots__ = ("challengeToken", "assertionResponse", "passkeyPurpose", "encryptedLoginToken")
+    CHALLENGETOKEN_FIELD_NUMBER: _ClassVar[int]
+    ASSERTIONRESPONSE_FIELD_NUMBER: _ClassVar[int]
+    PASSKEYPURPOSE_FIELD_NUMBER: _ClassVar[int]
+    ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: _ClassVar[int]
+    challengeToken: bytes
+    assertionResponse: bytes
+    passkeyPurpose: PasskeyPurpose
+    encryptedLoginToken: bytes
+    def __init__(self, challengeToken: _Optional[bytes] = ..., assertionResponse: _Optional[bytes] = ..., passkeyPurpose: _Optional[_Union[PasskeyPurpose, str]] = ..., encryptedLoginToken: _Optional[bytes] = ...) -> None: ...
+
+class PasskeyValidationResponse(_message.Message):
+    __slots__ = ("isValid", "encryptedLoginToken")
+    ISVALID_FIELD_NUMBER: _ClassVar[int]
+    ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: _ClassVar[int]
+    isValid: bool
+    encryptedLoginToken: bytes
+    def __init__(self, isValid: bool = ..., encryptedLoginToken: _Optional[bytes] = ...) -> None: ...
+
+class UpdatePasskeyRequest(_message.Message):
+    __slots__ = ("userId", "credentialId", "friendlyName")
+    USERID_FIELD_NUMBER: _ClassVar[int]
+    CREDENTIALID_FIELD_NUMBER: _ClassVar[int]
+    FRIENDLYNAME_FIELD_NUMBER: _ClassVar[int]
+    userId: int
+    credentialId: bytes
+    friendlyName: str
+    def __init__(self, userId: _Optional[int] = ..., credentialId: _Optional[bytes] = ..., friendlyName: _Optional[str] = ...) -> None: ...
+
+class PasskeyListRequest(_message.Message):
+    __slots__ = ("includeDisabled",)
+    INCLUDEDISABLED_FIELD_NUMBER: _ClassVar[int]
+    includeDisabled: bool
+    def __init__(self, includeDisabled: bool = ...) -> None: ...
+
+class PasskeyInfo(_message.Message):
+    __slots__ = ("userId", "credentialId", "friendlyName", "AAGUID", "createdAtMillis", "lastUsedMillis", "disabledAtMillis")
+    USERID_FIELD_NUMBER: _ClassVar[int]
+    CREDENTIALID_FIELD_NUMBER: _ClassVar[int]
+    FRIENDLYNAME_FIELD_NUMBER: _ClassVar[int]
+    AAGUID_FIELD_NUMBER: _ClassVar[int]
+    CREATEDATMILLIS_FIELD_NUMBER: _ClassVar[int]
+    LASTUSEDMILLIS_FIELD_NUMBER: _ClassVar[int]
+    DISABLEDATMILLIS_FIELD_NUMBER: _ClassVar[int]
+    userId: int
+    credentialId: bytes
+    friendlyName: str
+    AAGUID: str
+    createdAtMillis: int
+    lastUsedMillis: int
+    disabledAtMillis: int
+    def __init__(self, userId: _Optional[int] = ..., credentialId: _Optional[bytes] = ..., friendlyName: _Optional[str] = ..., AAGUID: _Optional[str] = ..., createdAtMillis: _Optional[int] = ..., lastUsedMillis: _Optional[int] = ..., disabledAtMillis: _Optional[int] = ...) -> None: ...
+
+class PasskeyListResponse(_message.Message):
+    __slots__ = ("passkeyInfo",)
+    PASSKEYINFO_FIELD_NUMBER: _ClassVar[int]
+    passkeyInfo: _containers.RepeatedCompositeFieldContainer[PasskeyInfo]
+    def __init__(self, passkeyInfo: _Optional[_Iterable[_Union[PasskeyInfo, _Mapping]]] = ...) -> None: ...

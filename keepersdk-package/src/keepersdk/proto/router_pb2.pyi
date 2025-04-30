@@ -17,6 +17,8 @@ class RouterResponseCode(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     RRC_BAD_STATE: _ClassVar[RouterResponseCode]
     RRC_CONTROLLER_DOWN: _ClassVar[RouterResponseCode]
     RRC_WRONG_INSTANCE: _ClassVar[RouterResponseCode]
+    RRC_NOT_ALLOWED_ENFORCEMENT_NOT_ENABLED: _ClassVar[RouterResponseCode]
+    RRC_NOT_ALLOWED_PAM_CONFIG_FEATURES_NOT_ENABLED: _ClassVar[RouterResponseCode]
 
 class RouterRotationStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -47,6 +49,8 @@ RRC_TIMEOUT: RouterResponseCode
 RRC_BAD_STATE: RouterResponseCode
 RRC_CONTROLLER_DOWN: RouterResponseCode
 RRC_WRONG_INSTANCE: RouterResponseCode
+RRC_NOT_ALLOWED_ENFORCEMENT_NOT_ENABLED: RouterResponseCode
+RRC_NOT_ALLOWED_PAM_CONFIG_FEATURES_NOT_ENABLED: RouterResponseCode
 RRS_ONLINE: RouterRotationStatus
 RRS_NO_ROTATION: RouterRotationStatus
 RRS_NO_CONTROLLER: RouterRotationStatus
@@ -88,7 +92,7 @@ class RouterControllerMessage(_message.Message):
     def __init__(self, messageType: _Optional[_Union[_pam_pb2.ControllerMessageType, str]] = ..., messageUid: _Optional[bytes] = ..., controllerUid: _Optional[bytes] = ..., streamResponse: bool = ..., payload: _Optional[bytes] = ..., timeout: _Optional[int] = ...) -> None: ...
 
 class RouterUserAuth(_message.Message):
-    __slots__ = ("transmissionKey", "sessionToken", "userId", "enterpriseUserId", "deviceName", "deviceToken", "clientVersionId", "needUsername", "username")
+    __slots__ = ("transmissionKey", "sessionToken", "userId", "enterpriseUserId", "deviceName", "deviceToken", "clientVersionId", "needUsername", "username", "mspEnterpriseId")
     TRANSMISSIONKEY_FIELD_NUMBER: _ClassVar[int]
     SESSIONTOKEN_FIELD_NUMBER: _ClassVar[int]
     USERID_FIELD_NUMBER: _ClassVar[int]
@@ -98,6 +102,7 @@ class RouterUserAuth(_message.Message):
     CLIENTVERSIONID_FIELD_NUMBER: _ClassVar[int]
     NEEDUSERNAME_FIELD_NUMBER: _ClassVar[int]
     USERNAME_FIELD_NUMBER: _ClassVar[int]
+    MSPENTERPRISEID_FIELD_NUMBER: _ClassVar[int]
     transmissionKey: bytes
     sessionToken: bytes
     userId: int
@@ -107,10 +112,11 @@ class RouterUserAuth(_message.Message):
     clientVersionId: int
     needUsername: bool
     username: str
-    def __init__(self, transmissionKey: _Optional[bytes] = ..., sessionToken: _Optional[bytes] = ..., userId: _Optional[int] = ..., enterpriseUserId: _Optional[int] = ..., deviceName: _Optional[str] = ..., deviceToken: _Optional[bytes] = ..., clientVersionId: _Optional[int] = ..., needUsername: bool = ..., username: _Optional[str] = ...) -> None: ...
+    mspEnterpriseId: int
+    def __init__(self, transmissionKey: _Optional[bytes] = ..., sessionToken: _Optional[bytes] = ..., userId: _Optional[int] = ..., enterpriseUserId: _Optional[int] = ..., deviceName: _Optional[str] = ..., deviceToken: _Optional[bytes] = ..., clientVersionId: _Optional[int] = ..., needUsername: bool = ..., username: _Optional[str] = ..., mspEnterpriseId: _Optional[int] = ...) -> None: ...
 
 class RouterDeviceAuth(_message.Message):
-    __slots__ = ("clientId", "clientVersion", "signature", "enterpriseId", "nodeId", "deviceName", "deviceToken", "controllerName", "controllerUid", "ownerUser", "challenge")
+    __slots__ = ("clientId", "clientVersion", "signature", "enterpriseId", "nodeId", "deviceName", "deviceToken", "controllerName", "controllerUid", "ownerUser", "challenge", "ownerId")
     CLIENTID_FIELD_NUMBER: _ClassVar[int]
     CLIENTVERSION_FIELD_NUMBER: _ClassVar[int]
     SIGNATURE_FIELD_NUMBER: _ClassVar[int]
@@ -122,6 +128,7 @@ class RouterDeviceAuth(_message.Message):
     CONTROLLERUID_FIELD_NUMBER: _ClassVar[int]
     OWNERUSER_FIELD_NUMBER: _ClassVar[int]
     CHALLENGE_FIELD_NUMBER: _ClassVar[int]
+    OWNERID_FIELD_NUMBER: _ClassVar[int]
     clientId: str
     clientVersion: str
     signature: bytes
@@ -133,7 +140,8 @@ class RouterDeviceAuth(_message.Message):
     controllerUid: bytes
     ownerUser: str
     challenge: str
-    def __init__(self, clientId: _Optional[str] = ..., clientVersion: _Optional[str] = ..., signature: _Optional[bytes] = ..., enterpriseId: _Optional[int] = ..., nodeId: _Optional[int] = ..., deviceName: _Optional[str] = ..., deviceToken: _Optional[bytes] = ..., controllerName: _Optional[str] = ..., controllerUid: _Optional[bytes] = ..., ownerUser: _Optional[str] = ..., challenge: _Optional[str] = ...) -> None: ...
+    ownerId: int
+    def __init__(self, clientId: _Optional[str] = ..., clientVersion: _Optional[str] = ..., signature: _Optional[bytes] = ..., enterpriseId: _Optional[int] = ..., nodeId: _Optional[int] = ..., deviceName: _Optional[str] = ..., deviceToken: _Optional[bytes] = ..., controllerName: _Optional[str] = ..., controllerUid: _Optional[bytes] = ..., ownerUser: _Optional[str] = ..., challenge: _Optional[str] = ..., ownerId: _Optional[int] = ...) -> None: ...
 
 class RouterRecordRotation(_message.Message):
     __slots__ = ("recordUid", "configurationUid", "controllerUid", "resourceUid", "noSchedule")
@@ -188,7 +196,7 @@ class RouterRotationInfo(_message.Message):
     def __init__(self, status: _Optional[_Union[RouterRotationStatus, str]] = ..., configurationUid: _Optional[bytes] = ..., resourceUid: _Optional[bytes] = ..., nodeId: _Optional[int] = ..., controllerUid: _Optional[bytes] = ..., controllerName: _Optional[str] = ..., scriptName: _Optional[str] = ..., pwdComplexity: _Optional[str] = ..., disabled: bool = ...) -> None: ...
 
 class RouterRecordRotationRequest(_message.Message):
-    __slots__ = ("recordUid", "revision", "configurationUid", "resourceUid", "schedule", "enterpriseUserId", "pwdComplexity", "disabled", "remoteAddress", "clientVersionId")
+    __slots__ = ("recordUid", "revision", "configurationUid", "resourceUid", "schedule", "enterpriseUserId", "pwdComplexity", "disabled", "remoteAddress", "clientVersionId", "noop")
     RECORDUID_FIELD_NUMBER: _ClassVar[int]
     REVISION_FIELD_NUMBER: _ClassVar[int]
     CONFIGURATIONUID_FIELD_NUMBER: _ClassVar[int]
@@ -199,6 +207,7 @@ class RouterRecordRotationRequest(_message.Message):
     DISABLED_FIELD_NUMBER: _ClassVar[int]
     REMOTEADDRESS_FIELD_NUMBER: _ClassVar[int]
     CLIENTVERSIONID_FIELD_NUMBER: _ClassVar[int]
+    NOOP_FIELD_NUMBER: _ClassVar[int]
     recordUid: bytes
     revision: int
     configurationUid: bytes
@@ -209,7 +218,8 @@ class RouterRecordRotationRequest(_message.Message):
     disabled: bool
     remoteAddress: str
     clientVersionId: int
-    def __init__(self, recordUid: _Optional[bytes] = ..., revision: _Optional[int] = ..., configurationUid: _Optional[bytes] = ..., resourceUid: _Optional[bytes] = ..., schedule: _Optional[str] = ..., enterpriseUserId: _Optional[int] = ..., pwdComplexity: _Optional[bytes] = ..., disabled: bool = ..., remoteAddress: _Optional[str] = ..., clientVersionId: _Optional[int] = ...) -> None: ...
+    noop: bool
+    def __init__(self, recordUid: _Optional[bytes] = ..., revision: _Optional[int] = ..., configurationUid: _Optional[bytes] = ..., resourceUid: _Optional[bytes] = ..., schedule: _Optional[str] = ..., enterpriseUserId: _Optional[int] = ..., pwdComplexity: _Optional[bytes] = ..., disabled: bool = ..., remoteAddress: _Optional[str] = ..., clientVersionId: _Optional[int] = ..., noop: bool = ...) -> None: ...
 
 class UserRecordAccessRequest(_message.Message):
     __slots__ = ("userId", "recordUid")
@@ -302,3 +312,33 @@ class ValidateConnectionsResponse(_message.Message):
     FAILEDCONNECTIONS_FIELD_NUMBER: _ClassVar[int]
     failedConnections: _containers.RepeatedCompositeFieldContainer[ConnectionValidationFailure]
     def __init__(self, failedConnections: _Optional[_Iterable[_Union[ConnectionValidationFailure, _Mapping]]] = ...) -> None: ...
+
+class GetEnforcementRequest(_message.Message):
+    __slots__ = ("enterpriseUserId",)
+    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
+    enterpriseUserId: int
+    def __init__(self, enterpriseUserId: _Optional[int] = ...) -> None: ...
+
+class EnforcementType(_message.Message):
+    __slots__ = ("enforcementTypeId", "value")
+    ENFORCEMENTTYPEID_FIELD_NUMBER: _ClassVar[int]
+    VALUE_FIELD_NUMBER: _ClassVar[int]
+    enforcementTypeId: int
+    value: str
+    def __init__(self, enforcementTypeId: _Optional[int] = ..., value: _Optional[str] = ...) -> None: ...
+
+class GetEnforcementResponse(_message.Message):
+    __slots__ = ("enforcementTypes",)
+    ENFORCEMENTTYPES_FIELD_NUMBER: _ClassVar[int]
+    enforcementTypes: _containers.RepeatedCompositeFieldContainer[EnforcementType]
+    def __init__(self, enforcementTypes: _Optional[_Iterable[_Union[EnforcementType, _Mapping]]] = ...) -> None: ...
+
+class PEDMTOTPValidateRequest(_message.Message):
+    __slots__ = ("username", "enterpriseId", "code")
+    USERNAME_FIELD_NUMBER: _ClassVar[int]
+    ENTERPRISEID_FIELD_NUMBER: _ClassVar[int]
+    CODE_FIELD_NUMBER: _ClassVar[int]
+    username: str
+    enterpriseId: int
+    code: int
+    def __init__(self, username: _Optional[str] = ..., enterpriseId: _Optional[int] = ..., code: _Optional[int] = ...) -> None: ...

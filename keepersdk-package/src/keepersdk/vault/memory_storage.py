@@ -24,6 +24,8 @@ class InMemoryVaultStorage(IVaultStorage):
         self._breach_watch_records = InMemoryEntityStorage[storage_types.BreachWatchRecord, str]()
         self._breach_watch_security_data = InMemoryEntityStorage[storage_types.BreachWatchSecurityData, str]()
 
+        self._notifications = InMemoryEntityStorage[storage_types.StorageNotification, str]()
+
     @property
     def user_settings(self):
         return self._user_settings
@@ -84,6 +86,10 @@ class InMemoryVaultStorage(IVaultStorage):
     def breach_watch_security_data(self):
         return self._breach_watch_security_data
 
+    @property
+    def notifications(self):
+        return self._notifications
+
     def clear(self):
         self._user_settings.delete()
         self._records.clear()
@@ -102,3 +108,5 @@ class InMemoryVaultStorage(IVaultStorage):
 
         self._breach_watch_records.clear()
         self._breach_watch_security_data.clear()
+
+        self._notifications.clear()

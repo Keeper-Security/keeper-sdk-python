@@ -207,3 +207,18 @@ class BreachWatchSecurityData(IUid):
 
     def uid(self):
         return self.record_uid
+
+
+class StorageNotification(IUid):
+    def __init__(self) -> None:
+        self.notification_uid: str = ''
+        self.notification_type: int = 0
+        self.notification_category: int = 0
+        self.sender_name: str = ''
+        self.encrypted_data: bytes = b''
+        self.read_status: int = 0
+        self.approval_status: int = 0
+        self.created: int = 0
+
+    def uid(self):
+        return self.notification_uid

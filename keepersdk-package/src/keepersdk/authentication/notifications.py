@@ -68,7 +68,7 @@ class FanOut(Generic[M]):
 class KeeperPushNotifications(FanOut[Dict[str, Any]]):
     def __init__(self) -> None:
         super().__init__()
-        self._ws_app: Optional[websockets.ClientProtocol] = None
+        self._ws_app: Optional[websockets.ClientConnection] = None
 
     async def main_loop(self, push_url: str, transmission_key: bytes, data: Optional[bytes] = None):
         logger = utils.get_logger()

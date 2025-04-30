@@ -108,10 +108,13 @@ class EnterpriseRoleViewCommand(base.ArgparseCommand):
                     try:
                         rto = value if isinstance(value, dict) else json.loads(value)
                         record_types = []
-                        for record_type_id in rto.get('std'):
+                        record_type_id: int
+                        record_type_ids: Any = rto.get('std')
+                        for record_type_id in record_type_ids:
                             if record_type_id in std_record_types:
                                 record_types.append(std_record_types[record_type_id])
-                        for record_type_id in rto.get('ent'):
+                        record_type_ids = rto.get('ent')
+                        for record_type_id in record_type_ids:
                             if record_type_id in ent_record_types:
                                 record_types.append(ent_record_types[record_type_id])
                         value = record_types

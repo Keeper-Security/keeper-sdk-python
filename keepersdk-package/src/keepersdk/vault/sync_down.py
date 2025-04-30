@@ -1,16 +1,16 @@
 import json
-from typing import List, Optional, Iterable, Dict
+from typing import List, Optional, Iterable
 
 from . import vault_data, vault_storage
 from .storage_types import (
     StorageRecord, StorageSharedFolder, StorageRecordKey, StorageTeam, StorageSharedFolderKey, StorageNonSharedData,
     StorageSharedFolderPermission, StorageFolder, StorageFolderRecord, StorageRecordType, StorageKeyType,
-    StorageUserEmail,
+    StorageUserEmail, StorageNotification,
     SharedFolderUserType, BreachWatchRecord, BreachWatchSecurityData, UserSettings)
 from .vault_plugins import IPendingSharePlugin, IAuditDataPlugin
 from .. import crypto, utils
 from ..authentication import keeper_auth
-from ..proto import SyncDown_pb2, record_pb2
+from ..proto import SyncDown_pb2, record_pb2, NotificationCenter_pb2
 from ..storage import storage_types
 
 
@@ -230,7 +230,7 @@ def sync_down_request(auth: keeper_auth.KeeperAuth,
             for team in response.teams:
                 team_uid = utils.base64_url_encode(team.teamUid)
                 sf_removed_keys.extend(
-                    (storage_types.UidLink[str, str](utils.base64_url_encode(x), team_uid) for x in team.removedSharedFolders))
+                    (storage_types.UidLink(utils.base64_url_encode(x), team_uid) for x in team.removedSharedFolders))
 
             if sf_removed_keys:
                 task.add_shared_folders((x.subject_uid() for x in sf_removed_keys))
@@ -526,7 +526,26 @@ def sync_down_request(auth: keeper_auth.KeeperAuth,
 
         if len(response.recordAddAuditData) > 0 and audit_data:
             audit_data.schedule_audit_data((utils.base64_url_encode(x) for x in response.recordAddAuditData))
+
+        if len(response.notificationSync) > 0:
+            def to_notification(nw: NotificationCenter_pb2.NotificationWrapper) -> StorageNotification:
+                sn = StorageNotification()
+                sn.notification_uid = utils.base64_url_encode(nw.uid)
+                sn.notification_type = nw.content.notification.type
+                sn.notification_category = nw.content.notification.category
+                sn.sender_name = nw.content.notification.sender.name
+                sn.encrypted_data = nw.content.notification.encryptedData.data
+                sn.read_status = nw.content.readStatus
+                sn.approval_status = nw.content.approvalStatus
+                sn.created = nw.timestamp
+                return sn
+
+            notifications = [to_notification(x) for x in response.notificationSync]
+            storage.notifications.put_entities(notifications)
+            task.add_notifications((x.notification_uid for x in notifications))
+
         user_settings.continuation_token = token
+
     storage.user_settings.store(user_settings)
 
     assert task is not None
@@ -555,5 +574,13 @@ def sync_down_request(auth: keeper_auth.KeeperAuth,
 
         storage.record_types.put_entities((y for y in (to_record_type(x) for x in rt_rs.recordTypes) if y))
         task.record_types_loaded = True
+
+    if len(task.notifications) > 0:
+        old_notifications = [(x.notification_uid, x.created) for x in storage.notifications.get_all_entities() if x.notification_uid not in task.notifications]
+        if len(old_notifications) + len(task.notifications) > 100:
+            old_notifications.sort(key=lambda x: x[1])
+            to_delete = len(old_notifications) + len(task.notifications) - 100
+            old_notifications = old_notifications[:to_delete]
+            storage.notifications.delete_uids([x[0] for x in old_notifications])
 
     return task

@@ -82,8 +82,7 @@ class SqliteLinkStorage(sqlite_dao.SqliteStorage, storage_types.ILinkStorage):
 
     def get_link(self, subject_uid, object_uid):
         for link in self.select_by_filter(self.schema.primary_key, (subject_uid, object_uid)):
-            yield link
-            break
+            return link
 
 
 class SqliteRecordStorage(sqlite_dao.SqliteStorage, storage_types.IRecordStorage):

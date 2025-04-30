@@ -80,6 +80,11 @@ class IVaultStorage(abc.ABC):
     def breach_watch_security_data(self) -> IEntityStorage[storage_types.BreachWatchSecurityData, str]:
         pass
 
+    @property
+    @abc.abstractmethod
+    def notifications(self) -> IEntityStorage[storage_types.StorageNotification, str]:
+        pass
+
     @abc.abstractmethod
     def clear(self) -> None:
         pass

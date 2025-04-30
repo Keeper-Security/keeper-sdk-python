@@ -284,8 +284,20 @@ class RecordAudit(_message.Message):
     data: bytes
     def __init__(self, version: _Optional[int] = ..., data: _Optional[bytes] = ...) -> None: ...
 
+class SecurityData(_message.Message):
+    __slots__ = ("data",)
+    DATA_FIELD_NUMBER: _ClassVar[int]
+    data: bytes
+    def __init__(self, data: _Optional[bytes] = ...) -> None: ...
+
+class SecurityScoreData(_message.Message):
+    __slots__ = ("data",)
+    DATA_FIELD_NUMBER: _ClassVar[int]
+    data: bytes
+    def __init__(self, data: _Optional[bytes] = ...) -> None: ...
+
 class RecordAdd(_message.Message):
-    __slots__ = ("record_uid", "record_key", "client_modified_time", "data", "non_shared_data", "folder_type", "folder_uid", "folder_key", "record_links", "audit")
+    __slots__ = ("record_uid", "record_key", "client_modified_time", "data", "non_shared_data", "folder_type", "folder_uid", "folder_key", "record_links", "audit", "securityData", "securityScoreData")
     RECORD_UID_FIELD_NUMBER: _ClassVar[int]
     RECORD_KEY_FIELD_NUMBER: _ClassVar[int]
     CLIENT_MODIFIED_TIME_FIELD_NUMBER: _ClassVar[int]
@@ -296,6 +308,8 @@ class RecordAdd(_message.Message):
     FOLDER_KEY_FIELD_NUMBER: _ClassVar[int]
     RECORD_LINKS_FIELD_NUMBER: _ClassVar[int]
     AUDIT_FIELD_NUMBER: _ClassVar[int]
+    SECURITYDATA_FIELD_NUMBER: _ClassVar[int]
+    SECURITYSCOREDATA_FIELD_NUMBER: _ClassVar[int]
     record_uid: bytes
     record_key: bytes
     client_modified_time: int
@@ -306,18 +320,22 @@ class RecordAdd(_message.Message):
     folder_key: bytes
     record_links: _containers.RepeatedCompositeFieldContainer[RecordLink]
     audit: RecordAudit
-    def __init__(self, record_uid: _Optional[bytes] = ..., record_key: _Optional[bytes] = ..., client_modified_time: _Optional[int] = ..., data: _Optional[bytes] = ..., non_shared_data: _Optional[bytes] = ..., folder_type: _Optional[_Union[RecordFolderType, str]] = ..., folder_uid: _Optional[bytes] = ..., folder_key: _Optional[bytes] = ..., record_links: _Optional[_Iterable[_Union[RecordLink, _Mapping]]] = ..., audit: _Optional[_Union[RecordAudit, _Mapping]] = ...) -> None: ...
+    securityData: SecurityData
+    securityScoreData: SecurityScoreData
+    def __init__(self, record_uid: _Optional[bytes] = ..., record_key: _Optional[bytes] = ..., client_modified_time: _Optional[int] = ..., data: _Optional[bytes] = ..., non_shared_data: _Optional[bytes] = ..., folder_type: _Optional[_Union[RecordFolderType, str]] = ..., folder_uid: _Optional[bytes] = ..., folder_key: _Optional[bytes] = ..., record_links: _Optional[_Iterable[_Union[RecordLink, _Mapping]]] = ..., audit: _Optional[_Union[RecordAudit, _Mapping]] = ..., securityData: _Optional[_Union[SecurityData, _Mapping]] = ..., securityScoreData: _Optional[_Union[SecurityScoreData, _Mapping]] = ...) -> None: ...
 
 class RecordsAddRequest(_message.Message):
-    __slots__ = ("records", "client_time")
+    __slots__ = ("records", "client_time", "security_data_key_type")
     RECORDS_FIELD_NUMBER: _ClassVar[int]
     CLIENT_TIME_FIELD_NUMBER: _ClassVar[int]
+    SECURITY_DATA_KEY_TYPE_FIELD_NUMBER: _ClassVar[int]
     records: _containers.RepeatedCompositeFieldContainer[RecordAdd]
     client_time: int
-    def __init__(self, records: _Optional[_Iterable[_Union[RecordAdd, _Mapping]]] = ..., client_time: _Optional[int] = ...) -> None: ...
+    security_data_key_type: RecordKeyType
+    def __init__(self, records: _Optional[_Iterable[_Union[RecordAdd, _Mapping]]] = ..., client_time: _Optional[int] = ..., security_data_key_type: _Optional[_Union[RecordKeyType, str]] = ...) -> None: ...
 
 class RecordUpdate(_message.Message):
-    __slots__ = ("record_uid", "client_modified_time", "revision", "data", "non_shared_data", "record_links_add", "record_links_remove", "audit")
+    __slots__ = ("record_uid", "client_modified_time", "revision", "data", "non_shared_data", "record_links_add", "record_links_remove", "audit", "securityData", "securityScoreData")
     RECORD_UID_FIELD_NUMBER: _ClassVar[int]
     CLIENT_MODIFIED_TIME_FIELD_NUMBER: _ClassVar[int]
     REVISION_FIELD_NUMBER: _ClassVar[int]
@@ -326,6 +344,8 @@ class RecordUpdate(_message.Message):
     RECORD_LINKS_ADD_FIELD_NUMBER: _ClassVar[int]
     RECORD_LINKS_REMOVE_FIELD_NUMBER: _ClassVar[int]
     AUDIT_FIELD_NUMBER: _ClassVar[int]
+    SECURITYDATA_FIELD_NUMBER: _ClassVar[int]
+    SECURITYSCOREDATA_FIELD_NUMBER: _ClassVar[int]
     record_uid: bytes
     client_modified_time: int
     revision: int
@@ -334,15 +354,19 @@ class RecordUpdate(_message.Message):
     record_links_add: _containers.RepeatedCompositeFieldContainer[RecordLink]
     record_links_remove: _containers.RepeatedScalarFieldContainer[bytes]
     audit: RecordAudit
-    def __init__(self, record_uid: _Optional[bytes] = ..., client_modified_time: _Optional[int] = ..., revision: _Optional[int] = ..., data: _Optional[bytes] = ..., non_shared_data: _Optional[bytes] = ..., record_links_add: _Optional[_Iterable[_Union[RecordLink, _Mapping]]] = ..., record_links_remove: _Optional[_Iterable[bytes]] = ..., audit: _Optional[_Union[RecordAudit, _Mapping]] = ...) -> None: ...
+    securityData: SecurityData
+    securityScoreData: SecurityScoreData
+    def __init__(self, record_uid: _Optional[bytes] = ..., client_modified_time: _Optional[int] = ..., revision: _Optional[int] = ..., data: _Optional[bytes] = ..., non_shared_data: _Optional[bytes] = ..., record_links_add: _Optional[_Iterable[_Union[RecordLink, _Mapping]]] = ..., record_links_remove: _Optional[_Iterable[bytes]] = ..., audit: _Optional[_Union[RecordAudit, _Mapping]] = ..., securityData: _Optional[_Union[SecurityData, _Mapping]] = ..., securityScoreData: _Optional[_Union[SecurityScoreData, _Mapping]] = ...) -> None: ...
 
 class RecordsUpdateRequest(_message.Message):
-    __slots__ = ("records", "client_time")
+    __slots__ = ("records", "client_time", "security_data_key_type")
     RECORDS_FIELD_NUMBER: _ClassVar[int]
     CLIENT_TIME_FIELD_NUMBER: _ClassVar[int]
+    SECURITY_DATA_KEY_TYPE_FIELD_NUMBER: _ClassVar[int]
     records: _containers.RepeatedCompositeFieldContainer[RecordUpdate]
     client_time: int
-    def __init__(self, records: _Optional[_Iterable[_Union[RecordUpdate, _Mapping]]] = ..., client_time: _Optional[int] = ...) -> None: ...
+    security_data_key_type: RecordKeyType
+    def __init__(self, records: _Optional[_Iterable[_Union[RecordUpdate, _Mapping]]] = ..., client_time: _Optional[int] = ..., security_data_key_type: _Optional[_Union[RecordKeyType, str]] = ...) -> None: ...
 
 class RecordFileForConversion(_message.Message):
     __slots__ = ("record_uid", "file_file_id", "thumb_file_id", "data", "record_key", "link_key")
@@ -567,7 +591,7 @@ class GetRecordDataWithAccessInfoRequest(_message.Message):
     def __init__(self, clientTime: _Optional[int] = ..., recordUid: _Optional[_Iterable[bytes]] = ..., recordDetailsInclude: _Optional[_Union[RecordDetailsInclude, str]] = ...) -> None: ...
 
 class UserPermission(_message.Message):
-    __slots__ = ("username", "owner", "shareAdmin", "sharable", "editable", "awaitingApproval", "expiration", "accountUid", "timerNotificationType")
+    __slots__ = ("username", "owner", "shareAdmin", "sharable", "editable", "awaitingApproval", "expiration", "accountUid", "timerNotificationType", "rotateOnExpiration")
     USERNAME_FIELD_NUMBER: _ClassVar[int]
     OWNER_FIELD_NUMBER: _ClassVar[int]
     SHAREADMIN_FIELD_NUMBER: _ClassVar[int]
@@ -577,6 +601,7 @@ class UserPermission(_message.Message):
     EXPIRATION_FIELD_NUMBER: _ClassVar[int]
     ACCOUNTUID_FIELD_NUMBER: _ClassVar[int]
     TIMERNOTIFICATIONTYPE_FIELD_NUMBER: _ClassVar[int]
+    ROTATEONEXPIRATION_FIELD_NUMBER: _ClassVar[int]
     username: str
     owner: bool
     shareAdmin: bool
@@ -586,23 +611,26 @@ class UserPermission(_message.Message):
     expiration: int
     accountUid: bytes
     timerNotificationType: TimerNotificationType
-    def __init__(self, username: _Optional[str] = ..., owner: bool = ..., shareAdmin: bool = ..., sharable: bool = ..., editable: bool = ..., awaitingApproval: bool = ..., expiration: _Optional[int] = ..., accountUid: _Optional[bytes] = ..., timerNotificationType: _Optional[_Union[TimerNotificationType, str]] = ...) -> None: ...
+    rotateOnExpiration: bool
+    def __init__(self, username: _Optional[str] = ..., owner: bool = ..., shareAdmin: bool = ..., sharable: bool = ..., editable: bool = ..., awaitingApproval: bool = ..., expiration: _Optional[int] = ..., accountUid: _Optional[bytes] = ..., timerNotificationType: _Optional[_Union[TimerNotificationType, str]] = ..., rotateOnExpiration: bool = ...) -> None: ...
 
 class SharedFolderPermission(_message.Message):
-    __slots__ = ("sharedFolderUid", "resharable", "editable", "revision", "expiration", "timerNotificationType")
+    __slots__ = ("sharedFolderUid", "resharable", "editable", "revision", "expiration", "timerNotificationType", "rotateOnExpiration")
     SHAREDFOLDERUID_FIELD_NUMBER: _ClassVar[int]
     RESHARABLE_FIELD_NUMBER: _ClassVar[int]
     EDITABLE_FIELD_NUMBER: _ClassVar[int]
     REVISION_FIELD_NUMBER: _ClassVar[int]
     EXPIRATION_FIELD_NUMBER: _ClassVar[int]
     TIMERNOTIFICATIONTYPE_FIELD_NUMBER: _ClassVar[int]
+    ROTATEONEXPIRATION_FIELD_NUMBER: _ClassVar[int]
     sharedFolderUid: bytes
     resharable: bool
     editable: bool
     revision: int
     expiration: int
     timerNotificationType: TimerNotificationType
-    def __init__(self, sharedFolderUid: _Optional[bytes] = ..., resharable: bool = ..., editable: bool = ..., revision: _Optional[int] = ..., expiration: _Optional[int] = ..., timerNotificationType: _Optional[_Union[TimerNotificationType, str]] = ...) -> None: ...
+    rotateOnExpiration: bool
+    def __init__(self, sharedFolderUid: _Optional[bytes] = ..., resharable: bool = ..., editable: bool = ..., revision: _Optional[int] = ..., expiration: _Optional[int] = ..., timerNotificationType: _Optional[_Union[TimerNotificationType, str]] = ..., rotateOnExpiration: bool = ...) -> None: ...
 
 class RecordData(_message.Message):
     __slots__ = ("revision", "version", "shared", "encryptedRecordData", "encryptedExtraData", "clientModifiedTime", "nonSharedData", "linkedRecordData", "fileId", "fileSize", "thumbnailSize", "recordKeyType", "recordKey", "recordUid")
@@ -685,7 +713,7 @@ class RecordShareUpdateRequest(_message.Message):
     def __init__(self, addSharedRecord: _Optional[_Iterable[_Union[SharedRecord, _Mapping]]] = ..., updateSharedRecord: _Optional[_Iterable[_Union[SharedRecord, _Mapping]]] = ..., removeSharedRecord: _Optional[_Iterable[_Union[SharedRecord, _Mapping]]] = ..., pt: _Optional[str] = ...) -> None: ...
 
 class SharedRecord(_message.Message):
-    __slots__ = ("toUsername", "recordUid", "recordKey", "sharedFolderUid", "teamUid", "editable", "shareable", "transfer", "useEccKey", "removeVaultData", "expiration", "timerNotificationType")
+    __slots__ = ("toUsername", "recordUid", "recordKey", "sharedFolderUid", "teamUid", "editable", "shareable", "transfer", "useEccKey", "removeVaultData", "expiration", "timerNotificationType", "rotateOnExpiration")
     TOUSERNAME_FIELD_NUMBER: _ClassVar[int]
     RECORDUID_FIELD_NUMBER: _ClassVar[int]
     RECORDKEY_FIELD_NUMBER: _ClassVar[int]
@@ -698,6 +726,7 @@ class SharedRecord(_message.Message):
     REMOVEVAULTDATA_FIELD_NUMBER: _ClassVar[int]
     EXPIRATION_FIELD_NUMBER: _ClassVar[int]
     TIMERNOTIFICATIONTYPE_FIELD_NUMBER: _ClassVar[int]
+    ROTATEONEXPIRATION_FIELD_NUMBER: _ClassVar[int]
     toUsername: str
     recordUid: bytes
     recordKey: bytes
@@ -710,7 +739,8 @@ class SharedRecord(_message.Message):
     removeVaultData: bool
     expiration: int
     timerNotificationType: TimerNotificationType
-    def __init__(self, toUsername: _Optional[str] = ..., recordUid: _Optional[bytes] = ..., recordKey: _Optional[bytes] = ..., sharedFolderUid: _Optional[bytes] = ..., teamUid: _Optional[bytes] = ..., editable: bool = ..., shareable: bool = ..., transfer: bool = ..., useEccKey: bool = ..., removeVaultData: bool = ..., expiration: _Optional[int] = ..., timerNotificationType: _Optional[_Union[TimerNotificationType, str]] = ...) -> None: ...
+    rotateOnExpiration: bool
+    def __init__(self, toUsername: _Optional[str] = ..., recordUid: _Optional[bytes] = ..., recordKey: _Optional[bytes] = ..., sharedFolderUid: _Optional[bytes] = ..., teamUid: _Optional[bytes] = ..., editable: bool = ..., shareable: bool = ..., transfer: bool = ..., useEccKey: bool = ..., removeVaultData: bool = ..., expiration: _Optional[int] = ..., timerNotificationType: _Optional[_Union[TimerNotificationType, str]] = ..., rotateOnExpiration: bool = ...) -> None: ...
 
 class RecordShareUpdateResponse(_message.Message):
     __slots__ = ("addSharedRecordStatus", "updateSharedRecordStatus", "removeSharedRecordStatus")

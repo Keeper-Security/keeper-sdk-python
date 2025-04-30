@@ -321,10 +321,10 @@ class KeeperAuth:
         self._use_pushes = True
         try:
             while self._use_pushes:
-                self.execute_auth_rest('keep_alive', None)
                 url = self.keeper_endpoint.get_push_url(
                     transmission_key, self.auth_context.device_token, self.auth_context.message_session_uid)
                 await self._push_notifications.main_loop(url, transmission_key, self.auth_context.session_token)
+                self.execute_auth_rest('keep_alive', None)
         except Exception as e:
             utils.get_logger().debug(e)
         finally:

@@ -27,6 +27,8 @@ def is_json_value_field(obj: Any) -> bool:
 
 
 def field_to_title(field: str) -> str:
+    if field[0] == '"' and field[-1] == '"':
+        return field.strip('"')
     words = field.split('_')
     words = [x.capitalize() for x in words if x]
     words = [x.upper() if x in WORDS_TO_CAPITALIZE else x for x in words]
@@ -95,6 +97,7 @@ def detect_column_type(values: Iterable[Any]) -> Optional[Callable[[Any], Any]]:
             return get_num_key
         if column_type == 'bool':
             return get_bool_key
+    return None
 
 
 
@@ -130,9 +133,10 @@ def dump_report_data(data: List[List[Any]],
             def key_func(r: List[Any]) -> Any:
                 assert sort_by is not None
                 assert key_fn is not None
-                if isinstance(r, list) :
+                if isinstance(r, list):
                     if 0 <= sort_by < len(r):
                         return key_fn(r[sort_by])
+                return None
             data.sort(key=key_func, reverse=reverse)
 
     if fmt == 'csv':
@@ -235,7 +239,9 @@ def dump_report_data(data: List[List[Any]],
                         value = column
                     if column_width > 0:
                         if isinstance(value, str) and len(value) > column_width:
-                            value = value[:column_width-2] + '...'
+                            lines = value.split('\n')
+                            lines = [x if len(x) < column_width else x[:column_width-2] + '...' for x in lines]
+                            value = '\n'.join(lines)
                     rowi.append(value)
                 expanded_data.append(rowi)
         tablefmt = 'simple'

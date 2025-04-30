@@ -12,6 +12,14 @@ class WebRtcConnectionType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
     CONNECTION: _ClassVar[WebRtcConnectionType]
     TUNNEL: _ClassVar[WebRtcConnectionType]
+    SSH: _ClassVar[WebRtcConnectionType]
+    RDP: _ClassVar[WebRtcConnectionType]
+    HTTP: _ClassVar[WebRtcConnectionType]
+    VNC: _ClassVar[WebRtcConnectionType]
+    TELNET: _ClassVar[WebRtcConnectionType]
+    MYSQL: _ClassVar[WebRtcConnectionType]
+    SQL_SERVER: _ClassVar[WebRtcConnectionType]
+    POSTGRESQL: _ClassVar[WebRtcConnectionType]
 
 class PAMOperationType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -31,10 +39,24 @@ class ControllerMessageType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
     CMT_GENERAL: _ClassVar[ControllerMessageType]
     CMT_ROTATE: _ClassVar[ControllerMessageType]
-    CMT_STREAM: _ClassVar[ControllerMessageType]
+    CMT_DISCOVERY: _ClassVar[ControllerMessageType]
     CMT_CONNECT: _ClassVar[ControllerMessageType]
+
+class PAMRecordingType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    PRT_SESSION: _ClassVar[PAMRecordingType]
+    PRT_TYPESCRIPT: _ClassVar[PAMRecordingType]
+    PRT_TIME: _ClassVar[PAMRecordingType]
 CONNECTION: WebRtcConnectionType
 TUNNEL: WebRtcConnectionType
+SSH: WebRtcConnectionType
+RDP: WebRtcConnectionType
+HTTP: WebRtcConnectionType
+VNC: WebRtcConnectionType
+TELNET: WebRtcConnectionType
+MYSQL: WebRtcConnectionType
+SQL_SERVER: WebRtcConnectionType
+POSTGRESQL: WebRtcConnectionType
 ADD: PAMOperationType
 UPDATE: PAMOperationType
 REPLACE: PAMOperationType
@@ -45,8 +67,11 @@ POT_ALREADY_EXISTS: PAMOperationResultType
 POT_DOES_NOT_EXIST: PAMOperationResultType
 CMT_GENERAL: ControllerMessageType
 CMT_ROTATE: ControllerMessageType
-CMT_STREAM: ControllerMessageType
+CMT_DISCOVERY: ControllerMessageType
 CMT_CONNECT: ControllerMessageType
+PRT_SESSION: PAMRecordingType
+PRT_TYPESCRIPT: PAMRecordingType
+PRT_TIME: PAMRecordingType
 
 class PAMRotationSchedule(_message.Message):
     __slots__ = ("recordUid", "configurationUid", "controllerUid", "scheduleData", "noSchedule")
@@ -83,18 +108,20 @@ class PAMOnlineController(_message.Message):
     def __init__(self, controllerUid: _Optional[bytes] = ..., connectedOn: _Optional[int] = ..., ipAddress: _Optional[str] = ..., version: _Optional[str] = ..., connections: _Optional[_Iterable[_Union[PAMWebRtcConnection, _Mapping]]] = ...) -> None: ...
 
 class PAMWebRtcConnection(_message.Message):
-    __slots__ = ("connectionUid", "type", "recordUid", "userName", "startedOn")
+    __slots__ = ("connectionUid", "type", "recordUid", "userName", "startedOn", "configurationUid")
     CONNECTIONUID_FIELD_NUMBER: _ClassVar[int]
     TYPE_FIELD_NUMBER: _ClassVar[int]
     RECORDUID_FIELD_NUMBER: _ClassVar[int]
     USERNAME_FIELD_NUMBER: _ClassVar[int]
     STARTEDON_FIELD_NUMBER: _ClassVar[int]
+    CONFIGURATIONUID_FIELD_NUMBER: _ClassVar[int]
     connectionUid: bytes
     type: WebRtcConnectionType
     recordUid: bytes
     userName: str
     startedOn: int
-    def __init__(self, connectionUid: _Optional[bytes] = ..., type: _Optional[_Union[WebRtcConnectionType, str]] = ..., recordUid: _Optional[bytes] = ..., userName: _Optional[str] = ..., startedOn: _Optional[int] = ...) -> None: ...
+    configurationUid: bytes
+    def __init__(self, connectionUid: _Optional[bytes] = ..., type: _Optional[_Union[WebRtcConnectionType, str]] = ..., recordUid: _Optional[bytes] = ..., userName: _Optional[str] = ..., startedOn: _Optional[int] = ..., configurationUid: _Optional[bytes] = ...) -> None: ...
 
 class PAMOnlineControllers(_message.Message):
     __slots__ = ("deprecated", "controllers")
@@ -289,9 +316,53 @@ class ConfigurationAddRequest(_message.Message):
     def __init__(self, configurationUid: _Optional[bytes] = ..., recordKey: _Optional[bytes] = ..., data: _Optional[bytes] = ..., recordLinks: _Optional[_Iterable[_Union[_record_pb2.RecordLink, _Mapping]]] = ..., audit: _Optional[_Union[_record_pb2.RecordAudit, _Mapping]] = ...) -> None: ...
 
 class RelayAccessCreds(_message.Message):
-    __slots__ = ("username", "password")
+    __slots__ = ("username", "password", "serverTime")
     USERNAME_FIELD_NUMBER: _ClassVar[int]
     PASSWORD_FIELD_NUMBER: _ClassVar[int]
+    SERVERTIME_FIELD_NUMBER: _ClassVar[int]
     username: str
     password: str
-    def __init__(self, username: _Optional[str] = ..., password: _Optional[str] = ...) -> None: ...
+    serverTime: int
+    def __init__(self, username: _Optional[str] = ..., password: _Optional[str] = ..., serverTime: _Optional[int] = ...) -> None: ...
+
+class PAMRecording(_message.Message):
+    __slots__ = ("connectionUid", "recordingType", "recordUid", "userName", "startedOn", "length", "fileSize", "protocol")
+    CONNECTIONUID_FIELD_NUMBER: _ClassVar[int]
+    RECORDINGTYPE_FIELD_NUMBER: _ClassVar[int]
+    RECORDUID_FIELD_NUMBER: _ClassVar[int]
+    USERNAME_FIELD_NUMBER: _ClassVar[int]
+    STARTEDON_FIELD_NUMBER: _ClassVar[int]
+    LENGTH_FIELD_NUMBER: _ClassVar[int]
+    FILESIZE_FIELD_NUMBER: _ClassVar[int]
+    PROTOCOL_FIELD_NUMBER: _ClassVar[int]
+    connectionUid: bytes
+    recordingType: PAMRecordingType
+    recordUid: bytes
+    userName: str
+    startedOn: int
+    length: int
+    fileSize: int
+    protocol: str
+    def __init__(self, connectionUid: _Optional[bytes] = ..., recordingType: _Optional[_Union[PAMRecordingType, str]] = ..., recordUid: _Optional[bytes] = ..., userName: _Optional[str] = ..., startedOn: _Optional[int] = ..., length: _Optional[int] = ..., fileSize: _Optional[int] = ..., protocol: _Optional[str] = ...) -> None: ...
+
+class PAMRecordingsResponse(_message.Message):
+    __slots__ = ("recordings",)
+    RECORDINGS_FIELD_NUMBER: _ClassVar[int]
+    recordings: _containers.RepeatedCompositeFieldContainer[PAMRecording]
+    def __init__(self, recordings: _Optional[_Iterable[_Union[PAMRecording, _Mapping]]] = ...) -> None: ...
+
+class PAMLink(_message.Message):
+    __slots__ = ("head", "tail")
+    HEAD_FIELD_NUMBER: _ClassVar[int]
+    TAIL_FIELD_NUMBER: _ClassVar[int]
+    head: bytes
+    tail: bytes
+    def __init__(self, head: _Optional[bytes] = ..., tail: _Optional[bytes] = ...) -> None: ...
+
+class PAMData(_message.Message):
+    __slots__ = ("vertex", "content")
+    VERTEX_FIELD_NUMBER: _ClassVar[int]
+    CONTENT_FIELD_NUMBER: _ClassVar[int]
+    vertex: bytes
+    content: bytes
+    def __init__(self, vertex: _Optional[bytes] = ..., content: _Optional[bytes] = ...) -> None: ...
