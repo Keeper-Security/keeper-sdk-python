@@ -1,0 +1,107 @@
+import abc
+import json
+import threading
+from typing import Optional, Any, Dict
+
+from fido2.client import Fido2Client, WindowsClient, ClientError, WebAuthnClient, UserInteraction
+from fido2.ctap import CtapError
+from fido2.hid import CtapHidDevice
+from fido2.webauthn import PublicKeyCredentialRequestOptions, UserVerificationRequirement, AuthenticatorAssertionResponse
+from .. import utils
+
+class IKeeperUserInteraction(abc.ABC):
+    @abc.abstractmethod
+    def output_text(self, text: str) -> None:
+        pass
+
+def verify_rp_id_none(rp_id, origin):
+    return True
+
+def yubikey_authenticate(request: Dict[str, Any], user_interaction: UserInteraction) -> Optional[str]:
+    logger = utils.get_logger()
+
+    if 'publicKeyCredentialRequestOptions' not in request:  # WebAuthN
+        logger.warning('Invalid Security Key request')
+        return None
+
+    origin = ''
+    options = request['publicKeyCredentialRequestOptions']
+    if 'extensions' in options:
+        extensions = options['extensions']
+        origin = extensions.get('appid') or ''
+
+    credentials = options.get('allowCredentials') or []
+    for c in credentials:
+        if isinstance(c.get('id'), str):
+            c['id'] = utils.base64_url_decode(c['id'])
+
+    challenge = options['challenge']
+    if isinstance(challenge, str):
+        options['challenge'] = utils.base64_url_decode(challenge)
+
+    client: WebAuthnClient
+    if WindowsClient.is_available():
+        client = WindowsClient(origin, verify=verify_rp_id_none)
+    else:
+        dev = next(CtapHidDevice.list_devices(), None)
+        if not dev:
+            logger.warning("No Security Key detected")
+            return None
+        fido_client = Fido2Client(dev, origin, verify=verify_rp_id_none, user_interaction=user_interaction)
+        uv_configured = any(fido_client.info.options.get(k) for k in ("uv", "clientPin", "bioEnroll"))
+        if not uv_configured:
+            uv = options['userVerification']
+            if uv == UserVerificationRequirement.PREFERRED:
+                options['userVerification'] = UserVerificationRequirement.DISCOURAGED
+        client = fido_client
+
+    evt= threading.Event()
+    response: Optional[AuthenticatorAssertionResponse] = None
+    try:
+        try:
+            rq_options = PublicKeyCredentialRequestOptions.from_dict(options)
+            rs = client.get_assertion(rq_options, event=evt)
+            response = rs.get_response(0)
+        except ClientError as err:
+            if isinstance(err.cause, CtapError):
+                if err.cause.code == CtapError.ERR.NO_CREDENTIALS:
+                    if user_interaction and isinstance(user_interaction, IKeeperUserInteraction):
+                        user_interaction.output_text('\n\nKeeper Security stopped supporting U2F security keys starting February 2022.\n'
+                              'If you registered your security key prior to this date please re-register it within the Web Vault.\n'
+                              'For information on using security keys with Keeper see the documentation: \n'
+                              'https://docs.keeper.io/enterprise-guide/two-factor-authentication#security-keys-fido-webauthn\n'
+                              'Commander will use the fallback security key authentication method.\n\n'
+                              'To use your Yubikey with Commander, please touch the flashing Security key one more time.\n')
+                    options['rpId'] = origin
+                    rq_options = PublicKeyCredentialRequestOptions.from_dict(options)
+                    rs = client.get_assertion(rq_options, event=evt)
+                    response = rs.get_response(0)
+                elif err.cause.code == CtapError.ERR.PIN_INVALID:
+                    raise Exception('PIN is invalid')
+                elif err.cause.code == CtapError.ERR.PIN_AUTH_BLOCKED:
+                    raise Exception('PIN is blocked')
+            elif isinstance(err.cause, str):
+                if err.code == ClientError.ERR.CONFIGURATION_UNSUPPORTED:
+                    raise Exception('Security key user verification (PIN or Biometric) is not configured')
+            raise err
+        except KeyboardInterrupt:
+            pass
+    finally:
+        evt.set()
+
+    if response:
+        credential_id = utils.base64_url_encode(response.credential_id or b'')
+        extensions = dict(response.extension_results) if response.extension_results else {}
+        signature = {
+            "id": credential_id,
+            "rawId": credential_id,
+            "response": {
+                "authenticatorData": utils.base64_url_encode(response.authenticator_data),
+                "clientDataJSON": response.client_data.b64,
+                "signature": utils.base64_url_encode(response.signature),
+            },
+            "type": "public-key",
+            "clientExtensionResults": extensions
+        }
+        return json.dumps(signature)
+    return None

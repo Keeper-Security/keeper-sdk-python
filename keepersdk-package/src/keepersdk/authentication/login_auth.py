@@ -76,11 +76,11 @@ class LoginStepDeviceApproval(ILoginStep, abc.ABC):
 class TwoFactorChannelInfo:
     def __init__(self) -> None:
         self.channel_type: TwoFactorChannel = TwoFactorChannel.Other
-        self.channel_name = ''
-        self.channel_uid = b''
+        self.channel_name: str = ''
+        self.channel_uid: bytes = b''
         self.phone: Optional[str] = None
         self.max_expiration: TwoFactorDuration = TwoFactorDuration.EveryLogin
-        self.challenge = ''
+        self.challenge: str = ''
 
 
 class LoginStepTwoFactor(ILoginStep, abc.ABC):
@@ -336,6 +336,7 @@ def duo_capability_to_sdk(capability: str) -> Optional[TwoFactorPushAction]:
         return TwoFactorPushAction.DuoTextMessage
     if capability == 'phone':
         return TwoFactorPushAction.DuoVoiceCall
+    return None
 
 
 @dataclasses.dataclass
@@ -938,13 +939,15 @@ class _CloudSsoTokenLoginStep(_SsoTokenLoginStep):
         super(_CloudSsoTokenLoginStep, self).__init__(login, sso_info, login_token)
         self.transmission_key = utils.generate_aes_key()
         rq = ssocloud_pb2.SsoCloudRequest()
+        rq.messageSessionUid = crypto.get_random_bytes(16)
         rq.clientVersion = login.keeper_endpoint.client_version
-        rq.embedded = True
-        transmission_key = utils.generate_aes_key()
+        rq.dest = 'commander'
+        rq.forceLogin = False
+        rq.detached = True
         api_rq = endpoint.prepare_api_request(
-            login.keeper_endpoint.server_key_id, transmission_key, rq.SerializeToString())
+            login.keeper_endpoint.server_key_id, self.transmission_key, rq.SerializeToString())
         url_comp = list(urlparse(sso_info.sso_url))
-        url_comp[3] = f'payload={quote_plus(utils.base64_url_encode(api_rq.SerializeToString()))}'
+        url_comp[4] = f'payload={quote_plus(utils.base64_url_encode(api_rq.SerializeToString()))}'
         self._login_url = urlunparse(url_comp)
 
     def set_sso_token(self, token_str: str):

@@ -6,14 +6,34 @@ import urllib.parse
 import webbrowser
 from typing import Dict, List, Union, Optional, Any, Tuple
 
+import fido2.client
 import pyperclip
 from prompt_toolkit.formatted_text import FormattedText
 
 from keepersdk import errors, utils, crypto
 from keepersdk.authentication import login_auth, keeper_auth, endpoint
 from keepersdk.proto import APIRequest_pb2, enterprise_pb2, ssocloud_pb2
+from keepersdk.authentication.yubikey import yubikey_authenticate, IKeeperUserInteraction
+
 from . import prompt_utils, constants
 from .params import KeeperParams
+
+
+class FidoCliInteraction(fido2.client.UserInteraction, IKeeperUserInteraction):
+    def output_text(self, text: str) -> None:
+        prompt_utils.output_text(text)
+
+    def prompt_up(self):
+        prompt_utils.output_text("\nTouch the flashing Security key to authenticate or "
+              "press Ctrl-C to resume with the primary two factor authentication...")
+
+    def request_pin(self, permissions, rd_id):
+        prompt = "Enter Security Key PIN: "
+        return prompt_utils.input_password(prompt)
+
+    def request_uv(self, permissions, rd_id):
+        prompt_utils.output_text("User Verification required.")
+        return True
 
 
 class LoginFlow:
@@ -137,7 +157,7 @@ class LoginFlow:
             'NOTE: To copy SSO Token please click "Copy authentication token" button on "SSO Connect" page.',
             '',
         ]
-        lines.extend((FormattedText([('class:h3', action), ('', text)]) for action, text in menu))
+        lines.extend((FormattedText([('class:h3', f'{action:>3}'), ('', f'. {text}')]) for action, text in menu))
         prompt_utils.output_text(*lines)
 
         while True:
@@ -290,30 +310,12 @@ class LoginFlow:
 
             if channel.channel_type == login_auth.TwoFactorChannel.SecurityKey:
                 try:
-                    from .yubikey import yubikey_authenticate
                     challenge = json.loads(channel.challenge)
-                    response = yubikey_authenticate(challenge)
-                    if response:
-                        credential_id = utils.base64_url_encode(response.credential_id)
-                        extensions = dict(response.extension_results) if response.extension_results else {}
-                        signature = {
-                            "id": credential_id,
-                            "rawId": credential_id,
-                            "response": {
-                                "authenticatorData": utils.base64_url_encode(response.authenticator_data),
-                                "clientDataJSON": response.client_data.b64,
-                                "signature": utils.base64_url_encode(response.signature),
-                            },
-                            "type": "public-key",
-                            "clientExtensionResults": extensions
-                        }
-                        step.send_code(channel.channel_uid, json.dumps(signature))
+                    signature = yubikey_authenticate(challenge, FidoCliInteraction())
+                    if signature:
+                        prompt_utils.output_text('')
+                        step.send_code(channel.channel_uid, signature)
                         break
-                except ImportError as e:
-                    if not LoginFlow.warned_on_fido_package:
-                        utils.get_logger().debug('Yubikey module init error: %s', e)
-                        prompt_utils.output_text(*LoginFlow.install_fido_package_warning)
-                        LoginFlow.warned_on_fido_package = True
                 except Exception as e:
                     utils.get_logger().error(e)
 

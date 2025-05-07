@@ -4,4 +4,3 @@ pyperclip
 tabulate
 asciitree
 colorama
-fido2
