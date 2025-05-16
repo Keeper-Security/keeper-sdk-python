@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import data_vault
 from keepersdk import crypto, utils
 from keepersdk.proto import record_pb2
-from keepersdk.vault import vault_online, sync_down, memory_storage
+from keepersdk.vault import vault_online, sync_down, memory_storage, record_management
 from keepersdk.proto import SyncDown_pb2
 
 
@@ -127,6 +127,44 @@ class VaultTestCase(unittest.TestCase):
         vault.sync_down()
         self.assertTrue(vault.vault_data.shared_folder_count < orig_sf_count)
         self.assertIsNone(vault.vault_data.get_shared_folder(shared_folder_uid))
+
+
+class CreateCustomRecordTypeTestCase(unittest.TestCase):
+    def setUp(self):
+        self.vault = MagicMock()
+        self.vault.keeper_auth.execute_auth_rest = MagicMock()
+
+    def test_successful_creation(self):
+        title = "TestType"
+        fields = [{"$ref": "login"}]
+        description = "A test type"
+        scope = "enterprise"
+        # Patch FieldTypes to include 'login'
+        record_management.record_types.FieldTypes = {"login": {}}
+        result = record_management.create_custom_record_type(self.vault, title, fields, description, scope)
+        self.assertIn("Custom record type", result)
+        self.vault.keeper_auth.execute_auth_rest.assert_called_once()
+
+    def test_missing_fields(self):
+        with self.assertRaises(ValueError) as cm:
+            record_management.create_custom_record_type(self.vault, "Title", [], "desc", "enterprise")
+        self.assertIn("At least one field", str(cm.exception))
+
+    def test_invalid_scope(self):
+        with self.assertRaises(ValueError) as cm:
+            record_management.create_custom_record_type(self.vault, "Title", [{"$ref": "login"}], "desc", "user")
+        self.assertIn("restricted to Keeper Enterprise", str(cm.exception))
+
+    def test_missing_ref(self):
+        with self.assertRaises(ValueError) as cm:
+            record_management.create_custom_record_type(self.vault, "Title", [{}], "desc", "enterprise")
+        self.assertIn("must contain a '$ref'", str(cm.exception))
+
+    def test_invalid_field_name(self):
+        record_management.record_types.FieldTypes = {"login": {}}
+        with self.assertRaises(ValueError) as cm:
+            record_management.create_custom_record_type(self.vault, "Title", [{"$ref": "not_a_field"}], "desc", "enterprise")
+        self.assertIn("not a valid RecordField", str(cm.exception))
 
 
 if __name__ == "__main__":
