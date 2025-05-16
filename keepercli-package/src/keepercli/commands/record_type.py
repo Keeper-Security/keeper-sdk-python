@@ -29,7 +29,7 @@ class RecordTypeAddCommand(base.ArgparseCommand):
 
         data = kwargs.get('data')
         if not data:
-            raise ValueError("Missing --data argument.")
+            raise ValueError("Cannot add record type without definition. Option --data is required.")
 
         try:
             record_type = json.loads(data)
