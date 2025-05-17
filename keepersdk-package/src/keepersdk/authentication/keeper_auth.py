@@ -54,8 +54,8 @@ class AuthContext:
         self.account_uid = b''
         self.session_token = b''
         self.session_token_restriction: SessionTokenRestriction = SessionTokenRestriction.Unrestricted
-        self.data_key = b''
-        self.client_key = b''
+        self.data_key: bytes = b''
+        self.client_key: bytes = b''
         self.rsa_private_key: Optional[RSAPrivateKey] = None
         self.ec_private_key: Optional[EllipticCurvePrivateKey] = None
         self.ec_public_key: Optional[EllipticCurvePublicKey] = None
@@ -67,11 +67,11 @@ class AuthContext:
         self.settings: Dict[str, Any] = {}
         self.license: Dict[str, Any] = {}
         self.sso_login_info: Optional[SsoLoginInfo] = None
-        self.device_token = b''
+        self.device_token: bytes = b''
         self.device_private_key: Optional[EllipticCurvePrivateKey] = None
-        self.forbid_rsa = False
-        self.session_token = b''
-        self.message_session_uid = b''
+        self.forbid_rsa: bool = False
+        self.session_token: bytes = b''
+        self.message_session_uid: bytes = b''
 
 
 class TimeToKeepalive:

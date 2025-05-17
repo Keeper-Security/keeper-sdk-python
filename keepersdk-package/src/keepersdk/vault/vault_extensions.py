@@ -106,7 +106,7 @@ def extract_password_record(record: vault_record.PasswordRecord) -> Tuple[dict, 
 def extract_typed_field(field: vault_record.TypedField) -> Dict[str, Any]:
     field_values = []
     field_type: Optional[record_types.FieldType] = None
-    multiple = record_types.Multiple.Optional
+    multiple = record_types.Multiple.Never
 
     if field.type in record_types.RecordFields:
         field_id = record_types.RecordFields[field.type]
