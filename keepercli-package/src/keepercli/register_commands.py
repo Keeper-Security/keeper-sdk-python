@@ -58,4 +58,4 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('audit-alert', audit_alert.AuditAlerts(), base.CommandScope.Enterprise)
         commands.register_command('download-membership', importer_commands.DownloadMembershipCommand(), base.CommandScope.Enterprise)
         commands.register_command('apply-membership', importer_commands.ApplyMembershipCommand(), base.CommandScope.Enterprise)
-        commands.register_command('record-type-add', record_type.RecordTypeAddCommand(), base.CommandScope.Vault)
+        commands.register_command('record-type-add', record_type.RecordTypeAddCommand(), base.CommandScope.Enterprise)
