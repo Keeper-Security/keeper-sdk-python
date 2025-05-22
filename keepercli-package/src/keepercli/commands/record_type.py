@@ -47,7 +47,7 @@ class RecordTypeAddCommand(base.ArgparseCommand):
             raise ValueError("Record type must include a list of 'fields'.")
 
         # Implicit fields - always present on any record, no need to be specified in the template: title, custom, notes
-        implicit_field_names = [x for x in RecordTypeAddCommand.record_implicit_fields]
+        implicit_field_names = [x for x in record_implicit_fields]
         implicit_fields = [r for r in record_type if r in implicit_field_names]
         if implicit_fields:
             error = {'error: Implicit fields not allowed in record type definition: ' + str(implicit_fields)}
@@ -59,12 +59,13 @@ class RecordTypeAddCommand(base.ArgparseCommand):
             logging.debug(f'Unknown attributes in record type definition: {bada}')
 
         result = record_type_management.create_custom_record_type(
-            context.vault, title, fields, description, scope
+            context.vault, title, fields, description
         )
         print(result)
 
-    record_implicit_fields = {
-        'title': '',  # string
-        'custom': [],  # Array of Field Data objects
-        'notes': ''  # string
-    }
+
+record_implicit_fields = {
+    'title': '',  # string
+    'custom': [],  # Array of Field Data objects
+    'notes': ''  # string
+}

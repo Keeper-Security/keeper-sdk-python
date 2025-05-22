@@ -6,8 +6,9 @@ from . import vault_online, record_types
 from ..proto import record_pb2
 
 
-def create_custom_record_type(vault: vault_online.VaultOnline, title: str, fields: List[Dict[str, str]], description: str, scope: str) -> str:
-    if scope != 'enterprise':
+def create_custom_record_type(vault: vault_online.VaultOnline, title: str, fields: List[Dict[str, str]], description: str) -> str:
+    is_enterprise_admin = vault.keeper_auth.auth_context.is_enterprise_admin
+    if not is_enterprise_admin:
         raise ValueError('This command is restricted to Keeper Enterprise administrators.')
 
     if not fields:
@@ -33,6 +34,6 @@ def create_custom_record_type(vault: vault_online.VaultOnline, title: str, field
     request_payload.content = json.dumps(record_type_data)
     request_payload.scope = record_pb2.RecordTypeScope.RT_ENTERPRISE
 
-    vault.keeper_auth.execute_auth_rest('vault/record_type_add', request_payload)
+    response = vault.keeper_auth.execute_auth_rest('vault/record_type_add', request_payload, response_type=record_pb2.RecordTypeModifyResponse)
 
-    return f"Custom record type '{title}' created successfully with fields: {[f['$ref'] for f in field_definitions]}"
+    return f"Custom record type '{title}' created successfully with fields: {[f['$ref'] for f in field_definitions]} and recordTypeId: {response.recordTypeId}"

@@ -23,7 +23,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
 
 
     if not scopes or bool(scopes & base.CommandScope.Vault):
-        from .commands import vault_folder, vault, vault_record, record_edit, importer_commands, breachwatch
+        from .commands import vault_folder, vault, vault_record, record_edit, importer_commands, breachwatch, record_type
         commands.register_command('sync-down', vault.SyncDownCommand(), base.CommandScope.Vault, 'd')
         commands.register_command('cd', vault_folder.FolderCdCommand(), base.CommandScope.Vault)
         commands.register_command('ls', vault_folder.FolderListCommand(), base.CommandScope.Vault)
@@ -42,11 +42,12 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('import', importer_commands.ImportCommand(), base.CommandScope.Vault)
         commands.register_command('export', importer_commands.ExportCommand(), base.CommandScope.Vault)
         commands.register_command('breachwatch', breachwatch.BreachWatchCommand(), base.CommandScope.Vault, 'bw')
+        commands.register_command('record-type-add', record_type.RecordTypeAddCommand(), base.CommandScope.Vault)
 
 
     if not scopes or bool(scopes & base.CommandScope.Enterprise):
         from .commands import (enterprise_info, enterprise_node, enterprise_role, enterprise_team, enterprise_user,
-                               importer_commands, audit_report, audit_alert, record_type)
+                               importer_commands, audit_report, audit_alert)
 
         commands.register_command('enterprise-down', enterprise_info.EnterpriseDownCommand(), base.CommandScope.Enterprise, 'ed')
         commands.register_command('enterprise-info', enterprise_info.EnterpriseInfoCommand(), base.CommandScope.Enterprise, 'ei')
@@ -58,4 +59,3 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('audit-alert', audit_alert.AuditAlerts(), base.CommandScope.Enterprise)
         commands.register_command('download-membership', importer_commands.DownloadMembershipCommand(), base.CommandScope.Enterprise)
         commands.register_command('apply-membership', importer_commands.ApplyMembershipCommand(), base.CommandScope.Enterprise)
-        commands.register_command('record-type-add', record_type.RecordTypeAddCommand(), base.CommandScope.Enterprise)
