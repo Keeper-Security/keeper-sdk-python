@@ -140,8 +140,9 @@ class CreateCustomRecordTypeTestCase(unittest.TestCase):
         fields = [{"$ref": "login"}]
         description = "A test type"
         record_type_management.record_types.FieldTypes = {"login": {}}
+        self.vault.keeper_auth.execute_auth_rest.return_value = record_pb2.RecordTypeModifyResponse()
         result = record_type_management.create_custom_record_type(self.vault, title, fields, description)
-        self.assertIn("created successfully", result)
+        self.assertIsInstance(result, record_pb2.RecordTypeModifyResponse)
         self.vault.keeper_auth.execute_auth_rest.assert_called_once_with(
             'vault/record_type_add',
             unittest.mock.ANY,
