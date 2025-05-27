@@ -28,6 +28,15 @@ class RecordTypeAddCommand(base.ArgparseCommand):
             raise ValueError("Vault is not initialized.")
 
         data = kwargs.get('data')
+        record_type = None
+
+        if data and data.strip().startswith('filepath:'):
+            filepath = data.split('filepath:')[1].strip()
+            try:
+                with open(filepath, 'r') as file:
+                    data = file.read()
+            except FileNotFoundError:
+                raise ValueError(f"File not found: {filepath}")
         if not data:
             raise ValueError("Cannot add record type without definition. Option --data is required.")
 
@@ -39,7 +48,6 @@ class RecordTypeAddCommand(base.ArgparseCommand):
         title = record_type.get('$id')
         fields = record_type.get('fields')
         description = record_type.get('description', '')
-        scope = record_type.get('scope', 'enterprise')
 
         if not title:
             raise ValueError("Record type must have a '$id' field.")
@@ -61,7 +69,7 @@ class RecordTypeAddCommand(base.ArgparseCommand):
         result = record_type_management.create_custom_record_type(
             context.vault, title, fields, description
         )
-        print(result)
+        print(f"Custom record type '{title}' created successfully with fields: {[f['$ref'] for f in fields]} and recordTypeId: {result.recordTypeId}")
 
 
 record_implicit_fields = {
