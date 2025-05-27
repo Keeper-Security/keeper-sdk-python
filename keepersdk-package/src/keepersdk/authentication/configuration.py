@@ -726,7 +726,7 @@ class JsonConfigurationStorage(IConfigurationStorage):
     def __init__(self, loader: Optional[IJsonLoader]=None) -> None:
         IConfigurationStorage.__init__(self)
         if not loader:
-            loader = JsonFileLoader('authentication.json')
+            loader = JsonFileLoader('config.json')
         self.loader = loader
 
     @classmethod
