@@ -6,6 +6,9 @@ from keepersdk.vault import record_type_management
 
 from . import base
 from ..params import KeeperParams
+from .. import api
+
+logger = api.get_logger()
 
 class RecordTypeAddCommand(base.ArgparseCommand):
     parser = argparse.ArgumentParser(
@@ -69,7 +72,7 @@ class RecordTypeAddCommand(base.ArgparseCommand):
         result = record_type_management.create_custom_record_type(
             context.vault, title, fields, description
         )
-        print(f"Custom record type '{title}' created successfully with fields: {[f['$ref'] for f in fields]} and recordTypeId: {result.recordTypeId}")
+        logger.info(f"Custom record type '{title}' created successfully with fields: {[f['$ref'] for f in fields]} and recordTypeId: {result.recordTypeId}")
 
 
 record_implicit_fields = {
