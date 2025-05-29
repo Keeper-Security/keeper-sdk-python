@@ -43,6 +43,8 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('export', importer_commands.ExportCommand(), base.CommandScope.Vault)
         commands.register_command('breachwatch', breachwatch.BreachWatchCommand(), base.CommandScope.Vault, 'bw')
         commands.register_command('record-type-add', record_type.RecordTypeAddCommand(), base.CommandScope.Vault)
+        commands.register_command('record-type-edit', record_type.RecordTypeEditCommand(), base.CommandScope.Vault)
+        commands.register_command('record-type-delete', record_type.RecordTypeDeleteCommand(), base.CommandScope.Vault)
 
 
     if not scopes or bool(scopes & base.CommandScope.Enterprise):
