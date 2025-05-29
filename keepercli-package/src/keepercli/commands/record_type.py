@@ -21,13 +21,8 @@ class RecordTypeAddCommand(base.ArgparseCommand):
             '--data',
             dest='data',
             action='store',
-            help='Record type definition in JSON format.'
-        )
-        parser.add_argument(
-            '--file',
-            action='store',
-            dest='file',
-            help='File path to read the record type definition from a JSON file.'
+            required=True,
+            help='Record type definition in JSON format or "filepath:" to read from JSON file.'
         )
         super().__init__(parser)
 
@@ -36,9 +31,8 @@ class RecordTypeAddCommand(base.ArgparseCommand):
             raise ValueError("Vault is not initialized.")
 
         data = kwargs.get('data')
-        file = kwargs.get('file')
 
-        record_type = load_data(data, file)
+        record_type = load_data(data)
 
         is_valid_data(record_type)
 
@@ -64,13 +58,8 @@ class RecordTypeEditCommand(base.ArgparseCommand):
             '--data',
             dest='data',
             action='store',
-            help='Record type definition in JSON format.'
-        )
-        parser.add_argument(
-            '--file',
-            action='store',
-            dest='file',
-            help='File path to read the record type definition from a JSON file.'
+            required=True,
+            help='Record type definition in JSON format or "filepath:" to read from JSON file.'
         )
         parser.add_argument(
             'record_type_id',
@@ -86,12 +75,11 @@ class RecordTypeEditCommand(base.ArgparseCommand):
 
         data = kwargs.get('data')
         record_type_id = kwargs.get('record_type_id')
-        file = kwargs.get('file')
 
         if not record_type_id:
             raise ValueError("Missing required argument: record_type_id")
         
-        record_type = load_data(data, file)
+        record_type = load_data(data)
 
         is_valid_data(record_type)
 
@@ -156,18 +144,21 @@ def is_valid_data(record_type):
         raise ValueError(error)
 
     rt_attributes = ('$id', 'categories', 'description', 'fields')
-    bada = [r for r in record_type if r not in rt_attributes and r not in implicit_field_names]
-    if bada:
-        logging.debug(f'Unknown attributes in record type definition: {bada}')
+    bad_attributes = [r for r in record_type if r not in rt_attributes and r not in implicit_field_names]
+    if bad_attributes:
+        logging.debug(f'Unknown attributes in record type definition: {bad_attributes}')
 
 
-def load_data(data, file):
-    if file:
+def load_data(data):
+
+    if data and data.strip().startswith('filepath:'):
+        filepath = data.split('filepath:')[1].strip()
         try:
-            with open(file, 'r') as f:
-                data = f.read()
+            with open(filepath, 'r') as file:
+                data = file.read()
         except FileNotFoundError:
-            raise ValueError(f"File not found: {file}")
+            raise ValueError(f"File not found: {filepath}")
+
     if not data:
         raise ValueError("Cannot add record type without definition. --data or --file is required.")
     
