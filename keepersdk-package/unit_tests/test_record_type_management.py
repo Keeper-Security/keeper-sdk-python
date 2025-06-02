@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from keepersdk.proto import record_pb2
 from keepersdk.vault import record_type_management
@@ -134,6 +134,77 @@ class DeleteCustomRecordTypesTestCase(unittest.TestCase):
         with self.assertRaises(ValueError) as cm:
             record_type_management.delete_custom_record_types(self.vault, record_type_id)
         self.assertIn("can be removed", str(cm.exception))
+
+
+class RecordTypeInfoTestCase(unittest.TestCase):
+    def setUp(self):
+        self.vault = MagicMock()
+        self.vault.vault_data.get_record_type_by_name = MagicMock()
+        self.vault.vault_data.get_record_types = MagicMock()
+
+    @patch('keepersdk.vault.record_type_management.tabulate')
+    @patch('keepersdk.vault.record_type_management.record_types')
+    def test_field_name_all(self, mock_record_types, mock_tabulate):
+        # Setup mock FieldTypes and RecordFields
+        mock_ft = MagicMock()
+        mock_ft.name = 'login'
+        mock_ft.description = 'desc'
+        mock_record_types.FieldTypes.values.return_value = [mock_ft]
+        mock_rf = MagicMock()
+        mock_rf.name = 'login'
+        mock_rf.multiple.name = 'Optional'
+        mock_record_types.RecordFields.values.return_value = [mock_rf]
+        mock_tabulate.tabulate.return_value = 'table'
+        result = record_type_management.record_type_info(self.vault, field_name='*')
+        self.assertEqual(result, 'table')
+
+    @patch('keepersdk.vault.record_type_management.tabulate')
+    @patch('keepersdk.vault.record_type_management.record_types')
+    def test_field_name_specific(self, mock_record_types, mock_tabulate):
+        mock_ft = MagicMock()
+        mock_ft.name = 'login'
+        mock_ft.description = 'desc'
+        mock_record_types.FieldTypes.get.return_value = mock_ft
+        mock_rf = MagicMock()
+        mock_rf.name = 'login'
+        mock_rf.multiple.name = 'Optional'
+        mock_record_types.RecordFields.values.return_value = [mock_rf]
+        mock_tabulate.tabulate.return_value = 'table'
+        result = record_type_management.record_type_info(self.vault, field_name='login')
+        self.assertEqual(result, 'table')
+
+    @patch('keepersdk.vault.record_type_management.record_type_utils')
+    def test_record_type_example(self, mock_utils):
+        mock_utils.get_record_type_example.return_value = '{"type": "login"}'
+        result = record_type_management.record_type_info(self.vault, record_type_name='login', example=True)
+        self.assertEqual(result, '{"type": "login"}')
+
+    @patch('keepersdk.vault.record_type_management.tabulate')
+    @patch('keepersdk.vault.record_type_management.record_type_utils')
+    def test_record_type_name_all(self, mock_utils, mock_tabulate):
+        mock_utils.get_record_types.return_value = [(1, 'login', 'Standard')]
+        mock_tabulate.tabulate.return_value = 'table'
+        result = record_type_management.record_type_info(self.vault, record_type_name='*')
+        self.assertEqual(result, 'table')
+
+    def test_record_type_name_not_found(self):
+        self.vault.vault_data.get_record_type_by_name.return_value = None
+        result = record_type_management.record_type_info(self.vault, record_type_name='notfound')
+        self.assertIn("not found", result)
+
+    @patch('keepersdk.vault.record_type_management.tabulate')
+    def test_record_type_name_details(self, mock_tabulate):
+        mock_record_type = MagicMock()
+        mock_record_type.id = 1
+        mock_record_type.name = 'login'
+        mock_record_type.scope = 0
+        field = MagicMock()
+        field.label = 'username'
+        mock_record_type.fields = [field]
+        self.vault.vault_data.get_record_type_by_name.return_value = mock_record_type
+        mock_tabulate.tabulate.return_value = 'table'
+        result = record_type_management.record_type_info(self.vault, record_type_name='login')
+        self.assertEqual(result, 'table')
 
 
 if __name__ == "__main__":

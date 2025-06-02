@@ -120,6 +120,59 @@ class RecordTypeDeleteCommand(base.ArgparseCommand):
         logger.info(f"Custom record type deleted successfully with record type id: {result.recordTypeId}")
 
 
+class RecordTypeInfoCommand(base.ArgparseCommand):
+
+    def __init__(self):
+        parser = argparse.ArgumentParser(
+            prog='record-type-info',
+            description='Get record type info'
+        )
+        parser.add_argument(
+            '-lr',
+            '--list-record-type',
+            type=str,
+            dest='record_name',
+            action='store',
+            default=None,
+            const = '*',
+            nargs='?',
+            help='list record type by name or use * to list all'
+        )
+        parser.add_argument(
+            '-lf',
+            '--list-field',
+            type=str,
+            dest='field_name',
+            action='store',
+            default=None,
+            help='list field type by name or use * to list all'
+        )
+        parser.add_argument(
+            '-e',
+            '--example',
+            dest='example',
+            action='store_true',
+            help='Set to "true" to generate example JSON'
+        )
+        super().__init__(parser)
+
+    def execute(self, context: KeeperParams, **kwargs) -> None:
+        if not context.vault:
+            raise ValueError("Vault is not initialized.")
+        example = kwargs.get('example', False)
+        field = kwargs.get('field_name')
+        record_type = kwargs.get('record_name')
+
+        result = record_type_management.record_type_info(
+            vault=context.vault,
+            field_name=field,
+            record_type_name=record_type,
+            example=example
+        )
+
+        logger.info(result)
+
+
 record_implicit_fields = {
     'title': '',  # string
     'custom': [],  # Array of Field Data objects
