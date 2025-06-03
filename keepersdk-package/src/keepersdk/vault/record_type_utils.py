@@ -61,13 +61,7 @@ def get_record_types(vault:vault_online.VaultOnline) -> list[vault_types.RecordT
         if record_types:
             for record_type in record_types:
                 name = record_type.name
-                scope_int = record_type.scope
-                scope = (
-                    "Standard" if scope_int == storage_types.RecordTypeScope.Standard else
-                    "User" if scope_int == storage_types.RecordTypeScope.User else
-                    "Enterprise" if scope_int == storage_types.RecordTypeScope.Enterprise else
-                    str(scope_int)
-                )
+                scope = get_record_type_scope(record_type.scope)
                 records.append((record_type.id, name, scope))
 
         return records
@@ -127,3 +121,40 @@ def get_field_definitions(field: record_types.FieldType):
         field.description
     ]
     return row
+
+
+scope_map = {
+    storage_types.RecordTypeScope.Standard: 'Standard',
+    storage_types.RecordTypeScope.User: 'User',
+    storage_types.RecordTypeScope.Enterprise: 'Enterprise'
+}
+
+
+def get_record_type_scope(scope: storage_types.RecordTypeScope) -> str:
+    return scope_map.get(scope, str(scope))
+
+
+def validate_record_type_file(file_path: str) -> list:
+    if not file_path:
+        raise ValueError('File path is required.')
+
+    if not file_path.endswith('.json'):
+        raise ValueError('Record type file must be a JSON file.')
+
+    try:
+        with open(file_path, 'r') as f:
+            json_obj = json.load(f)
+    except json.JSONDecodeError as e:
+        raise ValueError(f'Invalid JSON in record type file: {e}')
+    except FileNotFoundError:
+        raise ValueError(f'Record type file not found: {file_path}')
+    
+    if not isinstance(json_obj, dict):
+        raise ValueError('Invalid custom record types file')
+
+    record_types_list = json_obj.get('record_types')
+
+    if not isinstance(record_types_list, list):
+        raise ValueError('Invalid custom record types list')
+    
+    return record_types_list

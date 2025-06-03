@@ -212,12 +212,9 @@ class LoadRecordTypesTestCase(unittest.TestCase):
     def setUp(self):
         self.vault = MagicMock()
         self.filepath = 'dummy.json'
-        self.patcher_open = patch('keepersdk.vault.record_type_management.open', create=True)
-        self.mock_open = self.patcher_open.start()
-        self.addCleanup(self.patcher_open.stop)
-        self.patcher_os = patch('keepersdk.vault.record_type_management.os.path.exists', return_value=True)
-        self.mock_os = self.patcher_os.start()
-        self.addCleanup(self.patcher_os.stop)
+        self.patcher_validate = patch('keepersdk.vault.record_type_management.record_type_utils.validate_record_type_file')
+        self.mock_validate = self.patcher_validate.start()
+        self.addCleanup(self.patcher_validate.stop)
         self.patcher_create = patch('keepersdk.vault.record_type_management.create_custom_record_type')
         self.mock_create = self.patcher_create.start()
         self.addCleanup(self.patcher_create.stop)
@@ -229,72 +226,67 @@ class LoadRecordTypesTestCase(unittest.TestCase):
         self.addCleanup(self.patcher_record_fields.stop)
 
     def test_file_not_found(self):
-        self.mock_os.return_value = False
+        self.mock_validate.side_effect = ValueError('Record type file not found: dummy.json')
         with self.assertRaises(ValueError) as cm:
             record_type_management.load_record_types(self.vault, self.filepath)
-        self.assertIn('Custom record types file not found', str(cm.exception))
+        self.assertIn('Record type file not found', str(cm.exception))
 
     def test_invalid_json(self):
-        self.mock_open.return_value.__enter__.return_value = 'not a json'
-        with patch('json.load', side_effect=ValueError):
-            with self.assertRaises(ValueError):
-                record_type_management.load_record_types(self.vault, self.filepath)
+        self.mock_validate.side_effect = ValueError('Invalid JSON in record type file: ...')
+        with self.assertRaises(ValueError) as cm:
+            record_type_management.load_record_types(self.vault, self.filepath)
+        self.assertIn('Invalid JSON in record type file', str(cm.exception))
 
     def test_json_not_dict(self):
-        self.mock_open.return_value.__enter__.return_value = '{}'
-        with patch('json.load', return_value=[]):
-            with self.assertRaises(ValueError) as cm:
-                record_type_management.load_record_types(self.vault, self.filepath)
-            self.assertIn('Invalid custom record types file', str(cm.exception))
+        self.mock_validate.side_effect = ValueError('Invalid custom record types file')
+        with self.assertRaises(ValueError) as cm:
+            record_type_management.load_record_types(self.vault, self.filepath)
+        self.assertIn('Invalid custom record types file', str(cm.exception))
 
     def test_missing_record_types_list(self):
-        self.mock_open.return_value.__enter__.return_value = '{"foo": 1}'
-        with patch('json.load', return_value={"foo": 1}):
-            with self.assertRaises(ValueError) as cm:
-                record_type_management.load_record_types(self.vault, self.filepath)
-            self.assertIn('Invalid custom record types list', str(cm.exception))
+        self.mock_validate.side_effect = ValueError('Invalid custom record types list')
+        with self.assertRaises(ValueError) as cm:
+            record_type_management.load_record_types(self.vault, self.filepath)
+        self.assertIn('Invalid custom record types list', str(cm.exception))
 
     def test_record_types_list_not_list(self):
-        self.mock_open.return_value.__enter__.return_value = '{"record_types": 123}'
-        with patch('json.load', return_value={"record_types": 123}):
-            with self.assertRaises(ValueError) as cm:
-                record_type_management.load_record_types(self.vault, self.filepath)
-            self.assertIn('Invalid custom record types list', str(cm.exception))
+        self.mock_validate.side_effect = ValueError('Invalid custom record types list')
+        with self.assertRaises(ValueError) as cm:
+            record_type_management.load_record_types(self.vault, self.filepath)
+        self.assertIn('Invalid custom record types list', str(cm.exception))
 
     def test_skip_record_type_without_name(self):
-        self.mock_open.return_value.__enter__.return_value = '{"record_types": [{}]}'
-        with patch('json.load', return_value={"record_types": [{}]}):
-            self.mock_get_types.return_value = []
-            result = record_type_management.load_record_types(self.vault, self.filepath)
-            self.assertFalse(result)
-            self.mock_create.assert_not_called()
+        self.mock_validate.return_value = [{}]
+        self.mock_get_types.return_value = []
+        result = record_type_management.load_record_types(self.vault, self.filepath)
+        self.assertEqual(result, 0)
+        self.mock_create.assert_not_called()
 
     def test_skip_existing_record_type(self):
-        self.mock_open.return_value.__enter__.return_value = '{"record_types": [{"record_type_name": "foo", "fields": [{"$type": "login", "$ref": "login"}]}]}'
-        self.mock_get_types.return_value = [MagicMock(name='foo')]
-        with patch('json.load', return_value={"record_types": [{"record_type_name": "foo", "fields": [{"$type": "login", "$ref": "login"}]}]}):
-            result = record_type_management.load_record_types(self.vault, self.filepath)
-            self.assertFalse(result)
-            self.mock_create.assert_not_called()
+        self.mock_validate.return_value = [{"record_type_name": "foo", "fields": [{"$type": "login", "$ref": "login"}]}]
+        mock_existing = MagicMock()
+        mock_existing.name = 'foo'
+        self.mock_get_types.return_value = [(1, 'foo', 'Enterprise')]
+        result = record_type_management.load_record_types(self.vault, self.filepath)
+        self.assertEqual(result, 0)
+        self.mock_create.assert_not_called()
 
     def test_skip_invalid_fields(self):
-        self.mock_open.return_value.__enter__.return_value = '{"record_types": [{"record_type_name": "foo", "fields": [{"$type": "invalid", "$ref": "login"}]}]}'
+        self.mock_validate.return_value = [{"record_type_name": "foo", "fields": [{"$type": "invalid", "$ref": "login"}]}]
         self.mock_get_types.return_value = []
-        with patch('json.load', return_value={"record_types": [{"record_type_name": "foo", "fields": [{"$type": "invalid", "$ref": "login"}]}]}):
-            with patch.dict('keepersdk.vault.record_type_management.record_types.RecordFields', {'login': MagicMock()}):
-                result = record_type_management.load_record_types(self.vault, self.filepath)
-                self.assertFalse(result)
-                self.mock_create.assert_not_called()
+        with patch.dict('keepersdk.vault.record_type_management.record_types.RecordFields', {'login': MagicMock()}):
+            result = record_type_management.load_record_types(self.vault, self.filepath)
+            self.assertEqual(result, 0)
+            self.mock_create.assert_not_called()
 
     def test_successful_add(self):
-        self.mock_open.return_value.__enter__.return_value = '{"record_types": [{"record_type_name": "foo", "fields": [{"$type": "login", "$ref": "login"}]}]}'
+        self.mock_validate.return_value = [{"record_type_name": "foo", "fields": [{"$type": "login", "$ref": "login"}]}]
         self.mock_get_types.return_value = []
-        with patch('json.load', return_value={"record_types": [{"record_type_name": "foo", "fields": [{"$type": "login", "$ref": "login"}]}]}):
-            with patch.dict('keepersdk.vault.record_type_management.record_types.RecordFields', {'login': MagicMock()}):
-                self.mock_create.return_value = True
-                result = record_type_management.load_record_types(self.vault, self.filepath)
-                self.assertTrue(result)
-                self.mock_create.assert_called_once()
+        with patch.dict('keepersdk.vault.record_type_management.record_types.RecordFields', {'login': MagicMock()}):
+            self.mock_create.return_value = True
+            result = record_type_management.load_record_types(self.vault, self.filepath)
+            self.assertEqual(result, 1)
+            self.mock_create.assert_called_once()
 
 
 if __name__ == "__main__":

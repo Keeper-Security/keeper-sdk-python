@@ -127,10 +127,10 @@ class RecordTypeInfoCommand(base.ArgparseCommand):
             prog='record-type-info',
             description='Get record type info'
         )
-        RecordTypeInfoCommand.add_arguments(self.parser)
+        RecordTypeInfoCommand.add_arguments_to_parser(self.parser)
         super().__init__(self.parser)
 
-    def add_arguments(parser: argparse.ArgumentParser):
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
         parser.add_argument(
             '-lr',
             '--list-record-type',

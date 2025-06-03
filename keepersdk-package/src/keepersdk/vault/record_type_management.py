@@ -4,8 +4,11 @@ import tabulate
 
 from typing import List, Dict, Optional
 
-from . import vault_online, record_types, record_type_utils, storage_types
+from . import vault_online, record_types, record_type_utils
 from ..proto import record_pb2
+from ..utils import get_logger
+
+logger = get_logger()
 
 def create_custom_record_type(vault: vault_online.VaultOnline, title: str, fields: List[Dict[str, str]], description: str, categories: List[str] = None):
     is_enterprise_admin = vault.keeper_auth.auth_context.is_enterprise_admin
@@ -135,13 +138,7 @@ def record_type_info(
 
         rows = []
         fields = record_type.fields
-        scope_int = record_type.scope
-        scope = (
-            "Standard" if scope_int == storage_types.RecordTypeScope.Standard else
-            "User" if scope_int == storage_types.RecordTypeScope.User else
-            "Enterprise" if scope_int == storage_types.RecordTypeScope.Enterprise else
-            str(scope_int)
-        )
+        scope = record_type_utils.get_record_type_scope(record_type.scope)
         rows.append([
             record_type.id,
             record_type.name,
@@ -169,19 +166,8 @@ def record_type_info(
 
 def load_record_types(vault: vault_online.VaultOnline, filepath) -> int:
     count = 0
-    if not os.path.exists(filepath):
-        raise ValueError('Custom record types file not found')
 
-    with open(filepath, 'rt', encoding='utf-8') as file:
-        json_obj = json.load(file)
-
-    if not isinstance(json_obj, dict):
-        raise ValueError('Invalid custom record types file')
-
-    record_types_list = json_obj.get('record_types')
-
-    if not isinstance(record_types_list, list):
-        raise ValueError('Invalid custom record types list')
+    record_types_list = record_type_utils.validate_record_type_file(filepath)
 
     loaded_record_types = set()
     existing_record_types = record_type_utils.get_record_types(vault)
@@ -192,14 +178,17 @@ def load_record_types(vault: vault_online.VaultOnline, filepath) -> int:
     for record_type in record_types_list:
         record_type_name = record_type.get('record_type_name')
         if not record_type_name:
+            logger.error('Record type name is missing in the record type definition.', record_type)
             continue
 
         record_type_name = record_type_name[:30]
         if record_type_name.lower() in loaded_record_types:
+            logger.info(f'Record type "{record_type_name}" already exists. Skipping.')
             continue
 
         fields = record_type.get('fields')
         if not isinstance(fields, list):
+            logger.error('Fields must be a list in the record type definition.', record_type)
             continue
 
         is_valid = True
@@ -209,6 +198,7 @@ def load_record_types(vault: vault_online.VaultOnline, filepath) -> int:
                 is_valid = False
                 break
         if not is_valid:
+            logger.error('Invalid field type in the record type definition.', record_type)
             continue
 
         add_fields = []
@@ -219,6 +209,7 @@ def load_record_types(vault: vault_online.VaultOnline, filepath) -> int:
             add_fields.append(fo)
 
         if len(add_fields) == 0:
+            logger.error('No fields found in the record type definition.', record_type)
             continue
 
         create_custom_record_type(
