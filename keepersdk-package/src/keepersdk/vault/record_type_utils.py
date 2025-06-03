@@ -23,27 +23,19 @@ def get_record_type_example(vault: vault_online.VaultOnline, record_type_name: s
         fields = [x.label for x in fields]
         for fname in fields:
             ft = get_field_type(fname)
-            if not ft:
-                ft = {
-                    'id': fname,
-                    'type': 'text',
-                    'valueType': 'string',
-                    'value': '',
-                    'sample': 'unknown type'
-                }
 
             required = next((x.required for x in record_type_fields if x.label == fname), None)
             label = next((x.label for x in record_type_fields if x.label == fname), None)
 
             val = {
                 'type': fname,
-                'value': [ft.get('value')],
+                'value': [ft.get('value') or ''],
                 'required': required,
                 'label': label
             }
 
             if fname not in ('fileRef', 'addressRef', 'cardRef'):
-                if fname == 'phone' and 'sample' in ft and 'region' in ft['sample']:
+                if fname == 'phone' and ft and 'sample' in ft and 'region' in ft['sample']:
                     ft['sample']['region'] = 'US'
 
             rte['fields'].append(val)
@@ -74,19 +66,15 @@ def get_field_type(id):
         for fkey in record_types.FieldTypes
         if record_types.RecordFields[rkey].type == record_types.FieldTypes[fkey].name
     ]
-    ids = [ft for ft in ftypes if id and (id == ft.get('name'))]
-    result = ids[0] if ids else {}
+    result = next((ft for ft in ftypes if id.lower() == ft.get('name').lower()), {})
     if result:
         # Determine value based on whether the id matches a FieldType or RecordField
-        field_type_obj = next((ft for ft in record_types.FieldTypes.values() if ft.name == id), None)
-        record_field_obj = next((rf for rf in record_types.RecordFields.values() if rf.name == id), None)
+        field_type_obj = next((ft for ft in record_types.FieldTypes.values() if ft.name.lower() == id.lower()), None)
 
         if field_type_obj:
             value = getattr(field_type_obj, 'value', None)
-        elif record_field_obj:
-            value = getattr(record_field_obj, 'type', None)
         else:
-            value = None
+            value = result.get('type', None)
 
         result = {
             'id': result.get('$id') or result.get('name') or '',

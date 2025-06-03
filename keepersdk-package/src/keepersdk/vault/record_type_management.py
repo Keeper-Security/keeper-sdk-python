@@ -192,21 +192,19 @@ def load_record_types(vault: vault_online.VaultOnline, filepath) -> int:
             continue
 
         is_valid = True
+        add_fields = []
         for field in fields:
             field_type = field.get('$type')
             if field_type not in record_types.RecordFields:
                 is_valid = False
                 break
-        if not is_valid:
-            logger.error('Invalid field type in the record type definition.', record_type)
-            continue
-
-        add_fields = []
-        for field in fields:
             fo = {'$ref': field.get('$type')}
             if field.get('required') is True:
                 fo['required'] = True
             add_fields.append(fo)
+        if not is_valid:
+            logger.error('Invalid field type in the record type definition.', record_type)
+            continue
 
         if len(add_fields) == 0:
             logger.error('No fields found in the record type definition.', record_type)
