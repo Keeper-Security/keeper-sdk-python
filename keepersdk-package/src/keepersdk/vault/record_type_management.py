@@ -1,4 +1,5 @@
 import json
+import os
 import tabulate
 
 from typing import List, Dict, Optional
@@ -105,42 +106,19 @@ def record_type_info(
 ):
     #field types
     if field_name is not None:
-        # List all field types
-        if field_name.strip() == '' or field_name.strip() == '*':
+        headers = ('Field Type ID', 'Lookup', 'Multiple', 'Description')
+        show_all_fields = field_name.strip() == '' or field_name.strip() == '*'
+        if show_all_fields:
             rows = []
-            recordfield_names = {rf.name for rf in record_types.RecordFields.values()}
             for ft in record_types.FieldTypes.values():
-                lookup = ft.name if ft.name in recordfield_names else ""
-                multiple = (
-                    record_types.RecordFields[ft.name].multiple.name
-                    if lookup else "Optional"
-                )
-                rows.append([
-                    ft.name,
-                    lookup,
-                    multiple,
-                    ft.description
-                ])
-            headers = ('Field Type ID', 'Lookup', 'Multiple', 'Description')
+                rows.append(record_type_utils.get_field_definitions(ft))
             return tabulate.tabulate(rows, headers=headers, tablefmt='simple')
-        # Fetch a specific field type
         else:
+            # Fetch a specific field type
             ft = record_types.FieldTypes.get(field_name)
-            recordfield_names = {rf.name for rf in record_types.RecordFields.values()}
             if not ft:
                 raise ValueError(f"Field type '{field_name}' is not a valid RecordField.")
-            lookup = ft.name if ft.name in recordfield_names else ""
-            multiple = (
-                record_types.RecordFields[field_name].multiple.name
-                if lookup else "Optional"
-            )
-            row = [
-                ft.name,
-                lookup,
-                multiple,
-                ft.description
-            ]
-            headers = ('Field Type ID', 'Lookup', 'Multiple', 'Description')
+            row = record_type_utils.get_field_definitions(ft)
             return tabulate.tabulate([row], headers=headers, tablefmt='simple')
 
     # Handle record type example
@@ -150,9 +128,10 @@ def record_type_info(
 
     # Record Types
     if record_type_name and record_type_name != '*' and record_type_name != '':
+        #Fetch a specific record type
         record_type = vault.vault_data.get_record_type_by_name(record_type_name)
         if not record_type:
-            return f"Record type '{record_type_name}' not found."
+            raise ValueError(f"Record type '{record_type_name}' not found.")
 
         rows = []
         fields = record_type.fields
@@ -175,13 +154,80 @@ def record_type_info(
         headers = ('id', 'name', 'scope', 'fields')
         return tabulate.tabulate(rows, headers=headers, tablefmt='simple')
     else:
-        records = record_type_utils.get_record_types(vault)
-        if not records:
-            return "No record types found."
+        #Show all record types
+        record_types_list = record_type_utils.get_record_types(vault)
+        if not record_types_list:
+            raise ValueError("No record types found.")
 
         rows = []
-        for rtid, name, scope in records:
+        for rtid, name, scope in record_types_list:
             rows.append([rtid, name, scope])
 
         headers = ('Record Type ID', 'Record Type Name', 'Record Type Scope')
         return tabulate.tabulate(rows, headers=headers, tablefmt='simple')
+
+
+def load_record_types(vault: vault_online.VaultOnline, filepath) -> int:
+    count = 0
+    if not os.path.exists(filepath):
+        raise ValueError('Custom record types file not found')
+
+    with open(filepath, 'rt', encoding='utf-8') as file:
+        json_obj = json.load(file)
+
+    if not isinstance(json_obj, dict):
+        raise ValueError('Invalid custom record types file')
+
+    record_types_list = json_obj.get('record_types')
+
+    if not isinstance(record_types_list, list):
+        raise ValueError('Invalid custom record types list')
+
+    loaded_record_types = set()
+    existing_record_types = record_type_utils.get_record_types(vault)
+    if existing_record_types:
+        for existing_record_type in existing_record_types:
+            loaded_record_types.add(existing_record_type[1].lower())
+
+    for record_type in record_types_list:
+        record_type_name = record_type.get('record_type_name')
+        if not record_type_name:
+            continue
+
+        record_type_name = record_type_name[:30]
+        if record_type_name.lower() in loaded_record_types:
+            continue
+
+        fields = record_type.get('fields')
+        if not isinstance(fields, list):
+            continue
+
+        is_valid = True
+        for field in fields:
+            field_type = field.get('$type')
+            if field_type not in record_types.RecordFields:
+                is_valid = False
+                break
+        if not is_valid:
+            continue
+
+        add_fields = []
+        for field in fields:
+            fo = {'$ref': field.get('$type')}
+            if field.get('required') is True:
+                fo['required'] = True
+            add_fields.append(fo)
+
+        if len(add_fields) == 0:
+            continue
+
+        create_custom_record_type(
+            vault=vault,
+            title=record_type_name,
+            fields=add_fields,
+            description=record_type.get('description') or '',
+            categories=record_type.get('categories') or []
+        )
+        count += 1
+
+    return count

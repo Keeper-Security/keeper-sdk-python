@@ -123,10 +123,14 @@ class RecordTypeDeleteCommand(base.ArgparseCommand):
 class RecordTypeInfoCommand(base.ArgparseCommand):
 
     def __init__(self):
-        parser = argparse.ArgumentParser(
+        self.parser = argparse.ArgumentParser(
             prog='record-type-info',
             description='Get record type info'
         )
+        RecordTypeInfoCommand.add_arguments(self.parser)
+        super().__init__(self.parser)
+
+    def add_arguments(parser: argparse.ArgumentParser):
         parser.add_argument(
             '-lr',
             '--list-record-type',
@@ -154,7 +158,6 @@ class RecordTypeInfoCommand(base.ArgparseCommand):
             action='store_true',
             help='Set to "true" to generate example JSON'
         )
-        super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
         if not context.vault:
@@ -171,6 +174,38 @@ class RecordTypeInfoCommand(base.ArgparseCommand):
         )
 
         logger.info(result)
+
+
+class LoadRecordTypesCommand(base.ArgparseCommand):
+
+    def __init__(self):
+        parser = argparse.ArgumentParser(
+            prog='load-record-types',
+            description='Loads custom record types from a JSON file.'
+        )
+        parser.add_argument(
+            '--file',
+            dest='file',
+            action='store',
+            required=True,
+            help='Path to the JSON file containing the record type definition.'
+        )
+        super().__init__(parser)
+
+    def execute(self, context: KeeperParams, **kwargs) -> None:
+        if not context.vault:
+            raise ValueError("Vault is not initialized.")
+
+        filepath = kwargs.get('file')
+        if not filepath:
+            raise ValueError("Missing required argument: --file")
+        
+        response = record_type_management.load_record_types(context.vault, filepath)
+
+        if response != 0:
+            logger.info(f"Custom record types imported successfully. {response} record types were added.")
+        else:
+            logger.info("No custom record types were imported. Record types already exist in the vault or the file is empty.")
 
 
 record_implicit_fields = {

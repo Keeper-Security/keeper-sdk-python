@@ -189,8 +189,9 @@ class RecordTypeInfoTestCase(unittest.TestCase):
 
     def test_record_type_name_not_found(self):
         self.vault.vault_data.get_record_type_by_name.return_value = None
-        result = record_type_management.record_type_info(self.vault, record_type_name='notfound')
-        self.assertIn("not found", result)
+        with self.assertRaises(ValueError) as cm:
+            record_type_management.record_type_info(self.vault, record_type_name='notfound')
+        self.assertIn('not found', str(cm.exception))
 
     @patch('keepersdk.vault.record_type_management.tabulate')
     def test_record_type_name_details(self, mock_tabulate):
@@ -205,6 +206,95 @@ class RecordTypeInfoTestCase(unittest.TestCase):
         mock_tabulate.tabulate.return_value = 'table'
         result = record_type_management.record_type_info(self.vault, record_type_name='login')
         self.assertEqual(result, 'table')
+
+
+class LoadRecordTypesTestCase(unittest.TestCase):
+    def setUp(self):
+        self.vault = MagicMock()
+        self.filepath = 'dummy.json'
+        self.patcher_open = patch('keepersdk.vault.record_type_management.open', create=True)
+        self.mock_open = self.patcher_open.start()
+        self.addCleanup(self.patcher_open.stop)
+        self.patcher_os = patch('keepersdk.vault.record_type_management.os.path.exists', return_value=True)
+        self.mock_os = self.patcher_os.start()
+        self.addCleanup(self.patcher_os.stop)
+        self.patcher_create = patch('keepersdk.vault.record_type_management.create_custom_record_type')
+        self.mock_create = self.patcher_create.start()
+        self.addCleanup(self.patcher_create.stop)
+        self.patcher_get_types = patch('keepersdk.vault.record_type_management.record_type_utils.get_record_types')
+        self.mock_get_types = self.patcher_get_types.start()
+        self.addCleanup(self.patcher_get_types.stop)
+        self.patcher_record_fields = patch('keepersdk.vault.record_type_management.record_types.RecordFields', {})
+        self.mock_record_fields = self.patcher_record_fields.start()
+        self.addCleanup(self.patcher_record_fields.stop)
+
+    def test_file_not_found(self):
+        self.mock_os.return_value = False
+        with self.assertRaises(ValueError) as cm:
+            record_type_management.load_record_types(self.vault, self.filepath)
+        self.assertIn('Custom record types file not found', str(cm.exception))
+
+    def test_invalid_json(self):
+        self.mock_open.return_value.__enter__.return_value = 'not a json'
+        with patch('json.load', side_effect=ValueError):
+            with self.assertRaises(ValueError):
+                record_type_management.load_record_types(self.vault, self.filepath)
+
+    def test_json_not_dict(self):
+        self.mock_open.return_value.__enter__.return_value = '{}'
+        with patch('json.load', return_value=[]):
+            with self.assertRaises(ValueError) as cm:
+                record_type_management.load_record_types(self.vault, self.filepath)
+            self.assertIn('Invalid custom record types file', str(cm.exception))
+
+    def test_missing_record_types_list(self):
+        self.mock_open.return_value.__enter__.return_value = '{"foo": 1}'
+        with patch('json.load', return_value={"foo": 1}):
+            with self.assertRaises(ValueError) as cm:
+                record_type_management.load_record_types(self.vault, self.filepath)
+            self.assertIn('Invalid custom record types list', str(cm.exception))
+
+    def test_record_types_list_not_list(self):
+        self.mock_open.return_value.__enter__.return_value = '{"record_types": 123}'
+        with patch('json.load', return_value={"record_types": 123}):
+            with self.assertRaises(ValueError) as cm:
+                record_type_management.load_record_types(self.vault, self.filepath)
+            self.assertIn('Invalid custom record types list', str(cm.exception))
+
+    def test_skip_record_type_without_name(self):
+        self.mock_open.return_value.__enter__.return_value = '{"record_types": [{}]}'
+        with patch('json.load', return_value={"record_types": [{}]}):
+            self.mock_get_types.return_value = []
+            result = record_type_management.load_record_types(self.vault, self.filepath)
+            self.assertFalse(result)
+            self.mock_create.assert_not_called()
+
+    def test_skip_existing_record_type(self):
+        self.mock_open.return_value.__enter__.return_value = '{"record_types": [{"record_type_name": "foo", "fields": [{"$type": "login", "$ref": "login"}]}]}'
+        self.mock_get_types.return_value = [MagicMock(name='foo')]
+        with patch('json.load', return_value={"record_types": [{"record_type_name": "foo", "fields": [{"$type": "login", "$ref": "login"}]}]}):
+            result = record_type_management.load_record_types(self.vault, self.filepath)
+            self.assertFalse(result)
+            self.mock_create.assert_not_called()
+
+    def test_skip_invalid_fields(self):
+        self.mock_open.return_value.__enter__.return_value = '{"record_types": [{"record_type_name": "foo", "fields": [{"$type": "invalid", "$ref": "login"}]}]}'
+        self.mock_get_types.return_value = []
+        with patch('json.load', return_value={"record_types": [{"record_type_name": "foo", "fields": [{"$type": "invalid", "$ref": "login"}]}]}):
+            with patch.dict('keepersdk.vault.record_type_management.record_types.RecordFields', {'login': MagicMock()}):
+                result = record_type_management.load_record_types(self.vault, self.filepath)
+                self.assertFalse(result)
+                self.mock_create.assert_not_called()
+
+    def test_successful_add(self):
+        self.mock_open.return_value.__enter__.return_value = '{"record_types": [{"record_type_name": "foo", "fields": [{"$type": "login", "$ref": "login"}]}]}'
+        self.mock_get_types.return_value = []
+        with patch('json.load', return_value={"record_types": [{"record_type_name": "foo", "fields": [{"$type": "login", "$ref": "login"}]}]}):
+            with patch.dict('keepersdk.vault.record_type_management.record_types.RecordFields', {'login': MagicMock()}):
+                self.mock_create.return_value = True
+                result = record_type_management.load_record_types(self.vault, self.filepath)
+                self.assertTrue(result)
+                self.mock_create.assert_called_once()
 
 
 if __name__ == "__main__":

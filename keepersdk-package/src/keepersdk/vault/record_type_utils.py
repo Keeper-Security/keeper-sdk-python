@@ -1,6 +1,6 @@
 import json
 
-from . import vault_online, storage_types, record_types
+from . import vault_online, storage_types, record_types, vault_types
 from ..proto import record_pb2
 
 def get_record_type_example(vault: vault_online.VaultOnline, record_type_name: str) -> str:
@@ -54,7 +54,7 @@ def get_record_type_example(vault: vault_online.VaultOnline, record_type_name: s
     return result
 
 
-def get_record_types(vault:vault_online.VaultOnline):
+def get_record_types(vault:vault_online.VaultOnline) -> list[vault_types.RecordType]:
         records = []  # (recordTypeId, name, scope)
         record_types = vault.vault_data.get_record_types()
 
@@ -111,3 +111,19 @@ def isEnterpriseRecordType(record_type_id: int) -> bool:
     real_type_id = record_type_id % num_rts_per_scope
 
     return is_enterprise_rt, real_type_id
+
+
+def get_field_definitions(field: record_types.FieldType):
+    recordfield_names = {rf.name for rf in record_types.RecordFields.values()}
+    lookup = field.name if field.name in recordfield_names else ""
+    multiple = (
+        record_types.RecordFields[field.name].multiple.name
+        if lookup else "Optional"
+    )
+    row = [
+        field.name,
+        lookup,
+        multiple,
+        field.description
+    ]
+    return row
