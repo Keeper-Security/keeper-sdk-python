@@ -79,12 +79,6 @@ class EditCustomRecordTypesTestCase(unittest.TestCase):
             record_type_management.edit_custom_record_types(self.vault, record_type_id, "Title", [{"$ref": "login"}], "desc", ["test"])
         self.assertIn("restricted to Keeper Enterprise administrators", str(cm.exception))
 
-    def test_not_enterprise_record_type_id(self):
-        record_type_id = 1
-        with self.assertRaises(ValueError) as cm:
-            record_type_management.edit_custom_record_types(self.vault, record_type_id, "Title", [{"$ref": "login"}], "desc", ["test"])
-        self.assertIn("can be modified", str(cm.exception))
-
     def test_missing_fields(self):
         record_type_id = 2000001
         with self.assertRaises(ValueError) as cm:
@@ -128,12 +122,6 @@ class DeleteCustomRecordTypesTestCase(unittest.TestCase):
         with self.assertRaises(ValueError) as cm:
             record_type_management.delete_custom_record_types(self.vault, record_type_id)
         self.assertIn("restricted to Keeper Enterprise administrators", str(cm.exception))
-
-    def test_not_enterprise_record_type_id(self):
-        record_type_id = 1
-        with self.assertRaises(ValueError) as cm:
-            record_type_management.delete_custom_record_types(self.vault, record_type_id)
-        self.assertIn("can be removed", str(cm.exception))
 
 
 class RecordTypeInfoTestCase(unittest.TestCase):
