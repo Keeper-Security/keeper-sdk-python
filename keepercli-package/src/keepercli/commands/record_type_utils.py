@@ -1,7 +1,7 @@
 import json
 
-from . import vault_online, storage_types, record_types, vault_types
-from ..proto import record_pb2
+from keepersdk.vault import vault_online, storage_types, record_types, vault_types
+from keepersdk.proto import record_pb2
 
 def get_record_type_example(vault: vault_online.VaultOnline, record_type_name: str) -> str:
     STR_VALUE = 'text'

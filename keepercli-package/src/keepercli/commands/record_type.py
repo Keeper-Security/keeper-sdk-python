@@ -2,11 +2,12 @@ import argparse
 import json
 import logging
 
-from keepersdk.vault import record_type_management
+from keepersdk.vault import record_type_management, record_types
 
-from . import base
+from . import base, record_type_utils
 from ..params import KeeperParams
 from .. import api
+from ..helpers import report_utils
 
 logger = api.get_logger()
 
@@ -45,6 +46,7 @@ class RecordTypeAddCommand(base.ArgparseCommand):
             context.vault, title, fields, description, categories
         )
         logger.info(f"Custom record type '{title}' created successfully with fields: {[f['$ref'] for f in fields]} and recordTypeId: {result.recordTypeId}")
+        return
 
 
 class RecordTypeEditCommand(base.ArgparseCommand):
@@ -92,6 +94,7 @@ class RecordTypeEditCommand(base.ArgparseCommand):
             context.vault, record_type_id, title, fields, description, categories
         )
         logger.info(f"Custom record type (ID: {record_type_id}) updated successfully with fields: {[f['$ref'] for f in fields]} and recordTypeId: {result.recordTypeId}")
+        return
 
 
 class RecordTypeDeleteCommand(base.ArgparseCommand):
@@ -118,6 +121,7 @@ class RecordTypeDeleteCommand(base.ArgparseCommand):
 
         result = record_type_management.delete_custom_record_types(context.vault, record_type_id)
         logger.info(f"Custom record type deleted successfully with record type id: {result.recordTypeId}")
+        return
 
 
 class RecordTypeInfoCommand(base.ArgparseCommand):
@@ -162,18 +166,66 @@ class RecordTypeInfoCommand(base.ArgparseCommand):
     def execute(self, context: KeeperParams, **kwargs) -> None:
         if not context.vault:
             raise ValueError("Vault is not initialized.")
+        
+        vault = context.vault
         example = kwargs.get('example', False)
-        field = kwargs.get('field_name')
-        record_type = kwargs.get('record_name')
+        field_name = kwargs.get('field_name')
+        record_type_name = kwargs.get('record_name')
 
-        result = record_type_management.record_type_info(
-            vault=context.vault,
-            field_name=field,
-            record_type_name=record_type,
-            example=example
-        )
+        if field_name is not None:
+            headers = ('Field Type ID', 'Lookup', 'Multiple', 'Description')
+            show_all_fields = field_name.strip() == '' or field_name.strip() == '*'
+            if show_all_fields:
+                rows = []
+                for ft in record_types.FieldTypes.values():
+                    rows.append(record_type_utils.get_field_definitions(ft))
+                return report_utils.dump_report_data(rows, headers, column_width='auto', fmt='simple')
+            else:
+                # Fetch a specific field type
+                ft = record_types.FieldTypes.get(field_name)
+                if not ft:
+                    raise ValueError(f"Field type '{field_name}' is not a valid RecordField.")
+                row = record_type_utils.get_field_definitions(ft)
+                return report_utils.dump_report_data([row], headers, column_width='auto', fmt='simple')
 
-        logger.info(result)
+        if record_type_name and record_type_name != '*' and record_type_name != '' and example:
+            record_type_example = record_type_utils.get_record_type_example(vault, record_type_name)
+            logger.info(record_type_example)
+            return
+
+        # Record Types
+        if record_type_name and record_type_name != '*' and record_type_name != '':
+            #Fetch a specific record type
+            record_type = vault.vault_data.get_record_type_by_name(record_type_name)
+            if not record_type:
+                raise ValueError(f"Record type '{record_type_name}' not found.")
+
+            rows = []
+            fields = record_type.fields
+            scope = record_type_utils.get_record_type_scope(record_type.scope)
+            rows.append([
+                record_type.id,
+                record_type.name,
+                scope,
+                fields[0].label if hasattr(fields[0], 'label') else str(fields[0])
+            ])
+            for field in fields[1:]:
+                rows.append(['', '', '', field.label if hasattr(field, 'label') else str(field)])
+
+            headers = ('id', 'name', 'scope', 'fields')
+            return report_utils.dump_report_data(rows, headers, column_width='auto', fmt='simple')
+        else:
+            #Show all record types
+            record_types_list = record_type_utils.get_record_types(vault)
+            if not record_types_list:
+                raise ValueError("No record types found.")
+
+            rows = []
+            for rtid, name, scope in record_types_list:
+                rows.append([rtid, name, scope])
+
+            headers = ('Record Type ID', 'Record Type Name', 'Record Type Scope')
+            return report_utils.dump_report_data(rows, headers, column_width='auto', fmt='simple')
 
 
 class LoadRecordTypesCommand(base.ArgparseCommand):
@@ -200,12 +252,64 @@ class LoadRecordTypesCommand(base.ArgparseCommand):
         if not filepath:
             raise ValueError("Missing required argument: --file")
         
-        response = record_type_management.load_record_types(context.vault, filepath)
+        count = 0
+        record_types_list = record_type_utils.validate_record_type_file(filepath)
 
-        if response != 0:
-            logger.info(f"Custom record types imported successfully. {response} record types were added.")
+        loaded_record_types = set()
+        existing_record_types = record_type_utils.get_record_types(context.vault)
+        if existing_record_types:
+            for existing_record_type in existing_record_types:
+                loaded_record_types.add(existing_record_type[1].lower())
+
+        for record_type in record_types_list:
+            record_type_name = record_type.get('record_type_name')
+            if not record_type_name:
+                logger.error('Record type name is missing in the record type definition.', record_type)
+                continue
+
+            record_type_name = record_type_name[:30]
+            if record_type_name.lower() in loaded_record_types:
+                logger.info(f'Record type "{record_type_name}" already exists. Skipping.')
+                continue
+
+            fields = record_type.get('fields')
+            if not isinstance(fields, list):
+                logger.error('Fields must be a list in the record type definition.', record_type)
+                continue
+
+            is_valid = True
+            add_fields = []
+            for field in fields:
+                field_type = field.get('$type')
+                if field_type not in record_types.RecordFields:
+                    is_valid = False
+                    break
+                fo = {'$ref': field.get('$type')}
+                if field.get('required') is True:
+                    fo['required'] = True
+                add_fields.append(fo)
+            if not is_valid:
+                logger.error('Invalid field type in the record type definition.', record_type)
+                continue
+
+            if len(add_fields) == 0:
+                logger.error('No fields found in the record type definition.', record_type)
+                continue
+
+            record_type_management.create_custom_record_type(
+                vault=context.vault,
+                title=record_type_name,
+                fields=add_fields,
+                description=record_type.get('description') or '',
+                categories=record_type.get('categories') or []
+            )
+            count += 1
+
+        if count != 0:
+            logger.info(f"Custom record types imported successfully. {count} record types were added.")
         else:
             logger.info("No custom record types were imported. Record types already exist in the vault or the file is empty.")
+        return
 
 
 record_implicit_fields = {

@@ -1,10 +1,8 @@
 import json
-import os
-import tabulate
 
-from typing import List, Dict, Optional
+from typing import List, Dict
 
-from . import vault_online, record_types, record_type_utils
+from . import vault_online, record_types
 from ..proto import record_pb2
 from ..utils import get_logger
 
@@ -51,11 +49,6 @@ def edit_custom_record_types(vault: vault_online.VaultOnline, record_type_id: in
     if not fields:
         raise ValueError('At least one field must be specified.')
 
-    is_enterprise_rt, real_type_id = record_type_utils.isEnterpriseRecordType(record_type_id)
-
-    if not is_enterprise_rt:
-        raise ValueError('Only custom record types can be modified.')
-
     field_definitions = []
     for field in fields:
         field_name = field.get("$ref")
@@ -75,7 +68,7 @@ def edit_custom_record_types(vault: vault_online.VaultOnline, record_type_id: in
     request_payload = record_pb2.RecordType()
     request_payload.content = json.dumps(record_type_data)
     request_payload.scope = record_pb2.RT_ENTERPRISE
-    request_payload.recordTypeId = real_type_id
+    request_payload.recordTypeId = record_type_id
 
     response = vault.keeper_auth.execute_auth_rest('vault/record_type_update', request_payload, response_type=record_pb2.RecordTypeModifyResponse)
 
@@ -86,137 +79,12 @@ def delete_custom_record_types(vault: vault_online.VaultOnline, record_type_id: 
     is_enterprise_admin = vault.keeper_auth.auth_context.is_enterprise_admin
     if not is_enterprise_admin:
         raise ValueError('This command is restricted to Keeper Enterprise administrators.')
-    
-    is_enterprise_rt, real_type_id = record_type_utils.isEnterpriseRecordType(record_type_id)
-
-    if not is_enterprise_rt:
-        raise ValueError('Only custom record types can be removed.')
 
     request_payload = record_pb2.RecordType()
     request_payload.scope = record_pb2.RT_ENTERPRISE
-    request_payload.recordTypeId = real_type_id
+    request_payload.recordTypeId = record_type_id
 
     response = vault.keeper_auth.execute_auth_rest('vault/record_type_delete', request_payload, response_type=record_pb2.RecordTypeModifyResponse)
 
     return response
 
-
-def record_type_info(
-    vault: vault_online.VaultOnline,
-    field_name: Optional[str] = None,
-    record_type_name: Optional[str] = None,
-    example: Optional[bool] = None,
-):
-    #field types
-    if field_name is not None:
-        headers = ('Field Type ID', 'Lookup', 'Multiple', 'Description')
-        show_all_fields = field_name.strip() == '' or field_name.strip() == '*'
-        if show_all_fields:
-            rows = []
-            for ft in record_types.FieldTypes.values():
-                rows.append(record_type_utils.get_field_definitions(ft))
-            return tabulate.tabulate(rows, headers=headers, tablefmt='simple')
-        else:
-            # Fetch a specific field type
-            ft = record_types.FieldTypes.get(field_name)
-            if not ft:
-                raise ValueError(f"Field type '{field_name}' is not a valid RecordField.")
-            row = record_type_utils.get_field_definitions(ft)
-            return tabulate.tabulate([row], headers=headers, tablefmt='simple')
-
-    # Handle record type example
-    if record_type_name and record_type_name != '*' and record_type_name != '' and example:
-        record_type_example = record_type_utils.get_record_type_example(vault, record_type_name)
-        return record_type_example
-
-    # Record Types
-    if record_type_name and record_type_name != '*' and record_type_name != '':
-        #Fetch a specific record type
-        record_type = vault.vault_data.get_record_type_by_name(record_type_name)
-        if not record_type:
-            raise ValueError(f"Record type '{record_type_name}' not found.")
-
-        rows = []
-        fields = record_type.fields
-        scope = record_type_utils.get_record_type_scope(record_type.scope)
-        rows.append([
-            record_type.id,
-            record_type.name,
-            scope,
-            fields[0].label if hasattr(fields[0], 'label') else str(fields[0])
-        ])
-        for field in fields[1:]:
-            rows.append(['', '', '', field.label if hasattr(field, 'label') else str(field)])
-
-        headers = ('id', 'name', 'scope', 'fields')
-        return tabulate.tabulate(rows, headers=headers, tablefmt='simple')
-    else:
-        #Show all record types
-        record_types_list = record_type_utils.get_record_types(vault)
-        if not record_types_list:
-            raise ValueError("No record types found.")
-
-        rows = []
-        for rtid, name, scope in record_types_list:
-            rows.append([rtid, name, scope])
-
-        headers = ('Record Type ID', 'Record Type Name', 'Record Type Scope')
-        return tabulate.tabulate(rows, headers=headers, tablefmt='simple')
-
-
-def load_record_types(vault: vault_online.VaultOnline, filepath) -> int:
-    count = 0
-
-    record_types_list = record_type_utils.validate_record_type_file(filepath)
-
-    loaded_record_types = set()
-    existing_record_types = record_type_utils.get_record_types(vault)
-    if existing_record_types:
-        for existing_record_type in existing_record_types:
-            loaded_record_types.add(existing_record_type[1].lower())
-
-    for record_type in record_types_list:
-        record_type_name = record_type.get('record_type_name')
-        if not record_type_name:
-            logger.error('Record type name is missing in the record type definition.', record_type)
-            continue
-
-        record_type_name = record_type_name[:30]
-        if record_type_name.lower() in loaded_record_types:
-            logger.info(f'Record type "{record_type_name}" already exists. Skipping.')
-            continue
-
-        fields = record_type.get('fields')
-        if not isinstance(fields, list):
-            logger.error('Fields must be a list in the record type definition.', record_type)
-            continue
-
-        is_valid = True
-        add_fields = []
-        for field in fields:
-            field_type = field.get('$type')
-            if field_type not in record_types.RecordFields:
-                is_valid = False
-                break
-            fo = {'$ref': field.get('$type')}
-            if field.get('required') is True:
-                fo['required'] = True
-            add_fields.append(fo)
-        if not is_valid:
-            logger.error('Invalid field type in the record type definition.', record_type)
-            continue
-
-        if len(add_fields) == 0:
-            logger.error('No fields found in the record type definition.', record_type)
-            continue
-
-        create_custom_record_type(
-            vault=vault,
-            title=record_type_name,
-            fields=add_fields,
-            description=record_type.get('description') or '',
-            categories=record_type.get('categories') or []
-        )
-        count += 1
-
-    return count
