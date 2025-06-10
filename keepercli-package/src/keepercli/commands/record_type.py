@@ -1,8 +1,9 @@
 import argparse
 import json
-import logging
+import os
 
 from keepersdk.vault import record_type_management, record_types
+from keepersdk.importer import keeper_format, import_data
 
 from . import base, record_type_utils
 from ..params import KeeperParams
@@ -33,9 +34,9 @@ class RecordTypeAddCommand(base.ArgparseCommand):
 
         data = kwargs.get('data')
 
-        record_type = load_data(data)
+        record_type = record_type_utils.load_data(data)
 
-        is_valid_data(record_type)
+        record_type_utils.is_valid_data(record_type)
 
         title = record_type.get('$id')
         fields = record_type.get('fields')
@@ -81,9 +82,9 @@ class RecordTypeEditCommand(base.ArgparseCommand):
         if not record_type_id:
             raise ValueError("Missing required argument: record_type_id")
         
-        record_type = load_data(data)
+        record_type = record_type_utils.load_data(data)
 
-        is_valid_data(record_type)
+        record_type_utils.is_valid_data(record_type)
 
         title = record_type.get('$id')
         fields = record_type.get('fields')
@@ -312,49 +313,88 @@ class LoadRecordTypesCommand(base.ArgparseCommand):
         return
 
 
-record_implicit_fields = {
-    'title': '',  # string
-    'custom': [],  # Array of Field Data objects
-    'notes': ''  # string
-}
+class DownloadRecordTypesCommand(base.ArgparseCommand):
 
+    def __init__(self):
+        self.parser = argparse.ArgumentParser(
+            prog='download-record-types',
+            description='Download custom record types to a JSON file.'
+        )
+        DownloadRecordTypesCommand.add_arguments_to_parser(self.parser)
+        super().__init__(self.parser)
 
-def is_valid_data(record_type):
-    title = record_type.get('$id')
-    fields = record_type.get('fields')
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
+        parser.add_argument(
+            '--name',
+            dest='name',
+            action='store',
+            type=str,
+            help='Output file name. "record_types.json" if omitted.'
+        )
+        parser.add_argument(
+            '--ssh-key-file',
+            dest='ssh-key-file',
+            action="store_true",
+            help='Prefer store SSH keys as file attachments rather than fields on a record'
+        )
+        parser.add_argument(
+            '--source',
+            dest='source',
+            required=True,
+            choices=['keeper'],
+            help='Record Type Source. Only "keeper" is currently supported.'
+        )
 
-    if not title:
-        raise ValueError("Record type must have a '$id' field.")
-    if not fields or not isinstance(fields, list):
-        raise ValueError("Record type must include a list of 'fields'.")
+    def execute(self, context: KeeperParams, **kwargs) -> None:
+        if not context.vault:
+            raise ValueError("Vault is not initialized.")
 
-    # Implicit fields - always present on any record, no need to be specified in the template: title, custom, notes
-    implicit_field_names = [x for x in record_implicit_fields]
-    implicit_fields = [r for r in record_type if r in implicit_field_names]
-    if implicit_fields:
-        error = {'error: Implicit fields not allowed in record type definition: ' + str(implicit_fields)}
-        raise ValueError(error)
+        file_name = kwargs.get('name') or 'record_types.json'
+        source = kwargs.get('source')
+        ssh_key_file = kwargs.get('ssh-key-file')
 
-    rt_attributes = ('$id', 'categories', 'description', 'fields')
-    bad_attributes = [r for r in record_type if r not in rt_attributes and r not in implicit_field_names]
-    if bad_attributes:
-        logging.debug(f'Unknown attributes in record type definition: {bad_attributes}')
+        if source == 'keeper':
+            plugin = keeper_format.KeeperRecordTypeDownload(vault=context.vault)
+        #elif to be added for any other methods (currently only keeper is implemented)
 
+        record_types = []
+        for rt in plugin.download_record_type():
+            if not isinstance(rt, import_data.RecordType):
+                continue
+            need_file_ref = False
+            rto = {
+                'record_type_name': rt.name,
+                'fields': []
+            }
+            if rt.description:
+                rto['description'] = rt.description
 
-def load_data(data):
+            for f in rt.fields:
+                if ssh_key_file is True and f.type == 'keyPair':
+                    need_file_ref = True
+                    continue
+                fo = {'$type': f.type}
+                if f.label:
+                    fo['label'] = f.label
+                if f.required is True:
+                    fo['required'] = True
+                rto['fields'].append(fo)
 
-    if data and data.strip().startswith('filepath:'):
-        filepath = data.split('filepath:')[1].strip()
-        try:
-            with open(filepath, 'r') as file:
-                data = file.read()
-        except FileNotFoundError:
-            raise ValueError(f"File not found: {filepath}")
+            if need_file_ref:
+                has_ref = next((True for x in rto['fields'] if x['$type'] == 'fileRef'), False)
+                if not has_ref:
+                    rto['fields'].append({'$type': 'fileRef'})
+            record_types.append(rto)
 
-    if not data:
-        raise ValueError("Cannot add record type without definition. --data or --file is required.")
-    
-    try:
-        return json.loads(data)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Invalid JSON format: {e}")
+        if len(record_types) > 0:
+            output = {
+                'record_types': record_types
+            }
+            try:
+                with open(file_name, 'wt', encoding='utf-8') as file:
+                    json.dump(output, file, indent=2)
+                logger.info('Downloaded %d record types to "%s"', len(record_types), os.path.abspath(file_name))
+            except Exception as e:
+                logger.error('Failed to write record types to file "%s": %s', file_name, str(e))
+        else:
+            logger.info('No record types are downloaded')
