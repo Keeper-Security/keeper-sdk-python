@@ -497,7 +497,7 @@ class KeeperRecordTypeDownload(import_data.BaseDownloadRecordType):
 
     def download_record_type(self, **kwargs) -> Iterable[import_data.RecordType]:
         for ert in self.vault.vault_data.get_record_types():
-            if ert.scope == vault_types.RecordTypeScope.Enterprise:
+            if ert.scope != vault_types.RecordTypeScope.Enterprise:
                 continue
             rt = import_data.RecordType()
             rt.name = ert.name
