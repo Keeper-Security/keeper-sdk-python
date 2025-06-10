@@ -4,7 +4,9 @@ from typing import List, Dict
 
 from . import vault_online, record_types
 from ..proto import record_pb2
+from ..utils import get_logger
 
+logger = get_logger()
 
 def create_custom_record_type(vault: vault_online.VaultOnline, title: str, fields: List[Dict[str, str]], description: str, categories: List[str] = None):
     is_enterprise_admin = vault.keeper_auth.auth_context.is_enterprise_admin
@@ -47,11 +49,6 @@ def edit_custom_record_types(vault: vault_online.VaultOnline, record_type_id: in
     if not fields:
         raise ValueError('At least one field must be specified.')
 
-    is_enterprise_rt, real_type_id = isEnterpriseRecordType(record_type_id)
-
-    if not is_enterprise_rt:
-        raise ValueError('Only custom record types can be modified.')
-
     field_definitions = []
     for field in fields:
         field_name = field.get("$ref")
@@ -71,7 +68,7 @@ def edit_custom_record_types(vault: vault_online.VaultOnline, record_type_id: in
     request_payload = record_pb2.RecordType()
     request_payload.content = json.dumps(record_type_data)
     request_payload.scope = record_pb2.RT_ENTERPRISE
-    request_payload.recordTypeId = real_type_id
+    request_payload.recordTypeId = record_type_id
 
     response = vault.keeper_auth.execute_auth_rest('vault/record_type_update', request_payload, response_type=record_pb2.RecordTypeModifyResponse)
 
@@ -82,27 +79,12 @@ def delete_custom_record_types(vault: vault_online.VaultOnline, record_type_id: 
     is_enterprise_admin = vault.keeper_auth.auth_context.is_enterprise_admin
     if not is_enterprise_admin:
         raise ValueError('This command is restricted to Keeper Enterprise administrators.')
-    
-    is_enterprise_rt, real_type_id = isEnterpriseRecordType(record_type_id)
-
-    if not is_enterprise_rt:
-        raise ValueError('Only custom record types can be removed.')
 
     request_payload = record_pb2.RecordType()
     request_payload.scope = record_pb2.RT_ENTERPRISE
-    request_payload.recordTypeId = real_type_id
+    request_payload.recordTypeId = record_type_id
 
     response = vault.keeper_auth.execute_auth_rest('vault/record_type_delete', request_payload, response_type=record_pb2.RecordTypeModifyResponse)
 
     return response
 
-
-def isEnterpriseRecordType(record_type_id: int) -> bool:
-    num_rts_per_scope = 1_000_000
-    enterprise_scope = record_pb2.RT_ENTERPRISE
-    min_id = num_rts_per_scope * enterprise_scope
-    max_id = min_id + num_rts_per_scope
-    is_enterprise_rt = min_id < record_type_id <= max_id
-    real_type_id = record_type_id % num_rts_per_scope
-
-    return is_enterprise_rt, real_type_id
