@@ -1,10 +1,8 @@
 import json
-import os
-import tabulate
 
-from typing import List, Dict, Optional
+from typing import List, Dict
 
-from . import vault_online, record_types, record_type_utils
+from . import vault_online, record_types
 from ..proto import record_pb2
 from ..utils import get_logger
 
