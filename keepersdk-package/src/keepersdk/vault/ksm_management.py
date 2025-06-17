@@ -5,10 +5,14 @@ from . import vault_online, ksm
 from ..proto import APIRequest_pb2, enterprise_pb2
 from .. import utils
 
+URL_GET_SUMMARY_API = 'vault/get_applications_summary'
+URL_GET_APP_INFO_API = 'vault/get_app_info'
+CLIENT_SHORT_ID_LENGTH = 8
+
 
 def list_secrets_manager_apps(vault: vault_online.VaultOnline) -> list[ksm.SecretsManagerApp]:
     response = vault.keeper_auth.execute_auth_rest(
-        'vault/get_applications_summary',
+        URL_GET_SUMMARY_API,
         request=None,
         response_type=APIRequest_pb2.GetApplicationsSummaryResponse
     )
@@ -18,11 +22,7 @@ def list_secrets_manager_apps(vault: vault_online.VaultOnline) -> list[ksm.Secre
         uid = utils.base64_url_encode(app_summary.appRecordUid)
         app_record = vault.vault_data.load_record(uid)
         name = getattr(app_record, 'title', '') if app_record else ''
-        last_access = app_summary.lastAccess
-        last_access = (
-            datetime.datetime.fromtimestamp(last_access // 1000).isoformat()
-            if last_access != 0 else None
-        )
+        last_access = int_to_datetime(app_summary.lastAccess)
         secrets_app = ksm.SecretsManagerApp(
             name=name,
             uid=uid,
@@ -54,10 +54,10 @@ def get_secrets_manager_app(vault: vault_online.VaultOnline, uid_or_name: str) -
         client = ksm.ClientDevice(
             name=c.id,
             short_id=short_client_id,
-            created_on=datetime.datetime.fromtimestamp(c.createdOn // 1000).isoformat() if c.createdOn else None,
-            expires_on=datetime.datetime.fromtimestamp(c.accessExpireOn // 1000).isoformat() if c.accessExpireOn else None,
-            first_access=datetime.datetime.fromtimestamp(c.firstAccess // 1000).isoformat() if c.firstAccess else None,
-            last_access=datetime.datetime.fromtimestamp(c.lastAccess // 1000).isoformat() if c.lastAccess else None,
+            created_on=int_to_datetime(c.createdOn),
+            expires_on=int_to_datetime(c.accessExpireOn),
+            first_access=int_to_datetime(c.firstAccess),
+            last_access=int_to_datetime(c.lastAccess),
             ip_lock=c.lockIp,
             ip_address=c.ipAddress
         )
@@ -69,16 +69,35 @@ def get_secrets_manager_app(vault: vault_online.VaultOnline, uid_or_name: str) -
         share_type = APIRequest_pb2.ApplicationShareType.Name(share.shareType)
         editable_status = share.editable
         if share_type == 'SHARE_TYPE_RECORD':
-            shared_secrets.append(ksm.SharedSecretsInfo(type='RECORD', uid=uid_str, name=ksm_app.title, permissions=editable_status))
+            shared_secrets.append(
+                ksm.SharedSecretsInfo(
+                    type='RECORD', uid=uid_str, name=ksm_app.title, permissions=editable_status
+                    )
+                )
         elif share_type == 'SHARE_TYPE_FOLDER':
             cached_sf = next((f for f in vault.vault_data.folders() if f.folder_uid == uid_str), None)
             if cached_sf:
-                shared_secrets.append(ksm.SharedSecretsInfo(type='FOLDER', uid=uid_str, name=cached_sf.name, permissions=editable_status))
+                shared_secrets.append(
+                    ksm.SharedSecretsInfo(
+                        type='FOLDER', uid=uid_str, name=cached_sf.name, permissions=editable_status
+                        )
+                    )
         else:
-            shared_secrets.append(ksm.SharedSecretsInfo(type='UNKOWN SHARE TYPE', uid=uid_str, name=ksm_app.title, permissions=editable_status))
+            shared_secrets.append(
+                ksm.SharedSecretsInfo(
+                    type='UNKOWN SHARE TYPE', uid=uid_str, name=ksm_app.title, permissions=editable_status
+                    )
+                )
 
-    records_count = sum(1 for s in getattr(app_info, 'shares', []) if APIRequest_pb2.ApplicationShareType.Name(s.shareType) == 'SHARE_TYPE_RECORD')
-    folders_count = sum(1 for s in getattr(app_info, 'shares', []) if APIRequest_pb2.ApplicationShareType.Name(s.shareType) == 'SHARE_TYPE_FOLDER')
+    records_count = sum(
+        1 for s in getattr(app_info, 'shares', []) 
+        if APIRequest_pb2.ApplicationShareType.Name(s.shareType) == 'SHARE_TYPE_RECORD'
+        )
+    
+    folders_count = sum(
+        1 for s in getattr(app_info, 'shares', []) 
+        if APIRequest_pb2.ApplicationShareType.Name(s.shareType) == 'SHARE_TYPE_FOLDER'
+        )
 
     return ksm.SecretsManagerApp(
         name=ksm_app.title,
@@ -95,7 +114,11 @@ def get_secrets_manager_app(vault: vault_online.VaultOnline, uid_or_name: str) -
 def get_app_info(vault: vault_online.VaultOnline, app_uid):
     rq = APIRequest_pb2.GetAppInfoRequest()
     rq.appRecordUid.append(utils.base64_url_decode(app_uid))
-    rs = vault.keeper_auth.execute_auth_rest(request=rq, rest_endpoint='vault/get_app_info',  response_type=APIRequest_pb2.GetAppInfoResponse)
+    rs = vault.keeper_auth.execute_auth_rest(
+        request=rq, 
+        rest_endpoint=URL_GET_APP_INFO_API, 
+        response_type=APIRequest_pb2.GetAppInfoResponse
+        )
     return rs.appInfo
 
 
@@ -107,4 +130,5 @@ def shorten_client_id(all_clients, original_id, number_of_characters):
     return shorten_client_id(all_clients, original_id, number_of_characters + 1)
 
 
-CLIENT_SHORT_ID_LENGTH = 8
+def int_to_datetime(timestamp: int) -> datetime.datetime:
+    return datetime.datetime.fromtimestamp(timestamp / 1000) if timestamp and timestamp != 0 else None

@@ -23,7 +23,9 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
 
 
     if not scopes or bool(scopes & base.CommandScope.Vault):
-        from .commands import vault_folder, vault, vault_record, record_edit, importer_commands, breachwatch, record_type, secrets_manager
+        from .commands import (vault_folder, vault, vault_record, record_edit, importer_commands, breachwatch, 
+                               record_type, secrets_manager)
+        
         commands.register_command('sync-down', vault.SyncDownCommand(), base.CommandScope.Vault, 'd')
         commands.register_command('cd', vault_folder.FolderCdCommand(), base.CommandScope.Vault)
         commands.register_command('ls', vault_folder.FolderListCommand(), base.CommandScope.Vault)
@@ -48,7 +50,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('record-type-info', record_type.RecordTypeInfoCommand(), base.CommandScope.Vault, 'rti')
         commands.register_command('load-record-types', record_type.LoadRecordTypesCommand(), base.CommandScope.Vault)
         commands.register_command('download-record-types', record_type.DownloadRecordTypesCommand(), base.CommandScope.Vault)
-        commands.register_command('secrets-manager', secrets_manager.SecretsManagerCommand(), base.CommandScope.Vault)
+        commands.register_command('secrets-manager-app', secrets_manager.SecretsManagerAppCommand(), base.CommandScope.Vault)
 
 
     if not scopes or bool(scopes & base.CommandScope.Enterprise):

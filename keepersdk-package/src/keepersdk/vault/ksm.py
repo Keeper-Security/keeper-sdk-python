@@ -4,18 +4,6 @@ from typing import Optional
 
 
 @dataclass(frozen=True)
-class SecretsManagerApp:
-    name: str
-    uid: str
-    records: int
-    folders: int
-    count: int
-    last_access: datetime
-    client_devices: Optional[list["ClientDevice"]] = None
-    shared_secrets: Optional[list["SharedSecretsInfo"]] = None
-
-
-@dataclass(frozen=True)
 class ClientDevice:
     name: str
     short_id: str
@@ -33,3 +21,15 @@ class SharedSecretsInfo:
     uid: str
     name: str
     permissions: str
+
+
+@dataclass(frozen=True)
+class SecretsManagerApp:
+    name: str
+    uid: str
+    records: int
+    folders: int
+    count: int
+    last_access: datetime
+    client_devices: Optional[list[ClientDevice]] = None
+    shared_secrets: Optional[list[SharedSecretsInfo]] = None
