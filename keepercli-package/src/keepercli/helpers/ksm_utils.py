@@ -18,7 +18,6 @@ def print_client_device_info(client_devices: list[ksm.ClientDevice]) -> None:
                                     f'  IP Lock: {client_device.ip_lock}\n' \
                                     f'  IP Address: {client_device.ip_address or "--"}'
         logger.info(client_devices_str)
-    return
 
 def print_shared_secrets_info(shared_secrets: list[ksm.SharedSecretsInfo]) -> None:
     shares_table_fields = ['Share Type', 'UID', 'Title', 'Permissions']
@@ -26,4 +25,4 @@ def print_shared_secrets_info(shared_secrets: list[ksm.SharedSecretsInfo]) -> No
         [secrets.type, secrets.uid, secrets.name, secrets.permissions]
         for secrets in shared_secrets
     ]
-    return report_utils.dump_report_data(rows, shares_table_fields, fmt='table')
+    report_utils.dump_report_data(rows, shares_table_fields, fmt='table')

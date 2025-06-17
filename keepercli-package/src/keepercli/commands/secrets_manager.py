@@ -2,10 +2,10 @@ import argparse
 
 from keepersdk.vault import ksm_management
 
-from . import base, ksm_utils
+from . import base
 from .. import api
 from ..params import KeeperParams
-from ..helpers import report_utils
+from ..helpers import report_utils, ksm_utils
 
 
 logger = api.get_logger()
@@ -68,7 +68,7 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
             [app.name, app.uid, app.records, app.folders, app.count, app.last_access]
             for app in app_list
         ]
-        return report_utils.dump_report_data(rows, headers=headers, fmt='table')
+        report_utils.dump_report_data(rows, headers=headers, fmt='table')
     
 
     def get_app(self, vault, app_name):

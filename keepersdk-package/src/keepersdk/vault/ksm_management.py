@@ -2,7 +2,9 @@ import datetime
 import time
 
 from . import vault_online, ksm
-from ..proto import APIRequest_pb2, enterprise_pb2
+from ..proto import APIRequest_pb2
+from ..proto.APIRequest_pb2 import GetApplicationsSummaryResponse, ApplicationShareType, GetAppInfoRequest, GetAppInfoResponse
+from ..proto.enterprise_pb2 import GENERAL
 from .. import utils
 
 URL_GET_SUMMARY_API = 'vault/get_applications_summary'
@@ -14,7 +16,7 @@ def list_secrets_manager_apps(vault: vault_online.VaultOnline) -> list[ksm.Secre
     response = vault.keeper_auth.execute_auth_rest(
         URL_GET_SUMMARY_API,
         request=None,
-        response_type=APIRequest_pb2.GetApplicationsSummaryResponse
+        response_type=GetApplicationsSummaryResponse
     )
 
     apps_list = []
@@ -46,7 +48,7 @@ def get_secrets_manager_app(vault: vault_online.VaultOnline, uid_or_name: str) -
         raise ValueError('No Secrets Manager Applications returned.')
 
     app_info = app_infos[0]
-    client_devices = [x for x in app_info.clients if x.appClientType == enterprise_pb2.GENERAL]
+    client_devices = [x for x in app_info.clients if x.appClientType == GENERAL]
     client_list = []
     for c in client_devices:
         client_id = utils.base64_url_encode(c.clientId)
@@ -65,38 +67,16 @@ def get_secrets_manager_app(vault: vault_online.VaultOnline, uid_or_name: str) -
 
     shared_secrets = []
     for share in getattr(app_info, 'shares', []):
-        uid_str = utils.base64_url_encode(share.secretUid)
-        share_type = APIRequest_pb2.ApplicationShareType.Name(share.shareType)
-        editable_status = share.editable
-        if share_type == 'SHARE_TYPE_RECORD':
-            shared_secrets.append(
-                ksm.SharedSecretsInfo(
-                    type='RECORD', uid=uid_str, name=ksm_app.title, permissions=editable_status
-                    )
-                )
-        elif share_type == 'SHARE_TYPE_FOLDER':
-            cached_sf = next((f for f in vault.vault_data.folders() if f.folder_uid == uid_str), None)
-            if cached_sf:
-                shared_secrets.append(
-                    ksm.SharedSecretsInfo(
-                        type='FOLDER', uid=uid_str, name=cached_sf.name, permissions=editable_status
-                        )
-                    )
-        else:
-            shared_secrets.append(
-                ksm.SharedSecretsInfo(
-                    type='UNKOWN SHARE TYPE', uid=uid_str, name=ksm_app.title, permissions=editable_status
-                    )
-                )
+        shared_secrets.append(handle_share_type(share, ksm_app, vault))
 
     records_count = sum(
         1 for s in getattr(app_info, 'shares', []) 
-        if APIRequest_pb2.ApplicationShareType.Name(s.shareType) == 'SHARE_TYPE_RECORD'
+        if ApplicationShareType.Name(s.shareType) == 'SHARE_TYPE_RECORD'
         )
     
     folders_count = sum(
         1 for s in getattr(app_info, 'shares', []) 
-        if APIRequest_pb2.ApplicationShareType.Name(s.shareType) == 'SHARE_TYPE_FOLDER'
+        if ApplicationShareType.Name(s.shareType) == 'SHARE_TYPE_FOLDER'
         )
 
     return ksm.SecretsManagerApp(
@@ -112,12 +92,12 @@ def get_secrets_manager_app(vault: vault_online.VaultOnline, uid_or_name: str) -
 
 
 def get_app_info(vault: vault_online.VaultOnline, app_uid):
-    rq = APIRequest_pb2.GetAppInfoRequest()
+    rq = GetAppInfoRequest()
     rq.appRecordUid.append(utils.base64_url_decode(app_uid))
     rs = vault.keeper_auth.execute_auth_rest(
         request=rq, 
         rest_endpoint=URL_GET_APP_INFO_API, 
-        response_type=APIRequest_pb2.GetAppInfoResponse
+        response_type=GetAppInfoResponse
         )
     return rs.appInfo
 
@@ -132,3 +112,19 @@ def shorten_client_id(all_clients, original_id, number_of_characters):
 
 def int_to_datetime(timestamp: int) -> datetime.datetime:
     return datetime.datetime.fromtimestamp(timestamp / 1000) if timestamp and timestamp != 0 else None
+
+def handle_share_type(share, ksm_app, vault: vault_online.VaultOnline):
+    uid_str = utils.base64_url_encode(share.secretUid)
+    share_type = ApplicationShareType.Name(share.shareType)
+    editable_status = share.editable
+
+    if share_type == 'SHARE_TYPE_RECORD':
+        return ksm.SharedSecretsInfo(type='RECORD', uid=uid_str, name=ksm_app.title, permissions=editable_status)
+    
+    elif share_type == 'SHARE_TYPE_FOLDER':
+        cached_sf = next((f for f in vault.vault_data.folders() if f.folder_uid == uid_str), None)
+        if cached_sf:
+            return ksm.SharedSecretsInfo(type='FOLDER', uid=uid_str, name=cached_sf.name, permissions=editable_status)
+        
+    else:
+        return ksm.SharedSecretsInfo(type='UNKOWN SHARE TYPE', uid=uid_str, name=ksm_app.title, permissions=editable_status)
