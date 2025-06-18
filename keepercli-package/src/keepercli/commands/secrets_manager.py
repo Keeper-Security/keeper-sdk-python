@@ -76,7 +76,7 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
             logger.error("Application name or UID is required for 'app get'. Use --name='example' to set it.")
             return
 
-        app = ksm_management.get_secrets_manager_app(vault, app_name)
+        app = ksm_management.get_secrets_manager_app(vault=vault, uid_or_name=app_name)
 
         logger.info(f'\nSecrets Manager Application\n'
                 f'App Name: {app.name}\n'
