@@ -1,8 +1,6 @@
 import datetime
-import time
 
 from . import vault_online, ksm
-from ..proto import APIRequest_pb2
 from ..proto.APIRequest_pb2 import GetApplicationsSummaryResponse, ApplicationShareType, GetAppInfoRequest, GetAppInfoResponse
 from ..proto.enterprise_pb2 import GENERAL
 from .. import utils
@@ -23,7 +21,7 @@ def list_secrets_manager_apps(vault: vault_online.VaultOnline) -> list[ksm.Secre
     for app_summary in response.applicationSummary:
         uid = utils.base64_url_encode(app_summary.appRecordUid)
         app_record = vault.vault_data.load_record(uid)
-        name = getattr(app_record, 'title', '') if app_record else ''
+        name = app_record.title if app_record else ''
         last_access = int_to_datetime(app_summary.lastAccess)
         secrets_app = ksm.SecretsManagerApp(
             name=name,
@@ -69,15 +67,11 @@ def get_secrets_manager_app(vault: vault_online.VaultOnline, uid_or_name: str) -
     for share in getattr(app_info, 'shares', []):
         shared_secrets.append(handle_share_type(share, ksm_app, vault))
 
-    records_count = sum(
-        1 for s in getattr(app_info, 'shares', []) 
+    records_count = len([
+        s for s in getattr(app_info, 'shares', [])
         if ApplicationShareType.Name(s.shareType) == 'SHARE_TYPE_RECORD'
-        )
-    
-    folders_count = sum(
-        1 for s in getattr(app_info, 'shares', []) 
-        if ApplicationShareType.Name(s.shareType) == 'SHARE_TYPE_FOLDER'
-        )
+    ])
+    folders_count = len(shared_secrets) - records_count
 
     return ksm.SecretsManagerApp(
         name=ksm_app.title,
@@ -127,4 +121,4 @@ def handle_share_type(share, ksm_app, vault: vault_online.VaultOnline):
             return ksm.SharedSecretsInfo(type='FOLDER', uid=uid_str, name=cached_sf.name, permissions=editable_status)
         
     else:
-        return ksm.SharedSecretsInfo(type='UNKOWN SHARE TYPE', uid=uid_str, name=ksm_app.title, permissions=editable_status)
+        return None

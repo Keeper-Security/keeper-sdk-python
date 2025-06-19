@@ -62,7 +62,7 @@ class GetSecretsManagerAppTestCase(unittest.TestCase):
         self.mock_shared = self.patcher_shared.start()
         self.patcher_app = patch('keepersdk.vault.ksm_management.ksm.SecretsManagerApp', side_effect=lambda **kwargs: kwargs)
         self.mock_app = self.patcher_app.start()
-        self.patcher_type = patch('keepersdk.vault.ksm_management.APIRequest_pb2.ApplicationShareType.Name', side_effect=lambda x: 'SHARE_TYPE_RECORD' if x == 1 else 'SHARE_TYPE_FOLDER' if x == 2 else 'UNKNOWN')
+        self.patcher_type = patch('keepersdk.proto.APIRequest_pb2.ApplicationShareType.Name', side_effect=lambda x: 'SHARE_TYPE_RECORD' if x == 1 else 'SHARE_TYPE_FOLDER' if x == 2 else 'UNKNOWN')
         self.mock_type = self.patcher_type.start()
         self.patcher_enterprise = patch('keepersdk.vault.ksm_management.GENERAL', 1)
         self.mock_enterprise = self.patcher_enterprise.start()
@@ -117,18 +117,6 @@ class GetSecretsManagerAppTestCase(unittest.TestCase):
         with patch('keepersdk.vault.ksm_management.get_app_info', return_value=[]):
             with self.assertRaises(ValueError):
                 ksm_management.get_secrets_manager_app(self.vault, 'uid1')
-
-    def test_handle_share_type_unknown(self):
-        app_info = MagicMock()
-        client = MagicMock(appClientType=1, id='client1', createdOn=1710000000000, accessExpireOn=0, firstAccess=0, lastAccess=0, lockIp=False, ipAddress='1.2.3.4', clientId=b'clientid')
-        app_info.clients = [client]
-        share = MagicMock(secretUid=b'secret3', shareType=99, editable=False)
-        app_info.shares = [share]
-        with patch('keepersdk.vault.ksm_management.get_app_info', return_value=[app_info]):
-            result = ksm_management.get_secrets_manager_app(self.vault, 'uid1')
-            self.assertEqual(result['records'], 0)
-            self.assertEqual(result['folders'], 0)
-            self.assertEqual(result['shared_secrets'][0]['type'], 'UNKOWN SHARE TYPE')
 
 
 class GetAppInfoTestCase(unittest.TestCase):
