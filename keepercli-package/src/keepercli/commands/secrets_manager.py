@@ -46,26 +46,33 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
             raise ValueError("Vault is not initialized.")
 
         command = kwargs.get('command')
+        uid_or_name = kwargs.get('name')
+        force = kwargs.get('force')
 
-        if command == 'list':
+        def list_app():
             return self.list_app(vault=context.vault)
 
-        elif command == 'get':
-            uid_or_name = kwargs.get('name')
+        def get_app():
             return self.get_app(vault=context.vault, uid_or_name=uid_or_name)
-        
-        elif command == 'create':
-            name = kwargs.get('name')
-            force_add = kwargs.get('force')
-            self.create_app(vault=context.vault, name=name, force=force_add)
+
+        def create_app():
+            self.create_app(vault=context.vault, name=uid_or_name, force=force)
             return context.vault_down()
-        
-        elif command == 'remove':
-            uid_or_name = kwargs.get('name')
-            force = kwargs.get('force')
+
+        def remove_app():
             self.remove_app(vault=context.vault, uid_or_name=uid_or_name, force=force)
             return
-        
+
+        command_map = {
+            'list': list_app,
+            'get': get_app,
+            'create': create_app,
+            'remove': remove_app,
+        }
+
+        action = command_map.get(command)
+        if action:
+            return action()
         else:
             logger.error(f"Unknown command '{command}'. Available commands: list, get, create, remove, share and unshare.")
             return
