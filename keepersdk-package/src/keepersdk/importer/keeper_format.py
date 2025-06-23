@@ -509,4 +509,4 @@ class KeeperRecordTypeDownload(import_data.BaseDownloadRecordType):
                 if isinstance(ertf.required, bool):
                     rtf.required = ertf.required
                 rt.fields.append(rtf)
-                yield rt
+            yield rt
