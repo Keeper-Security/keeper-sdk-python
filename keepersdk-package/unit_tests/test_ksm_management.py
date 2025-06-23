@@ -184,5 +184,93 @@ class IntToDatetimeTestCase(unittest.TestCase):
         self.assertIsNone(dt)
 
 
+class CreateSecretsManagerAppTestCase(unittest.TestCase):
+    def setUp(self):
+        self.vault = MagicMock()
+        self.vault.vault_data.records.return_value = []
+        self.vault.keeper_auth.auth_context.data_key = b'datakey'
+        self.patcher_uid = patch('keepersdk.vault.ksm_management.utils.generate_uid', return_value='uidstr')
+        self.mock_uid = self.patcher_uid.start()
+        self.patcher_decode = patch('keepersdk.vault.ksm_management.utils.base64_url_decode', return_value=b'uidbytes')
+        self.mock_decode = self.patcher_decode.start()
+        self.patcher_encode = patch('keepersdk.vault.ksm_management.utils.base64_url_encode', return_value='encoded_uid')
+        self.mock_encode = self.patcher_encode.start()
+        self.patcher_aes = patch('keepersdk.vault.ksm_management.utils.generate_aes_key', return_value=b'aeskey')
+        self.mock_aes = self.patcher_aes.start()
+        self.patcher_encrypt = patch('keepersdk.vault.ksm_management.crypto.encrypt_aes_v2', side_effect=lambda data, key: b'encrypted_' + data if isinstance(data, bytes) else b'encrypted_' + data.encode())
+        self.mock_encrypt = self.patcher_encrypt.start()
+        self.patcher_time = patch('keepersdk.vault.ksm_management.utils.current_milli_time', return_value=1710000000000)
+        self.mock_time = self.patcher_time.start()
+        self.patcher_req = patch('keepersdk.vault.ksm_management.ApplicationAddRequest', autospec=True)
+        self.mock_req = self.patcher_req.start()
+
+    def tearDown(self):
+        self.patcher_uid.stop()
+        self.patcher_decode.stop()
+        self.patcher_encode.stop()
+        self.patcher_aes.stop()
+        self.patcher_encrypt.stop()
+        self.patcher_time.stop()
+        self.patcher_req.stop()
+
+    def test_create_app_success(self):
+        app_uid = ksm_management.create_secrets_manager_app(self.vault, 'TestApp')
+        self.assertEqual(app_uid, 'encoded_uid')
+        self.vault.keeper_auth.execute_auth_rest.assert_called_once()
+        self.mock_req.assert_called_once()
+        args, kwargs = self.vault.keeper_auth.execute_auth_rest.call_args
+        self.assertEqual(kwargs.get('rest_endpoint'), ksm_management.URL_CREATE_APP_API)
+
+    def test_create_app_duplicate_raises(self):
+        mock_record = MagicMock(title='TestApp')
+        self.vault.vault_data.records.return_value = [mock_record]
+        with self.assertRaises(ValueError) as cm:
+            ksm_management.create_secrets_manager_app(self.vault, 'TestApp')
+        self.assertEqual(str(cm.exception), 'Application with the same name TestApp already exists.')
+
+    def test_create_app_duplicate_force_add(self):
+        mock_record = MagicMock(title='TestApp')
+        self.vault.vault_data.records.return_value = [mock_record]
+        app_uid = ksm_management.create_secrets_manager_app(self.vault, 'TestApp', force_add=True)
+        self.assertEqual(app_uid, 'encoded_uid')
+
+
+class RemoveSecretsManagerAppTestCase(unittest.TestCase):
+    def setUp(self):
+        self.vault = MagicMock()
+        self.patcher_get = patch('keepersdk.vault.ksm_management.get_secrets_manager_app')
+        self.mock_get = self.patcher_get.start()
+        self.patcher_delete = patch('keepersdk.vault.ksm_management.record_management.delete_vault_objects')
+        self.mock_delete = self.patcher_delete.start()
+        self.patcher_path = patch('keepersdk.vault.ksm_management.vault_types.RecordPath', side_effect=lambda folder_uid, record_uid: MagicMock(folder_uid=folder_uid, record_uid=record_uid))
+        self.mock_path = self.patcher_path.start()
+
+    def tearDown(self):
+        self.patcher_get.stop()
+        self.patcher_delete.stop()
+        self.patcher_path.stop()
+
+    def test_remove_app_success(self):
+        app = MagicMock(uid='appuid', records=0, folders=0, count=0)
+        self.mock_get.return_value = app
+        uid = ksm_management.remove_secrets_manager_app(self.vault, 'appuid')
+        self.mock_delete.assert_called_once()
+        self.assertEqual(uid, 'appuid')
+
+    def test_remove_app_with_clients_raises(self):
+        app = MagicMock(uid='appuid', records=1, folders=0, count=0)
+        self.mock_get.return_value = app
+        with self.assertRaises(ValueError) as cm:
+            ksm_management.remove_secrets_manager_app(self.vault, 'appuid')
+        self.assertEqual(str(cm.exception), 'Cannot remove application with clients, shared record, shared folder. Force remove to proceed')
+
+    def test_remove_app_with_clients_force(self):
+        app = MagicMock(uid='appuid', records=1, folders=1, count=1)
+        self.mock_get.return_value = app
+        uid = ksm_management.remove_secrets_manager_app(self.vault, 'appuid', force=True)
+        self.mock_delete.assert_called_once()
+        self.assertEqual(uid, 'appuid')
+
+
 if __name__ == "__main__":
     unittest.main()
