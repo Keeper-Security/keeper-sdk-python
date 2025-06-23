@@ -218,12 +218,15 @@ class CreateSecretsManagerAppTestCase(unittest.TestCase):
         self.assertEqual(app_uid, 'encoded_uid')
         self.vault.keeper_auth.execute_auth_rest.assert_called_once()
         self.mock_req.assert_called_once()
+        args, kwargs = self.vault.keeper_auth.execute_auth_rest.call_args
+        self.assertEqual(kwargs.get('rest_endpoint'), ksm_management.URL_CREATE_APP_API)
 
     def test_create_app_duplicate_raises(self):
         mock_record = MagicMock(title='TestApp')
         self.vault.vault_data.records.return_value = [mock_record]
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ValueError) as cm:
             ksm_management.create_secrets_manager_app(self.vault, 'TestApp')
+        self.assertEqual(str(cm.exception), 'Application with the same name TestApp already exists.')
 
     def test_create_app_duplicate_force_add(self):
         mock_record = MagicMock(title='TestApp')
@@ -257,8 +260,9 @@ class RemoveSecretsManagerAppTestCase(unittest.TestCase):
     def test_remove_app_with_clients_raises(self):
         app = MagicMock(uid='appuid', records=1, folders=0, count=0)
         self.mock_get.return_value = app
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ValueError) as cm:
             ksm_management.remove_secrets_manager_app(self.vault, 'appuid')
+        self.assertEqual(str(cm.exception), 'Cannot remove application with clients, shared record, shared folder. Force remove to proceed')
 
     def test_remove_app_with_clients_force(self):
         app = MagicMock(uid='appuid', records=1, folders=1, count=1)

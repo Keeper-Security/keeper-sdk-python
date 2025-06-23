@@ -74,7 +74,7 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
         if action:
             return action()
         else:
-            logger.error(f"Unknown command '{command}'. Available commands: list, get, create, remove, share and unshare.")
+            logger.error(f"Unknown command '{command}'. Available commands: list, get, create, remove")
             return
 
 
