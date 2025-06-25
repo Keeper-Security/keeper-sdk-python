@@ -313,7 +313,7 @@ class LoginFlow:
                     challenge = json.loads(channel.challenge)
                     signature = yubikey_authenticate(challenge, FidoCliInteraction())
                     if signature:
-                        prompt_utils.output_text('')
+                        prompt_utils.output_text('Verified Security Key.')
                         step.send_code(channel.channel_uid, signature)
                         break
                 except Exception as e:
