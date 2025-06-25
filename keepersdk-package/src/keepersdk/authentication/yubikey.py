@@ -27,6 +27,11 @@ def yubikey_authenticate(request: Dict[str, Any], user_interaction: UserInteract
 
     origin = ''
     options = request['publicKeyCredentialRequestOptions']
+
+    if 'extensions' not in options:
+        options['extensions'] = {}
+    if 'largeBlob' not in options['extensions']:
+        options['extensions']['largeBlob'] = {'read': False}
     if 'extensions' in options:
         extensions = options['extensions']
         origin = extensions.get('appid') or ''
@@ -94,15 +99,14 @@ def yubikey_authenticate(request: Dict[str, Any], user_interaction: UserInteract
         evt.set()
 
     if response:
-        credential_id = utils.base64_url_encode(response.credential_id or b'')
-        extensions = dict(response.extension_results) if response.extension_results else {}
+        extensions = dict(response.client_extension_results) if response.client_extension_results else {}
         signature = {
-            "id": credential_id,
-            "rawId": credential_id,
+            "id": response.id,
+            "rawId": utils.base64_url_encode(response.raw_id),
             "response": {
-                "authenticatorData": utils.base64_url_encode(response.authenticator_data),
-                "clientDataJSON": response.client_data.b64,
-                "signature": utils.base64_url_encode(response.signature),
+                "authenticatorData": utils.base64_url_encode(response.response.authenticator_data),
+                "clientDataJSON": response.response.client_data.b64,
+                "signature": utils.base64_url_encode(response.response.signature),
             },
             "type": "public-key",
             "clientExtensionResults": extensions
