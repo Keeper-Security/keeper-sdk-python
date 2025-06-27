@@ -985,3 +985,44 @@ class RecordUploadAttachmentCommand(base.ArgparseCommand):
 
         attachment.upload_attachments(context.vault, record, upload_tasks)
         record_management.update_record(context.vault, record)
+
+
+class RecordDeleteCommand(base.ArgparseCommand):
+
+    def __init__(self):
+        self.parser = argparse.ArgumentParser(
+            prog='rm',
+            description='Remove a record'
+        )
+        RecordDeleteCommand.add_arguments_to_parser(self.parser)
+        super().__init__(self.parser)
+
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
+        parser.add_argument(
+            '-f', '--force', dest='force', action='store_true', help='do not prompt'
+        )
+        parser.add_argument(
+            'records', nargs='*', type=str, help='record path or UID. Can be multiple.'
+        )
+
+    def execute(self, context: KeeperParams, **kwargs) -> None:
+        if not context.vault:
+            raise ValueError("Vault is not initialized.")
+
+        record_uids = kwargs.get('records')
+        force = kwargs.get('force') or False
+
+        if not isinstance(record_uids, list):
+            if isinstance(record_uids, str):
+                record_uids = [record_uids]
+            else:
+                record_uids = []
+
+        confirm_fn = None if force else record_utils.default_confirm
+
+        record_management.delete_vault_objects(
+            vault=context.vault,
+            vault_objects=record_uids,
+            confirm=confirm_fn
+        )
+
