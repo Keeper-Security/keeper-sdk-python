@@ -53,3 +53,7 @@ def resolve_records(pattern: str, context: KeeperParams, *, recursive: bool=Fals
             add_folder(folder)
         for folder in folders:
             yield from folder.records
+
+
+def default_confirm(prompt: str) -> bool:
+    return input(f"{prompt} (y/n): ").strip().lower() == 'y'
