@@ -28,13 +28,11 @@ def yubikey_authenticate(request: Dict[str, Any], user_interaction: UserInteract
     origin = ''
     options = request['publicKeyCredentialRequestOptions']
 
-    if 'extensions' not in options:
-        options['extensions'] = {}
-    if 'largeBlob' not in options['extensions']:
-        options['extensions']['largeBlob'] = {'read': False}
     if 'extensions' in options:
         extensions = options['extensions']
         origin = extensions.get('appid') or ''
+        if 'largeBlob' not in options['extensions']:
+            options['extensions']['largeBlob'] = {'read': None}
 
     credentials = options.get('allowCredentials') or []
     for c in credentials:
