@@ -53,6 +53,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('download-record-types', record_type.DownloadRecordTypesCommand(), base.CommandScope.Vault)
         commands.register_command('secrets-manager-app', secrets_manager.SecretsManagerAppCommand(), base.CommandScope.Vault)
         commands.register_command('share-record', share_management.ShareRecordCommand(), base.CommandScope.Vault, 'sr')
+        commands.register_command('share-folder', share_management.ShareFolderCommand(), base.CommandScope.Vault, 'sf')
 
 
     if not scopes or bool(scopes & base.CommandScope.Enterprise):

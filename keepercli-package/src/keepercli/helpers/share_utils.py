@@ -1,6 +1,6 @@
 import datetime
 import itertools
-from typing import Optional
+from typing import Optional, Dict, List, Any, Generator, Tuple, Iterable
 
 from keepersdk import crypto, utils
 from keepersdk.proto import record_pb2
@@ -19,7 +19,7 @@ SHARE_OBJECTS_API = 'vault/get_share_objects'
 logger = api.get_logger()
 
 
-def get_share_expiration(expire_at, expire_in) -> int:
+def get_share_expiration(expire_at: Optional[str], expire_in: Optional[str]) -> int:
     if not expire_at and not expire_in:
         return -1
 
@@ -39,7 +39,7 @@ def get_share_expiration(expire_at, expire_in) -> int:
     return int(dt.timestamp())
 
 
-def get_share_objects(vault: vault_online.VaultOnline):
+def get_share_objects(vault: vault_online.VaultOnline) -> Dict[str, Dict[str, Any]]:
     request = record_pb2.GetShareObjectsRequest()
     
     response = vault.keeper_auth.execute_auth_rest(
@@ -58,7 +58,8 @@ def get_share_objects(vault: vault_online.VaultOnline):
         'mc': response.shareMCEnterpriseUsers,
     }
     
-    def process_users(users_data, category):
+    def process_users(users_data: Iterable[Any], category: str) -> Dict[str, Dict[str, Any]]:
+        """Process user data and add category information."""
         return {
             user.username: {
                 'name': user.fullname,
@@ -74,11 +75,11 @@ def get_share_objects(vault: vault_online.VaultOnline):
         users.update(process_users(users_data, category))
     
     enterprises = {
-        enterprise.enterpriseId: enterprise.enterprisename 
+        str(enterprise.enterpriseId): enterprise.enterprisename 
         for enterprise in response.shareEnterpriseNames
     }
     
-    def process_teams(teams_data):
+    def process_teams(teams_data: Iterable[Any]) -> Dict[str, Dict[str, Any]]:
         return {
             utils.base64_url_encode(team.teamUid): {
                 'name': team.teamname,
@@ -96,22 +97,31 @@ def get_share_objects(vault: vault_online.VaultOnline):
     }
 
 
-def load_records_in_shared_folder(vault: vault_online.VaultOnline, shared_folder_uid: str, record_uids: Optional[set[str]] = None):
-
+def load_records_in_shared_folder(
+    vault: vault_online.VaultOnline, 
+    shared_folder_uid: str, 
+    record_uids: Optional[set[str]] = None
+) -> None:
     shared_folder = None
     for shared_folder_info in vault.vault_data.shared_folders():
         if shared_folder_uid == shared_folder_info.shared_folder_uid:
             shared_folder = vault.vault_data.load_shared_folder(shared_folder_uid=shared_folder_uid)
             break
+    
     if not shared_folder:
         raise Exception(f'Shared folder "{shared_folder_uid}" is not loaded.')
+    
     shared_folder_key = vault.vault_data._shared_folders[shared_folder_uid].shared_folder_key
     record_keys = {}
     sf_record_keys = vault.vault_data.storage.record_keys.get_links_by_object(shared_folder.shared_folder_uid) or []
     for rk in sf_record_keys:
         record_uid = getattr(rk, 'record_uid', None)
         try:
-            key = utils.base64_url_decode(str(getattr(rk, 'record_key', b''), 'utf-8') if isinstance(getattr(rk, 'record_key', b''), bytes) else getattr(rk, 'record_key', ''))
+            key = utils.base64_url_decode(
+                str(getattr(rk, 'record_key', b''), 'utf-8') 
+                if isinstance(getattr(rk, 'record_key', b''), bytes) 
+                else getattr(rk, 'record_key', '')
+            )
             if len(key) == 60:
                 record_key = crypto.decrypt_aes_v2(key, shared_folder_key)
             else:
@@ -129,18 +139,29 @@ def load_records_in_shared_folder(vault: vault_online.VaultOnline, shared_folder
         record_set = set(record_keys.keys())
     record_set.difference_update(record_cache)
 
+    # Load records in batches
     while len(record_set) > 0:
         rq = record_pb2.GetRecordDataWithAccessInfoRequest()
         rq.clientTime = utils.current_milli_time()
         rq.recordDetailsInclude = record_pb2.DATA_PLUS_SHARE
+        
         for uid in record_set:
             try:
                 rq.recordUid.append(utils.base64_url_decode(uid))
             except Exception as e:
-                logger.debug('Incorrect record UID \"%s\": %s', uid, e)
+                logger.debug('Incorrect record UID "%s": %s', uid, e)
         record_set.clear()
 
-        rs = vault.keeper_auth.execute_auth_rest(rest_endpoint=RECORD_DETAILS_URL, request=rq, response_type=record_pb2.GetRecordDataWithAccessInfoResponse)
+        rs = vault.keeper_auth.execute_auth_rest(
+            rest_endpoint=RECORD_DETAILS_URL, 
+            request=rq, 
+            response_type=record_pb2.GetRecordDataWithAccessInfoResponse
+        )
+        
+        if not rs or not rs.recordDataWithAccessInfo:
+            logger.warning("No record data received from API")
+            break
+            
         for record_info in rs.recordDataWithAccessInfo:
             record_uid = utils.base64_url_encode(record_info.recordUid)
             record_data = record_info.recordData
@@ -170,25 +191,33 @@ def load_records_in_shared_folder(vault: vault_online.VaultOnline, shared_folder
                 else:
                     record['data_unencrypted'] = crypto.decrypt_aes_v2(data_decoded, record_key)
 
+                # Handle extra data for v2 records
                 if record_data.encryptedExtraData and version <= 2:
                     record['extra'] = record_data.encryptedExtraData
                     extra_decoded = utils.base64_url_decode(record_data.encryptedExtraData)
                     record['extra_unencrypted'] = crypto.decrypt_aes_v1(extra_decoded, record_key)
+                
+                # Handle v3 typed records with references
                 if version == 3:
                     v3_record = vault.vault_data.load_record(record_uid=record_uid)
                     if isinstance(v3_record, vault_record.TypedRecord):
                         for ref in itertools.chain(v3_record.fields, v3_record.custom):
                             if ref.type.endswith('Ref') and isinstance(ref.value, list):
                                 record_set.update(ref.value)
+                
+                # Handle v4 records with file attachments
                 elif version == 4:
                     if record_data.fileSize > 0:
                         record['file_size'] = record_data.fileSize
                     if record_data.thumbnailSize > 0:
                         record['thumbnail_size'] = record_data.thumbnailSize
+                
+                # Handle linked record metadata
                 if record_data.recordUid and record_data.recordKey:
                     record['owner_uid'] = utils.base64_url_encode(record_data.recordUid)
                     record['link_key'] = utils.base64_url_encode(record_data.recordKey)
 
+                # Add share permissions
                 record['shares'] = {
                     'user_permissions': [{
                         'username': up.username,
@@ -209,19 +238,25 @@ def load_records_in_shared_folder(vault: vault_online.VaultOnline, shared_folder
                 }
                 record_set.add(record_uid)
             except Exception as e:
-                logger.debug('Error decrypting record \"%s\": %s', record_uid, e)
+                logger.debug('Error decrypting record "%s": %s', record_uid, e)
         
         
-def get_record_shares(vault: vault_online.VaultOnline, record_uids: list[str], is_share_admin=False):
+def get_record_shares(
+    vault: vault_online.VaultOnline, 
+    record_uids: List[str], 
+    is_share_admin: bool = False
+) -> Optional[List[Dict[str, Any]]]:
     record_cache = {x.record_uid: x for x in vault.vault_data.records()}
     
-    def needs_share_info(uid):
+    def needs_share_info(uid: str) -> bool:
+        """Check if a record needs share information."""
         if uid in record_cache:
             record = record_cache[uid]
             return not hasattr(record, 'shares')
         return is_share_admin
     
-    def create_record_info(record_uid, keeper_record=None) -> dict:
+    def create_record_info(record_uid: str, keeper_record: Optional[Any] = None) -> Dict[str, Any]:
+        """Create basic record information dictionary."""
         rec = {'record_uid': record_uid}
         
         if keeper_record:
@@ -232,7 +267,8 @@ def get_record_shares(vault: vault_online.VaultOnline, record_uids: list[str], i
                 
         return rec
     
-    def process_user_permissions(info):
+    def process_user_permissions(info: Any) -> List[Dict[str, Any]]:
+        """Process user permissions from record info."""
         user_permissions = []
         for up in info.userPermission:
             permission = {
@@ -249,7 +285,8 @@ def get_record_shares(vault: vault_online.VaultOnline, record_uids: list[str], i
             user_permissions.append(permission)
         return user_permissions
     
-    def process_shared_folder_permissions(info):
+    def process_shared_folder_permissions(info: Any) -> List[Dict[str, Any]]:
+        """Process shared folder permissions from record info."""
         shared_folder_permissions = []
         for sp in info.sharedFolderPermission:
             permission = {
@@ -284,13 +321,12 @@ def get_record_shares(vault: vault_online.VaultOnline, record_uids: list[str], i
                 request=request, 
                 response_type=record_pb2.GetRecordDataWithAccessInfoResponse
             )
-            infos = []
-            if response is not None and hasattr(response, 'recordDataWithAccessInfo') and response.recordDataWithAccessInfo is not None:
-                infos = response.recordDataWithAccessInfo
-            else:
+            
+            if not response or not response.recordDataWithAccessInfo:
                 logger.error("No response or missing recordDataWithAccessInfo from Keeper API.")
                 continue
-            for info in infos:
+                
+            for info in response.recordDataWithAccessInfo:
                 record_uid = utils.base64_url_encode(info.recordUid)
                 
                 # Skip if record is already in cache
@@ -313,11 +349,15 @@ def get_record_shares(vault: vault_online.VaultOnline, record_uids: list[str], i
     return result if result else None
 
 
-def resolve_record_share_path(context: KeeperParams, record_uid: str):
+def resolve_record_share_path(context: KeeperParams, record_uid: str) -> Optional[Dict[str, str]]:
     return resolve_record_permission_path(context=context, record_uid=record_uid, permission='can_share')
 
 
-def resolve_record_permission_path(context: KeeperParams, record_uid: str, permission: str):
+def resolve_record_permission_path(
+    context: KeeperParams, 
+    record_uid: str, 
+    permission: str
+) -> Optional[Dict[str, str]]:
     for ap in enumerate_record_access_paths(context=context, record_uid=record_uid):
         if ap.get(permission):
             path = {
@@ -332,8 +372,12 @@ def resolve_record_permission_path(context: KeeperParams, record_uid: str, permi
     return None
 
 
-def enumerate_record_access_paths(context: KeeperParams, record_uid: str):
-    def get_record_permissions(shared_folder):
+def enumerate_record_access_paths(
+    context: KeeperParams, 
+    record_uid: str
+) -> Generator[Dict[str, Any], None, None]:
+
+    def get_record_permissions(shared_folder: Any) -> Optional[Any]:
         """Get permissions for the target record in a shared folder."""
         if not shared_folder or not shared_folder.record_permissions:
             return None
@@ -343,14 +387,19 @@ def enumerate_record_access_paths(context: KeeperParams, record_uid: str):
                 return permission
         return None
     
-    def determine_permissions(record_permission):
+    def determine_permissions(record_permission: Any) -> Tuple[bool, bool]:
         """Determine edit and share permissions based on record permission."""
         is_owner = record_permission.can_edit and record_permission.can_share
         if is_owner:
             return True, True
         return record_permission.can_edit, record_permission.can_share
     
-    def create_access_path(shared_folder_uid, can_edit, can_share, team_uid=None):
+    def create_access_path(
+        shared_folder_uid: str, 
+        can_edit: bool, 
+        can_share: bool, 
+        team_uid: Optional[str] = None
+    ) -> Dict[str, Any]:
         """Create a standardized access path dictionary."""
         path = {
             'record_uid': record_uid,
@@ -363,7 +412,11 @@ def enumerate_record_access_paths(context: KeeperParams, record_uid: str):
             path['team_uid'] = team_uid
         return path
     
-    def process_team_permissions(shared_folder, base_can_edit, base_can_share):
+    def process_team_permissions(
+        shared_folder: Any, 
+        base_can_edit: bool, 
+        base_can_share: bool
+    ) -> Generator[Dict[str, Any], None, None]:
         """Process team-based permissions for a shared folder."""
         if not context.enterprise_data:
             return
@@ -395,7 +448,9 @@ def enumerate_record_access_paths(context: KeeperParams, record_uid: str):
         record_permission = get_record_permissions(shared_folder)
         if not record_permission:
             continue
+            
         can_edit, can_share = determine_permissions(record_permission)
+        
         if hasattr(shared_folder, 'key_type'):
             yield create_access_path(
                 shared_folder_uid=shared_folder_uid,

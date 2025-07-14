@@ -37,6 +37,16 @@ class ManagePermission(Enum):
 logger = api.get_logger()
 
 
+def set_expiration_fields(obj, expiration):
+    """Set expiration and timerNotificationType fields on proto object if expiration is provided."""
+    if isinstance(expiration, int):
+        if expiration > 0:
+            obj.expiration = expiration * 1000
+            obj.timerNotificationType = record_pb2.NOTIFY_OWNER
+        elif expiration < 0:
+            obj.expiration = -1
+
+
 class ShareRecordCommand(base.ArgparseCommand):
     
     def __init__(self):
@@ -389,12 +399,7 @@ class ShareRecordCommand(base.ArgparseCommand):
                         else:
                             ro.editable = bool(can_edit)
                             ro.shareable = bool(can_share)
-                            if isinstance(share_expiration, int):
-                                if share_expiration > 0:
-                                    ro.expiration = share_expiration * 1000
-                                    ro.timerNotificationType = record_pb2.NOTIFY_OWNER
-                                elif share_expiration < 0:
-                                    ro.expiration = -1
+                            set_expiration_fields(ro, share_expiration)
                     elif email in existing_shares:
                         current = existing_shares[email]
                         if action == ShareAction.OWNER.value:
@@ -403,6 +408,7 @@ class ShareRecordCommand(base.ArgparseCommand):
                         else:
                             ro.editable = can_edit if can_edit is not None else current.get('editable')
                             ro.shareable = can_share if can_share is not None else current.get('shareable')
+                            set_expiration_fields(ro, share_expiration)
                     
                     if email in existing_shares:
                         rq.updateSharedRecord.append(ro)
@@ -414,6 +420,7 @@ class ShareRecordCommand(base.ArgparseCommand):
                             current = existing_shares[email]
                             ro.editable = False if can_edit else current.get('editable')
                             ro.shareable = False if can_share else current.get('shareable')
+                            set_expiration_fields(ro, share_expiration)
                         rq.updateSharedRecord.append(ro)
                     else:
                         rq.removeSharedRecord.append(ro)
@@ -815,12 +822,7 @@ class ShareFolderCommand(base.ArgparseCommand):
             for email in users:
                 uo = folder_pb2.SharedFolderUpdateUser()
                 uo.username = email
-                if isinstance(share_expiration, int):
-                    if share_expiration > 0:
-                        uo.expiration = share_expiration * 1000
-                        uo.timerNotificationType = record_pb2.NOTIFY_OWNER
-                    elif share_expiration < 0:
-                        uo.expiration = -1
+                set_expiration_fields(uo, share_expiration)
                 if email in existing_users:
                     if action == ShareAction.GRANT.value:
                         uo.manageRecords = folder_pb2.BOOLEAN_NO_CHANGE if mr is None else folder_pb2.BOOLEAN_TRUE if mr == ManagePermission.ON.value else folder_pb2.BOOLEAN_FALSE
@@ -858,12 +860,7 @@ class ShareFolderCommand(base.ArgparseCommand):
             for team_uid in teams:
                 to = folder_pb2.SharedFolderUpdateTeam()
                 to.teamUid = utils.base64_url_decode(team_uid)
-                if isinstance(share_expiration, int):
-                    if share_expiration > 0:
-                        to.expiration = share_expiration * 1000
-                        to.timerNotificationType = record_pb2.NOTIFY_OWNER
-                    elif share_expiration < 0:
-                        to.expiration = -1
+                set_expiration_fields(to, share_expiration)
                 if team_uid in existing_teams:
                     team = existing_teams[team_uid]
                     if action == ShareAction.GRANT.value:
@@ -915,12 +912,7 @@ class ShareFolderCommand(base.ArgparseCommand):
             for record_uid in rec_uids:
                 ro = folder_pb2.SharedFolderUpdateRecord()
                 ro.recordUid = utils.base64_url_decode(record_uid)
-                if isinstance(share_expiration, int):
-                    if share_expiration > 0:
-                        ro.expiration = share_expiration * 1000
-                        ro.timerNotificationType = record_pb2.NOTIFY_OWNER
-                    elif share_expiration < 0:
-                        ro.expiration = -1
+                set_expiration_fields(ro, share_expiration)
 
                 if record_uid in existing_records:
                     if action == ShareAction.GRANT.value:

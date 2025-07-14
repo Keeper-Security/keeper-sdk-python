@@ -1,16 +1,26 @@
 import argparse
-from itertools import groupby, product
+from enum import Enum
 from typing import Optional
 
 from keepersdk.vault import ksm_management, vault_online
 
-from . import base, share_management
+from . import base
+from .share_management import ShareAction, ShareRecordCommand, ShareFolderCommand
 from .. import api
 from ..helpers import ksm_utils, report_utils, share_utils
 from ..params import KeeperParams
 
 
 logger = api.get_logger()
+
+
+class SecretsManagerCommand(Enum):
+    LIST = "list"
+    GET = "get"
+    CREATE = "create"
+    REMOVE = "remove"
+    SHARE = "share"
+    UNSHARE = "unshare"
 
 
 class SecretsManagerAppCommand(base.ArgparseCommand):
@@ -28,6 +38,7 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
 
         parser.add_argument(
             '--command', type=str, action='store', required=True, dest='command',
+            choices=[cmd.value for cmd in SecretsManagerCommand],
             help='One of: "list", "get", "create", "remove", "share" or "unshare"'
             )
         parser.add_argument(
@@ -54,62 +65,48 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
         email = kwargs.get('email')
         is_admin = kwargs.get('admin', False)
 
+        if not command:
+            raise ValueError("Command is required. Available commands: list, get, create, remove, share, unshare")
+
+        if command != SecretsManagerCommand.LIST.value and not uid_or_name:
+            raise ValueError("Application name or UID is required. Use --name='example' to set it.")
+
         def list_app():
             return self.list_app(vault=vault)
 
         def get_app():
-            if not uid_or_name:
-                logger.error("Application name or UID is required for 'app get'. Use --name='example' to set it.")
-                return
             return self.get_app(vault=vault, uid_or_name=uid_or_name)
 
         def create_app():
-            if not uid_or_name:
-                logger.error("Application name or UID is required for 'app create'. Use --name='example' to set it.")
-                return
             self.create_app(vault=vault, name=uid_or_name, force=force)
             return context.vault_down()
 
         def remove_app():
-            if not uid_or_name:
-                logger.error("Application name or UID is required for 'app remove'. Use --name='example' to set it.")
-                return
             self.remove_app(vault=vault, uid_or_name=uid_or_name, force=force)
             return
         
         def share_app():
-            if not uid_or_name:
-                logger.error("Application name or UID is required for 'app share'. Use --name='example' to set it.")
-                return
-            self.share_app(context=context, uid_or_name=uid_or_name, force=force, unshare=False, email=email, is_admin=is_admin)
+            self.share_app(context=context, uid_or_name=uid_or_name, unshare=False, email=email, is_admin=is_admin)
             return context.vault_down()
         
         def unshare_app():
-            if not uid_or_name:
-                logger.error("Application name or UID is required for 'app unshare'. Use --name='example' to set it.")
-                return
-            self.share_app(context=context, uid_or_name=uid_or_name, force=force, unshare=True, email=email, is_admin=is_admin)
+            self.share_app(context=context, uid_or_name=uid_or_name, unshare=True, email=email, is_admin=is_admin)
             return context.vault_down()
 
         command_map = {
-            'list': list_app,
-            'get': get_app,
-            'create': create_app,
-            'remove': remove_app,
-            'share': share_app,
-            'unshare': unshare_app
+            SecretsManagerCommand.LIST.value: list_app,
+            SecretsManagerCommand.GET.value: get_app,
+            SecretsManagerCommand.CREATE.value: create_app,
+            SecretsManagerCommand.REMOVE.value: remove_app,
+            SecretsManagerCommand.SHARE.value: share_app,
+            SecretsManagerCommand.UNSHARE.value: unshare_app
         }
-
-        if not command:
-            logger.error("Command is required. Available commands: list, get, create, remove, share, unshare")
-            return
             
         action = command_map.get(command)
         if action:
             return action()
         else:
-            logger.error(f"Unknown command '{command}'. Available commands: list, get, create, remove, share, unshare")
-            return
+            raise ValueError(f"Unknown command '{command}'. Available commands: {', '.join([cmd.value for cmd in SecretsManagerCommand])}")
 
 
     def list_app(self, vault: vault_online.VaultOnline):
@@ -123,12 +120,7 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
     
 
     def get_app(self, vault: vault_online.VaultOnline, uid_or_name: str):
-        if not uid_or_name:
-            logger.error("Application name or UID is required for 'app get'. Use --name='example' to set it.")
-            return
-
         app = ksm_management.get_secrets_manager_app(vault=vault, uid_or_name=uid_or_name)
-
         logger.info(f'\nSecrets Manager Application\n'
                 f'App Name: {app.name}\n'
                 f'App UID: {app.uid}')
@@ -146,32 +138,18 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
     
     
     def create_app(self, vault: vault_online.VaultOnline, name: str, force: Optional[bool] = False):
-        if not name:
-            logger.error("Application name or UID is required for 'app create'. Use --name='example' to set it.")
-            return
-        
         app_uid = ksm_management.create_secrets_manager_app(vault=vault, name=name, force_add=force)
-        
         logger.info(f'Application was successfully added (UID: {app_uid})')
     
     
     def remove_app(self, vault: vault_online.VaultOnline, uid_or_name: str, force: Optional[bool] = False):
-        if not uid_or_name:
-            logger.error("Application name or UID is required for 'app remove'. Use --name='example' to set it.")
-            return
-        
         app_uid = ksm_management.remove_secrets_manager_app(vault=vault, uid_or_name=uid_or_name, force=force)
-        
         logger.info(f'Application was successfully removed (UID: {app_uid})')
     
-    def share_app(self, context: KeeperParams, uid_or_name: str, force: Optional[bool] = False, unshare: bool = False, email: Optional[str] = None, is_admin: Optional[bool] = False):
+    def share_app(self, context: KeeperParams, uid_or_name: str, unshare: bool = False, 
+                  email: Optional[str] = None, is_admin: Optional[bool] = False):
         if not email:
-            logger.error("Email parameter is required for sharing. Use --email='user@example.com' to set it.")
-            return
-            
-        if not context.vault:
-            logger.error("Vault is not initialized.")
-            return
+            raise ValueError("Email parameter is required for sharing. Use --email='user@example.com' to set it.")
             
         app_record = next((r for r in context.vault.vault_data.records() if r.record_uid == uid_or_name or r.title == uid_or_name), None)
         
@@ -179,7 +157,7 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
             raise ValueError(f'No application found with UID/Name: {uid_or_name}')
         
         app_uid = app_record.record_uid
-        action = share_management.ShareAction.REVOKE.value if unshare else share_management.ShareAction.GRANT.value
+        action = ShareAction.REVOKE.value if unshare else ShareAction.GRANT.value
         emails = [email]
         can_edit=is_admin and not unshare
         can_share=is_admin and not unshare
@@ -191,7 +169,7 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
             "can_share": can_share
         }
         
-        share_record_command = share_management.ShareRecordCommand()
+        share_record_command = ShareRecordCommand()
         share_record_command.execute(context=context, **args)
         
         context.vault.sync_down()
@@ -200,16 +178,30 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
 
     @staticmethod
     def update_shares_user_permissions(context: KeeperParams, uid: str, removed: bool):
-        if not context.vault:
-            logger.error("Vault is not initialized.")
-            return
         
         vault = context.vault
-        app_rec = vault.vault_data.get_record(record_uid=uid)
-        if app_rec is None:
-            logger.warning('Application "%s" not found.' % uid)
-            return
 
+        # Get user permissions for the app
+        user_perms = SecretsManagerAppCommand._get_app_user_permissions(vault, uid)
+        
+        # Get app info and shared secrets
+        app_info = ksm_management.get_secrets_manager_app(vault=vault, uid_or_name=uid)
+        if not app_info:
+            return
+            
+        # Separate shared records and folders
+        shared_recs, shared_folders = SecretsManagerAppCommand._separate_shared_items(
+            vault, app_info.shared_secrets
+        )
+        
+        # Create share requests for users that need updates
+        SecretsManagerAppCommand._process_share_updates(
+            context, vault, user_perms, shared_recs, shared_folders, removed
+        )
+
+    @staticmethod
+    def _get_app_user_permissions(vault: vault_online.VaultOnline, uid: str) -> list:
+        """Get user permissions for the application."""
         share_info = share_utils.get_record_shares(vault=vault, record_uids=[uid], is_share_admin=False)
         user_perms = []
         if share_info:
@@ -217,89 +209,148 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
                 if record_info.get('record_uid') == uid:
                     user_perms = record_info.get('shares', {}).get('user_permissions', [])
                     break
+        return user_perms
+
+    @staticmethod
+    def _separate_shared_items(vault: vault_online.VaultOnline, shared_secrets):
+        """Separate shared secrets into records and folders."""
+        share_uids = [secret.uid for secret in shared_secrets]
+        record_cache = {x.record_uid: x for x in vault.vault_data.records()}
         
-        sf_perm_keys = ('manage_users', 'manage_records')
-        rec_user_permissions = ('editable', 'shareable')
-
-        try:
-            app_info = ksm_management.get_secrets_manager_app(vault=vault, uid_or_name=uid)
-            if not app_info or not app_info.shared_secrets:
-                return
+        shared_recs = [uid for uid in share_uids if uid in record_cache]
+        shared_folders = [uid for uid in share_uids if uid not in shared_recs]
+        
+        if shared_recs:
+            share_utils.get_record_shares(vault=vault, record_uids=shared_recs, is_share_admin=False)
             
-            share_uids = [secret.uid for secret in app_info.shared_secrets]
-            record_cache = {x.record_uid: x for x in vault.vault_data.records()}
-            shared_folder_cache = {x.shared_folder_uid: x for x in vault.vault_data.shared_folders()}
+        return shared_recs, shared_folders
+
+    @staticmethod
+    def _process_share_updates(context: KeeperParams, vault: vault_online.VaultOnline, 
+                             user_perms: list, shared_recs: list, shared_folders: list, removed: bool):
+        """Process share updates for users."""
+        # Get admin and viewer users
+        admins = [up.get('username') for up in user_perms if up.get('editable')]
+        viewers = [up.get('username') for up in user_perms if not up.get('editable')]
+        app_users_map = dict(admins=admins, viewers=viewers)
+        
+        # Create share requests
+        sf_requests = []
+        rec_requests = []
+        
+        for group, users in app_users_map.items():
+            users_needing_update = [
+                u for u in users 
+                if SecretsManagerAppCommand._user_needs_update(vault, u, shared_recs + shared_folders, removed)
+            ]
             
-            shared_recs = [uid for uid in share_uids if uid in record_cache]
-            shared_folders = [uid for uid in share_uids if uid not in shared_recs]
-
-            if shared_recs:
-                share_utils.get_record_shares(vault=vault, record_uids=shared_recs, is_share_admin=False)
-
-            def share_needs_update(user: str, share_uid: str):
-                if removed:
-                    return False
-                is_rec_share = share_uid in record_cache
-                perm_keys, share_cache = (rec_user_permissions, record_cache) if is_rec_share \
-                    else (sf_perm_keys, shared_folder_cache)
-                get_user_permissions = lambda cached_share: cached_share.get('shares', {}).get('user_permissions',{}) if is_rec_share else cached_share.get('users')
-                share_user_permissions = get_user_permissions(share_cache.get(share_uid, {}))
-                return not any(up for up in share_user_permissions if up.get('username') == user)
-
-            admins = [up.get('username') for up in user_perms if up.get('editable')]
-            viewers = [up.get('username') for up in user_perms if not up.get('editable')]
-            app_users_map = dict(admins=admins, viewers=viewers)
-
-            user_needs_update = lambda u, adm: any(share_needs_update(u, uid) for uid in share_uids)
-
-            def group_by_app_share(products):
-                first_element = lambda x: x[0]
-                products = sorted(products, key=first_element)
-                products = groupby(products, key=first_element)
-                return {uid: [user for _, user in pair] for uid, pair in products}
-
-            sf_requests = []
-            rec_requests = []
-            for group, users in app_users_map.items():
-                is_admin = group == 'admins'
-                users = [u for u in users if user_needs_update(u, is_admin)]
-                sf_action = share_management.ShareAction.REMOVE.value if removed else share_management.ShareAction.GRANT.value
-                rec_action = share_management.ShareAction.REVOKE.value if removed else share_management.ShareAction.GRANT.value
-
-                prep_sf_rq = lambda u, uid: share_management.ShareFolderCommand.prepare_request(
-                    vault=vault,
-                    kwargs={'action': sf_action},
-                    curr_sf={'shared_folder_uid': uid, 'users': [], 'teams': [], 'records': []},
-                    users=u,
-                    teams=[],
-                    rec_uids=[],
-                    default_record=False,
-                    default_account=False,
-                    share_expiration=-1
-                )
-                sf_updates = {(sf, user) for sf, user in product(shared_folders, users) if share_needs_update(user, sf)}
-                sf_updates = group_by_app_share(sf_updates)
-                sf_requests.append([prep_sf_rq(users, uid) for uid, users in sf_updates.items() if users])
-
-                prep_rec_rq = lambda u, uid: share_management.ShareRecordCommand.prep_request(
-                    context=context,
-                    emails=[u],
-                    action=rec_action,
-                    uid_or_name=uid,
-                    share_expiration=-1,
-                    dry_run=False,
-                    can_edit=False,
-                    can_share=False
-                )
-                rec_updates = {(rec, user) for rec, user in product(shared_recs, users) if share_needs_update(user, rec)}
-                rec_updates = group_by_app_share(rec_updates)
-                rec_requests.extend([prep_rec_rq(users, rec) for rec, users in rec_updates.items() if users])
-                rec_requests = [rq for rq in rec_requests if rq]
-
-            share_management.ShareFolderCommand.send_requests(vault, sf_requests)
-            share_management.ShareRecordCommand.send_requests(vault, rec_requests)
-            logger.info("Share updates would be processed here if ShareFolderCommand and ShareRecordCommand were available")
+            if not users_needing_update:
+                continue
+                
+            # Process folder share requests
+            folder_requests = SecretsManagerAppCommand._create_folder_share_requests(
+                vault, shared_folders, users_needing_update, removed
+            )
+            sf_requests.extend(folder_requests)
             
-        except Exception as e:
-            logger.error(f"Error updating shares user permissions: {e}")
-    
+            # Process record share requests
+            record_requests = SecretsManagerAppCommand._create_record_share_requests(
+                context, shared_recs, users_needing_update, removed
+            )
+            rec_requests.extend(record_requests)
+
+        if sf_requests:
+            ShareFolderCommand.send_requests(vault, sf_requests)
+        if rec_requests:
+            ShareRecordCommand.send_requests(vault, rec_requests)
+        logger.info("Share updates processed successfully")
+
+    @staticmethod
+    def _user_needs_update(vault: vault_online.VaultOnline, user: str, share_uids: list, removed: bool) -> bool:
+        """Check if a user needs share permission updates."""
+        if removed:
+            return False
+            
+        # Get the share information for records
+        record_share_info = share_utils.get_record_shares(vault=vault, record_uids=share_uids, is_share_admin=False)
+        record_permissions = {}
+        if record_share_info:
+            for record_info in record_share_info:
+                record_uid = record_info.get('record_uid')
+                if record_uid:
+                    record_permissions[record_uid] = record_info.get('shares', {}).get('user_permissions', [])
+        
+        record_cache = {x.record_uid: x for x in vault.vault_data.records()}
+        shared_folder_cache = {x.shared_folder_uid: x for x in vault.vault_data.shared_folders()}
+        
+        for share_uid in share_uids:
+            is_rec_share = share_uid in record_cache
+            
+            if is_rec_share:
+                # Use the permissions we fetched above
+                share_user_permissions = record_permissions.get(share_uid, [])
+            else:
+                # For shared folders, get users from the folder object
+                folder_obj = shared_folder_cache.get(share_uid)
+                if folder_obj and hasattr(folder_obj, 'users'):
+                    share_user_permissions = getattr(folder_obj, 'users', [])
+                else:
+                    share_user_permissions = []
+                
+            # Check if user already has permissions
+            if not any(up.get('username') == user for up in share_user_permissions if isinstance(up, dict)):
+                return True
+        return False
+
+    @staticmethod
+    def _create_folder_share_requests(vault: vault_online.VaultOnline, shared_folders: list, 
+                                    users: list, removed: bool) -> list:
+        """Create folder share requests."""
+        if not shared_folders:
+            return []
+            
+        sf_action = ShareAction.REMOVE.value if removed else ShareAction.GRANT.value
+        
+        requests = []
+        for folder_uid in shared_folders:
+            for user in users:
+                if SecretsManagerAppCommand._user_needs_update(vault, user, [folder_uid], removed):
+                    request = ShareFolderCommand.prepare_request(
+                        vault=vault,
+                        kwargs={'action': sf_action},
+                        curr_sf={'shared_folder_uid': folder_uid, 'users': [], 'teams': [], 'records': []},
+                        users=[user],
+                        teams=[],
+                        rec_uids=[],
+                        default_record=False,
+                        default_account=False,
+                        share_expiration=-1
+                    )
+                    requests.append(request)
+        return requests
+
+    @staticmethod
+    def _create_record_share_requests(context: KeeperParams, shared_recs: list, 
+                                    users: list, removed: bool) -> list:
+        """Create record share requests."""
+        if not shared_recs or not context.vault:
+            return []
+            
+        rec_action = ShareAction.REVOKE.value if removed else ShareAction.GRANT.value
+        
+        requests = []
+        for record_uid in shared_recs:
+            for user in users:
+                if SecretsManagerAppCommand._user_needs_update(context.vault, user, [record_uid], removed):
+                    request = ShareRecordCommand.prep_request(
+                        context=context,
+                        emails=[user],
+                        action=rec_action,
+                        uid_or_name=record_uid,
+                        share_expiration=-1,
+                        dry_run=False,
+                        can_edit=False,
+                        can_share=False
+                    )
+                    requests.append(request)
+        return requests
