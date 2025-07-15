@@ -61,7 +61,7 @@ class ShareRecordCommand(base.ArgparseCommand):
     def add_arguments_to_parser(parser: argparse.ArgumentParser):
 
         parser.add_argument(
-            '-e', '--email', dest='email', action='append', required=True, help='account email'
+            '-e', '--email', dest='email', action='append', help='account email'
         )
         parser.add_argument(
             '--contacts-only', action='store_true', 
@@ -107,8 +107,8 @@ class ShareRecordCommand(base.ArgparseCommand):
         vault = context.vault
         
         uid_or_name = kwargs.get('record')
-        if uid_or_name is None:
-            raise ValueError('share-record', 'Record parameter is required')
+        if not uid_or_name:
+            return self.get_parser().print_help()
         
         emails = kwargs.get('email') or []
         if not emails:
@@ -603,8 +603,7 @@ class ShareFolderCommand(base.ArgparseCommand):
                         sa_obj_uids = {utils.base64_url_encode(uid) for uid in sa_obj_uids}
                         return sa_obj_uids
             except Exception as e:
-                print(f'get_share_admin: msg = {e}')
-                return None
+                raise ValueError(f'get_share_admin: msg = {e}')
 
         def get_folder_uids(context: KeeperParams, name: str) -> set[str]:
             """Get folder UIDs by name or path."""
@@ -780,13 +779,19 @@ class ShareFolderCommand(base.ArgparseCommand):
             rec_chunks = [rec_list[i * chunk_size:(i + 1) * chunk_size] for i in range(num_rec_chunks)] or [[]]
             user_chunks = [user_list[i * chunk_size:(i + 1) * chunk_size] for i in range(num_user_chunks)] or [[]]
             group_idx = 0
+            shared_folder_revision = vault.vault_data.storage.shared_folders.get_entity(sf_uid).revision
+            sf_unencrypted_key = vault.vault_data.get_shared_folder_key(shared_folder_uid=sh_fol.shared_folder_uid)
             for r_chunk in rec_chunks:
                 for u_chunk in user_chunks:
                     sf_info = sh_fol.copy() if isinstance(sh_fol, dict) else {
                         'shared_folder_uid': sf_uid,
-                        'users': [],
+                        'users': sh_fol.user_permissions,
                         'teams': [],
-                        'records': []
+                        'records': sh_fol.record_permissions,
+                        'shared_folder_key_unencrypted': sf_unencrypted_key,
+                        'default_manage_users': sh_fol.default_can_share,
+                        'default_manage_records': sh_fol.default_can_edit,
+                        'revision': shared_folder_revision
                     }
                     if group_idx and isinstance(sf_info, dict) and 'revision' in sf_info:
                         del sf_info['revision']
@@ -818,7 +823,7 @@ class ShareFolderCommand(base.ArgparseCommand):
                 rq.defaultManageUsers = folder_pb2.BOOLEAN_NO_CHANGE
 
         if len(users) > 0:
-            existing_users = {x['username'] for x in curr_sf.get('users', [])}
+            existing_users = {x['username'] if isinstance(x, dict) else x.name for x in curr_sf.get('users', [])}
             for email in users:
                 uo = folder_pb2.SharedFolderUpdateUser()
                 uo.username = email
@@ -948,7 +953,7 @@ class ShareFolderCommand(base.ArgparseCommand):
                 rqs = folder_pb2.SharedFolderUpdateV3RequestV2()
                 rqs.sharedFoldersUpdateV3.extend(chunk)
                 try:
-                    rss = vault.keeper_auth.execute_auth_rest(rest_endpoint=ApiUrl.SHARE_FOLDER_UPDATE.value, request=rqs, response_type=folder_pb2.SharedFolderUpdateV3ResponseV2)
+                    rss = vault.keeper_auth.execute_auth_rest(rest_endpoint=ApiUrl.SHARE_FOLDER_UPDATE.value, request=rqs, response_type=folder_pb2.SharedFolderUpdateV3ResponseV2, payload_version=1)
                     if rss and hasattr(rss, 'sharedFoldersUpdateV3Response'):
                         for rs in rss.sharedFoldersUpdateV3Response:
                             team_cache = vault.vault_data.teams()

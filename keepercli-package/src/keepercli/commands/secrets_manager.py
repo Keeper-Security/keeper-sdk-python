@@ -163,8 +163,8 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
         can_share=is_admin and not unshare
         args = {
             "action": action,
-            "emails": emails,
-            "uid": app_uid,
+            "email": emails,
+            "record": app_uid,
             "can_edit": can_edit,
             "can_share": can_share
         }

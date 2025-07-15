@@ -21,7 +21,7 @@ logger = api.get_logger()
 
 def get_share_expiration(expire_at: Optional[str], expire_in: Optional[str]) -> int:
     if not expire_at and not expire_in:
-        return -1
+        return 0
 
     dt = None
     if isinstance(expire_at, str):
