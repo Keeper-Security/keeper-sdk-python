@@ -24,7 +24,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
 
     if not scopes or bool(scopes & base.CommandScope.Vault):
         from .commands import (vault_folder, vault, vault_record, record_edit, importer_commands, breachwatch, 
-                               record_type, secrets_manager)
+                               record_type, secrets_manager, share_management)
         
         commands.register_command('sync-down', vault.SyncDownCommand(), base.CommandScope.Vault, 'd')
         commands.register_command('cd', vault_folder.FolderCdCommand(), base.CommandScope.Vault)
@@ -52,6 +52,8 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('load-record-types', record_type.LoadRecordTypesCommand(), base.CommandScope.Vault)
         commands.register_command('download-record-types', record_type.DownloadRecordTypesCommand(), base.CommandScope.Vault)
         commands.register_command('secrets-manager-app', secrets_manager.SecretsManagerAppCommand(), base.CommandScope.Vault)
+        commands.register_command('share-record', share_management.ShareRecordCommand(), base.CommandScope.Vault, 'sr')
+        commands.register_command('share-folder', share_management.ShareFolderCommand(), base.CommandScope.Vault, 'sf')
 
 
     if not scopes or bool(scopes & base.CommandScope.Enterprise):
