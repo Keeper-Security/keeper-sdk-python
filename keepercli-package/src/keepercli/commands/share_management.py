@@ -263,9 +263,7 @@ class ShareRecordCommand(base.ArgparseCommand):
                     folder=folder, 
                     callback=lambda x: folders.add(x.folder_uid)
                 )
-            for uid in folders:
-                if uid in record_cache:
-                    record_uids.add(uid)
+            record_uids = {uid for uid in folders if uid in record_cache}
         elif shared_folder_uid:
             if not recursive:
                 raise ValueError('share-record', '--recursive parameter is required')
@@ -663,11 +661,17 @@ class ShareFolderCommand(base.ArgparseCommand):
             shared_folder_uids.update(shared_folder_cache.keys())
         else:
             get_folder_by_uid = lambda uid: folder_cache.get(uid)
-            folder_uids = {uid for name in names if name for uid in get_folder_uids(context, name)}
+            folder_uids = {
+                uid 
+                for name in names if name 
+                for uid in get_folder_uids(context, name)
+            }
             folders = {get_folder_by_uid(uid) for uid in folder_uids if get_folder_by_uid(uid)}
             shared_folder_uids.update([uid for uid in folder_uids if uid in shared_folder_cache])
+
             sf_subfolders = {f for f in folders if f and f.folder_type == 'shared_folder_folder'}
             shared_folder_uids.update({f.folder_scope_uid for f in sf_subfolders if f.folder_scope_uid})
+
             unresolved_names = [name for name in names if name and not get_folder_uids(context, name)]
             share_admin_folder_uids = get_share_admin_obj_uids(vault=vault, obj_names=unresolved_names, obj_type=record_pb2.CHECK_SA_ON_SF)
             shared_folder_uids.update(share_admin_folder_uids or [])
@@ -753,8 +757,6 @@ class ShareFolderCommand(base.ArgparseCommand):
                     if all_users:
                         if sh_fol.user_permissions:
                             sf_users.update((x.name for x in sh_fol.user_permissions if x.name != context.username))
-                        if sh_fol.user_permissions:
-                            sf_teams.update((x.user_uid for x in sh_fol.user_permissions if x.user_type == storage_types.SharedFolderUserType.Team))
                     if all_records:
                         if sh_fol and sh_fol.record_permissions:
                             sf_records.update((x.record_uid for x in sh_fol.record_permissions))
@@ -1013,4 +1015,5 @@ class ShareFolderCommand(base.ArgparseCommand):
                                         else:
                                             logger.warning('Record share \'%s\' failed', title)
                 except Exception as kae:
-                    raise kae
+                    logger.error(kae)
+                    return

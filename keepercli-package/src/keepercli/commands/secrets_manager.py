@@ -185,13 +185,14 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
         user_perms = SecretsManagerAppCommand._get_app_user_permissions(vault, uid)
         
         # Get app info and shared secrets
-        app_info = ksm_management.get_secrets_manager_app(vault=vault, uid_or_name=uid)
+        app_infos = ksm_management.get_app_info(vault=vault, app_uid=uid)
+        app_info = app_infos[0]
         if not app_info:
             return
             
         # Separate shared records and folders
         shared_recs, shared_folders = SecretsManagerAppCommand._separate_shared_items(
-            vault, app_info.shared_secrets
+            vault, app_info.shares
         )
         
         # Create share requests for users that need updates
@@ -214,11 +215,17 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
     @staticmethod
     def _separate_shared_items(vault: vault_online.VaultOnline, shared_secrets):
         """Separate shared secrets into records and folders."""
-        share_uids = [secret.uid for secret in shared_secrets]
-        record_cache = {x.record_uid: x for x in vault.vault_data.records()}
-        
-        shared_recs = [uid for uid in share_uids if uid in record_cache]
-        shared_folders = [uid for uid in share_uids if uid not in shared_recs]
+        from keepersdk.proto.APIRequest_pb2 import ApplicationShareType
+        from keepersdk import utils
+        shared_recs = []
+        shared_folders = []
+        for share in shared_secrets:
+            uid_str = utils.base64_url_encode(share.secretUid)
+            share_type = ApplicationShareType.Name(share.shareType)
+            if share_type == 'SHARE_TYPE_RECORD':
+                shared_recs.append(uid_str)
+            elif share_type == 'SHARE_TYPE_FOLDER':
+                shared_folders.append(uid_str)
         
         if shared_recs:
             share_utils.get_record_shares(vault=vault, record_uids=shared_recs, is_share_admin=False)
@@ -231,6 +238,7 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
         """Process share updates for users."""
         # Get admin and viewer users
         admins = [up.get('username') for up in user_perms if up.get('editable')]
+        admins = [x for x in admins if x != vault.keeper_auth.auth_context.username]
         viewers = [up.get('username') for up in user_perms if not up.get('editable')]
         app_users_map = dict(admins=admins, viewers=viewers)
         
@@ -251,7 +259,7 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
             folder_requests = SecretsManagerAppCommand._create_folder_share_requests(
                 vault, shared_folders, users_needing_update, removed
             )
-            sf_requests.extend(folder_requests)
+            sf_requests.append(folder_requests)
             
             # Process record share requests
             record_requests = SecretsManagerAppCommand._create_record_share_requests(
@@ -268,9 +276,6 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
     @staticmethod
     def _user_needs_update(vault: vault_online.VaultOnline, user: str, share_uids: list, removed: bool) -> bool:
         """Check if a user needs share permission updates."""
-        if removed:
-            return False
-            
         # Get the share information for records
         record_share_info = share_utils.get_record_shares(vault=vault, record_uids=share_uids, is_share_admin=False)
         record_permissions = {}
@@ -281,7 +286,6 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
                     record_permissions[record_uid] = record_info.get('shares', {}).get('user_permissions', [])
         
         record_cache = {x.record_uid: x for x in vault.vault_data.records()}
-        shared_folder_cache = {x.shared_folder_uid: x for x in vault.vault_data.shared_folders()}
         
         for share_uid in share_uids:
             is_rec_share = share_uid in record_cache
@@ -291,9 +295,9 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
                 share_user_permissions = record_permissions.get(share_uid, [])
             else:
                 # For shared folders, get users from the folder object
-                folder_obj = shared_folder_cache.get(share_uid)
-                if folder_obj and hasattr(folder_obj, 'users'):
-                    share_user_permissions = getattr(folder_obj, 'users', [])
+                shared_folder_obj = vault.vault_data.load_shared_folder(shared_folder_uid=share_uid)
+                if shared_folder_obj and shared_folder_obj.user_permissions:
+                    share_user_permissions = shared_folder_obj.user_permissions
                 else:
                     share_user_permissions = []
                 
@@ -315,10 +319,23 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
         for folder_uid in shared_folders:
             for user in users:
                 if SecretsManagerAppCommand._user_needs_update(vault, user, [folder_uid], removed):
+                    sh_fol = vault.vault_data.load_shared_folder(folder_uid)
+                    shared_folder_revision = vault.vault_data.storage.shared_folders.get_entity(folder_uid).revision
+                    sf_unencrypted_key = vault.vault_data.get_shared_folder_key(shared_folder_uid=folder_uid)
+                    sf_info = {
+                        'shared_folder_uid': folder_uid,
+                        'users': sh_fol.user_permissions,
+                        'teams': [],
+                        'records': sh_fol.record_permissions,
+                        'shared_folder_key_unencrypted': sf_unencrypted_key,
+                        'default_manage_users': sh_fol.default_can_share,
+                        'default_manage_records': sh_fol.default_can_edit,
+                        'revision': shared_folder_revision
+                    }
                     request = ShareFolderCommand.prepare_request(
                         vault=vault,
                         kwargs={'action': sf_action},
-                        curr_sf={'shared_folder_uid': folder_uid, 'users': [], 'teams': [], 'records': []},
+                        curr_sf=sf_info,
                         users=[user],
                         teams=[],
                         rec_uids=[],

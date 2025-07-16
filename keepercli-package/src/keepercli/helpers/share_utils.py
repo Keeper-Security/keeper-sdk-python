@@ -329,10 +329,6 @@ def get_record_shares(
             for info in response.recordDataWithAccessInfo:
                 record_uid = utils.base64_url_encode(info.recordUid)
                 
-                # Skip if record is already in cache
-                if record_uid in record_cache:
-                    continue
-                
                 rec = create_record_info(record_uid)
                 
                 if isinstance(rec, dict):
@@ -376,23 +372,6 @@ def enumerate_record_access_paths(
     context: KeeperParams, 
     record_uid: str
 ) -> Generator[Dict[str, Any], None, None]:
-
-    def get_record_permissions(shared_folder: Any) -> Optional[Any]:
-        """Get permissions for the target record in a shared folder."""
-        if not shared_folder or not shared_folder.record_permissions:
-            return None
-            
-        for permission in shared_folder.record_permissions:
-            if permission.record_uid == record_uid:
-                return permission
-        return None
-    
-    def determine_permissions(record_permission: Any) -> Tuple[bool, bool]:
-        """Determine edit and share permissions based on record permission."""
-        is_owner = record_permission.can_edit and record_permission.can_share
-        if is_owner:
-            return True, True
-        return record_permission.can_edit, record_permission.can_share
     
     def create_access_path(
         shared_folder_uid: str, 
@@ -444,12 +423,10 @@ def enumerate_record_access_paths(
         shared_folder = context.vault.vault_data.load_shared_folder(
             shared_folder_uid=shared_folder_uid
         )
-        
-        record_permission = get_record_permissions(shared_folder)
-        if not record_permission:
-            continue
+
+        is_owner = context.vault.vault_data.get_record(record_uid).flags == vault_record.RecordFlags.IsOwner
             
-        can_edit, can_share = determine_permissions(record_permission)
+        can_edit, can_share = is_owner, is_owner
         
         if hasattr(shared_folder, 'key_type'):
             yield create_access_path(
