@@ -93,7 +93,7 @@ def create_secrets_manager_app(vault: vault_online.VaultOnline, name: str, force
     
     existing_app = next((r for r in vault.vault_data.records() if r.title == name), None)
     if existing_app and not force_add:
-        raise ValueError(f'Application with the same name {name} already exists.')
+        raise ValueError(f'Application with the same name {name} already exists. Set force to true to add Application with same name')
 
     app_record_data = {
         'title': name,
