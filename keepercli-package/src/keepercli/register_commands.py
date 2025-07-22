@@ -52,6 +52,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('load-record-types', record_type.LoadRecordTypesCommand(), base.CommandScope.Vault)
         commands.register_command('download-record-types', record_type.DownloadRecordTypesCommand(), base.CommandScope.Vault)
         commands.register_command('secrets-manager-app', secrets_manager.SecretsManagerAppCommand(), base.CommandScope.Vault)
+        commands.register_command('secrets-manager-client', secrets_manager.SecretsManagerClientCommand(), base.CommandScope.Vault)
         commands.register_command('share-record', share_management.ShareRecordCommand(), base.CommandScope.Vault, 'sr')
         commands.register_command('share-folder', share_management.ShareFolderCommand(), base.CommandScope.Vault, 'sf')
 
