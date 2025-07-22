@@ -7,13 +7,13 @@ import time
 from typing import Optional
 from urllib import parse
 
-from keepersdk.vault import ksm_management, vault_online
 from keepersdk import crypto, utils
 from keepersdk.proto.APIRequest_pb2 import AddAppClientRequest, Device, RemoveAppClientsRequest
 from keepersdk.proto.enterprise_pb2 import GENERAL
+from keepersdk.vault import ksm_management, vault_online
 
 from . import base
-from .share_management import ShareAction, ShareRecordCommand, ShareFolderCommand
+from .share_management import ShareAction, ShareFolderCommand, ShareRecordCommand
 from .. import api, constants, prompt_utils
 from ..helpers import ksm_utils, report_utils, share_utils
 from ..params import KeeperParams
@@ -52,7 +52,7 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
             help = f"One of: {', '.join(cmd.value for cmd in SecretsManagerCommand)}"
             )
         parser.add_argument(
-            '--name', '-n', type=str, dest='name', action='store', help='Application Name or UID'
+            '--app', '-n', type=str, dest='app', action='store', help='Application Name or UID'
             )
         parser.add_argument(
             '-f', '--force', dest='force', action='store_true', help='Force add or remove app'
@@ -70,7 +70,7 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
 
         vault = context.vault
         command = kwargs.get('command')
-        uid_or_name = kwargs.get('name')
+        uid_or_name = kwargs.get('app')
         force = kwargs.get('force')
         email = kwargs.get('email')
         is_admin = kwargs.get('admin', False)
@@ -507,7 +507,7 @@ class SecretsManagerClientCommand(base.ArgparseCommand):
         current_time_ms = int(time.time( ) * 1000)
         
         first_access_expire_duration_ms = current_time_ms + first_access_expire_duration * 60 * 1000
-        
+        access_expire_in_ms = None
         if access_expire_in_min:
             access_expire_in_ms = access_expire_in_min * 60 * 1000
         
@@ -517,90 +517,203 @@ class SecretsManagerClientCommand(base.ArgparseCommand):
         otat_str = ""
         
         for i in range(count):
-            secret_bytes = os.urandom(32)
-            counter_bytes = b'KEEPER_SECRETS_MANAGER_CLIENT_ID'
-            digest = 'sha512'
-
-            try:
-                mac = hmac.new(secret_bytes, counter_bytes, digest).digest()
-            except Exception as e:
-                raise e
+            token_data = SecretsManagerClientCommand._generate_single_client(
+                vault=vault,
+                uid=uid,
+                client_name=client_name,
+                count=count,
+                index=i,
+                unlock_ip=unlock_ip,
+                first_access_expire_duration_ms=first_access_expire_duration_ms,
+                access_expire_in_ms=access_expire_in_ms,
+                master_key=master_key,
+                server=server
+            )
             
-            encrypted_master_key = crypto.encrypt_aes_v2(master_key, secret_bytes)
-
-            request = AddAppClientRequest()
-            request.appRecordUid = utils.base64_url_decode(uid)
-            request.encryptedAppKey = encrypted_master_key
-            request.lockIp = not unlock_ip
-            request.firstAccessExpireOn = first_access_expire_duration_ms
-            request.appClientType = GENERAL
-
-            if access_expire_in_min:
-                request.accessExpireOn = access_expire_in_ms
-
-            request.clientId = mac
-
-            if client_name:
-                if count == 1:
-                    request.id = client_name
-                else:
-                    request.id = client_name + " " + str((i+1))
-            
-            device = vault.keeper_auth.execute_auth_rest(rest_endpoint=CLIENT_ADD_URL, request=request, response_type=Device)
-
-            if not device or not device.encryptedDeviceToken:
-                raise ValueError("Failed to create client device - no device token received")
-
-            encrypted_device_token = utils.base64_url_encode(device.encryptedDeviceToken)
-
-
-            exp_date_str = datetime.datetime.fromtimestamp( first_access_expire_duration_ms / 1000).strftime('%Y-%m-%d %H:%M:%S')
-            ip_lock = 'Disabled' if unlock_ip else 'Enabled'
-
-            if access_expire_in_min:
-                app_expire_on_str = datetime.datetime.fromtimestamp( access_expire_in_ms / 1000).strftime('%Y-%m-%d %H:%M:%S')
-            else:
-                app_expire_on_str = "Never"
-
-            token = utils.base64_url_encode(secret_bytes)
-
-            abbrev = constants.get_abbrev_by_host(server)
-            
-            if abbrev:
-                token_w_prefix = f'{abbrev}:{token}'
-            else:
-                if not server.startswith('http'):
-                    tmp_server = "https://" + server
-                else:
-                    tmp_server = server
-
-                token_w_prefix = f'{parse.urlparse(tmp_server).netloc.lower()}:{token}'
-
-            otat_str += f'\nOne-Time Access Token: {token_w_prefix}\n'
-
-            tokens.append({
-                'oneTimeToken': token_w_prefix,
-                'deviceToken': encrypted_device_token
-            })
-
-            if client_name:
-                otat_str += f'Name: {client_name}\n'
-
-            otat_str += f'IP Lock: {ip_lock}\n' \
-                        f'Token Expires On: {exp_date_str}\n' \
-                        f'App Access Expires on: {app_expire_on_str}\n'
-
-        logger.info(f'\nSuccessfully generated Client Device\n'
-                f'====================================\n'
-                f'{otat_str}')
-
+            tokens.append(token_data['token_info'])
+            otat_str += token_data['output_string']
+        
+        SecretsManagerClientCommand._log_success_message(otat_str)
+        
         if not unlock_ip:
-            logger.info("Warning: Configuration is now locked to your current IP. To keep in unlock you can add flag `--unlock-ip` "
-            "or use the One-time token to generate configuration on the host that has the IP that needs to be locked.")
-
-            logger.warning('')
-
+            SecretsManagerClientCommand._log_ip_lock_warning()
+        
         return tokens
+
+    @staticmethod
+    def _generate_single_client(
+            vault: vault_online.VaultOnline,
+            uid: str,
+            client_name: str,
+            count: int,
+            index: int,
+            unlock_ip: bool,
+            first_access_expire_duration_ms: int,
+            access_expire_in_ms: Optional[int],
+            master_key: bytes,
+            server: str) -> dict:
+        """Generate a single client device and return token info and output string."""
+        
+        # Generate secret and client ID
+        secret_bytes = os.urandom(32)
+        client_id = SecretsManagerClientCommand._generate_client_id(secret_bytes)
+        
+        encrypted_master_key = crypto.encrypt_aes_v2(master_key, secret_bytes)
+        
+        # Create and send request
+        device = SecretsManagerClientCommand._create_client_request(
+            vault=vault,
+            uid=uid,
+            encrypted_master_key=encrypted_master_key,
+            unlock_ip=unlock_ip,
+            first_access_expire_duration_ms=first_access_expire_duration_ms,
+            access_expire_in_ms=access_expire_in_ms,
+            client_id=client_id,
+            client_name=client_name,
+            count=count,
+            index=index
+        )
+        
+        # Generate token with server prefix
+        token_with_prefix = SecretsManagerClientCommand._generate_token_with_prefix(
+            secret_bytes=secret_bytes,
+            server=server
+        )
+        
+        output_string = SecretsManagerClientCommand._create_output_string(
+            token_with_prefix=token_with_prefix,
+            client_name=client_name,
+            unlock_ip=unlock_ip,
+            first_access_expire_duration_ms=first_access_expire_duration_ms,
+            access_expire_in_ms=access_expire_in_ms
+        )
+        
+        return {
+            'token_info': {
+                'oneTimeToken': token_with_prefix,
+                'deviceToken': utils.base64_url_encode(device.encryptedDeviceToken)
+            },
+            'output_string': output_string
+        }
+
+    @staticmethod
+    def _generate_client_id(secret_bytes: bytes) -> bytes:
+        """Generate client ID using HMAC."""
+        counter_bytes = b'KEEPER_SECRETS_MANAGER_CLIENT_ID'
+        digest = 'sha512'
+        
+        try:
+            return hmac.new(secret_bytes, counter_bytes, digest).digest()
+        except Exception as e:
+            logger.error(e)
+            raise
+
+    @staticmethod
+    def _create_client_request(
+            vault: vault_online.VaultOnline,
+            uid: str,
+            encrypted_master_key: bytes,
+            unlock_ip: bool,
+            first_access_expire_duration_ms: int,
+            access_expire_in_ms: Optional[int],
+            client_id: bytes,
+            client_name: str,
+            count: int,
+            index: int) -> Device:
+        """Create and send client request to server."""
+        
+        request = AddAppClientRequest()
+        request.appRecordUid = utils.base64_url_decode(uid)
+        request.encryptedAppKey = encrypted_master_key
+        request.lockIp = not unlock_ip
+        request.firstAccessExpireOn = first_access_expire_duration_ms
+        request.appClientType = GENERAL
+        request.clientId = client_id
+        
+        if access_expire_in_ms:
+            request.accessExpireOn = access_expire_in_ms
+        
+        if client_name:
+            if count == 1:
+                request.id = client_name
+            else:
+                request.id = f"{client_name} {index + 1}"
+        
+        device = vault.keeper_auth.execute_auth_rest(
+            rest_endpoint=CLIENT_ADD_URL, 
+            request=request, 
+            response_type=Device
+        )
+        
+        if not device or not device.encryptedDeviceToken:
+            raise ValueError("Failed to create client device - no device token received")
+        
+        return device
+
+    @staticmethod
+    def _generate_token_with_prefix(secret_bytes: bytes, server: str) -> str:
+        """Generate token with server prefix."""
+        token = utils.base64_url_encode(secret_bytes)
+        
+        # Get server abbreviation
+        abbrev = constants.get_abbrev_by_host(server)
+        
+        if abbrev:
+            return f'{abbrev}:{token}'
+        else:
+            if not server.startswith('http'):
+                tmp_server = "https://" + server
+            else:
+                tmp_server = server
+            
+            return f'{parse.urlparse(tmp_server).netloc.lower()}:{token}'
+
+    @staticmethod
+    def _create_output_string(
+            token_with_prefix: str,
+            client_name: str,
+            unlock_ip: bool,
+            first_access_expire_duration_ms: int,
+            access_expire_in_ms: Optional[int]) -> str:
+        """Create formatted output string for logging."""
+        
+        output_lines = [f'\nOne-Time Access Token: {token_with_prefix}']
+        
+        if client_name:
+            output_lines.append(f'Name: {client_name}')
+        
+        ip_lock = 'Disabled' if unlock_ip else 'Enabled'
+        output_lines.append(f'IP Lock: {ip_lock}')
+        
+        exp_date_str = datetime.datetime.fromtimestamp(
+            first_access_expire_duration_ms / 1000
+        ).strftime('%Y-%m-%d %H:%M:%S')
+        output_lines.append(f'Token Expires On: {exp_date_str}')
+        
+        if access_expire_in_ms:
+            app_expire_on_str = datetime.datetime.fromtimestamp(
+                access_expire_in_ms / 1000
+            ).strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            app_expire_on_str = "Never"
+        
+        output_lines.append(f'App Access Expires on: {app_expire_on_str}')
+        
+        return '\n'.join(output_lines)
+
+    @staticmethod
+    def _log_success_message(output_string: str) -> None:
+        """Log success message with generated client information."""
+        logger.info(f'\nSuccessfully generated Client Device\n'
+                   f'====================================\n'
+                   f'{output_string}')
+
+    @staticmethod
+    def _log_ip_lock_warning() -> None:
+        """Log warning about IP lock configuration."""
+        logger.info("Warning: Configuration is now locked to your current IP. To keep in unlock you can add flag `--unlock-ip` "
+                   "or use the One-time token to generate configuration on the host that has the IP that needs to be locked.")
+        logger.warning('')
 
     @staticmethod
     def remove_all_clients(vault: vault_online.VaultOnline, uid: str, force: bool):
