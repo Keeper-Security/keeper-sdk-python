@@ -727,7 +727,7 @@ class SecretsManagerClientCommand(base.ArgparseCommand):
 
         if not force:
             logger.info(f"This app has {clients_count} client(s) connections.")
-            uc = prompt_utils.user_choice('\tAre you sure you want to delete all clients from this application?', 'yn', default='n')
+            uc = prompt_utils.user_choice('Are you sure you want to delete all clients from this application?', 'yn', default='n')
             if uc.lower() != 'y':
                 return
 
@@ -785,4 +785,4 @@ class SecretsManagerClientCommand(base.ArgparseCommand):
         request.appRecordUid = utils.base64_url_decode(uid)
         request.clients.extend(client_hashes)
         vault.keeper_auth.execute_auth_rest(rest_endpoint=CLIENT_REMOVE_URL, request=request)
-        logger.info('\nClient removal was successfully\n')
+        logger.info('\nClient removal was successful\n')
