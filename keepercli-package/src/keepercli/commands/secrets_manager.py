@@ -1,34 +1,44 @@
 import argparse
+import datetime
 from enum import Enum
+import hmac
+import os
+import time
 from typing import Optional
+from urllib import parse
 
+from keepersdk import crypto, utils
+from keepersdk.proto.APIRequest_pb2 import AddAppClientRequest, Device, RemoveAppClientsRequest
+from keepersdk.proto.enterprise_pb2 import GENERAL
 from keepersdk.vault import ksm_management, vault_online
 
 from . import base
-from .share_management import ShareAction, ShareRecordCommand, ShareFolderCommand
-from .. import api
+from .share_management import ShareAction, ShareFolderCommand, ShareRecordCommand
+from .. import api, constants, prompt_utils
 from ..helpers import ksm_utils, report_utils, share_utils
 from ..params import KeeperParams
 
 
 logger = api.get_logger()
+CLIENT_ADD_URL = 'vault/app_client_add'
+CLIENT_REMOVE_URL = 'vault/app_client_remove'
 
 
 class SecretsManagerCommand(Enum):
     LIST = "list"
     GET = "get"
+    ADD = 'add'
     CREATE = "create"
     REMOVE = "remove"
     SHARE = "share"
     UNSHARE = "unshare"
-
 
 class SecretsManagerAppCommand(base.ArgparseCommand):
 
     def __init__(self):
         self.parser = argparse.ArgumentParser(
             prog='secrets-manager app',
-            description='Keeper Secrets Manager (KSM) Commands',
+            description='Keeper Secrets Manager (KSM) App Commands',
         )
         SecretsManagerAppCommand.add_arguments_to_parser(self.parser)
         super().__init__(self.parser)
@@ -37,12 +47,12 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
     def add_arguments_to_parser(parser: argparse.ArgumentParser):
 
         parser.add_argument(
-            '--command', type=str, action='store', required=True, dest='command',
+            '--command', type=str, action='store', dest='command',
             choices=[cmd.value for cmd in SecretsManagerCommand],
-            help='One of: "list", "get", "create", "remove", "share" or "unshare"'
+            help = f"One of: {', '.join(cmd.value for cmd in SecretsManagerCommand)}"
             )
         parser.add_argument(
-            '--name', '-n', type=str, dest='name', action='store', required=False, help='Application Name or UID'
+            '--app', '-n', type=str, dest='app', action='store', help='Application Name or UID'
             )
         parser.add_argument(
             '-f', '--force', dest='force', action='store_true', help='Force add or remove app'
@@ -60,13 +70,13 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
 
         vault = context.vault
         command = kwargs.get('command')
-        uid_or_name = kwargs.get('name')
+        uid_or_name = kwargs.get('app')
         force = kwargs.get('force')
         email = kwargs.get('email')
         is_admin = kwargs.get('admin', False)
 
         if not command:
-            raise ValueError("Command is required. Available commands: list, get, create, remove, share, unshare")
+            return self.get_parser().print_help()
 
         if command != SecretsManagerCommand.LIST.value and not uid_or_name:
             raise ValueError("Application name or UID is required. Use --name='example' to set it.")
@@ -97,6 +107,7 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
             SecretsManagerCommand.LIST.value: list_app,
             SecretsManagerCommand.GET.value: get_app,
             SecretsManagerCommand.CREATE.value: create_app,
+            SecretsManagerCommand.ADD.value: create_app,
             SecretsManagerCommand.REMOVE.value: remove_app,
             SecretsManagerCommand.SHARE.value: share_app,
             SecretsManagerCommand.UNSHARE.value: unshare_app
@@ -301,8 +312,9 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
                 else:
                     share_user_permissions = []
                 
-            # Check if user already has permissions
-            if not any(up.get('username') == user for up in share_user_permissions if isinstance(up, dict)):
+            # Check if user already has permissions using hashmap for O(1) lookup
+            user_permissions_set = {up.get('username') for up in share_user_permissions if isinstance(up, dict)}
+            if user not in user_permissions_set:
                 return True
         return False
 
@@ -371,3 +383,406 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
                     )
                     requests.append(request)
         return requests
+
+
+class SecretsManagerClientCommand(base.ArgparseCommand):
+
+    def __init__(self):
+        self.parser = argparse.ArgumentParser(
+            prog='secrets-manager-client',
+            description='Keeper Secrets Manager (KSM) Client Commands',
+        )
+        SecretsManagerClientCommand.add_arguments_to_parser(self.parser)
+        super().__init__(self.parser)
+
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
+
+        parser.add_argument(
+            '--command', type=str, action='store', dest='command',
+            choices=[SecretsManagerCommand.ADD.value, SecretsManagerCommand.REMOVE.value], 
+            help = f"One of: {SecretsManagerCommand.ADD.value}, {SecretsManagerCommand.REMOVE.value}"
+        )
+        parser.add_argument(
+            '--app', '-a', type=str, action='store', help='Application Name or UID'
+        )
+        parser.add_argument(
+            '--name', '-n', type=str, dest='name', action='store', required=False, help='client name'
+        )
+        parser.add_argument(
+            '--client', '-i', type=str, dest='client_names_or_ids', action='append', required=False, 
+            help='Client Name or ID. Use * or all to remove all clients'
+        )
+        parser.add_argument(
+            '--unlock-ip', '-l', dest='unlockIp', action='store_true', help='Unlock IP Address.'
+        )
+        parser.add_argument(
+            '--return-tokens', dest='returnTokens', action='store_true', help='Return Tokens'
+        )
+        parser.add_argument(
+            '--secret', '-s', type=str, action='append', required=False, help='Record UID'
+        )
+        parser.add_argument(
+            '--count', '-c', type=int, dest='count', action='store', 
+            help='Number of tokens to return. Default: 1', default=1
+        )
+        parser.add_argument(
+            '--first-access-expires-in-min', '-x', type=int, dest='firstAccessExpiresIn', action='store', 
+            help='Time for the first request to expire in minutes from the time when this command is executed. '
+                 'Maximum 1440 minutes (24 hrs). Default: 60', default=60
+        )
+        parser.add_argument(
+            '-f', '--force', dest='force', action='store_true', help='Force add or remove app'
+            )
+        parser.add_argument(
+            '--access-expire-in-min', '-p', type=int, dest='accessExpireInMin', action='store', 
+            help='Time interval that this client can access the KSM application. After this time, access is denied. '
+                 'Time is entered in minutes starting from the time when command is executed. Default: Not expiration'
+        )
+    
+    def execute(self, context: KeeperParams, **kwargs) -> None:
+        if not context.vault:
+            raise ValueError("Vault is not initialized.")
+        
+        vault = context.vault
+        command = kwargs.get('command')
+        uid_or_name = kwargs.get('app')
+        
+        if not command:
+            return self.get_parser().print_help()
+        
+        if not uid_or_name:
+            raise ValueError('Application UID or name is required. Use --app="uid_or_name".')
+        
+        ksm_app = next((r for r in vault.vault_data.records() if r.record_uid == uid_or_name or r.title == uid_or_name), None)
+        if not ksm_app:
+            raise ValueError(f'No application found with UID/Name: {uid_or_name}')
+        uid = ksm_app.record_uid
+        
+        if command == SecretsManagerCommand.ADD.value:
+            count = kwargs.get('count', 1)
+            unlock_ip = kwargs.get('unlockIp', False)
+
+            client_name = kwargs.get('name')
+
+            first_access_expire_in = kwargs.get('firstAccessExpiresIn', 60)
+            access_expire_in_min = kwargs.get('accessExpireInMin')
+
+            is_return_tokens = kwargs.get('returnTokens', False)
+
+            tokens_and_device = SecretsManagerClientCommand.add_client(
+                vault=vault, uid=uid, count=count, client_name=client_name, 
+                unlock_ip=unlock_ip, first_access_expire_duration=first_access_expire_in, 
+                access_expire_in_min=access_expire_in_min, server=context.server
+            )
+
+            tokens_only = [d['oneTimeToken'] for d in tokens_and_device]
+
+            return ', '.join(tokens_only) if is_return_tokens else None
+        
+        elif command == SecretsManagerCommand.REMOVE.value:
+            client_names_or_ids = kwargs.get('client_names_or_ids')
+            if not client_names_or_ids:
+                raise ValueError('Client name or id is required. Example: --client="new client"')
+            
+            force = kwargs.get('force', False)
+
+            if len(client_names_or_ids) == 1 and client_names_or_ids[0] in ['*', 'all']:
+                SecretsManagerClientCommand.remove_all_clients(vault=vault, uid=uid, force=force)
+            else:
+                SecretsManagerClientCommand.remove_client(vault=vault, uid=uid, client_names_and_ids=client_names_or_ids)
+
+            return
+    
+    @staticmethod
+    def add_client(
+            vault: vault_online.VaultOnline, 
+            uid: str, 
+            count: int, 
+            client_name: str,  
+            unlock_ip: bool, 
+            first_access_expire_duration: int, 
+            access_expire_in_min: Optional[int],
+            server: str):
+        
+        current_time_ms = int(time.time( ) * 1000)
+        
+        first_access_expire_duration_ms = current_time_ms + first_access_expire_duration * 60 * 1000
+        access_expire_in_ms = None
+        if access_expire_in_min:
+            access_expire_in_ms = access_expire_in_min * 60 * 1000
+        
+        master_key = vault.vault_data.get_record_key(record_uid=uid)
+        
+        tokens = []
+        output_lines = []
+        
+        for i in range(count):
+            token_data = SecretsManagerClientCommand._generate_single_client(
+                vault=vault,
+                uid=uid,
+                client_name=client_name,
+                count=count,
+                index=i,
+                unlock_ip=unlock_ip,
+                first_access_expire_duration_ms=first_access_expire_duration_ms,
+                access_expire_in_ms=access_expire_in_ms,
+                master_key=master_key,
+                server=server
+            )
+            
+            tokens.append(token_data['token_info'])
+            output_lines.append(token_data['output_string'])
+        
+        one_time_access_token = ''.join(output_lines)
+        SecretsManagerClientCommand._log_success_message(one_time_access_token)
+        
+        if not unlock_ip:
+            SecretsManagerClientCommand._log_ip_lock_warning()
+        
+        return tokens
+
+    @staticmethod
+    def _generate_single_client(
+            vault: vault_online.VaultOnline,
+            uid: str,
+            client_name: str,
+            count: int,
+            index: int,
+            unlock_ip: bool,
+            first_access_expire_duration_ms: int,
+            access_expire_in_ms: Optional[int],
+            master_key: bytes,
+            server: str) -> dict:
+        """Generate a single client device and return token info and output string."""
+        
+        # Generate secret and client ID
+        secret_bytes = os.urandom(32)
+        client_id = SecretsManagerClientCommand._generate_client_id(secret_bytes)
+        
+        encrypted_master_key = crypto.encrypt_aes_v2(master_key, secret_bytes)
+        
+        # Create and send request
+        device = SecretsManagerClientCommand._create_client_request(
+            vault=vault,
+            uid=uid,
+            encrypted_master_key=encrypted_master_key,
+            unlock_ip=unlock_ip,
+            first_access_expire_duration_ms=first_access_expire_duration_ms,
+            access_expire_in_ms=access_expire_in_ms,
+            client_id=client_id,
+            client_name=client_name,
+            count=count,
+            index=index
+        )
+        
+        # Generate token with server prefix
+        token_with_prefix = SecretsManagerClientCommand._generate_token_with_prefix(
+            secret_bytes=secret_bytes,
+            server=server
+        )
+        
+        output_string = SecretsManagerClientCommand._create_output_string(
+            token_with_prefix=token_with_prefix,
+            client_name=client_name,
+            unlock_ip=unlock_ip,
+            first_access_expire_duration_ms=first_access_expire_duration_ms,
+            access_expire_in_ms=access_expire_in_ms
+        )
+        
+        return {
+            'token_info': {
+                'oneTimeToken': token_with_prefix,
+                'deviceToken': utils.base64_url_encode(device.encryptedDeviceToken)
+            },
+            'output_string': output_string
+        }
+
+    @staticmethod
+    def _generate_client_id(secret_bytes: bytes) -> bytes:
+        """Generate client ID using HMAC."""
+        counter_bytes = b'KEEPER_SECRETS_MANAGER_CLIENT_ID'
+        digest = 'sha512'
+        
+        try:
+            return hmac.new(secret_bytes, counter_bytes, digest).digest()
+        except Exception as e:
+            logger.error(e)
+            raise
+
+    @staticmethod
+    def _create_client_request(
+            vault: vault_online.VaultOnline,
+            uid: str,
+            encrypted_master_key: bytes,
+            unlock_ip: bool,
+            first_access_expire_duration_ms: int,
+            access_expire_in_ms: Optional[int],
+            client_id: bytes,
+            client_name: str,
+            count: int,
+            index: int) -> Device:
+        """Create and send client request to server."""
+        
+        request = AddAppClientRequest()
+        request.appRecordUid = utils.base64_url_decode(uid)
+        request.encryptedAppKey = encrypted_master_key
+        request.lockIp = not unlock_ip
+        request.firstAccessExpireOn = first_access_expire_duration_ms
+        request.appClientType = GENERAL
+        request.clientId = client_id
+        
+        if access_expire_in_ms:
+            request.accessExpireOn = access_expire_in_ms
+        
+        if client_name:
+            request.id = client_name if count == 1 else f"{client_name} {index + 1}"
+        
+        device = vault.keeper_auth.execute_auth_rest(
+            rest_endpoint=CLIENT_ADD_URL, 
+            request=request, 
+            response_type=Device
+        )
+        
+        if not device or not device.encryptedDeviceToken:
+            raise ValueError("Failed to create client device - no device token received")
+        
+        return device
+
+    @staticmethod
+    def _generate_token_with_prefix(secret_bytes: bytes, server: str) -> str:
+        """Generate token with server prefix."""
+        token = utils.base64_url_encode(secret_bytes)
+        
+        # Get server abbreviation
+        abbrev = constants.get_abbrev_by_host(server)
+        
+        if abbrev:
+            return f'{abbrev}:{token}'
+        else:
+            tmp_server = server if server.startswith(('http://', 'https://')) else f"https://{server}"
+            
+            return f'{parse.urlparse(tmp_server).netloc.lower()}:{token}'
+
+    @staticmethod
+    def _create_output_string(
+            token_with_prefix: str,
+            client_name: str,
+            unlock_ip: bool,
+            first_access_expire_duration_ms: int,
+            access_expire_in_ms: Optional[int]) -> str:
+        """Create formatted output string for logging."""
+        
+        output_lines = [f'\nOne-Time Access Token: {token_with_prefix}']
+        
+        if client_name:
+            output_lines.append(f'Name: {client_name}')
+        
+        ip_lock = 'Disabled' if unlock_ip else 'Enabled'
+        output_lines.append(f'IP Lock: {ip_lock}')
+        
+        try:
+            exp_date_str = datetime.datetime.fromtimestamp(
+                first_access_expire_duration_ms / 1000
+            ).strftime('%Y-%m-%d %H:%M:%S')
+        except (OSError, ValueError) as e:
+            exp_date_str = 'Invalid timestamp'
+        output_lines.append(f'Token Expires On: {exp_date_str}')
+        
+        if access_expire_in_ms:
+            app_expire_on_str = datetime.datetime.fromtimestamp(
+                access_expire_in_ms / 1000
+            ).strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            app_expire_on_str = "Never"
+        
+        output_lines.append(f'App Access Expires on: {app_expire_on_str}')
+        
+        return '\n'.join(output_lines)
+
+    @staticmethod
+    def _log_success_message(output_string: str) -> None:
+        """Log success message with generated client information."""
+        logger.info(f'\nSuccessfully generated Client Device\n'
+                   f'====================================\n'
+                   f'{output_string}')
+
+    @staticmethod
+    def _log_ip_lock_warning() -> None:
+        """Log warning about IP lock configuration."""
+        logger.info("Warning: Configuration is now locked to your current IP. To keep in unlock you can add flag `--unlock-ip` "
+                   "or use the One-time token to generate configuration on the host that has the IP that needs to be locked.")
+        logger.warning('')
+
+    @staticmethod
+    def remove_all_clients(vault: vault_online.VaultOnline, uid: str, force: bool):
+
+        app_info = ksm_management.get_app_info(vault=vault, app_uid=uid)
+
+        clients_count = len(app_info[0].clients)
+
+        if clients_count == 0:
+            logger.warning('No client devices registered for this Application\n')
+            return
+
+        if not force:
+            logger.info(f"This app has {clients_count} client(s) connections.")
+            uc = prompt_utils.user_choice('Are you sure you want to delete all clients from this application?', 'yn', default='n')
+            if uc.lower() != 'y':
+                return
+
+        client_ids_to_remove = [utils.base64_url_encode(c.clientId) for ai in app_info
+                             for c in ai.clients if c.appClientType == GENERAL]
+        
+        if len(client_ids_to_remove) > 0:
+            SecretsManagerClientCommand.remove_client(vault=vault, uid=uid, client_names_and_ids=client_ids_to_remove)
+
+    @staticmethod
+    def remove_client(vault: vault_online.VaultOnline, uid: str, client_names_and_ids: list[str]):
+
+        def convert_ids_and_hashes_to_hashes(client_names_and_ids, uid):
+            exact_matches = set()
+            partial_matches = set()
+            
+            for name in client_names_and_ids:
+                if len(name) >= ksm_management.CLIENT_SHORT_ID_LENGTH:
+                    partial_matches.add(name)
+                else:
+                    exact_matches.add(name)
+            
+            client_id_hashes_bytes = []
+            app_infos = ksm_management.get_app_info(vault=vault, app_uid=uid)
+            app_info = app_infos[0]
+            
+            for client in app_info.clients:
+                if client.id in exact_matches:
+                    client_id_hashes_bytes.append(client.clientId)
+                    continue
+                
+                if partial_matches:
+                    client_id = utils.base64_url_encode(client.clientId)
+                    for partial_name in partial_matches:
+                        if client_id.startswith(partial_name):
+                            client_id_hashes_bytes.append(client.clientId)
+                            break
+            
+            return client_id_hashes_bytes
+
+        client_hashes = convert_ids_and_hashes_to_hashes(client_names_and_ids=client_names_and_ids, uid=uid)
+
+        found_clients_count = len(client_hashes)
+        if found_clients_count == 0:
+            logger.warning('No Client Devices found with given name or ID\n')
+            return
+        else:
+            uc = prompt_utils.user_choice(f'Are you sure you want to delete {found_clients_count} matching client(s) from this application?',
+                             'yn', default='n')
+            if uc.lower() != 'y':
+                return
+
+        request = RemoveAppClientsRequest()
+
+        request.appRecordUid = utils.base64_url_decode(uid)
+        request.clients.extend(client_hashes)
+        vault.keeper_auth.execute_auth_rest(rest_endpoint=CLIENT_REMOVE_URL, request=request)
+        logger.info('\nClient removal was successful\n')
