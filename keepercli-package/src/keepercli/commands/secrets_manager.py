@@ -312,8 +312,9 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
                 else:
                     share_user_permissions = []
                 
-            # Check if user already has permissions
-            if not any(up.get('username') == user for up in share_user_permissions if isinstance(up, dict)):
+            # Check if user already has permissions using hashmap for O(1) lookup
+            user_permissions_set = {up.get('username') for up in share_user_permissions if isinstance(up, dict)}
+            if user not in user_permissions_set:
                 return True
         return False
 
@@ -740,20 +741,30 @@ class SecretsManagerClientCommand(base.ArgparseCommand):
     def remove_client(vault: vault_online.VaultOnline, uid: str, client_names_and_ids: list[str]):
 
         def convert_ids_and_hashes_to_hashes(client_names_and_ids, uid):
+            exact_matches = set()
+            partial_matches = set()
+            
+            for name in client_names_and_ids:
+                if len(name) >= ksm_management.CLIENT_SHORT_ID_LENGTH:
+                    partial_matches.add(name)
+                else:
+                    exact_matches.add(name)
+            
             client_id_hashes_bytes = []
-            client_names_set = set(client_names_and_ids)
             app_infos = ksm_management.get_app_info(vault=vault, app_uid=uid)
-            for app_info in app_infos:
-                for client in app_info.clients:
-                    if client.id in client_names_set:
-                        client_id_hashes_bytes.append(client.clientId)
-                    else:
-                        client_id = utils.base64_url_encode(client.clientId)
-                        for client_name_or_id in client_names_and_ids:
-                            if (len(client_name_or_id) >= ksm_management.CLIENT_SHORT_ID_LENGTH and 
-                                client_id.startswith(client_name_or_id)):
-                                client_id_hashes_bytes.append(client.clientId)
-                                break
+            app_info = app_infos[0]
+            
+            for client in app_info.clients:
+                if client.id in exact_matches:
+                    client_id_hashes_bytes.append(client.clientId)
+                    continue
+                
+                if partial_matches:
+                    client_id = utils.base64_url_encode(client.clientId)
+                    for partial_name in partial_matches:
+                        if client_id.startswith(partial_name):
+                            client_id_hashes_bytes.append(client.clientId)
+                            break
             
             return client_id_hashes_bytes
 
