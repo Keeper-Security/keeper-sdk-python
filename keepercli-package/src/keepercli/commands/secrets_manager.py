@@ -685,9 +685,12 @@ class SecretsManagerClientCommand(base.ArgparseCommand):
         ip_lock = 'Disabled' if unlock_ip else 'Enabled'
         output_lines.append(f'IP Lock: {ip_lock}')
         
-        exp_date_str = datetime.datetime.fromtimestamp(
-            first_access_expire_duration_ms / 1000
-        ).strftime('%Y-%m-%d %H:%M:%S')
+        try:
+            exp_date_str = datetime.datetime.fromtimestamp(
+                first_access_expire_duration_ms / 1000
+            ).strftime('%Y-%m-%d %H:%M:%S')
+        except (OSError, ValueError) as e:
+            exp_date_str = 'Invalid timestamp'
         output_lines.append(f'Token Expires On: {exp_date_str}')
         
         if access_expire_in_ms:
