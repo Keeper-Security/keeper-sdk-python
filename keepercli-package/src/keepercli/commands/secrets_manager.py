@@ -514,7 +514,7 @@ class SecretsManagerClientCommand(base.ArgparseCommand):
         master_key = vault.vault_data.get_record_key(record_uid=uid)
         
         tokens = []
-        otat_str = ""
+        output_lines = []
         
         for i in range(count):
             token_data = SecretsManagerClientCommand._generate_single_client(
@@ -531,9 +531,10 @@ class SecretsManagerClientCommand(base.ArgparseCommand):
             )
             
             tokens.append(token_data['token_info'])
-            otat_str += token_data['output_string']
+            output_lines.append(token_data['output_string'])
         
-        SecretsManagerClientCommand._log_success_message(otat_str)
+        one_time_access_token = ''.join(output_lines)
+        SecretsManagerClientCommand._log_success_message(one_time_access_token)
         
         if not unlock_ip:
             SecretsManagerClientCommand._log_ip_lock_warning()
@@ -634,10 +635,7 @@ class SecretsManagerClientCommand(base.ArgparseCommand):
             request.accessExpireOn = access_expire_in_ms
         
         if client_name:
-            if count == 1:
-                request.id = client_name
-            else:
-                request.id = f"{client_name} {index + 1}"
+            request.id = client_name if count == 1 else f"{client_name} {index + 1}"
         
         device = vault.keeper_auth.execute_auth_rest(
             rest_endpoint=CLIENT_ADD_URL, 
@@ -661,10 +659,7 @@ class SecretsManagerClientCommand(base.ArgparseCommand):
         if abbrev:
             return f'{abbrev}:{token}'
         else:
-            if not server.startswith('http'):
-                tmp_server = "https://" + server
-            else:
-                tmp_server = server
+            tmp_server = server if server.startswith(('http://', 'https://')) else f"https://{server}"
             
             return f'{parse.urlparse(tmp_server).netloc.lower()}:{token}'
 
