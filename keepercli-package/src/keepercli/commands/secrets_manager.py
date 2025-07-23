@@ -8,7 +8,7 @@ from typing import Optional
 from urllib import parse
 
 from keepersdk import crypto, utils
-from keepersdk.proto.APIRequest_pb2 import AddAppClientRequest, Device, RemoveAppClientsRequest
+from keepersdk.proto.APIRequest_pb2 import AddAppClientRequest, Device, RemoveAppClientsRequest, AppShareAdd, ApplicationShareType, AddAppSharesRequest, RemoveAppSharesRequest
 from keepersdk.proto.enterprise_pb2 import GENERAL
 from keepersdk.vault import ksm_management, vault_online
 
@@ -22,6 +22,8 @@ from ..params import KeeperParams
 logger = api.get_logger()
 CLIENT_ADD_URL = 'vault/app_client_add'
 CLIENT_REMOVE_URL = 'vault/app_client_remove'
+SHARE_ADD_URL = 'vault/app_share_add'
+SHARE_REMOVE_URL = 'vault/app_share_remove'
 
 
 class SecretsManagerCommand(Enum):
@@ -312,7 +314,6 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
                 else:
                     share_user_permissions = []
                 
-            # Check if user already has permissions using hashmap for O(1) lookup
             user_permissions_set = {up.get('username') for up in share_user_permissions if isinstance(up, dict)}
             if user not in user_permissions_set:
                 return True
@@ -490,7 +491,7 @@ class SecretsManagerClientCommand(base.ArgparseCommand):
             if len(client_names_or_ids) == 1 and client_names_or_ids[0] in ['*', 'all']:
                 SecretsManagerClientCommand.remove_all_clients(vault=vault, uid=uid, force=force)
             else:
-                SecretsManagerClientCommand.remove_client(vault=vault, uid=uid, client_names_and_ids=client_names_or_ids)
+                SecretsManagerClientCommand.remove_client(vault=vault, uid=uid, client_names_and_ids=client_names_or_ids, force=force)
 
             return
     
@@ -735,10 +736,10 @@ class SecretsManagerClientCommand(base.ArgparseCommand):
                              for c in ai.clients if c.appClientType == GENERAL]
         
         if len(client_ids_to_remove) > 0:
-            SecretsManagerClientCommand.remove_client(vault=vault, uid=uid, client_names_and_ids=client_ids_to_remove)
+            SecretsManagerClientCommand.remove_client(vault=vault, uid=uid, client_names_and_ids=client_ids_to_remove, force=force)
 
     @staticmethod
-    def remove_client(vault: vault_online.VaultOnline, uid: str, client_names_and_ids: list[str]):
+    def remove_client(vault: vault_online.VaultOnline, uid: str, client_names_and_ids: list[str], force=False):
 
         def convert_ids_and_hashes_to_hashes(client_names_and_ids, uid):
             exact_matches = set()
@@ -774,7 +775,7 @@ class SecretsManagerClientCommand(base.ArgparseCommand):
         if found_clients_count == 0:
             logger.warning('No Client Devices found with given name or ID\n')
             return
-        else:
+        elif not force:
             uc = prompt_utils.user_choice(f'Are you sure you want to delete {found_clients_count} matching client(s) from this application?',
                              'yn', default='n')
             if uc.lower() != 'y':
@@ -786,3 +787,196 @@ class SecretsManagerClientCommand(base.ArgparseCommand):
         request.clients.extend(client_hashes)
         vault.keeper_auth.execute_auth_rest(rest_endpoint=CLIENT_REMOVE_URL, request=request)
         logger.info('\nClient removal was successful\n')
+
+
+class SecretsManagerShareCommand(base.ArgparseCommand):
+
+    def __init__(self):
+        self.parser = argparse.ArgumentParser(
+            prog='secrets-manager-share',
+            description='Keeper Secrets Manager (KSM) Share Commands',
+        )
+        SecretsManagerShareCommand.add_arguments_to_parser(self.parser)
+        super().__init__(self.parser)
+
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser) -> None:
+        parser.add_argument(
+            '--command', type=str, action='store', dest='command',
+            choices=[SecretsManagerCommand.ADD.value, SecretsManagerCommand.REMOVE.value],
+            help=f"One of: {SecretsManagerCommand.ADD.value}, {SecretsManagerCommand.REMOVE.value}"
+        )
+        parser.add_argument(
+            '--editable', '-e', action='store_true', required=False,
+            help='Is this share going to be editable or not.'
+        )
+        parser.add_argument(
+            '--app', '-a', type=str, action='store', help='Application Name or UID'
+        )
+        parser.add_argument(
+            '--secret', '-s', type=str, action='append', required=False,
+            help='Record UID(s)'
+        )
+
+    def execute(self, context: KeeperParams, **kwargs) -> None:
+        if not context.vault:
+            raise ValueError("Vault is not initialized.")
+
+        vault = context.vault
+        command = kwargs.get('command')
+        app_uid_or_name = kwargs.get('app')
+        secret_uids = kwargs.get('secret')
+
+        if not command:
+            return self.get_parser().print_help()
+
+        if not app_uid_or_name:
+            raise ValueError('Application UID or name is required. Use --app="uid_or_name".')
+
+        ksm_app = self._find_ksm_application(vault, app_uid_or_name)
+        if not ksm_app:
+            raise ValueError(f'No application found with UID/Name: {app_uid_or_name}')
+        
+        app_uid = ksm_app.record_uid
+
+        if command == SecretsManagerCommand.ADD.value:
+            is_editable = kwargs.get('editable', False)
+            self._handle_add_share(context, app_uid, secret_uids, is_editable)
+        elif command == SecretsManagerCommand.REMOVE.value:
+            SecretsManagerShareCommand.remove_share(vault=vault, app_uid=app_uid, secret_uids=secret_uids)
+
+    def _find_ksm_application(self, vault: vault_online.VaultOnline, app_uid_or_name: str):
+        return next(
+            (r for r in vault.vault_data.records() 
+             if r.record_uid == app_uid_or_name or r.title == app_uid_or_name), 
+            None
+        )
+
+    def _handle_add_share(self, context: KeeperParams, app_uid: str, secret_uids: list[str], is_editable: bool) -> None:
+        if not context.vault:
+            raise ValueError("Vault is not initialized.")
+            
+        master_key = context.vault.vault_data.get_record_key(record_uid=app_uid)
+        if not master_key:
+            raise ValueError(f"Could not retrieve master key for application {app_uid}")
+
+        success = SecretsManagerShareCommand.share_secret(
+            vault=context.vault, 
+            app_uid=app_uid, 
+            secret_uids=secret_uids, 
+            master_key=master_key, 
+            is_editable=is_editable
+        )
+
+        if success:
+            context.vault.sync_down()
+            SecretsManagerAppCommand.update_shares_user_permissions(context=context, uid=app_uid, removed=False)
+
+    @staticmethod
+    def share_secret(vault: vault_online.VaultOnline, app_uid: str, master_key: bytes, 
+                    secret_uids: list[str], is_editable: bool = False) -> bool:
+        if not secret_uids:
+            logger.warning("No secret UIDs provided for sharing.")
+            return False
+
+        app_shares = []
+        added_secret_info = []
+
+        for secret_uid in secret_uids:
+            share_info = SecretsManagerShareCommand._process_secret(
+                vault, secret_uid, master_key, is_editable
+            )
+            
+            if share_info:
+                app_shares.append(share_info['app_share'])
+                added_secret_info.append(share_info['secret_info'])
+
+        if not added_secret_info:
+            logger.warning("No valid secrets found to share.")
+            return False
+
+        return SecretsManagerShareCommand._send_share_request(
+            vault, app_uid, app_shares, added_secret_info, is_editable
+        )
+
+    @staticmethod
+    def _process_secret(vault: vault_online.VaultOnline, secret_uid: str, 
+                              master_key: bytes, is_editable: bool) -> Optional[dict]:
+        is_record = secret_uid in vault.vault_data._records
+        is_shared_folder = secret_uid in vault.vault_data._shared_folders
+
+        if is_record:
+            share_key_decrypted = vault.vault_data.get_record_key(record_uid=secret_uid)
+            share_type = ApplicationShareType.SHARE_TYPE_RECORD
+            secret_type_name = 'Record'
+        elif is_shared_folder:
+            share_key_decrypted = vault.vault_data.get_shared_folder_key(shared_folder_uid=secret_uid)
+            share_type = ApplicationShareType.SHARE_TYPE_FOLDER
+            secret_type_name = 'Shared Folder'
+        else:
+            logger.error(
+                f"UID='{secret_uid}' is not a Record nor Shared Folder. "
+                "Only individual records or Shared Folders can be added to the application. "
+                "Make sure your local cache is up to date by running 'sync-down' command and trying again."
+            )
+            return None
+
+        if not share_key_decrypted:
+            logger.error(f"Could not retrieve key for secret {secret_uid}")
+            return None
+
+        app_share = AppShareAdd()
+        app_share.secretUid = utils.base64_url_decode(secret_uid)
+        app_share.shareType = share_type
+        app_share.encryptedSecretKey = crypto.encrypt_aes_v2(share_key_decrypted, master_key)
+        app_share.editable = is_editable
+
+        return {
+            'app_share': app_share,
+            'secret_info': (secret_uid, secret_type_name)
+        }
+
+    @staticmethod
+    def _send_share_request(vault: vault_online.VaultOnline, app_uid: str, 
+                          app_shares: list, added_secret_info: list, is_editable: bool) -> bool:
+        """Send the share request to the server."""
+        request = AddAppSharesRequest()
+        request.appRecordUid = utils.base64_url_decode(app_uid)
+        request.shares.extend(app_shares)
+
+        try:
+            vault.keeper_auth.execute_auth_rest(rest_endpoint=SHARE_ADD_URL, request=request)
+            
+            logger.info(f'\nSuccessfully added secrets to app uid={app_uid}, editable={is_editable}:')
+            for secret_uid, secret_type in added_secret_info:
+                logger.info(f'{secret_uid} \t{secret_type}')
+            logger.info('')
+            return True
+            
+        except base.errors.KeeperApiError as kae:
+            if kae.message == 'Duplicate share, already added':
+                logger.error(
+                    "One of the secret UIDs is already shared to this application. "
+                    "Please remove already shared UIDs from your command and try again."
+                )
+            else:
+                logger.error(f"Failed to share secrets: {kae}")
+            return False
+
+    @staticmethod
+    def remove_share(vault: vault_online.VaultOnline, app_uid: str, secret_uids: list[str]) -> None:
+        """Remove shares from a KSM application."""
+        if not secret_uids:
+            logger.warning("No secret UIDs provided for removal.")
+            return
+
+        request = RemoveAppSharesRequest()
+        request.appRecordUid = utils.base64_url_decode(app_uid)
+        request.shares.extend(utils.base64_url_decode(uid) for uid in secret_uids)
+        
+        try:
+            vault.keeper_auth.execute_auth_rest(rest_endpoint=SHARE_REMOVE_URL, request=request)
+            logger.info("Shared secrets were successfully removed from the application\n")
+        except Exception as e:
+            logger.error(f"Failed to remove shared secrets: {e}")
+            raise
