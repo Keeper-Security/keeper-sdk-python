@@ -24,6 +24,8 @@ CLIENT_ADD_URL = 'vault/app_client_add'
 CLIENT_REMOVE_URL = 'vault/app_client_remove'
 SHARE_ADD_URL = 'vault/app_share_add'
 SHARE_REMOVE_URL = 'vault/app_share_remove'
+RECORD = 'Record'
+SHARED_FOLDER = 'Shared Folder'
 
 
 class SecretsManagerCommand(Enum):
@@ -235,9 +237,9 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
         for share in shared_secrets:
             uid_str = utils.base64_url_encode(share.secretUid)
             share_type = ApplicationShareType.Name(share.shareType)
-            if share_type == 'SHARE_TYPE_RECORD':
+            if share_type == ApplicationShareType.SHARE_TYPE_RECORD:
                 shared_recs.append(uid_str)
-            elif share_type == 'SHARE_TYPE_FOLDER':
+            elif share_type == ApplicationShareType.SHARE_TYPE_FOLDER:
                 shared_folders.append(uid_str)
         
         if shared_recs:
@@ -775,7 +777,7 @@ class SecretsManagerClientCommand(base.ArgparseCommand):
         if found_clients_count == 0:
             logger.warning('No Client Devices found with given name or ID\n')
             return
-        elif not force:
+        if not force:
             uc = prompt_utils.user_choice(f'Are you sure you want to delete {found_clients_count} matching client(s) from this application?',
                              'yn', default='n')
             if uc.lower() != 'y':
@@ -908,11 +910,11 @@ class SecretsManagerShareCommand(base.ArgparseCommand):
         if is_record:
             share_key_decrypted = vault.vault_data.get_record_key(record_uid=secret_uid)
             share_type = ApplicationShareType.SHARE_TYPE_RECORD
-            secret_type_name = 'Record'
+            secret_type_name = RECORD
         elif is_shared_folder:
             share_key_decrypted = vault.vault_data.get_shared_folder_key(shared_folder_uid=secret_uid)
             share_type = ApplicationShareType.SHARE_TYPE_FOLDER
-            secret_type_name = 'Shared Folder'
+            secret_type_name = SHARED_FOLDER
         else:
             logger.error(
                 f"UID='{secret_uid}' is not a Record nor Shared Folder. "
