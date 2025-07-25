@@ -810,14 +810,14 @@ class SecretsManagerShareCommand(base.ArgparseCommand):
         )
         parser.add_argument(
             '--editable', '-e', action='store_true', required=False,
-            help='Is this share going to be editable or not.'
+            help='Is this share going to be editable or not'
         )
         parser.add_argument(
             '--app', '-a', type=str, action='store', help='Application Name or UID'
         )
         parser.add_argument(
-            '--secret', '-s', type=str, action='append', required=False,
-            help='Record UID(s)'
+            '--secret', '-s', type=str, required=False,
+            help='Record UID(s) - space separated (e.g., "uid1 uid2 uid3")'
         )
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
@@ -827,7 +827,10 @@ class SecretsManagerShareCommand(base.ArgparseCommand):
         vault = context.vault
         command = kwargs.get('command')
         app_uid_or_name = kwargs.get('app')
-        secret_uids = kwargs.get('secret')
+        secret_uids_str = kwargs.get('secret')
+        secret_uids = []
+        if secret_uids_str:
+            secret_uids = [uid.strip() for uid in secret_uids_str.split() if uid.strip()]
 
         if not command:
             return self.get_parser().print_help()
@@ -952,7 +955,6 @@ class SecretsManagerShareCommand(base.ArgparseCommand):
             logger.info(f'\nSuccessfully added secrets to app uid={app_uid}, editable={is_editable}:')
             for secret_uid, secret_type in added_secret_info:
                 logger.info(f'{secret_uid} \t{secret_type}')
-            logger.info('')
             return True
             
         except base.errors.KeeperApiError as kae:
@@ -976,9 +978,5 @@ class SecretsManagerShareCommand(base.ArgparseCommand):
         request.appRecordUid = utils.base64_url_decode(app_uid)
         request.shares.extend(utils.base64_url_decode(uid) for uid in secret_uids)
         
-        try:
-            vault.keeper_auth.execute_auth_rest(rest_endpoint=SHARE_REMOVE_URL, request=request)
-            logger.info("Shared secrets were successfully removed from the application\n")
-        except Exception as e:
-            logger.error(f"Failed to remove shared secrets: {e}")
-            raise
+        vault.keeper_auth.execute_auth_rest(rest_endpoint=SHARE_REMOVE_URL, request=request)
+        logger.info("Shared secrets were successfully removed from the application\n")
