@@ -496,6 +496,9 @@ class SecretsManagerClientCommand(base.ArgparseCommand):
                 SecretsManagerClientCommand.remove_client(vault=vault, uid=uid, client_names_and_ids=client_names_or_ids, force=force)
 
             return
+        else:
+            raise base.CommandError(f"Unknown command '{command}'. Available commands: {SecretsManagerCommand.ADD.value}, {SecretsManagerCommand.REMOVE.value}")
+
     
     @staticmethod
     def add_client(
@@ -849,6 +852,8 @@ class SecretsManagerShareCommand(base.ArgparseCommand):
             self._handle_add_share(context, app_uid, secret_uids, is_editable)
         elif command == SecretsManagerCommand.REMOVE.value:
             SecretsManagerShareCommand.remove_share(vault=vault, app_uid=app_uid, secret_uids=secret_uids)
+        else:
+            raise base.CommandError(f"Unknown command '{command}'. Available commands: {SecretsManagerCommand.ADD.value}, {SecretsManagerCommand.REMOVE.value}")
 
     def _find_ksm_application(self, vault: vault_online.VaultOnline, app_uid_or_name: str):
         return next(
