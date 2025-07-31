@@ -12,13 +12,17 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
 from keepersdk.vault import (record_types, typed_field_utils, vault_record, attachment, record_facades,
-                             record_management, vault_online, vault_data, vault_types, vault_utils)
+                             record_management, vault_online, vault_data, vault_types, vault_utils, vault_extensions)
 from keepersdk import crypto, generator
 
 from . import base
 from .. import prompt_utils, api, constants
-from ..helpers import folder_utils, record_utils
+from ..helpers import folder_utils, record_utils, share_utils, timeout_utils
 from ..params import KeeperParams
+
+
+logger = api.get_logger()
+
 
 @dataclasses.dataclass(frozen=True)
 class ParsedFieldValue:
@@ -126,15 +130,13 @@ $JSON:<JSON TEXT>       any object         Sets a field value as JSON
 class RecordEditMixin(typed_field_utils.TypedFieldMixin):
     def __init__(self) -> None:
         self.warnings: List[str] = []
-        self.logger = api.get_logger()
 
     def on_warning(self, message: str) -> None:
         if message:
             self.warnings.append(message)
 
     def on_info(self, message):
-        if self.logger:
-            self.logger.info(message)
+        logger.info(message)
 
     @staticmethod
     def parse_field(field: str) -> ParsedFieldValue:
@@ -619,6 +621,10 @@ class RecordAddCommand(base.ArgparseCommand, RecordEditMixin):
                         help='folder name or UID to store record')
     parser.add_argument('fields', nargs='*', type=str,
                         help='load record type data from strings with dot notation')
+    parser.add_argument('--self-destruct', dest='self_destruct', action='store',
+                        metavar='<NUMBER>[(m)inutes|(h)ours|(d)ays]',
+                        help='Time period record share URL is valid. The record will be deleted in your vault in 5 minutes since open')
+
 
     def __init__(self):
         super().__init__(RecordAddCommand.parser)
@@ -682,7 +688,7 @@ class RecordAddCommand(base.ArgparseCommand, RecordEditMixin):
         ignore_warnings = kwargs.get('force') is True
         if len(self.warnings) > 0:
             for warning in self.warnings:
-                api.get_logger().warning(warning)
+                logger.warning(warning)
             if not ignore_warnings:
                 return
         self.warnings.clear()
@@ -691,13 +697,23 @@ class RecordAddCommand(base.ArgparseCommand, RecordEditMixin):
             self.upload_attachments(context.vault, record, add_attachments, not ignore_warnings)
             if len(self.warnings) > 0:
                 for warning in self.warnings:
-                    api.get_logger().warning(warning)
+                    logger.warning(warning)
                 if not ignore_warnings:
                     return
 
+        self_destruct = kwargs.get('self_destruct')
+        
         record_management.add_record_to_folder(context.vault, record, folder.folder_uid)
         context.environment_variables[constants.LAST_RECORD_UID] = record.record_uid
-        return record.record_uid
+        if not self_destruct:
+            return record.record_uid
+        else:
+            expiration_period = None
+            expiration_period = timeout_utils.parse_timeout(self_destruct)
+            if expiration_period.total_seconds() > 182 * 24 * 60 * 60:
+                raise base.CommandError('URL expiration period cannot be greater than 6 months.')
+            url = record_utils.process_external_share(context=context, expiration_period=expiration_period, record=record)
+            return url
 
 class RecordUpdateCommand(base.ArgparseCommand, RecordEditMixin):
     parser = argparse.ArgumentParser(prog='record-update', description='Update a record')
@@ -778,7 +794,7 @@ class RecordUpdateCommand(base.ArgparseCommand, RecordEditMixin):
         ignore_warnings = kwargs.get('force') is True
         if len(self.warnings) > 0:
             for warning in self.warnings:
-                api.get_logger().warning(warning)
+                logger.warning(warning)
             if not ignore_warnings:
                 return
         self.warnings.clear()
@@ -788,7 +804,7 @@ class RecordUpdateCommand(base.ArgparseCommand, RecordEditMixin):
             self.delete_attachments(context.vault.vault_data, record, names)
             if len(self.warnings) > 0:
                 for warning in self.warnings:
-                    api.get_logger().warning(warning)
+                    logger.warning(warning)
                 if not ignore_warnings:
                     return
             self.warnings.clear()
@@ -797,7 +813,7 @@ class RecordUpdateCommand(base.ArgparseCommand, RecordEditMixin):
             self.upload_attachments(context.vault, record, add_attachments, not ignore_warnings)
             if len(self.warnings) > 0:
                 for warning in self.warnings:
-                    api.get_logger().warning(warning)
+                    logger.warning(warning)
                 if not ignore_warnings:
                     return
 
@@ -863,7 +879,7 @@ class RecordDeleteAttachmentCommand(base.ArgparseCommand):
                     typed_field.value = [x for x in typed_field.value if x not in deleted_files]
 
         if len(deleted_files) == 0:
-            api.get_logger().info('Attachment(s) not found')
+            logger.info('Attachment(s) not found')
             return
 
         record_management.update_record(context.vault, record)
@@ -1026,3 +1042,604 @@ class RecordDeleteCommand(base.ArgparseCommand):
             confirm=confirm_fn
         )
 
+
+class RecordGetCommand(base.ArgparseCommand):
+    """Command to get details of Records, Folders, Teams by UID or title."""
+
+    def __init__(self):
+        self.parser = argparse.ArgumentParser(
+            prog='get',
+            description='Get the details of a Record/Folder/Team by UID or title'
+        )
+        RecordGetCommand.add_arguments_to_parser(self.parser)
+        super().__init__(self.parser)
+
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
+        parser.add_argument(
+            '--unmask', dest='unmask', action='store_true', 
+            help='display hidden field content'
+        )
+        parser.add_argument(
+            '--legacy', dest='legacy', action='store_true', 
+            help='json output: display typed records as legacy'
+        )
+        parser.add_argument(
+            '--format', dest='format', action='store', 
+            choices=['detail', 'json', 'password', 'fields'],
+            default='detail', 
+            help='output format as detail, json, password, fields'
+        )
+        parser.add_argument(
+            'uid', type=str, action='store', 
+            help='UID or title to search for'
+        )
+
+    def execute(self, context: KeeperParams, **kwargs):
+        """Execute the get command based on the provided parameters."""
+        self._validate_context(context)
+        
+        uid = kwargs.get('uid')
+        output_format = kwargs.get('format', 'detail')
+        unmask = kwargs.get('unmask', False)
+        
+        if not uid:
+            raise base.CommandError('UID parameter is required')
+        
+        target_object = self._find_target_object(context.vault, uid)
+        if not target_object:
+            raise base.CommandError('The given UID is not a valid Keeper Object')
+        
+        self._display_object(context.vault, target_object, output_format, unmask)
+
+    def _validate_context(self, context: KeeperParams):
+        """Validate that the vault is properly initialized."""
+        if not context.vault:
+            raise ValueError("Vault is not initialized.")
+
+    def _find_target_object(self, vault: vault_data.VaultData, uid_or_title: str):
+        """Find a Keeper object (record, folder, shared folder, or team) by UID or title."""
+
+        record = self._find_record(vault, uid_or_title)
+        if record:
+            return ('record', record)
+        
+        shared_folder = self._find_shared_folder(vault, uid_or_title)
+        if shared_folder:
+            return ('shared_folder', shared_folder)
+        
+        folder = self._find_folder(vault, uid_or_title)
+        if folder:
+            return ('folder', folder)
+        
+        team = self._find_team(vault, uid_or_title)
+        if team:
+            return ('team', team)
+        
+        return None
+
+    def _find_record(self, vault: vault_data.VaultData, uid_or_title: str):
+        """Find a record by UID or title."""
+        return next(
+            (r for r in vault.vault_data.records() 
+             if r.record_uid == uid_or_title or r.title == uid_or_title), 
+            None
+        )
+
+    def _find_shared_folder(self, vault: vault_data.VaultData, uid_or_title: str):
+        """Find a shared folder by UID or name."""
+        return next(
+            (f for f in vault.vault_data.shared_folders() 
+             if f.shared_folder_uid == uid_or_title or f.name == uid_or_title), 
+            None
+        )
+    
+    def _find_folder(self, vault: vault_data.VaultData, uid_or_title: str):
+        """Find a folder by UID or name."""
+        return next(
+            (f for f in vault.vault_data.folders() 
+             if f.folder_uid == uid_or_title or f.name == uid_or_title), 
+            None
+        )
+    
+    def _find_team(self, vault: vault_data.VaultData, uid_or_title: str):
+        """Find a team by UID or name."""
+        return next(
+            (t for t in vault.vault_data.teams() 
+             if t.team_uid == uid_or_title or t.name == uid_or_title), 
+            None
+        )
+
+    def _display_object(self, vault: vault_data.VaultData, target_object, output_format: str, unmask: bool):
+        """Display the target object in the specified format."""
+        object_type, object_data = target_object
+        
+        if object_type == 'record':
+            self._display_record(vault, object_data, output_format, unmask)
+        elif object_type == 'shared_folder':
+            self._display_shared_folder(vault, object_data, output_format)
+        elif object_type == 'folder':
+            self._display_folder(vault, object_data, output_format)
+        elif object_type == 'team':
+            self._display_team(vault, object_data, output_format)
+
+    def _display_record(self, vault: vault_data.VaultData, record, output_format: str, unmask: bool):
+        """Display a record in the specified format."""
+        if output_format == 'json':
+            self._display_record_json(vault, record.record_uid)
+        elif output_format == 'password':
+            self._display_record_password(vault, record.record_uid)
+        elif output_format == 'fields':
+            self._display_record_fields(vault, record.record_uid, unmask)
+        else:  # detail format
+            self._display_record_detail(vault, record.record_uid, unmask)
+
+    def _display_shared_folder(self, vault: vault_data.VaultData, shared_folder, output_format: str):
+        """Display a shared folder in the specified format."""
+        if output_format == 'json':
+            self._display_shared_folder_json(vault, shared_folder.shared_folder_uid)
+        else:  # detail format
+            self._display_shared_folder_detail(vault, shared_folder.shared_folder_uid)
+
+    def _display_folder(self, vault: vault_data.VaultData, folder, output_format: str):
+        """Display a folder in the specified format."""
+        if output_format == 'json':
+            self._display_folder_json(vault, folder.folder_uid)
+        else:  # detail format
+            self._display_folder_detail(vault, folder.folder_uid)
+
+    def _display_team(self, vault: vault_data.VaultData, team, output_format: str):
+        """Display a team in the specified format."""
+        if output_format == 'json':
+            self._display_team_json(vault, team.team_uid)
+        else:  # detail format
+            self._display_team_detail(vault, team.team_uid)
+    
+    def _display_record_json(self, vault: vault_data.VaultData, uid: str):
+        """Display record information in JSON format."""
+        record = vault.vault_data.get_record(record_uid=uid)
+        record_data = vault.vault_data.load_record(record_uid=uid)
+        
+        output = self._build_record_json_output(record, record_data, uid)
+        
+        self._add_share_info_to_json(vault, uid, output)
+        
+        logger.info(json.dumps(output, indent=2))
+
+    def _build_record_json_output(self, record, record_data, uid: str):
+        """Build the JSON output structure for a record."""
+        output = {
+            'Record UID:': uid,
+            'Type': record.record_type,
+            'Title:': record.title,
+        }
+        
+        if isinstance(record_data, vault_record.PasswordRecord):
+            self._add_password_record_json_fields(record_data, output)
+        elif isinstance(record_data, vault_record.TypedRecord):
+            self._add_typed_record_json_fields(record_data, output)
+        elif isinstance(record_data, vault_record.FileRecord):
+            self._add_file_record_json_fields(record_data, output)
+        else:
+            raise ValueError('Record data could not be displayed. Record is of unsupported type for this command(eg Application record)')
+
+        output['Last Modified:'] = record_data.client_time_modified
+        output['Version:'] = record.version
+        output['Revision'] = record.revision
+        
+        return output
+
+    def _add_password_record_json_fields(self, record_data: vault_record.PasswordRecord, output: dict):
+        """Add password record specific fields to JSON output."""
+        output['Notes:'] = record_data.notes
+        output['$login:'] = record_data.login
+        output['$password:'] = record_data.password
+        output['$link:'] = record_data.link
+
+        if record_data.totp:
+            output['Totp:'] = record_data.totp
+        
+        if record_data.attachments:
+            output['Attachments:'] = [{
+                'Id': a.get('id'),
+                'Name': a.get('name'),
+                'Size': a.get('size')
+            } for a in record_data.attachments]
+        
+        if record_data.custom:
+            output['Custom fields:'] = [vault_extensions.extract_typed_field(field) for field in record_data.custom]
+
+    def _add_typed_record_json_fields(self, record_data: vault_record.TypedRecord, output: dict):
+        """Add typed record specific fields to JSON output."""
+        output['Notes:'] = record_data.notes
+        output['Fields:'] = [vault_extensions.extract_typed_field(field) for field in record_data.fields]
+        output['Custom:'] = [vault_extensions.extract_typed_field(field) for field in record_data.custom]
+
+    def _add_file_record_json_fields(self, record_data: vault_record.FileRecord, output: dict):
+        """Add file record specific fields to JSON output."""
+        output['Name:'] = record_data.file_name
+        output['MIME Type:'] = record_data.mime_type
+        output['Size:'] = record_data.size
+
+    def _add_share_info_to_json(self, vault: vault_data.VaultData, uid: str, output: dict):
+        """Add share information to JSON output."""
+        share_infos = share_utils.get_record_shares(vault=vault, record_uids=[uid])
+        if share_infos and len(share_infos) > 0:
+            share_info = share_infos[0]
+            shares = share_info.get('shares', {})
+            record_shares = shares.get('user_permissions')
+            folder_shares = shares.get('shared_folder_permissions')
+
+            if record_shares:
+                output['User Shares:'] = record_shares
+            if folder_shares:
+                output['Shared Folders:'] = folder_shares
+    
+    def _display_shared_folder_json(self, vault: vault_data.VaultData, uid: str):
+        """Display shared folder information in JSON format."""
+        shared_folder = vault.vault_data.load_shared_folder(shared_folder_uid=uid)
+        output = {
+            'Shared Folder UID:': uid,
+            'Name:': shared_folder.name,
+            'Default Manage Records:': shared_folder.default_manage_records,
+            'Default Manage Users:': shared_folder.default_manage_users,
+            'Default Can Edit:': shared_folder.default_can_edit,
+            'Default Can Share:': shared_folder.default_can_share
+        }
+        
+        if len(shared_folder.record_permissions) > 0:
+            output['Record Permissions:'] = [{
+                'record_uid': r.record_uid,
+                'can_edit': r.can_edit,
+                'can_share': r.can_share
+            } for r in shared_folder.record_permissions]
+            
+        if len(shared_folder.user_permissions) > 0:
+            output['User Permissions:'] = [{
+                'user_uid': u.user_uid,
+                'name': u.name,
+                'user_type': u.user_type,
+                'manage_records': u.manage_records,
+                'manage_users': u.manage_users
+            } for u in shared_folder.user_permissions]
+        
+        logger.info(json.dumps(output, indent=2))
+    
+    def _display_folder_json(self, vault: vault_data.VaultData, uid: str):
+        """Display folder information in JSON format."""
+        folder = vault.vault_data.get_folder(folder_uid=uid)
+        output = {
+            'Folder UID:': uid,
+            'Parent Folder UID:': folder.parent_uid,
+            'Folder Type:': folder.folder_type,
+            'Name:': folder.name
+        }
+        logger.info(json.dumps(output, indent=2))
+    
+    def _display_team_json(self, vault: vault_data.VaultData, uid: str):
+        """Display team information in JSON format."""
+        team = vault.vault_data.get_team(team_uid=uid)
+        output = {
+            'Team UID:': uid,
+            'Name:': team.name
+        }
+        logger.info(json.dumps(output, indent=2))
+    
+    def _display_record_detail(self, vault: vault_data.VaultData, uid: str, unmask: bool):
+        """Display record information in detailed format."""
+        record = vault.vault_data.get_record(record_uid=uid)
+        record_data = vault.vault_data.load_record(record_uid=uid)
+        
+        self._display_record_header(record, uid)
+        
+        if isinstance(record_data, vault_record.PasswordRecord):
+            self._display_password_record_detail(record_data, unmask)
+        elif isinstance(record_data, vault_record.TypedRecord):
+            self._display_typed_record_detail(record_data, unmask)
+        elif isinstance(record_data, vault_record.FileRecord):
+            self._display_file_record_detail(record_data)
+        
+        self._display_share_information(vault, uid)
+        self._display_share_admins(vault, uid)
+
+    def _display_record_header(self, record, uid: str):
+        """Display the header information for a record."""
+        logger.info('')
+        logger.info('{0:>20s}: {1:<20s}'.format('UID', uid))
+        logger.info('{0:>20s}: {1:<20s}'.format('Type', record.record_type or ''))
+        if record.title:
+            logger.info('{0:>20s}: {1:<20s}'.format('Title', record.title))
+
+    def _display_password_record_detail(self, record_data: vault_record.PasswordRecord, unmask: bool):
+        """Display password record details."""
+        if record_data.login:
+            logger.info('{0:>20s}: {1:<20s}'.format('Login', record_data.login))
+        if record_data.password:
+            password_display = record_data.password if unmask else '********'
+            logger.info('{0:>20s}: {1:<20s}'.format('Password', password_display))
+        if record_data.link:
+            logger.info('{0:>20s}: {1:<20s}'.format('URL', record_data.link))
+
+        self._display_custom_fields(record_data.custom)
+        self._display_notes(record_data.notes)
+        self._display_attachments(record_data.attachments)
+        self._display_totp(record_data.totp, unmask)
+
+    def _display_typed_record_detail(self, record_data: vault_record.TypedRecord, unmask: bool):
+        """Display typed record details."""
+        # Display typed record fields
+        for field in record_data.fields:
+            if field.value:
+                field_value = field.get_default_value()
+                if self._is_sensitive_field_type(field.type) and not unmask:
+                    field_value = '********'
+                logger.info('{0:>20s}: {1:<20s}'.format(field.type, str(field_value)))
+        
+        # Display custom fields
+        for field in record_data.custom:
+            if field.value:
+                field_value = field.get_default_value()
+                if self._is_sensitive_field_type(field.type) and not unmask:
+                    field_value = '********'
+                logger.info('{0:>20s}: {1:<20s}'.format(field.type, str(field_value)))
+        
+        self._display_notes(record_data.notes)
+
+    def _display_file_record_detail(self, record_data: vault_record.FileRecord):
+        """Display file record details."""
+        logger.info('{0:>20s}: {1:<20s}'.format('File Name', record_data.file_name))
+        logger.info('{0:>20s}: {1:<20s}'.format('MIME Type', record_data.mime_type))
+        logger.info('{0:>20s}: {1:<20s}'.format('Size', str(record_data.size)))
+
+    def _display_custom_fields(self, custom_fields):
+        """Display custom fields."""
+        if custom_fields:
+            for c in custom_fields:
+                logger.info('{0:>20s}: {1:<s}'.format(str(c.name), str(c.value)))
+
+    def _display_notes(self, notes: str):
+        """Display notes with proper formatting."""
+        if notes:
+            lines = notes.split('\n')
+            for i in range(len(lines)):
+                logger.info('{0:>21s} {1}'.format('Notes:' if i == 0 else '', lines[i].strip()))
+
+    def _display_attachments(self, attachments):
+        """Display attachment information."""
+        if attachments:
+            for i in range(len(attachments)):
+                atta = attachments[i]
+                size = atta.size or 0
+                scale = 'b'
+                if size > 0:
+                    if size > 1000:
+                        size = size / 1024
+                        scale = 'Kb'
+                    if size > 1000:
+                        size = size / 1024
+                        scale = 'Mb'
+                    if size > 1000:
+                        size = size / 1024
+                        scale = 'Gb'
+                sz = '{0:.2f}'.format(size).rstrip('0').rstrip('.')
+                logger.info('{0:>21s} {1:<20s} {2:>6s}{3:<2s} {4:>6s}: {5}'.format(
+                    'Attachments:' if i == 0 else '', atta.title or atta.name, sz, scale, 'ID', atta.id))
+
+    def _display_totp(self, totp: str, unmask: bool):
+        """Display TOTP information."""
+        if totp:
+            totp_display = totp if unmask else '********'
+            logger.info('{0:>20s}: {1}'.format('TOTP URL', totp_display))
+            code, remain, _ = record_utils.get_totp_code(totp)
+            if code:
+                logger.info('{0:>20s}: {1:<20s} valid for {2} sec'.format('Two Factor Code', code, remain))
+
+    def _display_share_information(self, vault: vault_data.VaultData, uid: str):
+        """Display share information for a record."""
+        share_infos = share_utils.get_record_shares(vault=vault, record_uids=[uid])
+        if not share_infos or len(share_infos) == 0:
+            return
+            
+        share_info = share_infos[0]
+        shares = share_info.get('shares', {})
+        record_shares = shares.get('user_permissions')
+        folder_shares = shares.get('shared_folder_permissions')
+
+        if record_shares:
+            self._display_user_permissions(record_shares)
+        if folder_shares:
+            self._display_folder_permissions(folder_shares)
+
+    def _display_user_permissions(self, record_shares):
+        """Display user permissions."""
+        logger.info('')
+        logger.info('User Permissions:')
+        for user in record_shares:
+            logger.info('')
+            if 'username' in user:
+                logger.info('User: ' + user['username'])
+            if 'user_uid' in user:
+                logger.info('User UID: ' + user['user_uid'])
+            elif 'accountUid' in user:
+                logger.info('User UID: ' + user['accountUid'])
+            
+            # Handle both possible spellings of sharable/shareable
+            shareable = user.get('sharable') or user.get('shareable', False)
+            
+            logger.info('Shareable: ' + ('Yes' if shareable else 'No'))
+            logger.info('Read-Only: ' + ('Yes' if not shareable else 'No'))
+        logger.info('')
+
+    def _display_folder_permissions(self, folder_shares):
+        """Display folder permissions."""
+        logger.info('')
+        logger.info('Shared Folder Permissions:')
+        for sf in folder_shares:
+            logger.info('')
+            if 'shared_folder_uid' in sf:
+                logger.info('Shared Folder UID: ' + sf['shared_folder_uid'])
+            if 'user_uid' in sf:
+                logger.info('User UID: ' + sf['user_uid'])
+            elif 'accountUid' in sf:
+                logger.info('User UID: ' + sf['accountUid'])
+            
+            if sf.get('manage_users', False) is True:
+                logger.info('Manage Users: True')
+            if sf.get('manage_records', False) is True:
+                logger.info('Manage Records: True')
+            if sf.get('can_edit', False) is True:
+                logger.info('Can Edit: True')
+            if sf.get('can_share', False) is True:
+                logger.info('Can Share: True')
+        logger.info('')
+
+    def _display_share_admins(self, vault: vault_data.VaultData, uid: str):
+        """Display share admins for a record."""
+        admins = record_utils.get_share_admins_for_record(vault=vault, record_uid=uid)
+        if admins:
+            logger.info('')
+            logger.info('Share Admins:')
+            for admin in admins:
+                logger.info(admin)
+        
+    def _display_shared_folder_detail(self, vault: vault_data.VaultData, uid: str):
+        """Display shared folder information in detailed format."""
+        shared_folder = vault.vault_data.load_shared_folder(shared_folder_uid=uid)
+        logger.info('') 
+        logger.info('{0:>25s}: {1:<20s}'.format('Shared Folder UID', shared_folder.shared_folder_uid))
+        logger.info('{0:>25s}: {1}'.format('Name', shared_folder.name))
+        logger.info('{0:>25s}: {1}'.format('Default Manage Records', shared_folder.default_manage_records))
+        logger.info('{0:>25s}: {1}'.format('Default Manage Users', shared_folder.default_manage_users))
+        logger.info('{0:>25s}: {1}'.format('Default Can Edit', shared_folder.default_can_edit))
+        logger.info('{0:>25s}: {1}'.format('Default Can Share', shared_folder.default_can_share))
+
+        if len(shared_folder.record_permissions) > 0:
+            logger.info('')
+            logger.info('{0:>25s}:'.format('Record Permissions'))
+            for r in shared_folder.record_permissions:
+                logger.info('{0:>25s}: {1}'.format(r.record_uid, folder_utils.record_permission_to_string({
+                    'can_edit': r.can_edit,
+                    'can_share': r.can_share
+                })))
+
+        if len(shared_folder.user_permissions) > 0:
+            logger.info('')
+            logger.info('{0:>25s}:'.format('User Permissions'))
+            for u in shared_folder.user_permissions:
+                logger.info('{0:>25s}: {1}'.format(u.name or u.user_uid, folder_utils.user_permission_to_string({
+                    'manage_users': u.manage_users,
+                    'manage_records': u.manage_records
+                })))
+
+        logger.info('')
+    
+    def _display_folder_detail(self, vault: vault_data.VaultData, uid: str):
+        """Display folder information in detailed format."""
+        folder = vault.vault_data.get_folder(folder_uid=uid)
+        logger.info('')
+        logger.info('{0:>20s}: {1:<20s}'.format('Folder UID', folder.folder_uid))
+        logger.info('{0:>20s}: {1:<20s}'.format('Folder Type', folder.folder_type))
+        logger.info('{0:>20s}: {1}'.format('Name', folder.name))
+        if folder.parent_uid:
+            logger.info('{0:>20s}: {1:<20s}'.format('Parent Folder UID', folder.parent_uid))
+        if folder.folder_type == 'shared_folder_folder':
+            logger.info('{0:>20s}: {1:<20s}'.format('Shared Folder UID', folder.folder_scope_uid))
+    
+    def _display_team_detail(self, vault: vault_data.VaultData, uid: str):
+        """Display team information in detailed format."""
+        team = vault.vault_data.get_team(team_uid=uid)
+        logger.info('')
+        logger.info('{0:>20s}: {1:<20s}'.format('Team UID', team.team_uid))
+        logger.info('{0:>20s}: {1}'.format('Name', team.name))
+        logger.info('{0:>20s}: {1}'.format('Restrict Edit', team.restrict_edit))
+        logger.info('{0:>20s}: {1}'.format('Restrict View', team.restrict_view))
+        logger.info('{0:>20s}: {1}'.format('Restrict Share', team.restrict_share))
+        logger.info('')
+    
+    def _display_record_password(self, vault: vault_data.VaultData, uid: str):
+        """Display only the password field of a record."""
+        record_data = vault.vault_data.load_record(record_uid=uid)
+        if isinstance(record_data, vault_record.PasswordRecord):
+            logger.info(record_data.password)
+        elif isinstance(record_data, vault_record.TypedRecord):
+            password_field = record_data.get_typed_field('password')
+            if password_field and password_field.value:
+                logger.info(password_field.get_default_value(str))
+        else:
+            logger.info('No password field found in this record type')
+    
+    def _display_record_fields(self, vault: vault_data.VaultData, uid: str, unmask: bool):
+        """Display record fields in JSON format."""
+        record = vault.vault_data.get_record(record_uid=uid)
+        record_data = vault.vault_data.load_record(record_uid=uid)
+
+        fields = []
+        normalize_titles = {}
+
+        # Get share information
+        share_infos = share_utils.get_record_shares(vault=vault, record_uids=[uid])
+        record_shares = []
+        folder_shares = []
+        if share_infos and len(share_infos) > 0:
+            share_info = share_infos[0]
+            shares = share_info.get('shares', {})
+            record_shares = shares.get('user_permissions', [])
+            folder_shares = shares.get('shared_folder_permissions', [])
+
+        self._add_record_properties_to_fields(record, record_shares, folder_shares, fields, normalize_titles)
+        
+        self._add_typed_fields_to_output(record_data, unmask, fields, normalize_titles)
+        
+        if record_data.notes:
+            field = {
+                'name': 'Notes',
+                'value': record_data.notes,
+            }
+            fields.append(field)
+
+        logger.info(json.dumps(fields, indent=2))
+
+    def _add_record_properties_to_fields(self, record, record_shares, folder_shares, fields, normalize_titles):
+        """Add record properties to the fields list."""
+        record_props = {
+            'title': record.title,
+            'record_uid': record.record_uid,
+            'revision': record.revision,
+            'version': record.version,
+            'shared': True if record_shares or folder_shares else False,
+        }
+        for prop_name, prop_value in record_props.items():
+            normalize_titles[prop_name.lower()] = prop_name
+            key = prop_name
+            field = {
+                'name': key,
+                'value': prop_value,
+            }
+            fields.append(field)
+
+    def _add_typed_fields_to_output(self, record_data, unmask: bool, fields, normalize_titles):
+        """Add typed fields to the output."""
+        for field in record_data.get_typed_fields():
+            key = field.label or field.type
+            if key in normalize_titles:
+                key = normalize_titles[key.lower()]
+            normalize_titles[key.lower()] = key
+            var_value = ''
+            if field.value and (unmask or not self._is_sensitive_field_type(field.type)):
+                var_value = field.get_external_value()
+            elif field.value:
+                var_value = '********'
+
+            field_obj = {
+                'name': key,
+                'value': var_value,
+            }
+            fields.append(field_obj)
+    
+    def _is_sensitive_field_type(self, field_type: str) -> bool:
+        """Check if a field type is considered sensitive and should be masked."""
+        sensitive_types = {
+            'password', 'secret', 'otp', 'privateKey', 'pinCode', 
+            'oneTimeCode', 'keyPair', 'licenseNumber'
+        }
+        return field_type in sensitive_types

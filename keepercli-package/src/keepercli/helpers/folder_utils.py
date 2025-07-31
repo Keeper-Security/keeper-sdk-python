@@ -62,3 +62,29 @@ def try_resolve_path(context: KeeperParams, path: str) -> Tuple[vault_types.Fold
     # The second is the final component of the path we're passed as an argument to this function. It could be a record, or
     # a not-yet-existent directory.
     return folder, path
+
+
+def user_permission_to_string(permission):
+    if isinstance(permission, dict):
+        manage_users = permission.get('manage_users', False)
+        manage_records = permission.get('manage_records', False)
+        if manage_users and manage_records:
+            return 'Can Manage Users & Records'
+        if not manage_users and not manage_records:
+            return 'No Folder Permissions'
+        if manage_users:
+            return 'Can Manage Users'
+        return 'Can Manage Records'
+
+
+def record_permission_to_string(permission):
+    if isinstance(permission, dict):
+        can_edit = permission.get('can_edit', False)
+        can_share = permission.get('can_share', False)
+        if can_edit and can_share:
+            return 'Can Edit & Share'
+        if not can_edit and not can_share:
+            return 'Read Only'
+        if can_edit:
+            return 'Can Edit'
+        return 'Can Share'
