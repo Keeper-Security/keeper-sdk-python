@@ -203,6 +203,10 @@ class PasswordRecord(KeeperRecord):
         for cf in self.custom:
             yield '', cf.name, cf.value
 
+    def get_typed_fields(self) -> List[TypedField]:
+        """Return all typed fields. For PasswordRecord, this returns an empty list as it uses legacy fields."""
+        return []
+
 
 class TypedField(record_types.ITypedField):
     def __init__(self):
@@ -314,6 +318,10 @@ class TypedRecord(KeeperRecord):
             if value:
                 yield field.type, field.label or '', value
 
+    def get_typed_fields(self) -> List[TypedField]:
+        """Return all typed fields (both main fields and custom fields)."""
+        return list(itertools.chain(self.fields, self.custom))
+
 
 class FileRecord(KeeperRecord):
     def __init__(self) -> None:
@@ -338,6 +346,10 @@ class FileRecord(KeeperRecord):
         yield 'file_name', '', self.file_name
         yield 'mime_type', '', self.mime_type
 
+    def get_typed_fields(self) -> List[TypedField]:
+        """Return all typed fields. For FileRecord, this returns an empty list as it uses basic fields."""
+        return []
+
 
 class ApplicationRecord(KeeperRecord):
     def __init__(self) -> None:
@@ -350,3 +362,7 @@ class ApplicationRecord(KeeperRecord):
     def load_record_data(self, data, extra=None):
         self.title = sanitize_str_field_value(data.get('title'))
         self.app_type = sanitize_str_field_value(data.get('type'))
+
+    def get_typed_fields(self) -> List[TypedField]:
+        """Return all typed fields. For ApplicationRecord, this returns an empty list as it uses basic fields."""
+        return []
