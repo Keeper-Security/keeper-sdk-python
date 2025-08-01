@@ -1,10 +1,28 @@
+from base64 import b32decode
+import datetime
 import fnmatch
+import hashlib
+import hmac
 import re
-from typing import Optional, Iterator, List
+from datetime import timedelta
+from typing import Iterator, List, Optional
+from urllib import parse
+from urllib.parse import urlunparse
 
-from keepersdk.vault import vault_record, vault_utils, vault_types
-from . import folder_utils
+from keepersdk import crypto, utils
+from keepersdk.proto.APIRequest_pb2 import AddExternalShareRequest, Device
+from keepersdk.proto.enterprise_pb2 import GetSharingAdminsRequest, GetSharingAdminsResponse
+from keepersdk.vault import vault_online, vault_record, vault_types, vault_utils
+
 from ..params import KeeperParams
+from .. import api
+from . import folder_utils
+
+logger = api.get_logger()
+
+GET_SHARE_ADMINS = 'enterprise/get_sharing_admins'
+EXTERNAL_SHARE_ADD_URL = 'vault/external_share_add'
+KEEPER_SECRETS_MANAGER_CLIENT_ID = 'KEEPER_SECRETS_MANAGER_CLIENT_ID'
 
 
 def try_resolve_single_record(record_name: Optional[str], context: KeeperParams) -> Optional[vault_record.KeeperRecordInfo]:
@@ -23,6 +41,8 @@ def try_resolve_single_record(record_name: Optional[str], context: KeeperParams)
             record_info = context.vault.vault_data.get_record(record_uid)
             if record_info and record_info.title.casefold() == name:
                 return record_info
+    return None
+
 
 def resolve_records(pattern: str, context: KeeperParams, *, recursive: bool=False) -> Iterator[str]:
     assert context.vault is not None
@@ -57,3 +77,86 @@ def resolve_records(pattern: str, context: KeeperParams, *, recursive: bool=Fals
 
 def default_confirm(prompt: str) -> bool:
     return input(f"{prompt} (y/n): ").strip().lower() == 'y'
+
+
+def process_external_share(context: KeeperParams, expiration_period: timedelta, 
+                           record: vault_record.PasswordRecord | vault_record.TypedRecord) -> str:
+    
+    vault = context.vault
+    record_uid = record.record_uid
+    record_key = vault.vault_data.get_record_key(record_uid=record_uid)
+    client_key = utils.generate_aes_key()
+    client_id = crypto.hmac_sha512(client_key, KEEPER_SECRETS_MANAGER_CLIENT_ID.encode())
+    
+    request = AddExternalShareRequest()
+    request.recordUid = utils.base64_url_decode(record_uid)
+    request.encryptedRecordKey = crypto.encrypt_aes_v2(record_key, client_key)
+    request.clientId = client_id
+    request.accessExpireOn = utils.current_milli_time() + int(expiration_period.total_seconds() * 1000)
+    request.isSelfDestruct = True
+    
+    vault.keeper_auth.execute_auth_rest(
+        rest_endpoint=EXTERNAL_SHARE_ADD_URL, 
+        request=request, 
+        response_type=Device
+    )
+    
+    url = urlunparse((
+        'https', 
+        context.server, 
+        '/vault/share', 
+        None, 
+        None, 
+        utils.base64_url_encode(client_key)
+    ))
+    return url
+
+
+def get_totp_code(url, offset=None):
+    comp = parse.urlparse(url)
+    if comp.scheme == 'otpauth':
+        params = dict(parse.parse_qsl(comp.query))
+        
+        secret = params.get('secret')
+        algorithm = params.get('algorithm', 'SHA1')
+        digits = int(params['digits']) if 'digits' in params else 6
+        period = int(params['period']) if 'period' in params else 30
+        if secret:
+            tm_base = int(datetime.datetime.now().timestamp())
+            tm = tm_base / period
+            if isinstance(offset, int):
+                tm += offset
+            alg = algorithm.lower()
+            if alg in hashlib.__dict__:
+                reminder = len(secret) % 8
+                if reminder in {2, 4, 5, 7}:
+                    padding = '=' * (8 - reminder)
+                    secret += padding
+                key = bytes(b32decode(secret))
+                msg = int(tm).to_bytes(8, byteorder='big')
+                hash = hashlib.__dict__[alg]
+                hm = hmac.new(key, msg=msg, digestmod=hash)
+                digest = hm.digest()
+                offset = digest[-1] & 0x0f
+                base = bytearray(digest[offset:offset + 4])
+                base[0] = base[0] & 0x7f
+                code_int = int.from_bytes(base, byteorder='big')
+                code = str(code_int % (10 ** digits))
+                if len(code) < digits:
+                    code = code.rjust(digits, '0')
+                return code, period - (tm_base % period), period
+            else:
+                raise Exception(f'Unsupported hash algorithm: {algorithm}')
+
+
+def get_share_admins_for_record(vault: vault_online.VaultOnline, record_uid: str):
+    try:
+        request = GetSharingAdminsRequest()
+        request.recordUid = utils.base64_url_decode(record_uid)
+        response = vault.keeper_auth.execute_auth_rest(rest_endpoint=GET_SHARE_ADMINS, request=request, response_type= GetSharingAdminsResponse)
+        admins = [x.email for x in response.userProfileExts if x.isShareAdminForRequestedObject]
+    except Exception as e:
+        logger.debug(e)
+        return
+
+    return admins
