@@ -1099,10 +1099,6 @@ class RecordGetCommand(base.ArgparseCommand):
 
     def _find_target_object(self, vault: vault_data.VaultData, uid_or_title: str):
         """Find a Keeper object (record, folder, shared folder, or team) by UID or title."""
-
-        record = self._find_record(vault, uid_or_title)
-        if record:
-            return ('record', record)
         
         shared_folder = self._find_shared_folder(vault, uid_or_title)
         if shared_folder:
@@ -1115,6 +1111,10 @@ class RecordGetCommand(base.ArgparseCommand):
         team = self._find_team(vault, uid_or_title)
         if team:
             return ('team', team)
+        
+        record = self._find_record(vault, uid_or_title)
+        if record:
+            return ('record', record)
         
         return None
 
@@ -1165,14 +1165,15 @@ class RecordGetCommand(base.ArgparseCommand):
 
     def _display_record(self, vault: vault_data.VaultData, record, output_format: str, unmask: bool):
         """Display a record in the specified format."""
-        if output_format == 'json':
-            self._display_record_json(vault, record.record_uid)
-        elif output_format == 'password':
-            self._display_record_password(vault, record.record_uid)
-        elif output_format == 'fields':
-            self._display_record_fields(vault, record.record_uid, unmask)
-        else:  # detail format
-            self._display_record_detail(vault, record.record_uid, unmask)
+        record_uid = record.record_uid
+        dispatch = {
+            'json': lambda: self._display_record_json(vault, record_uid),
+            'password': lambda: self._display_record_password(vault, record_uid),
+            'fields': lambda: self._display_record_fields(vault, record_uid, unmask)
+        }
+
+        display_func = dispatch.get(output_format, lambda: self._display_record_detail(vault, record_uid, unmask))
+        display_func()
 
     def _display_shared_folder(self, vault: vault_data.VaultData, shared_folder, output_format: str):
         """Display a shared folder in the specified format."""

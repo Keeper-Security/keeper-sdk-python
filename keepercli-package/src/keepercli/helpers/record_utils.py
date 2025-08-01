@@ -115,19 +115,12 @@ def process_external_share(context: KeeperParams, expiration_period: timedelta,
 def get_totp_code(url, offset=None):
     comp = parse.urlparse(url)
     if comp.scheme == 'otpauth':
-        secret = None
-        algorithm = 'SHA1'
-        digits = 6
-        period = 30
-        for k, v in parse.parse_qsl(comp.query):
-            if k == 'secret':
-                secret = v
-            elif k == 'algorithm':
-                algorithm = v
-            elif k == 'digits':
-                digits = int(v)
-            elif k == 'period':
-                period = int(v)
+        params = dict(parse.parse_qsl(comp.query))
+        
+        secret = params.get('secret')
+        algorithm = params.get('algorithm', 'SHA1')
+        digits = int(params['digits']) if 'digits' in params else 6
+        period = int(params['period']) if 'period' in params else 30
         if secret:
             tm_base = int(datetime.datetime.now().timestamp())
             tm = tm_base / period
