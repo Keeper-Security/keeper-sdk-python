@@ -39,6 +39,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('record-add', record_edit.RecordAddCommand(), base.CommandScope.Vault, 'ra')
         commands.register_command('record-update', record_edit.RecordUpdateCommand(), base.CommandScope.Vault, 'ru')
         commands.register_command('rm', record_edit.RecordDeleteCommand(), base.CommandScope.Vault)
+        commands.register_command('get', record_edit.RecordGetCommand(), base.CommandScope.Vault)
         commands.register_command('delete-attachment', record_edit.RecordDeleteAttachmentCommand(), base.CommandScope.Vault)
         commands.register_command('download-attachment', record_edit.RecordDownloadAttachmentCommand(), base.CommandScope.Vault, 'da')
         commands.register_command('upload-attachment', record_edit.RecordUploadAttachmentCommand(), base.CommandScope.Vault, 'ua')
