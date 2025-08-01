@@ -713,7 +713,10 @@ class RecordAddCommand(base.ArgparseCommand, RecordEditMixin):
             if expiration_period.total_seconds() > 182 * 24 * 60 * 60:
                 raise base.CommandError('URL expiration period cannot be greater than 6 months.')
             url = record_utils.process_external_share(context=context, expiration_period=expiration_period, record=record)
-            return url
+            expiration_date = datetime.datetime.now() + expiration_period
+            formatted_date = expiration_date.strftime('%d/%m/%Y %H:%M:%S')
+            message = f'Record self-destructs on {formatted_date} or after being viewed once. Once the link is opened the recipient will have 5 minutes to view the record.\n{url}'
+            return message
 
 class RecordUpdateCommand(base.ArgparseCommand, RecordEditMixin):
     parser = argparse.ArgumentParser(prog='record-update', description='Update a record')
