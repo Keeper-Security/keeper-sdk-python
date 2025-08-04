@@ -1623,15 +1623,15 @@ class RecordGetCommand(base.ArgparseCommand):
 
     def _add_typed_fields_to_output(self, record_data, unmask: bool, fields, normalize_titles):
         """Add typed fields to the output."""
-        for field in record_data.get_typed_fields():
-            key = field.label or field.type
+        for field_type, field_label, field_value in record_data.enumerate_fields():
+            key = field_label or field_type
             if key in normalize_titles:
                 key = normalize_titles[key.lower()]
             normalize_titles[key.lower()] = key
-            var_value = ''
-            if field.value and (unmask or not self._is_sensitive_field_type(field.type)):
-                var_value = field.get_external_value()
-            elif field.value:
+            
+            if unmask or not self._is_sensitive_field_type(field_type):
+                var_value = field_value
+            else:
                 var_value = '********'
 
             field_obj = {
