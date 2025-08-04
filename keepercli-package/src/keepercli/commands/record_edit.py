@@ -1074,8 +1074,20 @@ class RecordGetCommand(base.ArgparseCommand):
             help='output format as detail, json, password, fields'
         )
         parser.add_argument(
-            'uid', type=str, action='store', 
-            help='UID or title to search for'
+            '-f', '--folder', dest='folder', action='store',
+            help='folder UID or title to search for'
+        )
+        parser.add_argument(
+            '-t', '--team', dest='team', action='store',
+            help='team UID or title to search for'
+        )
+        parser.add_argument(
+            '-r', '--record', dest='record', action='store',
+            help='record UID or title to search for'
+        )
+        parser.add_argument(
+            'uid', type=str, action='store', nargs='?', default=None,
+            help='UID or title to search for (optional when using -f, -t, or -r flags)'
         )
 
     def execute(self, context: KeeperParams, **kwargs):
@@ -1085,11 +1097,37 @@ class RecordGetCommand(base.ArgparseCommand):
         uid = kwargs.get('uid')
         output_format = kwargs.get('format', 'detail')
         unmask = kwargs.get('unmask', False)
+        folder = kwargs.get('folder')
+        team = kwargs.get('team')
+        record = kwargs.get('record')
         
-        if not uid:
-            raise base.CommandError('UID parameter is required')
-        
-        target_object = self._find_target_object(context.vault, uid)
+        if folder:
+            shared_folder = self._find_shared_folder(context.vault, folder)
+            if shared_folder:
+                target_object = ('shared_folder', shared_folder)
+            else:
+                folder = self._find_folder(context.vault, folder)
+                if folder:
+                    target_object = ('folder', folder)
+                else:
+                    raise base.CommandError('The given UID or title is not a valid folder')
+        elif team:
+            team = self._find_team(context.vault, team)
+            if team:
+                target_object = ('team', team)
+            else:
+                raise base.CommandError('The given UID or title is not a valid team')
+        elif record:
+            record = self._find_record(context.vault, record)
+            if record:
+                target_object = ('record', record)
+            else:
+                raise base.CommandError('The given UID or title is not a valid record')
+        elif uid:
+            target_object = self._find_target_object(context.vault, uid)
+        else:
+            raise base.CommandError('Either UID parameter or one of -f, -t, -r flags is required')
+
         if not target_object:
             raise base.CommandError('The given UID is not a valid Keeper Object')
         
