@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import re
 from datetime import timedelta
+from token import OP
 from typing import Iterator, List, Optional
 from urllib import parse
 from urllib.parse import urlunparse
@@ -14,6 +15,7 @@ from keepersdk.proto.APIRequest_pb2 import AddExternalShareRequest, Device
 from keepersdk.proto.enterprise_pb2 import GetSharingAdminsRequest, GetSharingAdminsResponse
 from keepersdk.vault import vault_online, vault_record, vault_types, vault_utils
 
+from ..commands.base import CommandError
 from ..params import KeeperParams
 from .. import api
 from . import folder_utils
@@ -80,7 +82,9 @@ def default_confirm(prompt: str) -> bool:
 
 
 def process_external_share(context: KeeperParams, expiration_period: timedelta, 
-                           record: vault_record.PasswordRecord | vault_record.TypedRecord) -> str:
+                           record: vault_record.PasswordRecord | vault_record.TypedRecord,
+                           name: Optional[str] = None, is_editable: bool = False,
+                           is_self_destruct: Optional[bool] = True) -> str:
     
     vault = context.vault
     record_uid = record.record_uid
@@ -93,8 +97,14 @@ def process_external_share(context: KeeperParams, expiration_period: timedelta,
     request.encryptedRecordKey = crypto.encrypt_aes_v2(record_key, client_key)
     request.clientId = client_id
     request.accessExpireOn = utils.current_milli_time() + int(expiration_period.total_seconds() * 1000)
-    request.isSelfDestruct = True
+
+    if name:
+        request.id = name
     
+    request.isSelfDestruct = is_self_destruct
+    # TODO: uncomment when proto is updated
+    # request.isEditable = is_editable
+
     vault.keeper_auth.execute_auth_rest(
         rest_endpoint=EXTERNAL_SHARE_ADD_URL, 
         request=request, 
@@ -160,3 +170,24 @@ def get_share_admins_for_record(vault: vault_online.VaultOnline, record_uid: str
         return
 
     return admins
+
+
+def resolve_record(context: KeeperParams, name: str) -> str:
+    record_uid = None
+    vault = context.vault
+    if name in vault.vault_data._records:
+        record_uid = name
+    else:
+        rs = folder_utils.try_resolve_path(context, name)
+        if rs is not None:
+            folder, name = rs
+            if folder is not None and name is not None:
+                if folder.records:
+                    for uid in folder.records:
+                        r = vault.vault_data.get_record(record_uid=uid)
+                        if r.title.lower() == name.lower():
+                            record_uid = uid
+                            break
+    if record_uid is None:
+        raise CommandError('one-time-share', f'Record not found: {name}')
+    return record_uid
