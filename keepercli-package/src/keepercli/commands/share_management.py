@@ -38,12 +38,14 @@ class ManagePermission(Enum):
 
 logger = api.get_logger()
 
+TIMESTAMP_MILLISECONDS_FACTOR = 1000
+TRUNCATE_SUFFIX = '...'
 
 def set_expiration_fields(obj, expiration):
     """Set expiration and timerNotificationType fields on proto object if expiration is provided."""
     if isinstance(expiration, int):
         if expiration > 0:
-            obj.expiration = expiration * 1000
+            obj.expiration = expiration * TIMESTAMP_MILLISECONDS_FACTOR
             obj.timerNotificationType = record_pb2.NOTIFY_OWNER
         elif expiration < 0:
             obj.expiration = -1
@@ -1032,6 +1034,7 @@ class OneTimeShareListCommand(base.ArgparseCommand):
         OneTimeShareListCommand.add_arguments_to_parser(self.parser)
         super().__init__(self.parser)
     
+    @staticmethod
     def add_arguments_to_parser(parser: argparse.ArgumentParser):
         parser.add_argument(
             '-R', '--recursive', dest='recursive', action='store_true', 
@@ -1061,7 +1064,7 @@ class OneTimeShareListCommand(base.ArgparseCommand):
             records = [records]
         
         record_uids = self._resolve_record_uids(context, vault, records, kwargs.get('recursive', False))
-        if len(record_uids) == 0:
+        if not record_uids:
             raise base.CommandError('one-time-share', 'No records found')
 
         applications = self._get_applications(vault, record_uids)
@@ -1089,9 +1092,7 @@ class OneTimeShareListCommand(base.ArgparseCommand):
                         if f_uid in vault.vault_data._folders:
                             for uid in folder.records:
                                 rec = vault.vault_data.get_record(record_uid=uid)
-                                if rec.version not in (2, 3):
-                                    continue
-                                if rec.title.lower() == r_name.lower():
+                                if rec and rec.version in (2, 3) and rec.title.lower() == r_name.lower():
                                     record_uid = uid
                                     break
                     else:
@@ -1123,9 +1124,10 @@ class OneTimeShareListCommand(base.ArgparseCommand):
     def _get_applications(self, vault, record_uids: set):
         """Get application info for the given record UIDs."""
         r_uids = list(record_uids)
-        if len(r_uids) >= 1000:
-            logger.info('Trimming result to 1000 records')
-            r_uids = r_uids[:999]
+        MAX_BATCH_SIZE = 1000
+        if len(r_uids) >= MAX_BATCH_SIZE:
+            logger.info('Trimming result to %d records', MAX_BATCH_SIZE)
+            r_uids = r_uids[:MAX_BATCH_SIZE - 1]
         return ksm_management.get_app_info(vault=vault, app_uid=r_uids)
 
     def _build_share_table(self, applications, kwargs):
@@ -1160,20 +1162,26 @@ class OneTimeShareListCommand(base.ArgparseCommand):
             'record_uid': utils.base64_url_encode(app_info.appRecordUid),
             'name': client.id,
             'share_link_id': utils.base64_url_encode(client.clientId),
-            'generated': datetime.datetime.fromtimestamp(client.createdOn / 1000),
-            'expires': datetime.datetime.fromtimestamp(client.accessExpireOn / 1000),
+            'generated': datetime.datetime.fromtimestamp(client.createdOn / TIMESTAMP_MILLISECONDS_FACTOR),
+            'expires': datetime.datetime.fromtimestamp(client.accessExpireOn / TIMESTAMP_MILLISECONDS_FACTOR),
         }
         
+        TRUNCATE_LENGTH = 20
         if output_format == 'table' and not verbose:
-            link['share_link_id'] = utils.base64_url_encode(client.clientId)[:20] + '...'
+            link['share_link_id'] = utils.base64_url_encode(client.clientId)[:TRUNCATE_LENGTH] + TRUNCATE_SUFFIX
         else:
             link['share_link_id'] = utils.base64_url_encode(client.clientId)
 
         if client.firstAccess > 0:
-            link['opened'] = datetime.datetime.fromtimestamp(client.firstAccess / 1000)
-            link['accessed'] = datetime.datetime.fromtimestamp(client.lastAccess / 1000)
+            link['opened'] = datetime.datetime.fromtimestamp(client.firstAccess / TIMESTAMP_MILLISECONDS_FACTOR)
+            link['accessed'] = datetime.datetime.fromtimestamp(client.lastAccess / TIMESTAMP_MILLISECONDS_FACTOR)
 
-        link['status'] = 'Expired' if now > client.accessExpireOn else 'Opened' if client.firstAccess > 0 else 'Generated'
+        if now > client.accessExpireOn:
+            link['status'] = 'Expired'
+        elif client.firstAccess > 0:
+            link['status'] = 'Opened'
+        else:
+            link['status'] = 'Generated'
         
         return link
 
@@ -1198,6 +1206,7 @@ class OneTimeShareCreateCommand(base.ArgparseCommand):
         OneTimeShareCreateCommand.add_arguments_to_parser(self.parser)
         super().__init__(self.parser)
     
+    @staticmethod
     def add_arguments_to_parser(parser: argparse.ArgumentParser):
         parser.add_argument(
             '--output', dest='output', choices=['clipboard', 'stdout'], action='store', 
@@ -1245,8 +1254,9 @@ class OneTimeShareCreateCommand(base.ArgparseCommand):
 
     def _validate_and_parse_expiration(self, period_str):
         """Validate and parse the expiration period."""
-        period = timeout_utils.parse_timeout(period_str)
-        if period.total_seconds() > 182 * 24 * 60 * 60:
+        period = timeout_utils.parse_timeout(period_str)        
+        SIX_MONTHS_IN_SECONDS = 182 * 24 * 60 * 60
+        if period.total_seconds() > SIX_MONTHS_IN_SECONDS:
             raise base.CommandError('one-time-share', 'URL expiration period cannot be greater than 6 months.')
         return period
 
@@ -1304,6 +1314,7 @@ class OneTimeShareRemoveCommand(base.ArgparseCommand):
         OneTimeShareRemoveCommand.add_arguments_to_parser(self.parser)
         super().__init__(self.parser)
     
+    @staticmethod
     def add_arguments_to_parser(parser: argparse.ArgumentParser):
         parser.add_argument(
             'record', nargs='?', type=str, action='store', help='record path or UID'
@@ -1341,46 +1352,51 @@ class OneTimeShareRemoveCommand(base.ArgparseCommand):
 
         self._remove_share(vault, record_uid, client_id, share_name, record_name)
 
-    def _find_client_id(self, applications, share_name: str):
-        """Find the client ID for the given share name."""
-        if share_name.endswith('...'):
-            share_name = share_name[:-3]
-
-        client_id = None
-        client_ids = []
+    def _find_client_id(self, applications, share_name: str) -> Optional[bytes]:
+        
+        cleaned_name = share_name[:-len(TRUNCATE_SUFFIX)] if share_name.endswith(TRUNCATE_SUFFIX) else share_name
+        cleaned_name_lower = cleaned_name.lower()
+        
+        partial_matches = []
         
         for app_info in applications:
-            if client_id:
-                break
             if not app_info.isExternalShare:
                 continue
                 
             for client in app_info.clients:
-                if client.id.lower() == share_name.lower():
-                    client_id = client.clientId
-                    break
-                    
-                enc_client_id = utils.base64_url_encode(client.clientId)
-                if enc_client_id == share_name:
-                    client_id = client.clientId
-                    break
-                    
-                if enc_client_id.startswith(share_name):
-                    client_ids.append(client.clientId)
+                if client.id.lower() == cleaned_name_lower:
+                    return client.clientId
+                
+                encoded_client_id = utils.base64_url_encode(client.clientId)
+                if encoded_client_id == cleaned_name:
+                    return client.clientId
+                
+                if encoded_client_id.startswith(cleaned_name):
+                    partial_matches.append(client.clientId)
+        
+        return self._resolve_partial_matches(partial_matches, share_name)
 
-        if not client_id:
-            if len(client_ids) == 1:
-                client_id = client_ids[0]
-                client_ids.clear()
-
-        if not client_id:
-            if len(client_ids) > 1:
-                logger.warning('There are more than one one-time shares \"%s\"', share_name)
-            else:
-                logger.warning('There is no one-time share \"%s\"', share_name)
+    def _resolve_partial_matches(self, partial_matches: list[bytes], original_name: str) -> Optional[bytes]:
+        """
+        Resolve partial matches to a single client ID.
+        
+        Args:
+            partial_matches: List of client IDs that partially match
+            original_name: Original share name for error reporting
+            
+        Returns:
+            bytes: Single client ID if exactly one match, None otherwise
+        """
+        if not partial_matches:
+            logger.warning('No one-time share found matching "%s"', original_name)
             return None
             
-        return client_id
+        if len(partial_matches) == 1:
+            return partial_matches[0]
+            
+        # Multiple matches found
+        logger.warning('Multiple one-time shares found matching "%s". Please use a more specific identifier.', original_name)
+        return None
 
     def _remove_share(self, vault, record_uid: str, client_id: bytes, share_name: str, record_name: str):
         """Remove the one-time share."""

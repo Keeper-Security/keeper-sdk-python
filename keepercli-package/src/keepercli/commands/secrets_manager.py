@@ -41,7 +41,7 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
 
     def __init__(self):
         self.parser = argparse.ArgumentParser(
-            prog='secrets-manager app',
+            prog='secrets-manager-app',
             description='Keeper Secrets Manager (KSM) App Commands',
         )
         SecretsManagerAppCommand.add_arguments_to_parser(self.parser)

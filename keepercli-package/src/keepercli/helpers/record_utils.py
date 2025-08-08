@@ -176,7 +176,7 @@ def resolve_record(context: KeeperParams, name: str) -> str:
     record_uid = None
     vault = context.vault
     if name in vault.vault_data._records:
-        record_uid = name
+        return name
     else:
         rs = folder_utils.try_resolve_path(context, name)
         if rs is not None:
@@ -186,8 +186,6 @@ def resolve_record(context: KeeperParams, name: str) -> str:
                     for uid in folder.records:
                         r = vault.vault_data.get_record(record_uid=uid)
                         if r.title.lower() == name.lower():
-                            record_uid = uid
-                            break
+                            return uid
     if record_uid is None:
         raise CommandError('one-time-share', f'Record not found: {name}')
-    return record_uid
