@@ -56,7 +56,7 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
             help = f"One of: {', '.join(cmd.value for cmd in SecretsManagerCommand)}"
             )
         parser.add_argument(
-            '--app', '-n', type=str, dest='app', action='store', help='Application Name or UID'
+            '--app', '-a', type=str, dest='app', action='store', help='Application Name or UID'
             )
         parser.add_argument(
             '-f', '--force', dest='force', action='store_true', help='Force add or remove app'
@@ -83,7 +83,7 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
             return self.get_parser().print_help()
 
         if command != SecretsManagerCommand.LIST.value and not uid_or_name:
-            raise ValueError("Application name or UID is required. Use --name='example' to set it.")
+            raise ValueError("Application name or UID is required. Use --app='example' to set it.")
 
         def list_app():
             return self.list_app(vault=vault)
