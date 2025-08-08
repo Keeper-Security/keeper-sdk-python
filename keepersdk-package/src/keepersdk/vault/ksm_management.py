@@ -22,20 +22,21 @@ def list_secrets_manager_apps(vault: vault_online.VaultOnline) -> list[ksm.Secre
     )
 
     apps_list = []
-    for app_summary in response.applicationSummary:
-        uid = utils.base64_url_encode(app_summary.appRecordUid)
-        app_record = vault.vault_data.load_record(uid)
-        name = app_record.title if app_record else ''
-        last_access = int_to_datetime(app_summary.lastAccess)
-        secrets_app = ksm.SecretsManagerApp(
-            name=name,
-            uid=uid,
-            records=app_summary.folderRecords,
-            folders=app_summary.folderShares,
-            count=app_summary.clientCount,
-            last_access=last_access
-        )
-        apps_list.append(secrets_app)
+    if response.applicationSummary:
+        for app_summary in response.applicationSummary:
+            uid = utils.base64_url_encode(app_summary.appRecordUid)
+            app_record = vault.vault_data.load_record(uid)
+            name = app_record.title if app_record else ''
+            last_access = int_to_datetime(app_summary.lastAccess)
+            secrets_app = ksm.SecretsManagerApp(
+                name=name,
+                uid=uid,
+                records=app_summary.folderRecords,
+                folders=app_summary.folderShares,
+                count=app_summary.clientCount,
+                last_access=last_access
+            )
+            apps_list.append(secrets_app)
 
     return apps_list
 
@@ -138,9 +139,15 @@ def remove_secrets_manager_app(vault: vault_online.VaultOnline, uid_or_name: str
     return app.uid
 
 
-def get_app_info(vault: vault_online.VaultOnline, app_uid):
+def get_app_info(vault: vault_online.VaultOnline, app_uid: str | list[str]) -> list:
     rq = GetAppInfoRequest()
-    rq.appRecordUid.append(utils.base64_url_decode(app_uid))
+    
+    if isinstance(app_uid, str):
+        app_uid = [app_uid]
+    
+    for uid in app_uid:
+        rq.appRecordUid.append(utils.base64_url_decode(uid))
+    
     rs = vault.keeper_auth.execute_auth_rest(
         request=rq, 
         rest_endpoint=URL_GET_APP_INFO_API, 

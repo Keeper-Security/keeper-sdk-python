@@ -710,7 +710,8 @@ class RecordAddCommand(base.ArgparseCommand, RecordEditMixin):
         else:
             expiration_period = None
             expiration_period = timeout_utils.parse_timeout(self_destruct)
-            if expiration_period.total_seconds() > 182 * 24 * 60 * 60:
+            SIX_MONTHS_IN_SECONDS = 182 * 24 * 60 * 60
+            if expiration_period.total_seconds() > SIX_MONTHS_IN_SECONDS:
                 raise base.CommandError('URL expiration period cannot be greater than 6 months.')
             url = record_utils.process_external_share(context=context, expiration_period=expiration_period, record=record)
             expiration_date = datetime.datetime.now() + expiration_period
