@@ -18,6 +18,10 @@ def add_record_to_folder(vault: vault_online.VaultOnline, record: Union[Password
     vault_data = vault.vault_data
 
     folder = vault_data.get_folder(folder_uid) if folder_uid else None
+
+    if folder_uid and not folder:
+        raise ValueError(f'Folder with UID \"{folder_uid}\" not found')
+
     folder_key: Optional[bytes] = None
     if folder and folder.folder_type in {'shared_folder', 'shared_folder_folder'}:
         assert folder.folder_scope_uid is not None

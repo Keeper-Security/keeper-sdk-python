@@ -57,6 +57,9 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('secrets-manager-share', secrets_manager.SecretsManagerShareCommand(), base.CommandScope.Vault)
         commands.register_command('share-record', share_management.ShareRecordCommand(), base.CommandScope.Vault, 'sr')
         commands.register_command('share-folder', share_management.ShareFolderCommand(), base.CommandScope.Vault, 'sf')
+        commands.register_command('share-list', share_management.OneTimeShareListCommand(), base.CommandScope.Vault)
+        commands.register_command('share-create', share_management.OneTimeShareCreateCommand(), base.CommandScope.Vault)
+        commands.register_command('share-remove', share_management.OneTimeShareRemoveCommand(), base.CommandScope.Vault)
 
 
     if not scopes or bool(scopes & base.CommandScope.Enterprise):
