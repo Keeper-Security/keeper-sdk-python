@@ -9,12 +9,14 @@ from .. import api
 from ..helpers import report_utils, record_utils
 from ..params import KeeperParams
 
+logger = api.get_logger()
 
 class BreachWatchCommand(base.GroupCommand):
     def __init__(self):
         super().__init__('BreachWatch.')
         self.register_command(BreachWatchListCommand(), 'list', 'l')
         self.register_command(BreachWatchIgnoreCommand(), 'ignore')
+        self.register_command(BreachWatchScanCommand(), 'scan')
 
 class BreachWatchListCommand(base.ArgparseCommand):
     def __init__(self):
@@ -131,3 +133,104 @@ class BreachWatchIgnoreCommand(base.ArgparseCommand):
                 for status in rs.breachWatchRecordStatus:
                     logging.info(f'{utils.base64_url_encode(status.recordUid)}: {status.status} {status.reason}')
         """
+
+
+class BreachWatchScanCommand(base.ArgparseCommand):
+    def __init__(self):
+        parser = argparse.ArgumentParser(
+            prog='breachwatch scan', description='Scan for breached passwords.'
+        )
+        self.add_arguments_to_parser(parser)
+        super().__init__(parser)
+
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
+        parser.add_argument('--records', '-r', dest='records', type=str,
+                            help='UID of the record to scan')
+
+    def execute(self, context: KeeperParams, **kwargs):
+        """Main execution method for breach watch scanning."""
+        self._validate_context(context)
+        record_uids = self._get_and_validate_record_uids(kwargs)
+        
+        for record_uid in record_uids:
+            self._scan_single_record(context.vault, record_uid)
+
+    def _validate_context(self, context: KeeperParams) -> None:
+        """Validate that the context has required components."""
+        if not context.vault:
+            raise ValueError("Vault is not initialized.")
+        
+        if not context.vault.breach_watch_plugin():
+            raise ValueError("Breach watch is not enabled.")
+
+    def _get_and_validate_record_uids(self, kwargs: dict) -> list:
+        """Extract and validate record UIDs from kwargs."""
+        record_uids = kwargs.get('records')
+        if not record_uids:
+            raise ValueError("Record UID is required.")
+        
+        if isinstance(record_uids, str):
+            record_uids = [record_uids]
+        
+        return record_uids
+
+    def _scan_single_record(self, vault, record_uid: str) -> None:
+        """Scan a single record for breached passwords."""
+        record = self._load_record(vault, record_uid)
+        if not record:
+            return
+
+        password = self._extract_password(record, record_uid)
+        if not password:
+            return
+
+        record_key = self._get_record_key(vault, record_uid)
+        if not record_key:
+            return
+        
+        self._perform_breach_watch_scan(vault, record_uid, record_key, password)
+
+    def _load_record(self, vault, record_uid: str):
+        """Load a record from the vault."""
+        record = vault.vault_data.load_record(record_uid)
+        if not record:
+            logger.warning(f"Record not found: {record_uid}")
+        return record
+
+    def _extract_password(self, record, record_uid: str) -> str:
+        """Extract password from a record."""
+        password = record.extract_password()
+        if not password:
+            logger.warning(f"Password not found in record: {record_uid}")
+        return password
+
+    def _get_record_key(self, vault, record_uid: str):
+        """Get the record key for encryption/decryption."""
+        record_key = vault.vault_data.get_record_key(record_uid)
+        if not record_key:
+            logger.warning(f"Record key not found for record: {record_uid}")
+        return record_key
+
+    def _perform_breach_watch_scan(self, vault, record_uid: str, record_key, password: str) -> None:
+        """Perform the actual breach watch scan for a record."""
+        try:
+            bw_password = vault.breach_watch_plugin().scan_and_store_record_status(
+                record_uid=record_uid,
+                record_key=record_key,
+                password=password
+            )
+            
+            if bw_password:
+                status = self._get_status_display(bw_password.status)
+                logger.info(f"Scan completed for record {record_uid}. Status: {status}")
+            else:
+                logger.warning(f"Scan failed for record {record_uid}")
+                
+        except Exception as e:
+            logger.error(f"Error scanning record {record_uid}: {str(e)}")
+
+    def _get_status_display(self, status) -> str:
+        """Convert breach watch status to human-readable format."""
+        return "WEAK" if status == client_pb2.BWStatus.WEAK or status == client_pb2.BWStatus.BREACHED else "GOOD"
+                
