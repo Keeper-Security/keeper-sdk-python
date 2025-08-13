@@ -1,2017 +1,4289 @@
-from google.protobuf.internal import containers as _containers
-from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
-from google.protobuf import descriptor as _descriptor
-from google.protobuf import message as _message
-from typing import ClassVar as _ClassVar, Iterable as _Iterable, Mapping as _Mapping, Optional as _Optional, Union as _Union
-
-DESCRIPTOR: _descriptor.FileDescriptor
-
-class KeyType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    RSA: _ClassVar[KeyType]
-    ECC: _ClassVar[KeyType]
-
-class RoleUserModifyStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    ROLE_EXISTS: _ClassVar[RoleUserModifyStatus]
-    MISSING_TREE_KEY: _ClassVar[RoleUserModifyStatus]
-    MISSING_ROLE_KEY: _ClassVar[RoleUserModifyStatus]
-    INVALID_ENTERPRISE_USER_ID: _ClassVar[RoleUserModifyStatus]
-    PENDING_ENTERPRISE_USER: _ClassVar[RoleUserModifyStatus]
-    INVALID_NODE_ID: _ClassVar[RoleUserModifyStatus]
-    MAY_NOT_REMOVE_SELF_FROM_ROLE: _ClassVar[RoleUserModifyStatus]
-    MUST_HAVE_ONE_USER_ADMIN: _ClassVar[RoleUserModifyStatus]
-
-class EnterpriseType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    ENTERPRISE_STANDARD: _ClassVar[EnterpriseType]
-    ENTERPRISE_MSP: _ClassVar[EnterpriseType]
-
-class TransferAcceptanceStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    UNDEFINED: _ClassVar[TransferAcceptanceStatus]
-    NOT_REQUIRED: _ClassVar[TransferAcceptanceStatus]
-    NOT_ACCEPTED: _ClassVar[TransferAcceptanceStatus]
-    PARTIALLY_ACCEPTED: _ClassVar[TransferAcceptanceStatus]
-    ACCEPTED: _ClassVar[TransferAcceptanceStatus]
-
-class EnterpriseDataEntity(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    UNKNOWN: _ClassVar[EnterpriseDataEntity]
-    NODES: _ClassVar[EnterpriseDataEntity]
-    ROLES: _ClassVar[EnterpriseDataEntity]
-    USERS: _ClassVar[EnterpriseDataEntity]
-    TEAMS: _ClassVar[EnterpriseDataEntity]
-    TEAM_USERS: _ClassVar[EnterpriseDataEntity]
-    ROLE_USERS: _ClassVar[EnterpriseDataEntity]
-    ROLE_PRIVILEGES: _ClassVar[EnterpriseDataEntity]
-    ROLE_ENFORCEMENTS: _ClassVar[EnterpriseDataEntity]
-    ROLE_TEAMS: _ClassVar[EnterpriseDataEntity]
-    LICENSES: _ClassVar[EnterpriseDataEntity]
-    MANAGED_NODES: _ClassVar[EnterpriseDataEntity]
-    MANAGED_COMPANIES: _ClassVar[EnterpriseDataEntity]
-    BRIDGES: _ClassVar[EnterpriseDataEntity]
-    SCIMS: _ClassVar[EnterpriseDataEntity]
-    EMAIL_PROVISION: _ClassVar[EnterpriseDataEntity]
-    QUEUED_TEAMS: _ClassVar[EnterpriseDataEntity]
-    QUEUED_TEAM_USERS: _ClassVar[EnterpriseDataEntity]
-    SSO_SERVICES: _ClassVar[EnterpriseDataEntity]
-    REPORT_FILTER_USERS: _ClassVar[EnterpriseDataEntity]
-    DEVICES_REQUEST_FOR_ADMIN_APPROVAL: _ClassVar[EnterpriseDataEntity]
-    USER_ALIASES: _ClassVar[EnterpriseDataEntity]
-    COMPLIANCE_REPORT_CRITERIA_AND_FILTER: _ClassVar[EnterpriseDataEntity]
-    COMPLIANCE_REPORTS: _ClassVar[EnterpriseDataEntity]
-    QUEUED_TEAM_USERS_INCLUDING_PENDING: _ClassVar[EnterpriseDataEntity]
-
-class CacheStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    KEEP: _ClassVar[CacheStatus]
-    CLEAR: _ClassVar[CacheStatus]
-
-class BackupKeyType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    NO_KEY: _ClassVar[BackupKeyType]
-    ENCRYPTED_BY_DATA_KEY: _ClassVar[BackupKeyType]
-    ENCRYPTED_BY_PUBLIC_KEY: _ClassVar[BackupKeyType]
-    ENCRYPTED_BY_DATA_KEY_GCM: _ClassVar[BackupKeyType]
-    ENCRYPTED_BY_PUBLIC_KEY_ECC: _ClassVar[BackupKeyType]
-
-class BackupUserDataKeyType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    OWN: _ClassVar[BackupUserDataKeyType]
-    SHARED_TO_ENTERPRISE: _ClassVar[BackupUserDataKeyType]
-
-class EncryptedKeyType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    KT_NO_KEY: _ClassVar[EncryptedKeyType]
-    KT_ENCRYPTED_BY_DATA_KEY: _ClassVar[EncryptedKeyType]
-    KT_ENCRYPTED_BY_PUBLIC_KEY: _ClassVar[EncryptedKeyType]
-    KT_ENCRYPTED_BY_DATA_KEY_GCM: _ClassVar[EncryptedKeyType]
-    KT_ENCRYPTED_BY_PUBLIC_KEY_ECC: _ClassVar[EncryptedKeyType]
-
-class EnterpriseFlagType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    INVALID: _ClassVar[EnterpriseFlagType]
-    ALLOW_PERSONAL_LICENSE: _ClassVar[EnterpriseFlagType]
-    SPECIAL_PROVISIONING: _ClassVar[EnterpriseFlagType]
-    RECORD_TYPES: _ClassVar[EnterpriseFlagType]
-    SECRETS_MANAGER: _ClassVar[EnterpriseFlagType]
-    ENTERPRISE_LOCKED: _ClassVar[EnterpriseFlagType]
-    FORBID_KEY_TYPE_2: _ClassVar[EnterpriseFlagType]
-    CONSOLE_ONBOARDED: _ClassVar[EnterpriseFlagType]
-    FORBID_ACCOUNT_TRANSFER: _ClassVar[EnterpriseFlagType]
-    NPS_POPUP_OPT_OUT: _ClassVar[EnterpriseFlagType]
-    SHOW_USER_ONBOARD: _ClassVar[EnterpriseFlagType]
-
-class UserUpdateStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    USER_UPDATE_OK: _ClassVar[UserUpdateStatus]
-    USER_UPDATE_ACCESS_DENIED: _ClassVar[UserUpdateStatus]
-
-class AuditUserStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    OK: _ClassVar[AuditUserStatus]
-    ACCESS_DENIED: _ClassVar[AuditUserStatus]
-    NO_LONGER_IN_ENTERPRISE: _ClassVar[AuditUserStatus]
-
-class TeamUserType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    USER: _ClassVar[TeamUserType]
-    ADMIN: _ClassVar[TeamUserType]
-    ADMIN_ONLY: _ClassVar[TeamUserType]
-
-class AppClientType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    NOT_USED: _ClassVar[AppClientType]
-    GENERAL: _ClassVar[AppClientType]
-    DISCOVERY_AND_ROTATION_CONTROLLER: _ClassVar[AppClientType]
-    KCM_CONTROLLER: _ClassVar[AppClientType]
-    SELF_DESTRUCT: _ClassVar[AppClientType]
-
-class DeleteEnterpriseUsersResult(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    SUCCESS: _ClassVar[DeleteEnterpriseUsersResult]
-    NOT_AN_ENTERPRISE_USER: _ClassVar[DeleteEnterpriseUsersResult]
-    CANNOT_DELETE_SELF: _ClassVar[DeleteEnterpriseUsersResult]
-    BRIDGE_CANNOT_DELETE_ACTIVE_USER: _ClassVar[DeleteEnterpriseUsersResult]
-    ERROR: _ClassVar[DeleteEnterpriseUsersResult]
-
-class ClearSecurityDataType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    RECALCULATE_SUMMARY_REPORT: _ClassVar[ClearSecurityDataType]
-    FORCE_CLIENT_CHECK_FOR_MISSING_DATA: _ClassVar[ClearSecurityDataType]
-    FORCE_CLIENT_RESEND_SECURITY_DATA: _ClassVar[ClearSecurityDataType]
-RSA: KeyType
-ECC: KeyType
-ROLE_EXISTS: RoleUserModifyStatus
-MISSING_TREE_KEY: RoleUserModifyStatus
-MISSING_ROLE_KEY: RoleUserModifyStatus
-INVALID_ENTERPRISE_USER_ID: RoleUserModifyStatus
-PENDING_ENTERPRISE_USER: RoleUserModifyStatus
-INVALID_NODE_ID: RoleUserModifyStatus
-MAY_NOT_REMOVE_SELF_FROM_ROLE: RoleUserModifyStatus
-MUST_HAVE_ONE_USER_ADMIN: RoleUserModifyStatus
-ENTERPRISE_STANDARD: EnterpriseType
-ENTERPRISE_MSP: EnterpriseType
-UNDEFINED: TransferAcceptanceStatus
-NOT_REQUIRED: TransferAcceptanceStatus
-NOT_ACCEPTED: TransferAcceptanceStatus
-PARTIALLY_ACCEPTED: TransferAcceptanceStatus
-ACCEPTED: TransferAcceptanceStatus
-UNKNOWN: EnterpriseDataEntity
-NODES: EnterpriseDataEntity
-ROLES: EnterpriseDataEntity
-USERS: EnterpriseDataEntity
-TEAMS: EnterpriseDataEntity
-TEAM_USERS: EnterpriseDataEntity
-ROLE_USERS: EnterpriseDataEntity
-ROLE_PRIVILEGES: EnterpriseDataEntity
-ROLE_ENFORCEMENTS: EnterpriseDataEntity
-ROLE_TEAMS: EnterpriseDataEntity
-LICENSES: EnterpriseDataEntity
-MANAGED_NODES: EnterpriseDataEntity
-MANAGED_COMPANIES: EnterpriseDataEntity
-BRIDGES: EnterpriseDataEntity
-SCIMS: EnterpriseDataEntity
-EMAIL_PROVISION: EnterpriseDataEntity
-QUEUED_TEAMS: EnterpriseDataEntity
-QUEUED_TEAM_USERS: EnterpriseDataEntity
-SSO_SERVICES: EnterpriseDataEntity
-REPORT_FILTER_USERS: EnterpriseDataEntity
-DEVICES_REQUEST_FOR_ADMIN_APPROVAL: EnterpriseDataEntity
-USER_ALIASES: EnterpriseDataEntity
-COMPLIANCE_REPORT_CRITERIA_AND_FILTER: EnterpriseDataEntity
-COMPLIANCE_REPORTS: EnterpriseDataEntity
-QUEUED_TEAM_USERS_INCLUDING_PENDING: EnterpriseDataEntity
-KEEP: CacheStatus
-CLEAR: CacheStatus
-NO_KEY: BackupKeyType
-ENCRYPTED_BY_DATA_KEY: BackupKeyType
-ENCRYPTED_BY_PUBLIC_KEY: BackupKeyType
-ENCRYPTED_BY_DATA_KEY_GCM: BackupKeyType
-ENCRYPTED_BY_PUBLIC_KEY_ECC: BackupKeyType
-OWN: BackupUserDataKeyType
-SHARED_TO_ENTERPRISE: BackupUserDataKeyType
-KT_NO_KEY: EncryptedKeyType
-KT_ENCRYPTED_BY_DATA_KEY: EncryptedKeyType
-KT_ENCRYPTED_BY_PUBLIC_KEY: EncryptedKeyType
-KT_ENCRYPTED_BY_DATA_KEY_GCM: EncryptedKeyType
-KT_ENCRYPTED_BY_PUBLIC_KEY_ECC: EncryptedKeyType
-INVALID: EnterpriseFlagType
-ALLOW_PERSONAL_LICENSE: EnterpriseFlagType
-SPECIAL_PROVISIONING: EnterpriseFlagType
-RECORD_TYPES: EnterpriseFlagType
-SECRETS_MANAGER: EnterpriseFlagType
-ENTERPRISE_LOCKED: EnterpriseFlagType
-FORBID_KEY_TYPE_2: EnterpriseFlagType
-CONSOLE_ONBOARDED: EnterpriseFlagType
-FORBID_ACCOUNT_TRANSFER: EnterpriseFlagType
-NPS_POPUP_OPT_OUT: EnterpriseFlagType
-SHOW_USER_ONBOARD: EnterpriseFlagType
-USER_UPDATE_OK: UserUpdateStatus
-USER_UPDATE_ACCESS_DENIED: UserUpdateStatus
-OK: AuditUserStatus
-ACCESS_DENIED: AuditUserStatus
-NO_LONGER_IN_ENTERPRISE: AuditUserStatus
-USER: TeamUserType
-ADMIN: TeamUserType
-ADMIN_ONLY: TeamUserType
-NOT_USED: AppClientType
-GENERAL: AppClientType
-DISCOVERY_AND_ROTATION_CONTROLLER: AppClientType
-KCM_CONTROLLER: AppClientType
-SELF_DESTRUCT: AppClientType
-SUCCESS: DeleteEnterpriseUsersResult
-NOT_AN_ENTERPRISE_USER: DeleteEnterpriseUsersResult
-CANNOT_DELETE_SELF: DeleteEnterpriseUsersResult
-BRIDGE_CANNOT_DELETE_ACTIVE_USER: DeleteEnterpriseUsersResult
-ERROR: DeleteEnterpriseUsersResult
-RECALCULATE_SUMMARY_REPORT: ClearSecurityDataType
-FORCE_CLIENT_CHECK_FOR_MISSING_DATA: ClearSecurityDataType
-FORCE_CLIENT_RESEND_SECURITY_DATA: ClearSecurityDataType
-
-class EnterpriseKeyPairRequest(_message.Message):
-    __slots__ = ("enterprisePublicKey", "encryptedEnterprisePrivateKey", "keyType")
-    ENTERPRISEPUBLICKEY_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDENTERPRISEPRIVATEKEY_FIELD_NUMBER: _ClassVar[int]
-    KEYTYPE_FIELD_NUMBER: _ClassVar[int]
-    enterprisePublicKey: bytes
-    encryptedEnterprisePrivateKey: bytes
-    keyType: KeyType
-    def __init__(self, enterprisePublicKey: _Optional[bytes] = ..., encryptedEnterprisePrivateKey: _Optional[bytes] = ..., keyType: _Optional[_Union[KeyType, str]] = ...) -> None: ...
-
-class GetTeamMemberRequest(_message.Message):
-    __slots__ = ("teamUid",)
-    TEAMUID_FIELD_NUMBER: _ClassVar[int]
-    teamUid: bytes
-    def __init__(self, teamUid: _Optional[bytes] = ...) -> None: ...
-
-class EnterpriseUser(_message.Message):
-    __slots__ = ("enterpriseUserId", "email", "enterpriseUsername", "isShareAdmin", "username")
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    EMAIL_FIELD_NUMBER: _ClassVar[int]
-    ENTERPRISEUSERNAME_FIELD_NUMBER: _ClassVar[int]
-    ISSHAREADMIN_FIELD_NUMBER: _ClassVar[int]
-    USERNAME_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserId: int
-    email: str
-    enterpriseUsername: str
-    isShareAdmin: bool
-    username: str
-    def __init__(self, enterpriseUserId: _Optional[int] = ..., email: _Optional[str] = ..., enterpriseUsername: _Optional[str] = ..., isShareAdmin: bool = ..., username: _Optional[str] = ...) -> None: ...
-
-class GetTeamMemberResponse(_message.Message):
-    __slots__ = ("enterpriseUser",)
-    ENTERPRISEUSER_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUser: _containers.RepeatedCompositeFieldContainer[EnterpriseUser]
-    def __init__(self, enterpriseUser: _Optional[_Iterable[_Union[EnterpriseUser, _Mapping]]] = ...) -> None: ...
-
-class EnterpriseUserIds(_message.Message):
-    __slots__ = ("enterpriseUserId",)
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserId: _containers.RepeatedScalarFieldContainer[int]
-    def __init__(self, enterpriseUserId: _Optional[_Iterable[int]] = ...) -> None: ...
-
-class EnterprisePersonalAccount(_message.Message):
-    __slots__ = ("email", "OBSOLETE_FIELD")
-    EMAIL_FIELD_NUMBER: _ClassVar[int]
-    OBSOLETE_FIELD_FIELD_NUMBER: _ClassVar[int]
-    email: str
-    OBSOLETE_FIELD: bytes
-    def __init__(self, email: _Optional[str] = ..., OBSOLETE_FIELD: _Optional[bytes] = ...) -> None: ...
-
-class EncryptedTeamKeyRequest(_message.Message):
-    __slots__ = ("teamUid", "encryptedTeamKey", "force")
-    TEAMUID_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDTEAMKEY_FIELD_NUMBER: _ClassVar[int]
-    FORCE_FIELD_NUMBER: _ClassVar[int]
-    teamUid: bytes
-    encryptedTeamKey: bytes
-    force: bool
-    def __init__(self, teamUid: _Optional[bytes] = ..., encryptedTeamKey: _Optional[bytes] = ..., force: bool = ...) -> None: ...
-
-class ReEncryptedData(_message.Message):
-    __slots__ = ("id", "data")
-    ID_FIELD_NUMBER: _ClassVar[int]
-    DATA_FIELD_NUMBER: _ClassVar[int]
-    id: int
-    data: str
-    def __init__(self, id: _Optional[int] = ..., data: _Optional[str] = ...) -> None: ...
-
-class ReEncryptedRoleKey(_message.Message):
-    __slots__ = ("role_id", "encryptedRoleKey")
-    ROLE_ID_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDROLEKEY_FIELD_NUMBER: _ClassVar[int]
-    role_id: int
-    encryptedRoleKey: bytes
-    def __init__(self, role_id: _Optional[int] = ..., encryptedRoleKey: _Optional[bytes] = ...) -> None: ...
-
-class ReEncryptedUserDataKey(_message.Message):
-    __slots__ = ("enterpriseUserId", "userEncryptedDataKey")
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    USERENCRYPTEDDATAKEY_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserId: int
-    userEncryptedDataKey: bytes
-    def __init__(self, enterpriseUserId: _Optional[int] = ..., userEncryptedDataKey: _Optional[bytes] = ...) -> None: ...
-
-class NodeToManagedCompanyRequest(_message.Message):
-    __slots__ = ("companyId", "nodes", "roles", "users", "roleKeys", "teamKeys", "usersDataKeys")
-    COMPANYID_FIELD_NUMBER: _ClassVar[int]
-    NODES_FIELD_NUMBER: _ClassVar[int]
-    ROLES_FIELD_NUMBER: _ClassVar[int]
-    USERS_FIELD_NUMBER: _ClassVar[int]
-    ROLEKEYS_FIELD_NUMBER: _ClassVar[int]
-    TEAMKEYS_FIELD_NUMBER: _ClassVar[int]
-    USERSDATAKEYS_FIELD_NUMBER: _ClassVar[int]
-    companyId: int
-    nodes: _containers.RepeatedCompositeFieldContainer[ReEncryptedData]
-    roles: _containers.RepeatedCompositeFieldContainer[ReEncryptedData]
-    users: _containers.RepeatedCompositeFieldContainer[ReEncryptedData]
-    roleKeys: _containers.RepeatedCompositeFieldContainer[ReEncryptedRoleKey]
-    teamKeys: _containers.RepeatedCompositeFieldContainer[EncryptedTeamKeyRequest]
-    usersDataKeys: _containers.RepeatedCompositeFieldContainer[ReEncryptedUserDataKey]
-    def __init__(self, companyId: _Optional[int] = ..., nodes: _Optional[_Iterable[_Union[ReEncryptedData, _Mapping]]] = ..., roles: _Optional[_Iterable[_Union[ReEncryptedData, _Mapping]]] = ..., users: _Optional[_Iterable[_Union[ReEncryptedData, _Mapping]]] = ..., roleKeys: _Optional[_Iterable[_Union[ReEncryptedRoleKey, _Mapping]]] = ..., teamKeys: _Optional[_Iterable[_Union[EncryptedTeamKeyRequest, _Mapping]]] = ..., usersDataKeys: _Optional[_Iterable[_Union[ReEncryptedUserDataKey, _Mapping]]] = ...) -> None: ...
-
-class RoleTeam(_message.Message):
-    __slots__ = ("role_id", "teamUid")
-    ROLE_ID_FIELD_NUMBER: _ClassVar[int]
-    TEAMUID_FIELD_NUMBER: _ClassVar[int]
-    role_id: int
-    teamUid: bytes
-    def __init__(self, role_id: _Optional[int] = ..., teamUid: _Optional[bytes] = ...) -> None: ...
-
-class RoleTeams(_message.Message):
-    __slots__ = ("role_team",)
-    ROLE_TEAM_FIELD_NUMBER: _ClassVar[int]
-    role_team: _containers.RepeatedCompositeFieldContainer[RoleTeam]
-    def __init__(self, role_team: _Optional[_Iterable[_Union[RoleTeam, _Mapping]]] = ...) -> None: ...
-
-class RoleUserAddKeys(_message.Message):
-    __slots__ = ("enterpriseUserId", "treeKey", "roleAdminKey")
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    TREEKEY_FIELD_NUMBER: _ClassVar[int]
-    ROLEADMINKEY_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserId: int
-    treeKey: str
-    roleAdminKey: str
-    def __init__(self, enterpriseUserId: _Optional[int] = ..., treeKey: _Optional[str] = ..., roleAdminKey: _Optional[str] = ...) -> None: ...
-
-class RoleUserAdd(_message.Message):
-    __slots__ = ("role_id", "roleUserAddKeys")
-    ROLE_ID_FIELD_NUMBER: _ClassVar[int]
-    ROLEUSERADDKEYS_FIELD_NUMBER: _ClassVar[int]
-    role_id: int
-    roleUserAddKeys: _containers.RepeatedCompositeFieldContainer[RoleUserAddKeys]
-    def __init__(self, role_id: _Optional[int] = ..., roleUserAddKeys: _Optional[_Iterable[_Union[RoleUserAddKeys, _Mapping]]] = ...) -> None: ...
-
-class RoleUsersAddRequest(_message.Message):
-    __slots__ = ("roleUserAdds",)
-    ROLEUSERADDS_FIELD_NUMBER: _ClassVar[int]
-    roleUserAdds: _containers.RepeatedCompositeFieldContainer[RoleUserAdd]
-    def __init__(self, roleUserAdds: _Optional[_Iterable[_Union[RoleUserAdd, _Mapping]]] = ...) -> None: ...
-
-class RoleUserAddResult(_message.Message):
-    __slots__ = ("roleId", "enterpriseUserId", "status", "message")
-    ROLEID_FIELD_NUMBER: _ClassVar[int]
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    STATUS_FIELD_NUMBER: _ClassVar[int]
-    MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    roleId: int
-    enterpriseUserId: int
-    status: RoleUserModifyStatus
-    message: str
-    def __init__(self, roleId: _Optional[int] = ..., enterpriseUserId: _Optional[int] = ..., status: _Optional[_Union[RoleUserModifyStatus, str]] = ..., message: _Optional[str] = ...) -> None: ...
-
-class RoleUsersAddResponse(_message.Message):
-    __slots__ = ("results",)
-    RESULTS_FIELD_NUMBER: _ClassVar[int]
-    results: _containers.RepeatedCompositeFieldContainer[RoleUserAddResult]
-    def __init__(self, results: _Optional[_Iterable[_Union[RoleUserAddResult, _Mapping]]] = ...) -> None: ...
-
-class RoleUserRemove(_message.Message):
-    __slots__ = ("role_id", "enterpriseUserIds")
-    ROLE_ID_FIELD_NUMBER: _ClassVar[int]
-    ENTERPRISEUSERIDS_FIELD_NUMBER: _ClassVar[int]
-    role_id: int
-    enterpriseUserIds: _containers.RepeatedScalarFieldContainer[int]
-    def __init__(self, role_id: _Optional[int] = ..., enterpriseUserIds: _Optional[_Iterable[int]] = ...) -> None: ...
-
-class RoleUsersRemoveRequest(_message.Message):
-    __slots__ = ("roleUserRemoves",)
-    ROLEUSERREMOVES_FIELD_NUMBER: _ClassVar[int]
-    roleUserRemoves: _containers.RepeatedCompositeFieldContainer[RoleUserRemove]
-    def __init__(self, roleUserRemoves: _Optional[_Iterable[_Union[RoleUserRemove, _Mapping]]] = ...) -> None: ...
-
-class RoleUserRemoveResult(_message.Message):
-    __slots__ = ("roleId", "enterpriseUserId", "status", "message")
-    ROLEID_FIELD_NUMBER: _ClassVar[int]
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    STATUS_FIELD_NUMBER: _ClassVar[int]
-    MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    roleId: int
-    enterpriseUserId: int
-    status: RoleUserModifyStatus
-    message: str
-    def __init__(self, roleId: _Optional[int] = ..., enterpriseUserId: _Optional[int] = ..., status: _Optional[_Union[RoleUserModifyStatus, str]] = ..., message: _Optional[str] = ...) -> None: ...
-
-class RoleUsersRemoveResponse(_message.Message):
-    __slots__ = ("results",)
-    RESULTS_FIELD_NUMBER: _ClassVar[int]
-    results: _containers.RepeatedCompositeFieldContainer[RoleUserRemoveResult]
-    def __init__(self, results: _Optional[_Iterable[_Union[RoleUserRemoveResult, _Mapping]]] = ...) -> None: ...
-
-class EnterpriseRegistration(_message.Message):
-    __slots__ = ("encryptedTreeKey", "enterpriseName", "rootNodeData", "adminUserData", "adminName", "roleData", "rsaKeyPair", "numberSeats", "enterpriseType", "rolePublicKey", "rolePrivateKeyEncryptedWithRoleKey", "roleKeyEncryptedWithTreeKey", "eccKeyPair", "allUsersRoleData", "roleKeyEncryptedWithUserPublicKey")
-    ENCRYPTEDTREEKEY_FIELD_NUMBER: _ClassVar[int]
-    ENTERPRISENAME_FIELD_NUMBER: _ClassVar[int]
-    ROOTNODEDATA_FIELD_NUMBER: _ClassVar[int]
-    ADMINUSERDATA_FIELD_NUMBER: _ClassVar[int]
-    ADMINNAME_FIELD_NUMBER: _ClassVar[int]
-    ROLEDATA_FIELD_NUMBER: _ClassVar[int]
-    RSAKEYPAIR_FIELD_NUMBER: _ClassVar[int]
-    NUMBERSEATS_FIELD_NUMBER: _ClassVar[int]
-    ENTERPRISETYPE_FIELD_NUMBER: _ClassVar[int]
-    ROLEPUBLICKEY_FIELD_NUMBER: _ClassVar[int]
-    ROLEPRIVATEKEYENCRYPTEDWITHROLEKEY_FIELD_NUMBER: _ClassVar[int]
-    ROLEKEYENCRYPTEDWITHTREEKEY_FIELD_NUMBER: _ClassVar[int]
-    ECCKEYPAIR_FIELD_NUMBER: _ClassVar[int]
-    ALLUSERSROLEDATA_FIELD_NUMBER: _ClassVar[int]
-    ROLEKEYENCRYPTEDWITHUSERPUBLICKEY_FIELD_NUMBER: _ClassVar[int]
-    encryptedTreeKey: bytes
-    enterpriseName: str
-    rootNodeData: bytes
-    adminUserData: bytes
-    adminName: str
-    roleData: bytes
-    rsaKeyPair: EnterpriseKeyPairRequest
-    numberSeats: int
-    enterpriseType: EnterpriseType
-    rolePublicKey: bytes
-    rolePrivateKeyEncryptedWithRoleKey: bytes
-    roleKeyEncryptedWithTreeKey: bytes
-    eccKeyPair: EnterpriseKeyPairRequest
-    allUsersRoleData: bytes
-    roleKeyEncryptedWithUserPublicKey: bytes
-    def __init__(self, encryptedTreeKey: _Optional[bytes] = ..., enterpriseName: _Optional[str] = ..., rootNodeData: _Optional[bytes] = ..., adminUserData: _Optional[bytes] = ..., adminName: _Optional[str] = ..., roleData: _Optional[bytes] = ..., rsaKeyPair: _Optional[_Union[EnterpriseKeyPairRequest, _Mapping]] = ..., numberSeats: _Optional[int] = ..., enterpriseType: _Optional[_Union[EnterpriseType, str]] = ..., rolePublicKey: _Optional[bytes] = ..., rolePrivateKeyEncryptedWithRoleKey: _Optional[bytes] = ..., roleKeyEncryptedWithTreeKey: _Optional[bytes] = ..., eccKeyPair: _Optional[_Union[EnterpriseKeyPairRequest, _Mapping]] = ..., allUsersRoleData: _Optional[bytes] = ..., roleKeyEncryptedWithUserPublicKey: _Optional[bytes] = ...) -> None: ...
-
-class DomainPasswordRulesRequest(_message.Message):
-    __slots__ = ("username", "verificationCode")
-    USERNAME_FIELD_NUMBER: _ClassVar[int]
-    VERIFICATIONCODE_FIELD_NUMBER: _ClassVar[int]
-    username: str
-    verificationCode: str
-    def __init__(self, username: _Optional[str] = ..., verificationCode: _Optional[str] = ...) -> None: ...
-
-class DomainPasswordRulesFields(_message.Message):
-    __slots__ = ("type", "minimum", "maximum", "allowed")
-    TYPE_FIELD_NUMBER: _ClassVar[int]
-    MINIMUM_FIELD_NUMBER: _ClassVar[int]
-    MAXIMUM_FIELD_NUMBER: _ClassVar[int]
-    ALLOWED_FIELD_NUMBER: _ClassVar[int]
-    type: str
-    minimum: int
-    maximum: int
-    allowed: bool
-    def __init__(self, type: _Optional[str] = ..., minimum: _Optional[int] = ..., maximum: _Optional[int] = ..., allowed: bool = ...) -> None: ...
-
-class LoginToMcRequest(_message.Message):
-    __slots__ = ("mcEnterpriseId", "messageSessionUid")
-    MCENTERPRISEID_FIELD_NUMBER: _ClassVar[int]
-    MESSAGESESSIONUID_FIELD_NUMBER: _ClassVar[int]
-    mcEnterpriseId: int
-    messageSessionUid: bytes
-    def __init__(self, mcEnterpriseId: _Optional[int] = ..., messageSessionUid: _Optional[bytes] = ...) -> None: ...
-
-class LoginToMcResponse(_message.Message):
-    __slots__ = ("encryptedSessionToken", "encryptedTreeKey")
-    ENCRYPTEDSESSIONTOKEN_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDTREEKEY_FIELD_NUMBER: _ClassVar[int]
-    encryptedSessionToken: bytes
-    encryptedTreeKey: str
-    def __init__(self, encryptedSessionToken: _Optional[bytes] = ..., encryptedTreeKey: _Optional[str] = ...) -> None: ...
-
-class DomainPasswordRulesResponse(_message.Message):
-    __slots__ = ("domainPasswordRulesFields",)
-    DOMAINPASSWORDRULESFIELDS_FIELD_NUMBER: _ClassVar[int]
-    domainPasswordRulesFields: _containers.RepeatedCompositeFieldContainer[DomainPasswordRulesFields]
-    def __init__(self, domainPasswordRulesFields: _Optional[_Iterable[_Union[DomainPasswordRulesFields, _Mapping]]] = ...) -> None: ...
-
-class ApproveUserDeviceRequest(_message.Message):
-    __slots__ = ("enterpriseUserId", "encryptedDeviceToken", "encryptedDeviceDataKey", "denyApproval")
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDDEVICEDATAKEY_FIELD_NUMBER: _ClassVar[int]
-    DENYAPPROVAL_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserId: int
-    encryptedDeviceToken: bytes
-    encryptedDeviceDataKey: bytes
-    denyApproval: bool
-    def __init__(self, enterpriseUserId: _Optional[int] = ..., encryptedDeviceToken: _Optional[bytes] = ..., encryptedDeviceDataKey: _Optional[bytes] = ..., denyApproval: bool = ...) -> None: ...
-
-class ApproveUserDeviceResponse(_message.Message):
-    __slots__ = ("enterpriseUserId", "encryptedDeviceToken", "failed", "message")
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: _ClassVar[int]
-    FAILED_FIELD_NUMBER: _ClassVar[int]
-    MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserId: int
-    encryptedDeviceToken: bytes
-    failed: bool
-    message: str
-    def __init__(self, enterpriseUserId: _Optional[int] = ..., encryptedDeviceToken: _Optional[bytes] = ..., failed: bool = ..., message: _Optional[str] = ...) -> None: ...
-
-class ApproveUserDevicesRequest(_message.Message):
-    __slots__ = ("deviceRequests",)
-    DEVICEREQUESTS_FIELD_NUMBER: _ClassVar[int]
-    deviceRequests: _containers.RepeatedCompositeFieldContainer[ApproveUserDeviceRequest]
-    def __init__(self, deviceRequests: _Optional[_Iterable[_Union[ApproveUserDeviceRequest, _Mapping]]] = ...) -> None: ...
-
-class ApproveUserDevicesResponse(_message.Message):
-    __slots__ = ("deviceResponses",)
-    DEVICERESPONSES_FIELD_NUMBER: _ClassVar[int]
-    deviceResponses: _containers.RepeatedCompositeFieldContainer[ApproveUserDeviceResponse]
-    def __init__(self, deviceResponses: _Optional[_Iterable[_Union[ApproveUserDeviceResponse, _Mapping]]] = ...) -> None: ...
-
-class EnterpriseUserDataKey(_message.Message):
-    __slots__ = ("enterpriseUserId", "userEncryptedDataKey", "keyTypeId", "roleKey", "privateKey")
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    USERENCRYPTEDDATAKEY_FIELD_NUMBER: _ClassVar[int]
-    KEYTYPEID_FIELD_NUMBER: _ClassVar[int]
-    ROLEKEY_FIELD_NUMBER: _ClassVar[int]
-    PRIVATEKEY_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserId: int
-    userEncryptedDataKey: bytes
-    keyTypeId: int
-    roleKey: bytes
-    privateKey: bytes
-    def __init__(self, enterpriseUserId: _Optional[int] = ..., userEncryptedDataKey: _Optional[bytes] = ..., keyTypeId: _Optional[int] = ..., roleKey: _Optional[bytes] = ..., privateKey: _Optional[bytes] = ...) -> None: ...
-
-class EnterpriseUserDataKeys(_message.Message):
-    __slots__ = ("keys",)
-    KEYS_FIELD_NUMBER: _ClassVar[int]
-    keys: _containers.RepeatedCompositeFieldContainer[EnterpriseUserDataKey]
-    def __init__(self, keys: _Optional[_Iterable[_Union[EnterpriseUserDataKey, _Mapping]]] = ...) -> None: ...
-
-class EnterpriseUserDataKeyLight(_message.Message):
-    __slots__ = ("enterpriseUserId", "userEncryptedDataKey", "keyTypeId")
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    USERENCRYPTEDDATAKEY_FIELD_NUMBER: _ClassVar[int]
-    KEYTYPEID_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserId: int
-    userEncryptedDataKey: bytes
-    keyTypeId: int
-    def __init__(self, enterpriseUserId: _Optional[int] = ..., userEncryptedDataKey: _Optional[bytes] = ..., keyTypeId: _Optional[int] = ...) -> None: ...
-
-class EnterpriseUserDataKeysByNode(_message.Message):
-    __slots__ = ("nodeId", "keys")
-    NODEID_FIELD_NUMBER: _ClassVar[int]
-    KEYS_FIELD_NUMBER: _ClassVar[int]
-    nodeId: int
-    keys: _containers.RepeatedCompositeFieldContainer[EnterpriseUserDataKeyLight]
-    def __init__(self, nodeId: _Optional[int] = ..., keys: _Optional[_Iterable[_Union[EnterpriseUserDataKeyLight, _Mapping]]] = ...) -> None: ...
-
-class EnterpriseUserDataKeysByNodeResponse(_message.Message):
-    __slots__ = ("keys",)
-    KEYS_FIELD_NUMBER: _ClassVar[int]
-    keys: _containers.RepeatedCompositeFieldContainer[EnterpriseUserDataKeysByNode]
-    def __init__(self, keys: _Optional[_Iterable[_Union[EnterpriseUserDataKeysByNode, _Mapping]]] = ...) -> None: ...
-
-class EnterpriseDataRequest(_message.Message):
-    __slots__ = ("continuationToken",)
-    CONTINUATIONTOKEN_FIELD_NUMBER: _ClassVar[int]
-    continuationToken: bytes
-    def __init__(self, continuationToken: _Optional[bytes] = ...) -> None: ...
-
-class SpecialProvisioning(_message.Message):
-    __slots__ = ("url", "name")
-    URL_FIELD_NUMBER: _ClassVar[int]
-    NAME_FIELD_NUMBER: _ClassVar[int]
-    url: str
-    name: str
-    def __init__(self, url: _Optional[str] = ..., name: _Optional[str] = ...) -> None: ...
-
-class GeneralDataEntity(_message.Message):
-    __slots__ = ("enterpriseName", "restrictVisibility", "specialProvisioning", "userPrivilege", "distributor", "forbidAccountTransfer", "showUserOnboard")
-    ENTERPRISENAME_FIELD_NUMBER: _ClassVar[int]
-    RESTRICTVISIBILITY_FIELD_NUMBER: _ClassVar[int]
-    SPECIALPROVISIONING_FIELD_NUMBER: _ClassVar[int]
-    USERPRIVILEGE_FIELD_NUMBER: _ClassVar[int]
-    DISTRIBUTOR_FIELD_NUMBER: _ClassVar[int]
-    FORBIDACCOUNTTRANSFER_FIELD_NUMBER: _ClassVar[int]
-    SHOWUSERONBOARD_FIELD_NUMBER: _ClassVar[int]
-    enterpriseName: str
-    restrictVisibility: bool
-    specialProvisioning: SpecialProvisioning
-    userPrivilege: UserPrivilege
-    distributor: bool
-    forbidAccountTransfer: bool
-    showUserOnboard: bool
-    def __init__(self, enterpriseName: _Optional[str] = ..., restrictVisibility: bool = ..., specialProvisioning: _Optional[_Union[SpecialProvisioning, _Mapping]] = ..., userPrivilege: _Optional[_Union[UserPrivilege, _Mapping]] = ..., distributor: bool = ..., forbidAccountTransfer: bool = ..., showUserOnboard: bool = ...) -> None: ...
-
-class Node(_message.Message):
-    __slots__ = ("nodeId", "parentId", "bridgeId", "scimId", "licenseId", "encryptedData", "duoEnabled", "rsaEnabled", "ssoServiceProviderId", "restrictVisibility", "ssoServiceProviderIds")
-    NODEID_FIELD_NUMBER: _ClassVar[int]
-    PARENTID_FIELD_NUMBER: _ClassVar[int]
-    BRIDGEID_FIELD_NUMBER: _ClassVar[int]
-    SCIMID_FIELD_NUMBER: _ClassVar[int]
-    LICENSEID_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDDATA_FIELD_NUMBER: _ClassVar[int]
-    DUOENABLED_FIELD_NUMBER: _ClassVar[int]
-    RSAENABLED_FIELD_NUMBER: _ClassVar[int]
-    SSOSERVICEPROVIDERID_FIELD_NUMBER: _ClassVar[int]
-    RESTRICTVISIBILITY_FIELD_NUMBER: _ClassVar[int]
-    SSOSERVICEPROVIDERIDS_FIELD_NUMBER: _ClassVar[int]
-    nodeId: int
-    parentId: int
-    bridgeId: int
-    scimId: int
-    licenseId: int
-    encryptedData: str
-    duoEnabled: bool
-    rsaEnabled: bool
-    ssoServiceProviderId: int
-    restrictVisibility: bool
-    ssoServiceProviderIds: _containers.RepeatedScalarFieldContainer[int]
-    def __init__(self, nodeId: _Optional[int] = ..., parentId: _Optional[int] = ..., bridgeId: _Optional[int] = ..., scimId: _Optional[int] = ..., licenseId: _Optional[int] = ..., encryptedData: _Optional[str] = ..., duoEnabled: bool = ..., rsaEnabled: bool = ..., ssoServiceProviderId: _Optional[int] = ..., restrictVisibility: bool = ..., ssoServiceProviderIds: _Optional[_Iterable[int]] = ...) -> None: ...
-
-class Role(_message.Message):
-    __slots__ = ("roleId", "nodeId", "encryptedData", "keyType", "visibleBelow", "newUserInherit", "roleType")
-    ROLEID_FIELD_NUMBER: _ClassVar[int]
-    NODEID_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDDATA_FIELD_NUMBER: _ClassVar[int]
-    KEYTYPE_FIELD_NUMBER: _ClassVar[int]
-    VISIBLEBELOW_FIELD_NUMBER: _ClassVar[int]
-    NEWUSERINHERIT_FIELD_NUMBER: _ClassVar[int]
-    ROLETYPE_FIELD_NUMBER: _ClassVar[int]
-    roleId: int
-    nodeId: int
-    encryptedData: str
-    keyType: str
-    visibleBelow: bool
-    newUserInherit: bool
-    roleType: str
-    def __init__(self, roleId: _Optional[int] = ..., nodeId: _Optional[int] = ..., encryptedData: _Optional[str] = ..., keyType: _Optional[str] = ..., visibleBelow: bool = ..., newUserInherit: bool = ..., roleType: _Optional[str] = ...) -> None: ...
-
-class User(_message.Message):
-    __slots__ = ("enterpriseUserId", "nodeId", "encryptedData", "keyType", "username", "status", "lock", "userId", "accountShareExpiration", "fullName", "jobTitle", "tfaEnabled", "transferAcceptanceStatus")
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    NODEID_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDDATA_FIELD_NUMBER: _ClassVar[int]
-    KEYTYPE_FIELD_NUMBER: _ClassVar[int]
-    USERNAME_FIELD_NUMBER: _ClassVar[int]
-    STATUS_FIELD_NUMBER: _ClassVar[int]
-    LOCK_FIELD_NUMBER: _ClassVar[int]
-    USERID_FIELD_NUMBER: _ClassVar[int]
-    ACCOUNTSHAREEXPIRATION_FIELD_NUMBER: _ClassVar[int]
-    FULLNAME_FIELD_NUMBER: _ClassVar[int]
-    JOBTITLE_FIELD_NUMBER: _ClassVar[int]
-    TFAENABLED_FIELD_NUMBER: _ClassVar[int]
-    TRANSFERACCEPTANCESTATUS_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserId: int
-    nodeId: int
-    encryptedData: str
-    keyType: str
-    username: str
-    status: str
-    lock: int
-    userId: int
-    accountShareExpiration: int
-    fullName: str
-    jobTitle: str
-    tfaEnabled: bool
-    transferAcceptanceStatus: TransferAcceptanceStatus
-    def __init__(self, enterpriseUserId: _Optional[int] = ..., nodeId: _Optional[int] = ..., encryptedData: _Optional[str] = ..., keyType: _Optional[str] = ..., username: _Optional[str] = ..., status: _Optional[str] = ..., lock: _Optional[int] = ..., userId: _Optional[int] = ..., accountShareExpiration: _Optional[int] = ..., fullName: _Optional[str] = ..., jobTitle: _Optional[str] = ..., tfaEnabled: bool = ..., transferAcceptanceStatus: _Optional[_Union[TransferAcceptanceStatus, str]] = ...) -> None: ...
-
-class UserAlias(_message.Message):
-    __slots__ = ("enterpriseUserId", "username")
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    USERNAME_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserId: int
-    username: str
-    def __init__(self, enterpriseUserId: _Optional[int] = ..., username: _Optional[str] = ...) -> None: ...
-
-class ComplianceReportMetaData(_message.Message):
-    __slots__ = ("reportUid", "nodeId", "reportName", "dateGenerated", "runByName", "numberOfOwners", "numberOfRecords")
-    REPORTUID_FIELD_NUMBER: _ClassVar[int]
-    NODEID_FIELD_NUMBER: _ClassVar[int]
-    REPORTNAME_FIELD_NUMBER: _ClassVar[int]
-    DATEGENERATED_FIELD_NUMBER: _ClassVar[int]
-    RUNBYNAME_FIELD_NUMBER: _ClassVar[int]
-    NUMBEROFOWNERS_FIELD_NUMBER: _ClassVar[int]
-    NUMBEROFRECORDS_FIELD_NUMBER: _ClassVar[int]
-    reportUid: bytes
-    nodeId: int
-    reportName: str
-    dateGenerated: int
-    runByName: str
-    numberOfOwners: int
-    numberOfRecords: int
-    def __init__(self, reportUid: _Optional[bytes] = ..., nodeId: _Optional[int] = ..., reportName: _Optional[str] = ..., dateGenerated: _Optional[int] = ..., runByName: _Optional[str] = ..., numberOfOwners: _Optional[int] = ..., numberOfRecords: _Optional[int] = ...) -> None: ...
-
-class ManagedNode(_message.Message):
-    __slots__ = ("roleId", "managedNodeId", "cascadeNodeManagement")
-    ROLEID_FIELD_NUMBER: _ClassVar[int]
-    MANAGEDNODEID_FIELD_NUMBER: _ClassVar[int]
-    CASCADENODEMANAGEMENT_FIELD_NUMBER: _ClassVar[int]
-    roleId: int
-    managedNodeId: int
-    cascadeNodeManagement: bool
-    def __init__(self, roleId: _Optional[int] = ..., managedNodeId: _Optional[int] = ..., cascadeNodeManagement: bool = ...) -> None: ...
-
-class UserManagedNode(_message.Message):
-    __slots__ = ("nodeId", "cascadeNodeManagement", "privileges")
-    NODEID_FIELD_NUMBER: _ClassVar[int]
-    CASCADENODEMANAGEMENT_FIELD_NUMBER: _ClassVar[int]
-    PRIVILEGES_FIELD_NUMBER: _ClassVar[int]
-    nodeId: int
-    cascadeNodeManagement: bool
-    privileges: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, nodeId: _Optional[int] = ..., cascadeNodeManagement: bool = ..., privileges: _Optional[_Iterable[str]] = ...) -> None: ...
-
-class UserPrivilege(_message.Message):
-    __slots__ = ("userManagedNodes", "enterpriseUserId", "encryptedData")
-    USERMANAGEDNODES_FIELD_NUMBER: _ClassVar[int]
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDDATA_FIELD_NUMBER: _ClassVar[int]
-    userManagedNodes: _containers.RepeatedCompositeFieldContainer[UserManagedNode]
-    enterpriseUserId: int
-    encryptedData: str
-    def __init__(self, userManagedNodes: _Optional[_Iterable[_Union[UserManagedNode, _Mapping]]] = ..., enterpriseUserId: _Optional[int] = ..., encryptedData: _Optional[str] = ...) -> None: ...
-
-class RoleUser(_message.Message):
-    __slots__ = ("roleId", "enterpriseUserId")
-    ROLEID_FIELD_NUMBER: _ClassVar[int]
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    roleId: int
-    enterpriseUserId: int
-    def __init__(self, roleId: _Optional[int] = ..., enterpriseUserId: _Optional[int] = ...) -> None: ...
-
-class RolePrivilege(_message.Message):
-    __slots__ = ("managedNodeId", "roleId", "privilegeType")
-    MANAGEDNODEID_FIELD_NUMBER: _ClassVar[int]
-    ROLEID_FIELD_NUMBER: _ClassVar[int]
-    PRIVILEGETYPE_FIELD_NUMBER: _ClassVar[int]
-    managedNodeId: int
-    roleId: int
-    privilegeType: str
-    def __init__(self, managedNodeId: _Optional[int] = ..., roleId: _Optional[int] = ..., privilegeType: _Optional[str] = ...) -> None: ...
-
-class RoleEnforcement(_message.Message):
-    __slots__ = ("roleId", "enforcementType", "value")
-    ROLEID_FIELD_NUMBER: _ClassVar[int]
-    ENFORCEMENTTYPE_FIELD_NUMBER: _ClassVar[int]
-    VALUE_FIELD_NUMBER: _ClassVar[int]
-    roleId: int
-    enforcementType: str
-    value: str
-    def __init__(self, roleId: _Optional[int] = ..., enforcementType: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
-
-class Team(_message.Message):
-    __slots__ = ("teamUid", "name", "nodeId", "restrictEdit", "restrictShare", "restrictView", "encryptedData", "encryptedTeamKey")
-    TEAMUID_FIELD_NUMBER: _ClassVar[int]
-    NAME_FIELD_NUMBER: _ClassVar[int]
-    NODEID_FIELD_NUMBER: _ClassVar[int]
-    RESTRICTEDIT_FIELD_NUMBER: _ClassVar[int]
-    RESTRICTSHARE_FIELD_NUMBER: _ClassVar[int]
-    RESTRICTVIEW_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDDATA_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDTEAMKEY_FIELD_NUMBER: _ClassVar[int]
-    teamUid: bytes
-    name: str
-    nodeId: int
-    restrictEdit: bool
-    restrictShare: bool
-    restrictView: bool
-    encryptedData: str
-    encryptedTeamKey: str
-    def __init__(self, teamUid: _Optional[bytes] = ..., name: _Optional[str] = ..., nodeId: _Optional[int] = ..., restrictEdit: bool = ..., restrictShare: bool = ..., restrictView: bool = ..., encryptedData: _Optional[str] = ..., encryptedTeamKey: _Optional[str] = ...) -> None: ...
-
-class TeamUser(_message.Message):
-    __slots__ = ("teamUid", "enterpriseUserId", "userType")
-    TEAMUID_FIELD_NUMBER: _ClassVar[int]
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    USERTYPE_FIELD_NUMBER: _ClassVar[int]
-    teamUid: bytes
-    enterpriseUserId: int
-    userType: str
-    def __init__(self, teamUid: _Optional[bytes] = ..., enterpriseUserId: _Optional[int] = ..., userType: _Optional[str] = ...) -> None: ...
-
-class GetDistributorInfoResponse(_message.Message):
-    __slots__ = ("distributors",)
-    DISTRIBUTORS_FIELD_NUMBER: _ClassVar[int]
-    distributors: _containers.RepeatedCompositeFieldContainer[Distributor]
-    def __init__(self, distributors: _Optional[_Iterable[_Union[Distributor, _Mapping]]] = ...) -> None: ...
-
-class Distributor(_message.Message):
-    __slots__ = ("name", "mspInfos")
-    NAME_FIELD_NUMBER: _ClassVar[int]
-    MSPINFOS_FIELD_NUMBER: _ClassVar[int]
-    name: str
-    mspInfos: _containers.RepeatedCompositeFieldContainer[MspInfo]
-    def __init__(self, name: _Optional[str] = ..., mspInfos: _Optional[_Iterable[_Union[MspInfo, _Mapping]]] = ...) -> None: ...
-
-class MspInfo(_message.Message):
-    __slots__ = ("enterpriseId", "enterpriseName", "allocatedLicenses", "allowedMcProducts", "allowedAddOns", "maxFilePlanType", "managedCompanies", "allowUnlimitedLicenses", "addOns")
-    ENTERPRISEID_FIELD_NUMBER: _ClassVar[int]
-    ENTERPRISENAME_FIELD_NUMBER: _ClassVar[int]
-    ALLOCATEDLICENSES_FIELD_NUMBER: _ClassVar[int]
-    ALLOWEDMCPRODUCTS_FIELD_NUMBER: _ClassVar[int]
-    ALLOWEDADDONS_FIELD_NUMBER: _ClassVar[int]
-    MAXFILEPLANTYPE_FIELD_NUMBER: _ClassVar[int]
-    MANAGEDCOMPANIES_FIELD_NUMBER: _ClassVar[int]
-    ALLOWUNLIMITEDLICENSES_FIELD_NUMBER: _ClassVar[int]
-    ADDONS_FIELD_NUMBER: _ClassVar[int]
-    enterpriseId: int
-    enterpriseName: str
-    allocatedLicenses: int
-    allowedMcProducts: _containers.RepeatedScalarFieldContainer[str]
-    allowedAddOns: _containers.RepeatedScalarFieldContainer[str]
-    maxFilePlanType: str
-    managedCompanies: _containers.RepeatedCompositeFieldContainer[ManagedCompany]
-    allowUnlimitedLicenses: bool
-    addOns: _containers.RepeatedCompositeFieldContainer[LicenseAddOn]
-    def __init__(self, enterpriseId: _Optional[int] = ..., enterpriseName: _Optional[str] = ..., allocatedLicenses: _Optional[int] = ..., allowedMcProducts: _Optional[_Iterable[str]] = ..., allowedAddOns: _Optional[_Iterable[str]] = ..., maxFilePlanType: _Optional[str] = ..., managedCompanies: _Optional[_Iterable[_Union[ManagedCompany, _Mapping]]] = ..., allowUnlimitedLicenses: bool = ..., addOns: _Optional[_Iterable[_Union[LicenseAddOn, _Mapping]]] = ...) -> None: ...
-
-class ManagedCompany(_message.Message):
-    __slots__ = ("mcEnterpriseId", "mcEnterpriseName", "mspNodeId", "numberOfSeats", "numberOfUsers", "productId", "isExpired", "treeKey", "tree_key_role", "filePlanType", "addOns")
-    MCENTERPRISEID_FIELD_NUMBER: _ClassVar[int]
-    MCENTERPRISENAME_FIELD_NUMBER: _ClassVar[int]
-    MSPNODEID_FIELD_NUMBER: _ClassVar[int]
-    NUMBEROFSEATS_FIELD_NUMBER: _ClassVar[int]
-    NUMBEROFUSERS_FIELD_NUMBER: _ClassVar[int]
-    PRODUCTID_FIELD_NUMBER: _ClassVar[int]
-    ISEXPIRED_FIELD_NUMBER: _ClassVar[int]
-    TREEKEY_FIELD_NUMBER: _ClassVar[int]
-    TREE_KEY_ROLE_FIELD_NUMBER: _ClassVar[int]
-    FILEPLANTYPE_FIELD_NUMBER: _ClassVar[int]
-    ADDONS_FIELD_NUMBER: _ClassVar[int]
-    mcEnterpriseId: int
-    mcEnterpriseName: str
-    mspNodeId: int
-    numberOfSeats: int
-    numberOfUsers: int
-    productId: str
-    isExpired: bool
-    treeKey: str
-    tree_key_role: int
-    filePlanType: str
-    addOns: _containers.RepeatedCompositeFieldContainer[LicenseAddOn]
-    def __init__(self, mcEnterpriseId: _Optional[int] = ..., mcEnterpriseName: _Optional[str] = ..., mspNodeId: _Optional[int] = ..., numberOfSeats: _Optional[int] = ..., numberOfUsers: _Optional[int] = ..., productId: _Optional[str] = ..., isExpired: bool = ..., treeKey: _Optional[str] = ..., tree_key_role: _Optional[int] = ..., filePlanType: _Optional[str] = ..., addOns: _Optional[_Iterable[_Union[LicenseAddOn, _Mapping]]] = ...) -> None: ...
-
-class MSPPool(_message.Message):
-    __slots__ = ("productId", "seats", "availableSeats", "stash")
-    PRODUCTID_FIELD_NUMBER: _ClassVar[int]
-    SEATS_FIELD_NUMBER: _ClassVar[int]
-    AVAILABLESEATS_FIELD_NUMBER: _ClassVar[int]
-    STASH_FIELD_NUMBER: _ClassVar[int]
-    productId: str
-    seats: int
-    availableSeats: int
-    stash: int
-    def __init__(self, productId: _Optional[str] = ..., seats: _Optional[int] = ..., availableSeats: _Optional[int] = ..., stash: _Optional[int] = ...) -> None: ...
-
-class MSPContact(_message.Message):
-    __slots__ = ("enterpriseId", "enterpriseName")
-    ENTERPRISEID_FIELD_NUMBER: _ClassVar[int]
-    ENTERPRISENAME_FIELD_NUMBER: _ClassVar[int]
-    enterpriseId: int
-    enterpriseName: str
-    def __init__(self, enterpriseId: _Optional[int] = ..., enterpriseName: _Optional[str] = ...) -> None: ...
-
-class LicenseAddOn(_message.Message):
-    __slots__ = ("name", "enabled", "isTrial", "expiration", "created", "seats", "activationTime", "includedInProduct", "apiCallCount", "tierDescription", "seatsAllocated")
-    NAME_FIELD_NUMBER: _ClassVar[int]
-    ENABLED_FIELD_NUMBER: _ClassVar[int]
-    ISTRIAL_FIELD_NUMBER: _ClassVar[int]
-    EXPIRATION_FIELD_NUMBER: _ClassVar[int]
-    CREATED_FIELD_NUMBER: _ClassVar[int]
-    SEATS_FIELD_NUMBER: _ClassVar[int]
-    ACTIVATIONTIME_FIELD_NUMBER: _ClassVar[int]
-    INCLUDEDINPRODUCT_FIELD_NUMBER: _ClassVar[int]
-    APICALLCOUNT_FIELD_NUMBER: _ClassVar[int]
-    TIERDESCRIPTION_FIELD_NUMBER: _ClassVar[int]
-    SEATSALLOCATED_FIELD_NUMBER: _ClassVar[int]
-    name: str
-    enabled: bool
-    isTrial: bool
-    expiration: int
-    created: int
-    seats: int
-    activationTime: int
-    includedInProduct: bool
-    apiCallCount: int
-    tierDescription: str
-    seatsAllocated: int
-    def __init__(self, name: _Optional[str] = ..., enabled: bool = ..., isTrial: bool = ..., expiration: _Optional[int] = ..., created: _Optional[int] = ..., seats: _Optional[int] = ..., activationTime: _Optional[int] = ..., includedInProduct: bool = ..., apiCallCount: _Optional[int] = ..., tierDescription: _Optional[str] = ..., seatsAllocated: _Optional[int] = ...) -> None: ...
-
-class MCDefault(_message.Message):
-    __slots__ = ("mcProduct", "addOns", "filePlanType", "maxLicenses", "fixedMaxLicenses")
-    MCPRODUCT_FIELD_NUMBER: _ClassVar[int]
-    ADDONS_FIELD_NUMBER: _ClassVar[int]
-    FILEPLANTYPE_FIELD_NUMBER: _ClassVar[int]
-    MAXLICENSES_FIELD_NUMBER: _ClassVar[int]
-    FIXEDMAXLICENSES_FIELD_NUMBER: _ClassVar[int]
-    mcProduct: str
-    addOns: _containers.RepeatedScalarFieldContainer[str]
-    filePlanType: str
-    maxLicenses: int
-    fixedMaxLicenses: bool
-    def __init__(self, mcProduct: _Optional[str] = ..., addOns: _Optional[_Iterable[str]] = ..., filePlanType: _Optional[str] = ..., maxLicenses: _Optional[int] = ..., fixedMaxLicenses: bool = ...) -> None: ...
-
-class MSPPermits(_message.Message):
-    __slots__ = ("restricted", "maxAllowedLicenses", "allowedMcProducts", "allowedAddOns", "maxFilePlanType", "allowUnlimitedLicenses", "mcDefaults")
-    RESTRICTED_FIELD_NUMBER: _ClassVar[int]
-    MAXALLOWEDLICENSES_FIELD_NUMBER: _ClassVar[int]
-    ALLOWEDMCPRODUCTS_FIELD_NUMBER: _ClassVar[int]
-    ALLOWEDADDONS_FIELD_NUMBER: _ClassVar[int]
-    MAXFILEPLANTYPE_FIELD_NUMBER: _ClassVar[int]
-    ALLOWUNLIMITEDLICENSES_FIELD_NUMBER: _ClassVar[int]
-    MCDEFAULTS_FIELD_NUMBER: _ClassVar[int]
-    restricted: bool
-    maxAllowedLicenses: int
-    allowedMcProducts: _containers.RepeatedScalarFieldContainer[str]
-    allowedAddOns: _containers.RepeatedScalarFieldContainer[str]
-    maxFilePlanType: str
-    allowUnlimitedLicenses: bool
-    mcDefaults: _containers.RepeatedCompositeFieldContainer[MCDefault]
-    def __init__(self, restricted: bool = ..., maxAllowedLicenses: _Optional[int] = ..., allowedMcProducts: _Optional[_Iterable[str]] = ..., allowedAddOns: _Optional[_Iterable[str]] = ..., maxFilePlanType: _Optional[str] = ..., allowUnlimitedLicenses: bool = ..., mcDefaults: _Optional[_Iterable[_Union[MCDefault, _Mapping]]] = ...) -> None: ...
-
-class License(_message.Message):
-    __slots__ = ("paid", "numberOfSeats", "expiration", "licenseKeyId", "productTypeId", "name", "enterpriseLicenseId", "seatsAllocated", "seatsPending", "tier", "filePlanTypeId", "maxBytes", "storageExpiration", "licenseStatus", "mspPool", "managedBy", "addOns", "nextBillingDate", "hasMSPLegacyLog", "mspPermits", "distributor")
-    PAID_FIELD_NUMBER: _ClassVar[int]
-    NUMBEROFSEATS_FIELD_NUMBER: _ClassVar[int]
-    EXPIRATION_FIELD_NUMBER: _ClassVar[int]
-    LICENSEKEYID_FIELD_NUMBER: _ClassVar[int]
-    PRODUCTTYPEID_FIELD_NUMBER: _ClassVar[int]
-    NAME_FIELD_NUMBER: _ClassVar[int]
-    ENTERPRISELICENSEID_FIELD_NUMBER: _ClassVar[int]
-    SEATSALLOCATED_FIELD_NUMBER: _ClassVar[int]
-    SEATSPENDING_FIELD_NUMBER: _ClassVar[int]
-    TIER_FIELD_NUMBER: _ClassVar[int]
-    FILEPLANTYPEID_FIELD_NUMBER: _ClassVar[int]
-    MAXBYTES_FIELD_NUMBER: _ClassVar[int]
-    STORAGEEXPIRATION_FIELD_NUMBER: _ClassVar[int]
-    LICENSESTATUS_FIELD_NUMBER: _ClassVar[int]
-    MSPPOOL_FIELD_NUMBER: _ClassVar[int]
-    MANAGEDBY_FIELD_NUMBER: _ClassVar[int]
-    ADDONS_FIELD_NUMBER: _ClassVar[int]
-    NEXTBILLINGDATE_FIELD_NUMBER: _ClassVar[int]
-    HASMSPLEGACYLOG_FIELD_NUMBER: _ClassVar[int]
-    MSPPERMITS_FIELD_NUMBER: _ClassVar[int]
-    DISTRIBUTOR_FIELD_NUMBER: _ClassVar[int]
-    paid: bool
-    numberOfSeats: int
-    expiration: int
-    licenseKeyId: int
-    productTypeId: int
-    name: str
-    enterpriseLicenseId: int
-    seatsAllocated: int
-    seatsPending: int
-    tier: int
-    filePlanTypeId: int
-    maxBytes: int
-    storageExpiration: int
-    licenseStatus: str
-    mspPool: _containers.RepeatedCompositeFieldContainer[MSPPool]
-    managedBy: MSPContact
-    addOns: _containers.RepeatedCompositeFieldContainer[LicenseAddOn]
-    nextBillingDate: int
-    hasMSPLegacyLog: bool
-    mspPermits: MSPPermits
-    distributor: bool
-    def __init__(self, paid: bool = ..., numberOfSeats: _Optional[int] = ..., expiration: _Optional[int] = ..., licenseKeyId: _Optional[int] = ..., productTypeId: _Optional[int] = ..., name: _Optional[str] = ..., enterpriseLicenseId: _Optional[int] = ..., seatsAllocated: _Optional[int] = ..., seatsPending: _Optional[int] = ..., tier: _Optional[int] = ..., filePlanTypeId: _Optional[int] = ..., maxBytes: _Optional[int] = ..., storageExpiration: _Optional[int] = ..., licenseStatus: _Optional[str] = ..., mspPool: _Optional[_Iterable[_Union[MSPPool, _Mapping]]] = ..., managedBy: _Optional[_Union[MSPContact, _Mapping]] = ..., addOns: _Optional[_Iterable[_Union[LicenseAddOn, _Mapping]]] = ..., nextBillingDate: _Optional[int] = ..., hasMSPLegacyLog: bool = ..., mspPermits: _Optional[_Union[MSPPermits, _Mapping]] = ..., distributor: bool = ...) -> None: ...
-
-class Bridge(_message.Message):
-    __slots__ = ("bridgeId", "nodeId", "wanIpEnforcement", "lanIpEnforcement", "status")
-    BRIDGEID_FIELD_NUMBER: _ClassVar[int]
-    NODEID_FIELD_NUMBER: _ClassVar[int]
-    WANIPENFORCEMENT_FIELD_NUMBER: _ClassVar[int]
-    LANIPENFORCEMENT_FIELD_NUMBER: _ClassVar[int]
-    STATUS_FIELD_NUMBER: _ClassVar[int]
-    bridgeId: int
-    nodeId: int
-    wanIpEnforcement: str
-    lanIpEnforcement: str
-    status: str
-    def __init__(self, bridgeId: _Optional[int] = ..., nodeId: _Optional[int] = ..., wanIpEnforcement: _Optional[str] = ..., lanIpEnforcement: _Optional[str] = ..., status: _Optional[str] = ...) -> None: ...
-
-class Scim(_message.Message):
-    __slots__ = ("scimId", "nodeId", "status", "lastSynced", "rolePrefix", "uniqueGroups")
-    SCIMID_FIELD_NUMBER: _ClassVar[int]
-    NODEID_FIELD_NUMBER: _ClassVar[int]
-    STATUS_FIELD_NUMBER: _ClassVar[int]
-    LASTSYNCED_FIELD_NUMBER: _ClassVar[int]
-    ROLEPREFIX_FIELD_NUMBER: _ClassVar[int]
-    UNIQUEGROUPS_FIELD_NUMBER: _ClassVar[int]
-    scimId: int
-    nodeId: int
-    status: str
-    lastSynced: int
-    rolePrefix: str
-    uniqueGroups: bool
-    def __init__(self, scimId: _Optional[int] = ..., nodeId: _Optional[int] = ..., status: _Optional[str] = ..., lastSynced: _Optional[int] = ..., rolePrefix: _Optional[str] = ..., uniqueGroups: bool = ...) -> None: ...
-
-class EmailProvision(_message.Message):
-    __slots__ = ("id", "nodeId", "domain", "method")
-    ID_FIELD_NUMBER: _ClassVar[int]
-    NODEID_FIELD_NUMBER: _ClassVar[int]
-    DOMAIN_FIELD_NUMBER: _ClassVar[int]
-    METHOD_FIELD_NUMBER: _ClassVar[int]
-    id: int
-    nodeId: int
-    domain: str
-    method: str
-    def __init__(self, id: _Optional[int] = ..., nodeId: _Optional[int] = ..., domain: _Optional[str] = ..., method: _Optional[str] = ...) -> None: ...
-
-class QueuedTeam(_message.Message):
-    __slots__ = ("teamUid", "name", "nodeId", "encryptedData")
-    TEAMUID_FIELD_NUMBER: _ClassVar[int]
-    NAME_FIELD_NUMBER: _ClassVar[int]
-    NODEID_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDDATA_FIELD_NUMBER: _ClassVar[int]
-    teamUid: bytes
-    name: str
-    nodeId: int
-    encryptedData: str
-    def __init__(self, teamUid: _Optional[bytes] = ..., name: _Optional[str] = ..., nodeId: _Optional[int] = ..., encryptedData: _Optional[str] = ...) -> None: ...
-
-class QueuedTeamUser(_message.Message):
-    __slots__ = ("teamUid", "users")
-    TEAMUID_FIELD_NUMBER: _ClassVar[int]
-    USERS_FIELD_NUMBER: _ClassVar[int]
-    teamUid: bytes
-    users: _containers.RepeatedScalarFieldContainer[int]
-    def __init__(self, teamUid: _Optional[bytes] = ..., users: _Optional[_Iterable[int]] = ...) -> None: ...
-
-class TeamsAddResult(_message.Message):
-    __slots__ = ("successfulTeamAdd", "unsuccessfulTeamAdd", "result", "errorMessage")
-    SUCCESSFULTEAMADD_FIELD_NUMBER: _ClassVar[int]
-    UNSUCCESSFULTEAMADD_FIELD_NUMBER: _ClassVar[int]
-    RESULT_FIELD_NUMBER: _ClassVar[int]
-    ERRORMESSAGE_FIELD_NUMBER: _ClassVar[int]
-    successfulTeamAdd: _containers.RepeatedCompositeFieldContainer[TeamAddResult]
-    unsuccessfulTeamAdd: _containers.RepeatedCompositeFieldContainer[TeamAddResult]
-    result: str
-    errorMessage: str
-    def __init__(self, successfulTeamAdd: _Optional[_Iterable[_Union[TeamAddResult, _Mapping]]] = ..., unsuccessfulTeamAdd: _Optional[_Iterable[_Union[TeamAddResult, _Mapping]]] = ..., result: _Optional[str] = ..., errorMessage: _Optional[str] = ...) -> None: ...
-
-class TeamAddResult(_message.Message):
-    __slots__ = ("team", "result", "errorMessage")
-    TEAM_FIELD_NUMBER: _ClassVar[int]
-    RESULT_FIELD_NUMBER: _ClassVar[int]
-    ERRORMESSAGE_FIELD_NUMBER: _ClassVar[int]
-    team: Team
-    result: str
-    errorMessage: str
-    def __init__(self, team: _Optional[_Union[Team, _Mapping]] = ..., result: _Optional[str] = ..., errorMessage: _Optional[str] = ...) -> None: ...
-
-class SsoService(_message.Message):
-    __slots__ = ("ssoServiceProviderId", "nodeId", "name", "sp_url", "inviteNewUsers", "active", "isCloud")
-    SSOSERVICEPROVIDERID_FIELD_NUMBER: _ClassVar[int]
-    NODEID_FIELD_NUMBER: _ClassVar[int]
-    NAME_FIELD_NUMBER: _ClassVar[int]
-    SP_URL_FIELD_NUMBER: _ClassVar[int]
-    INVITENEWUSERS_FIELD_NUMBER: _ClassVar[int]
-    ACTIVE_FIELD_NUMBER: _ClassVar[int]
-    ISCLOUD_FIELD_NUMBER: _ClassVar[int]
-    ssoServiceProviderId: int
-    nodeId: int
-    name: str
-    sp_url: str
-    inviteNewUsers: bool
-    active: bool
-    isCloud: bool
-    def __init__(self, ssoServiceProviderId: _Optional[int] = ..., nodeId: _Optional[int] = ..., name: _Optional[str] = ..., sp_url: _Optional[str] = ..., inviteNewUsers: bool = ..., active: bool = ..., isCloud: bool = ...) -> None: ...
-
-class ReportFilterUser(_message.Message):
-    __slots__ = ("userId", "email")
-    USERID_FIELD_NUMBER: _ClassVar[int]
-    EMAIL_FIELD_NUMBER: _ClassVar[int]
-    userId: int
-    email: str
-    def __init__(self, userId: _Optional[int] = ..., email: _Optional[str] = ...) -> None: ...
-
-class DeviceRequestForAdminApproval(_message.Message):
-    __slots__ = ("deviceId", "enterpriseUserId", "encryptedDeviceToken", "devicePublicKey", "deviceName", "clientVersion", "deviceType", "date", "ipAddress", "location", "email", "accountUid")
-    DEVICEID_FIELD_NUMBER: _ClassVar[int]
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: _ClassVar[int]
-    DEVICEPUBLICKEY_FIELD_NUMBER: _ClassVar[int]
-    DEVICENAME_FIELD_NUMBER: _ClassVar[int]
-    CLIENTVERSION_FIELD_NUMBER: _ClassVar[int]
-    DEVICETYPE_FIELD_NUMBER: _ClassVar[int]
-    DATE_FIELD_NUMBER: _ClassVar[int]
-    IPADDRESS_FIELD_NUMBER: _ClassVar[int]
-    LOCATION_FIELD_NUMBER: _ClassVar[int]
-    EMAIL_FIELD_NUMBER: _ClassVar[int]
-    ACCOUNTUID_FIELD_NUMBER: _ClassVar[int]
-    deviceId: int
-    enterpriseUserId: int
-    encryptedDeviceToken: bytes
-    devicePublicKey: bytes
-    deviceName: str
-    clientVersion: str
-    deviceType: str
-    date: int
-    ipAddress: str
-    location: str
-    email: str
-    accountUid: bytes
-    def __init__(self, deviceId: _Optional[int] = ..., enterpriseUserId: _Optional[int] = ..., encryptedDeviceToken: _Optional[bytes] = ..., devicePublicKey: _Optional[bytes] = ..., deviceName: _Optional[str] = ..., clientVersion: _Optional[str] = ..., deviceType: _Optional[str] = ..., date: _Optional[int] = ..., ipAddress: _Optional[str] = ..., location: _Optional[str] = ..., email: _Optional[str] = ..., accountUid: _Optional[bytes] = ...) -> None: ...
-
-class EnterpriseData(_message.Message):
-    __slots__ = ("entity", "delete", "data")
-    ENTITY_FIELD_NUMBER: _ClassVar[int]
-    DELETE_FIELD_NUMBER: _ClassVar[int]
-    DATA_FIELD_NUMBER: _ClassVar[int]
-    entity: EnterpriseDataEntity
-    delete: bool
-    data: _containers.RepeatedScalarFieldContainer[bytes]
-    def __init__(self, entity: _Optional[_Union[EnterpriseDataEntity, str]] = ..., delete: bool = ..., data: _Optional[_Iterable[bytes]] = ...) -> None: ...
-
-class EnterpriseDataResponse(_message.Message):
-    __slots__ = ("continuationToken", "hasMore", "cacheStatus", "data", "generalData")
-    CONTINUATIONTOKEN_FIELD_NUMBER: _ClassVar[int]
-    HASMORE_FIELD_NUMBER: _ClassVar[int]
-    CACHESTATUS_FIELD_NUMBER: _ClassVar[int]
-    DATA_FIELD_NUMBER: _ClassVar[int]
-    GENERALDATA_FIELD_NUMBER: _ClassVar[int]
-    continuationToken: bytes
-    hasMore: bool
-    cacheStatus: CacheStatus
-    data: _containers.RepeatedCompositeFieldContainer[EnterpriseData]
-    generalData: GeneralDataEntity
-    def __init__(self, continuationToken: _Optional[bytes] = ..., hasMore: bool = ..., cacheStatus: _Optional[_Union[CacheStatus, str]] = ..., data: _Optional[_Iterable[_Union[EnterpriseData, _Mapping]]] = ..., generalData: _Optional[_Union[GeneralDataEntity, _Mapping]] = ...) -> None: ...
-
-class BackupRequest(_message.Message):
-    __slots__ = ("continuationToken",)
-    CONTINUATIONTOKEN_FIELD_NUMBER: _ClassVar[int]
-    continuationToken: bytes
-    def __init__(self, continuationToken: _Optional[bytes] = ...) -> None: ...
-
-class BackupRecord(_message.Message):
-    __slots__ = ("userId", "recordUid", "key", "keyType", "version", "data", "extra")
-    USERID_FIELD_NUMBER: _ClassVar[int]
-    RECORDUID_FIELD_NUMBER: _ClassVar[int]
-    KEY_FIELD_NUMBER: _ClassVar[int]
-    KEYTYPE_FIELD_NUMBER: _ClassVar[int]
-    VERSION_FIELD_NUMBER: _ClassVar[int]
-    DATA_FIELD_NUMBER: _ClassVar[int]
-    EXTRA_FIELD_NUMBER: _ClassVar[int]
-    userId: int
-    recordUid: bytes
-    key: bytes
-    keyType: BackupKeyType
-    version: int
-    data: bytes
-    extra: bytes
-    def __init__(self, userId: _Optional[int] = ..., recordUid: _Optional[bytes] = ..., key: _Optional[bytes] = ..., keyType: _Optional[_Union[BackupKeyType, str]] = ..., version: _Optional[int] = ..., data: _Optional[bytes] = ..., extra: _Optional[bytes] = ...) -> None: ...
-
-class BackupKey(_message.Message):
-    __slots__ = ("userId", "backupKey")
-    USERID_FIELD_NUMBER: _ClassVar[int]
-    BACKUPKEY_FIELD_NUMBER: _ClassVar[int]
-    userId: int
-    backupKey: bytes
-    def __init__(self, userId: _Optional[int] = ..., backupKey: _Optional[bytes] = ...) -> None: ...
-
-class BackupUser(_message.Message):
-    __slots__ = ("userId", "userName", "dataKey", "dataKeyType", "privateKey", "treeKey", "treeKeyType", "backupKeys", "privateECKey")
-    USERID_FIELD_NUMBER: _ClassVar[int]
-    USERNAME_FIELD_NUMBER: _ClassVar[int]
-    DATAKEY_FIELD_NUMBER: _ClassVar[int]
-    DATAKEYTYPE_FIELD_NUMBER: _ClassVar[int]
-    PRIVATEKEY_FIELD_NUMBER: _ClassVar[int]
-    TREEKEY_FIELD_NUMBER: _ClassVar[int]
-    TREEKEYTYPE_FIELD_NUMBER: _ClassVar[int]
-    BACKUPKEYS_FIELD_NUMBER: _ClassVar[int]
-    PRIVATEECKEY_FIELD_NUMBER: _ClassVar[int]
-    userId: int
-    userName: str
-    dataKey: bytes
-    dataKeyType: BackupUserDataKeyType
-    privateKey: bytes
-    treeKey: bytes
-    treeKeyType: BackupKeyType
-    backupKeys: _containers.RepeatedCompositeFieldContainer[BackupKey]
-    privateECKey: bytes
-    def __init__(self, userId: _Optional[int] = ..., userName: _Optional[str] = ..., dataKey: _Optional[bytes] = ..., dataKeyType: _Optional[_Union[BackupUserDataKeyType, str]] = ..., privateKey: _Optional[bytes] = ..., treeKey: _Optional[bytes] = ..., treeKeyType: _Optional[_Union[BackupKeyType, str]] = ..., backupKeys: _Optional[_Iterable[_Union[BackupKey, _Mapping]]] = ..., privateECKey: _Optional[bytes] = ...) -> None: ...
-
-class BackupResponse(_message.Message):
-    __slots__ = ("enterpriseEccPrivateKey", "users", "records", "continuationToken")
-    ENTERPRISEECCPRIVATEKEY_FIELD_NUMBER: _ClassVar[int]
-    USERS_FIELD_NUMBER: _ClassVar[int]
-    RECORDS_FIELD_NUMBER: _ClassVar[int]
-    CONTINUATIONTOKEN_FIELD_NUMBER: _ClassVar[int]
-    enterpriseEccPrivateKey: bytes
-    users: _containers.RepeatedCompositeFieldContainer[BackupUser]
-    records: _containers.RepeatedCompositeFieldContainer[BackupRecord]
-    continuationToken: bytes
-    def __init__(self, enterpriseEccPrivateKey: _Optional[bytes] = ..., users: _Optional[_Iterable[_Union[BackupUser, _Mapping]]] = ..., records: _Optional[_Iterable[_Union[BackupRecord, _Mapping]]] = ..., continuationToken: _Optional[bytes] = ...) -> None: ...
-
-class BackupFile(_message.Message):
-    __slots__ = ("user", "backupUid", "fileName", "created", "downloadUrl")
-    USER_FIELD_NUMBER: _ClassVar[int]
-    BACKUPUID_FIELD_NUMBER: _ClassVar[int]
-    FILENAME_FIELD_NUMBER: _ClassVar[int]
-    CREATED_FIELD_NUMBER: _ClassVar[int]
-    DOWNLOADURL_FIELD_NUMBER: _ClassVar[int]
-    user: str
-    backupUid: bytes
-    fileName: str
-    created: int
-    downloadUrl: str
-    def __init__(self, user: _Optional[str] = ..., backupUid: _Optional[bytes] = ..., fileName: _Optional[str] = ..., created: _Optional[int] = ..., downloadUrl: _Optional[str] = ...) -> None: ...
-
-class BackupsResponse(_message.Message):
-    __slots__ = ("files",)
-    FILES_FIELD_NUMBER: _ClassVar[int]
-    files: _containers.RepeatedCompositeFieldContainer[BackupFile]
-    def __init__(self, files: _Optional[_Iterable[_Union[BackupFile, _Mapping]]] = ...) -> None: ...
-
-class GetEnterpriseDataKeysRequest(_message.Message):
-    __slots__ = ("roleId",)
-    ROLEID_FIELD_NUMBER: _ClassVar[int]
-    roleId: _containers.RepeatedScalarFieldContainer[int]
-    def __init__(self, roleId: _Optional[_Iterable[int]] = ...) -> None: ...
-
-class GetEnterpriseDataKeysResponse(_message.Message):
-    __slots__ = ("reEncryptedRoleKey", "roleKey", "mspKey", "enterpriseKeys", "treeKey")
-    REENCRYPTEDROLEKEY_FIELD_NUMBER: _ClassVar[int]
-    ROLEKEY_FIELD_NUMBER: _ClassVar[int]
-    MSPKEY_FIELD_NUMBER: _ClassVar[int]
-    ENTERPRISEKEYS_FIELD_NUMBER: _ClassVar[int]
-    TREEKEY_FIELD_NUMBER: _ClassVar[int]
-    reEncryptedRoleKey: _containers.RepeatedCompositeFieldContainer[ReEncryptedRoleKey]
-    roleKey: _containers.RepeatedCompositeFieldContainer[RoleKey]
-    mspKey: MspKey
-    enterpriseKeys: EnterpriseKeys
-    treeKey: TreeKey
-    def __init__(self, reEncryptedRoleKey: _Optional[_Iterable[_Union[ReEncryptedRoleKey, _Mapping]]] = ..., roleKey: _Optional[_Iterable[_Union[RoleKey, _Mapping]]] = ..., mspKey: _Optional[_Union[MspKey, _Mapping]] = ..., enterpriseKeys: _Optional[_Union[EnterpriseKeys, _Mapping]] = ..., treeKey: _Optional[_Union[TreeKey, _Mapping]] = ...) -> None: ...
-
-class RoleKey(_message.Message):
-    __slots__ = ("roleId", "encryptedKey", "keyType")
-    ROLEID_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDKEY_FIELD_NUMBER: _ClassVar[int]
-    KEYTYPE_FIELD_NUMBER: _ClassVar[int]
-    roleId: int
-    encryptedKey: str
-    keyType: EncryptedKeyType
-    def __init__(self, roleId: _Optional[int] = ..., encryptedKey: _Optional[str] = ..., keyType: _Optional[_Union[EncryptedKeyType, str]] = ...) -> None: ...
-
-class MspKey(_message.Message):
-    __slots__ = ("encryptedMspTreeKey", "encryptedMspTreeKeyType")
-    ENCRYPTEDMSPTREEKEY_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDMSPTREEKEYTYPE_FIELD_NUMBER: _ClassVar[int]
-    encryptedMspTreeKey: str
-    encryptedMspTreeKeyType: EncryptedKeyType
-    def __init__(self, encryptedMspTreeKey: _Optional[str] = ..., encryptedMspTreeKeyType: _Optional[_Union[EncryptedKeyType, str]] = ...) -> None: ...
-
-class EnterpriseKeys(_message.Message):
-    __slots__ = ("rsaPublicKey", "rsaEncryptedPrivateKey", "eccPublicKey", "eccEncryptedPrivateKey")
-    RSAPUBLICKEY_FIELD_NUMBER: _ClassVar[int]
-    RSAENCRYPTEDPRIVATEKEY_FIELD_NUMBER: _ClassVar[int]
-    ECCPUBLICKEY_FIELD_NUMBER: _ClassVar[int]
-    ECCENCRYPTEDPRIVATEKEY_FIELD_NUMBER: _ClassVar[int]
-    rsaPublicKey: bytes
-    rsaEncryptedPrivateKey: bytes
-    eccPublicKey: bytes
-    eccEncryptedPrivateKey: bytes
-    def __init__(self, rsaPublicKey: _Optional[bytes] = ..., rsaEncryptedPrivateKey: _Optional[bytes] = ..., eccPublicKey: _Optional[bytes] = ..., eccEncryptedPrivateKey: _Optional[bytes] = ...) -> None: ...
-
-class TreeKey(_message.Message):
-    __slots__ = ("treeKey", "keyTypeId")
-    TREEKEY_FIELD_NUMBER: _ClassVar[int]
-    KEYTYPEID_FIELD_NUMBER: _ClassVar[int]
-    treeKey: str
-    keyTypeId: BackupKeyType
-    def __init__(self, treeKey: _Optional[str] = ..., keyTypeId: _Optional[_Union[BackupKeyType, str]] = ...) -> None: ...
-
-class SharedRecordResponse(_message.Message):
-    __slots__ = ("events",)
-    EVENTS_FIELD_NUMBER: _ClassVar[int]
-    events: _containers.RepeatedCompositeFieldContainer[SharedRecordEvent]
-    def __init__(self, events: _Optional[_Iterable[_Union[SharedRecordEvent, _Mapping]]] = ...) -> None: ...
-
-class SharedRecordEvent(_message.Message):
-    __slots__ = ("recordUid", "userName", "canEdit", "canReshare", "shareFrom")
-    RECORDUID_FIELD_NUMBER: _ClassVar[int]
-    USERNAME_FIELD_NUMBER: _ClassVar[int]
-    CANEDIT_FIELD_NUMBER: _ClassVar[int]
-    CANRESHARE_FIELD_NUMBER: _ClassVar[int]
-    SHAREFROM_FIELD_NUMBER: _ClassVar[int]
-    recordUid: bytes
-    userName: str
-    canEdit: bool
-    canReshare: bool
-    shareFrom: int
-    def __init__(self, recordUid: _Optional[bytes] = ..., userName: _Optional[str] = ..., canEdit: bool = ..., canReshare: bool = ..., shareFrom: _Optional[int] = ...) -> None: ...
-
-class SetRestrictVisibilityRequest(_message.Message):
-    __slots__ = ("nodeId",)
-    NODEID_FIELD_NUMBER: _ClassVar[int]
-    nodeId: int
-    def __init__(self, nodeId: _Optional[int] = ...) -> None: ...
-
-class UserAddRequest(_message.Message):
-    __slots__ = ("enterpriseUserId", "nodeId", "encryptedData", "keyType", "fullName", "jobTitle", "email", "suppressEmailInvite")
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    NODEID_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDDATA_FIELD_NUMBER: _ClassVar[int]
-    KEYTYPE_FIELD_NUMBER: _ClassVar[int]
-    FULLNAME_FIELD_NUMBER: _ClassVar[int]
-    JOBTITLE_FIELD_NUMBER: _ClassVar[int]
-    EMAIL_FIELD_NUMBER: _ClassVar[int]
-    SUPPRESSEMAILINVITE_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserId: int
-    nodeId: int
-    encryptedData: bytes
-    keyType: EncryptedKeyType
-    fullName: str
-    jobTitle: str
-    email: str
-    suppressEmailInvite: bool
-    def __init__(self, enterpriseUserId: _Optional[int] = ..., nodeId: _Optional[int] = ..., encryptedData: _Optional[bytes] = ..., keyType: _Optional[_Union[EncryptedKeyType, str]] = ..., fullName: _Optional[str] = ..., jobTitle: _Optional[str] = ..., email: _Optional[str] = ..., suppressEmailInvite: bool = ...) -> None: ...
-
-class UserUpdateRequest(_message.Message):
-    __slots__ = ("users",)
-    USERS_FIELD_NUMBER: _ClassVar[int]
-    users: _containers.RepeatedCompositeFieldContainer[UserUpdate]
-    def __init__(self, users: _Optional[_Iterable[_Union[UserUpdate, _Mapping]]] = ...) -> None: ...
-
-class UserUpdate(_message.Message):
-    __slots__ = ("enterpriseUserId", "nodeId", "encryptedData", "keyType", "fullName", "jobTitle", "email")
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    NODEID_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDDATA_FIELD_NUMBER: _ClassVar[int]
-    KEYTYPE_FIELD_NUMBER: _ClassVar[int]
-    FULLNAME_FIELD_NUMBER: _ClassVar[int]
-    JOBTITLE_FIELD_NUMBER: _ClassVar[int]
-    EMAIL_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserId: int
-    nodeId: int
-    encryptedData: bytes
-    keyType: EncryptedKeyType
-    fullName: str
-    jobTitle: str
-    email: str
-    def __init__(self, enterpriseUserId: _Optional[int] = ..., nodeId: _Optional[int] = ..., encryptedData: _Optional[bytes] = ..., keyType: _Optional[_Union[EncryptedKeyType, str]] = ..., fullName: _Optional[str] = ..., jobTitle: _Optional[str] = ..., email: _Optional[str] = ...) -> None: ...
-
-class UserUpdateResponse(_message.Message):
-    __slots__ = ("users",)
-    USERS_FIELD_NUMBER: _ClassVar[int]
-    users: _containers.RepeatedCompositeFieldContainer[UserUpdateResult]
-    def __init__(self, users: _Optional[_Iterable[_Union[UserUpdateResult, _Mapping]]] = ...) -> None: ...
-
-class UserUpdateResult(_message.Message):
-    __slots__ = ("enterpriseUserId", "status")
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    STATUS_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserId: int
-    status: UserUpdateStatus
-    def __init__(self, enterpriseUserId: _Optional[int] = ..., status: _Optional[_Union[UserUpdateStatus, str]] = ...) -> None: ...
-
-class ComplianceRecordOwnersRequest(_message.Message):
-    __slots__ = ("nodeIds", "includeNonShared")
-    NODEIDS_FIELD_NUMBER: _ClassVar[int]
-    INCLUDENONSHARED_FIELD_NUMBER: _ClassVar[int]
-    nodeIds: _containers.RepeatedScalarFieldContainer[int]
-    includeNonShared: bool
-    def __init__(self, nodeIds: _Optional[_Iterable[int]] = ..., includeNonShared: bool = ...) -> None: ...
-
-class ComplianceRecordOwnersResponse(_message.Message):
-    __slots__ = ("recordOwners",)
-    RECORDOWNERS_FIELD_NUMBER: _ClassVar[int]
-    recordOwners: _containers.RepeatedCompositeFieldContainer[RecordOwner]
-    def __init__(self, recordOwners: _Optional[_Iterable[_Union[RecordOwner, _Mapping]]] = ...) -> None: ...
-
-class RecordOwner(_message.Message):
-    __slots__ = ("enterpriseUserId", "shared")
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    SHARED_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserId: int
-    shared: bool
-    def __init__(self, enterpriseUserId: _Optional[int] = ..., shared: bool = ...) -> None: ...
-
-class PreliminaryComplianceDataRequest(_message.Message):
-    __slots__ = ("enterpriseUserIds", "includeNonShared", "continuationToken", "includeTotalMatchingRecordsInFirstResponse")
-    ENTERPRISEUSERIDS_FIELD_NUMBER: _ClassVar[int]
-    INCLUDENONSHARED_FIELD_NUMBER: _ClassVar[int]
-    CONTINUATIONTOKEN_FIELD_NUMBER: _ClassVar[int]
-    INCLUDETOTALMATCHINGRECORDSINFIRSTRESPONSE_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserIds: _containers.RepeatedScalarFieldContainer[int]
-    includeNonShared: bool
-    continuationToken: bytes
-    includeTotalMatchingRecordsInFirstResponse: bool
-    def __init__(self, enterpriseUserIds: _Optional[_Iterable[int]] = ..., includeNonShared: bool = ..., continuationToken: _Optional[bytes] = ..., includeTotalMatchingRecordsInFirstResponse: bool = ...) -> None: ...
-
-class PreliminaryComplianceDataResponse(_message.Message):
-    __slots__ = ("auditUserData", "continuationToken", "hasMore", "totalMatchingRecords")
-    AUDITUSERDATA_FIELD_NUMBER: _ClassVar[int]
-    CONTINUATIONTOKEN_FIELD_NUMBER: _ClassVar[int]
-    HASMORE_FIELD_NUMBER: _ClassVar[int]
-    TOTALMATCHINGRECORDS_FIELD_NUMBER: _ClassVar[int]
-    auditUserData: _containers.RepeatedCompositeFieldContainer[AuditUserData]
-    continuationToken: bytes
-    hasMore: bool
-    totalMatchingRecords: int
-    def __init__(self, auditUserData: _Optional[_Iterable[_Union[AuditUserData, _Mapping]]] = ..., continuationToken: _Optional[bytes] = ..., hasMore: bool = ..., totalMatchingRecords: _Optional[int] = ...) -> None: ...
-
-class AuditUserRecord(_message.Message):
-    __slots__ = ("recordUid", "encryptedData", "shared")
-    RECORDUID_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDDATA_FIELD_NUMBER: _ClassVar[int]
-    SHARED_FIELD_NUMBER: _ClassVar[int]
-    recordUid: bytes
-    encryptedData: bytes
-    shared: bool
-    def __init__(self, recordUid: _Optional[bytes] = ..., encryptedData: _Optional[bytes] = ..., shared: bool = ...) -> None: ...
-
-class AuditUserData(_message.Message):
-    __slots__ = ("enterpriseUserId", "auditUserRecords", "status")
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    AUDITUSERRECORDS_FIELD_NUMBER: _ClassVar[int]
-    STATUS_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserId: int
-    auditUserRecords: _containers.RepeatedCompositeFieldContainer[AuditUserRecord]
-    status: AuditUserStatus
-    def __init__(self, enterpriseUserId: _Optional[int] = ..., auditUserRecords: _Optional[_Iterable[_Union[AuditUserRecord, _Mapping]]] = ..., status: _Optional[_Union[AuditUserStatus, str]] = ...) -> None: ...
-
-class ComplianceReportFilters(_message.Message):
-    __slots__ = ("recordTitles", "recordUids", "jobTitles", "urls", "enterpriseUserIds")
-    RECORDTITLES_FIELD_NUMBER: _ClassVar[int]
-    RECORDUIDS_FIELD_NUMBER: _ClassVar[int]
-    JOBTITLES_FIELD_NUMBER: _ClassVar[int]
-    URLS_FIELD_NUMBER: _ClassVar[int]
-    ENTERPRISEUSERIDS_FIELD_NUMBER: _ClassVar[int]
-    recordTitles: _containers.RepeatedScalarFieldContainer[str]
-    recordUids: _containers.RepeatedScalarFieldContainer[bytes]
-    jobTitles: _containers.RepeatedScalarFieldContainer[int]
-    urls: _containers.RepeatedScalarFieldContainer[str]
-    enterpriseUserIds: _containers.RepeatedScalarFieldContainer[int]
-    def __init__(self, recordTitles: _Optional[_Iterable[str]] = ..., recordUids: _Optional[_Iterable[bytes]] = ..., jobTitles: _Optional[_Iterable[int]] = ..., urls: _Optional[_Iterable[str]] = ..., enterpriseUserIds: _Optional[_Iterable[int]] = ...) -> None: ...
-
-class ComplianceReportRequest(_message.Message):
-    __slots__ = ("complianceReportRun", "reportName", "saveReport")
-    COMPLIANCEREPORTRUN_FIELD_NUMBER: _ClassVar[int]
-    REPORTNAME_FIELD_NUMBER: _ClassVar[int]
-    SAVEREPORT_FIELD_NUMBER: _ClassVar[int]
-    complianceReportRun: ComplianceReportRun
-    reportName: str
-    saveReport: bool
-    def __init__(self, complianceReportRun: _Optional[_Union[ComplianceReportRun, _Mapping]] = ..., reportName: _Optional[str] = ..., saveReport: bool = ...) -> None: ...
-
-class ComplianceReportRun(_message.Message):
-    __slots__ = ("reportCriteriaAndFilter", "users", "records")
-    REPORTCRITERIAANDFILTER_FIELD_NUMBER: _ClassVar[int]
-    USERS_FIELD_NUMBER: _ClassVar[int]
-    RECORDS_FIELD_NUMBER: _ClassVar[int]
-    reportCriteriaAndFilter: ComplianceReportCriteriaAndFilter
-    users: _containers.RepeatedScalarFieldContainer[int]
-    records: _containers.RepeatedScalarFieldContainer[bytes]
-    def __init__(self, reportCriteriaAndFilter: _Optional[_Union[ComplianceReportCriteriaAndFilter, _Mapping]] = ..., users: _Optional[_Iterable[int]] = ..., records: _Optional[_Iterable[bytes]] = ...) -> None: ...
-
-class ComplianceReportCriteriaAndFilter(_message.Message):
-    __slots__ = ("nodeId", "criteriaUid", "criteriaName", "criteria", "filters", "lastModified", "nodeEncryptedData")
-    NODEID_FIELD_NUMBER: _ClassVar[int]
-    CRITERIAUID_FIELD_NUMBER: _ClassVar[int]
-    CRITERIANAME_FIELD_NUMBER: _ClassVar[int]
-    CRITERIA_FIELD_NUMBER: _ClassVar[int]
-    FILTERS_FIELD_NUMBER: _ClassVar[int]
-    LASTMODIFIED_FIELD_NUMBER: _ClassVar[int]
-    NODEENCRYPTEDDATA_FIELD_NUMBER: _ClassVar[int]
-    nodeId: int
-    criteriaUid: bytes
-    criteriaName: str
-    criteria: ComplianceReportCriteria
-    filters: _containers.RepeatedCompositeFieldContainer[ComplianceReportFilter]
-    lastModified: int
-    nodeEncryptedData: bytes
-    def __init__(self, nodeId: _Optional[int] = ..., criteriaUid: _Optional[bytes] = ..., criteriaName: _Optional[str] = ..., criteria: _Optional[_Union[ComplianceReportCriteria, _Mapping]] = ..., filters: _Optional[_Iterable[_Union[ComplianceReportFilter, _Mapping]]] = ..., lastModified: _Optional[int] = ..., nodeEncryptedData: _Optional[bytes] = ...) -> None: ...
-
-class ComplianceReportCriteria(_message.Message):
-    __slots__ = ("jobTitles", "enterpriseUserIds", "includeNonShared")
-    JOBTITLES_FIELD_NUMBER: _ClassVar[int]
-    ENTERPRISEUSERIDS_FIELD_NUMBER: _ClassVar[int]
-    INCLUDENONSHARED_FIELD_NUMBER: _ClassVar[int]
-    jobTitles: _containers.RepeatedScalarFieldContainer[str]
-    enterpriseUserIds: _containers.RepeatedScalarFieldContainer[int]
-    includeNonShared: bool
-    def __init__(self, jobTitles: _Optional[_Iterable[str]] = ..., enterpriseUserIds: _Optional[_Iterable[int]] = ..., includeNonShared: bool = ...) -> None: ...
-
-class ComplianceReportFilter(_message.Message):
-    __slots__ = ("recordTitles", "recordUids", "jobTitles", "urls", "recordTypes")
-    RECORDTITLES_FIELD_NUMBER: _ClassVar[int]
-    RECORDUIDS_FIELD_NUMBER: _ClassVar[int]
-    JOBTITLES_FIELD_NUMBER: _ClassVar[int]
-    URLS_FIELD_NUMBER: _ClassVar[int]
-    RECORDTYPES_FIELD_NUMBER: _ClassVar[int]
-    recordTitles: _containers.RepeatedScalarFieldContainer[str]
-    recordUids: _containers.RepeatedScalarFieldContainer[bytes]
-    jobTitles: _containers.RepeatedScalarFieldContainer[str]
-    urls: _containers.RepeatedScalarFieldContainer[str]
-    recordTypes: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, recordTitles: _Optional[_Iterable[str]] = ..., recordUids: _Optional[_Iterable[bytes]] = ..., jobTitles: _Optional[_Iterable[str]] = ..., urls: _Optional[_Iterable[str]] = ..., recordTypes: _Optional[_Iterable[str]] = ...) -> None: ...
-
-class ComplianceReportResponse(_message.Message):
-    __slots__ = ("dateGenerated", "runByUserName", "reportName", "reportUid", "complianceReportRun", "userProfiles", "auditTeams", "auditRecords", "userRecords", "sharedFolderRecords", "sharedFolderUsers", "sharedFolderTeams", "auditTeamUsers", "auditRoles", "linkedRecords")
-    DATEGENERATED_FIELD_NUMBER: _ClassVar[int]
-    RUNBYUSERNAME_FIELD_NUMBER: _ClassVar[int]
-    REPORTNAME_FIELD_NUMBER: _ClassVar[int]
-    REPORTUID_FIELD_NUMBER: _ClassVar[int]
-    COMPLIANCEREPORTRUN_FIELD_NUMBER: _ClassVar[int]
-    USERPROFILES_FIELD_NUMBER: _ClassVar[int]
-    AUDITTEAMS_FIELD_NUMBER: _ClassVar[int]
-    AUDITRECORDS_FIELD_NUMBER: _ClassVar[int]
-    USERRECORDS_FIELD_NUMBER: _ClassVar[int]
-    SHAREDFOLDERRECORDS_FIELD_NUMBER: _ClassVar[int]
-    SHAREDFOLDERUSERS_FIELD_NUMBER: _ClassVar[int]
-    SHAREDFOLDERTEAMS_FIELD_NUMBER: _ClassVar[int]
-    AUDITTEAMUSERS_FIELD_NUMBER: _ClassVar[int]
-    AUDITROLES_FIELD_NUMBER: _ClassVar[int]
-    LINKEDRECORDS_FIELD_NUMBER: _ClassVar[int]
-    dateGenerated: int
-    runByUserName: str
-    reportName: str
-    reportUid: bytes
-    complianceReportRun: ComplianceReportRun
-    userProfiles: _containers.RepeatedCompositeFieldContainer[UserProfile]
-    auditTeams: _containers.RepeatedCompositeFieldContainer[AuditTeam]
-    auditRecords: _containers.RepeatedCompositeFieldContainer[AuditRecord]
-    userRecords: _containers.RepeatedCompositeFieldContainer[UserRecord]
-    sharedFolderRecords: _containers.RepeatedCompositeFieldContainer[SharedFolderRecord]
-    sharedFolderUsers: _containers.RepeatedCompositeFieldContainer[SharedFolderUser]
-    sharedFolderTeams: _containers.RepeatedCompositeFieldContainer[SharedFolderTeam]
-    auditTeamUsers: _containers.RepeatedCompositeFieldContainer[AuditTeamUser]
-    auditRoles: _containers.RepeatedCompositeFieldContainer[AuditRole]
-    linkedRecords: _containers.RepeatedCompositeFieldContainer[LinkedRecord]
-    def __init__(self, dateGenerated: _Optional[int] = ..., runByUserName: _Optional[str] = ..., reportName: _Optional[str] = ..., reportUid: _Optional[bytes] = ..., complianceReportRun: _Optional[_Union[ComplianceReportRun, _Mapping]] = ..., userProfiles: _Optional[_Iterable[_Union[UserProfile, _Mapping]]] = ..., auditTeams: _Optional[_Iterable[_Union[AuditTeam, _Mapping]]] = ..., auditRecords: _Optional[_Iterable[_Union[AuditRecord, _Mapping]]] = ..., userRecords: _Optional[_Iterable[_Union[UserRecord, _Mapping]]] = ..., sharedFolderRecords: _Optional[_Iterable[_Union[SharedFolderRecord, _Mapping]]] = ..., sharedFolderUsers: _Optional[_Iterable[_Union[SharedFolderUser, _Mapping]]] = ..., sharedFolderTeams: _Optional[_Iterable[_Union[SharedFolderTeam, _Mapping]]] = ..., auditTeamUsers: _Optional[_Iterable[_Union[AuditTeamUser, _Mapping]]] = ..., auditRoles: _Optional[_Iterable[_Union[AuditRole, _Mapping]]] = ..., linkedRecords: _Optional[_Iterable[_Union[LinkedRecord, _Mapping]]] = ...) -> None: ...
-
-class AuditRecord(_message.Message):
-    __slots__ = ("recordUid", "auditData", "hasAttachments", "inTrash", "treeLeft", "treeRight")
-    RECORDUID_FIELD_NUMBER: _ClassVar[int]
-    AUDITDATA_FIELD_NUMBER: _ClassVar[int]
-    HASATTACHMENTS_FIELD_NUMBER: _ClassVar[int]
-    INTRASH_FIELD_NUMBER: _ClassVar[int]
-    TREELEFT_FIELD_NUMBER: _ClassVar[int]
-    TREERIGHT_FIELD_NUMBER: _ClassVar[int]
-    recordUid: bytes
-    auditData: bytes
-    hasAttachments: bool
-    inTrash: bool
-    treeLeft: int
-    treeRight: int
-    def __init__(self, recordUid: _Optional[bytes] = ..., auditData: _Optional[bytes] = ..., hasAttachments: bool = ..., inTrash: bool = ..., treeLeft: _Optional[int] = ..., treeRight: _Optional[int] = ...) -> None: ...
-
-class AuditRole(_message.Message):
-    __slots__ = ("roleId", "encryptedData", "restrictShareOutsideEnterprise", "restrictShareAll", "restrictShareOfAttachments", "restrictMaskPasswordsWhileEditing", "roleNodeManagements")
-    ROLEID_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDDATA_FIELD_NUMBER: _ClassVar[int]
-    RESTRICTSHAREOUTSIDEENTERPRISE_FIELD_NUMBER: _ClassVar[int]
-    RESTRICTSHAREALL_FIELD_NUMBER: _ClassVar[int]
-    RESTRICTSHAREOFATTACHMENTS_FIELD_NUMBER: _ClassVar[int]
-    RESTRICTMASKPASSWORDSWHILEEDITING_FIELD_NUMBER: _ClassVar[int]
-    ROLENODEMANAGEMENTS_FIELD_NUMBER: _ClassVar[int]
-    roleId: int
-    encryptedData: bytes
-    restrictShareOutsideEnterprise: bool
-    restrictShareAll: bool
-    restrictShareOfAttachments: bool
-    restrictMaskPasswordsWhileEditing: bool
-    roleNodeManagements: _containers.RepeatedCompositeFieldContainer[RoleNodeManagement]
-    def __init__(self, roleId: _Optional[int] = ..., encryptedData: _Optional[bytes] = ..., restrictShareOutsideEnterprise: bool = ..., restrictShareAll: bool = ..., restrictShareOfAttachments: bool = ..., restrictMaskPasswordsWhileEditing: bool = ..., roleNodeManagements: _Optional[_Iterable[_Union[RoleNodeManagement, _Mapping]]] = ...) -> None: ...
-
-class RoleNodeManagement(_message.Message):
-    __slots__ = ("treeLeft", "treeRight", "cascade", "privileges")
-    TREELEFT_FIELD_NUMBER: _ClassVar[int]
-    TREERIGHT_FIELD_NUMBER: _ClassVar[int]
-    CASCADE_FIELD_NUMBER: _ClassVar[int]
-    PRIVILEGES_FIELD_NUMBER: _ClassVar[int]
-    treeLeft: int
-    treeRight: int
-    cascade: bool
-    privileges: int
-    def __init__(self, treeLeft: _Optional[int] = ..., treeRight: _Optional[int] = ..., cascade: bool = ..., privileges: _Optional[int] = ...) -> None: ...
-
-class UserProfile(_message.Message):
-    __slots__ = ("enterpriseUserId", "fullName", "jobTitle", "email", "roleIds")
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    FULLNAME_FIELD_NUMBER: _ClassVar[int]
-    JOBTITLE_FIELD_NUMBER: _ClassVar[int]
-    EMAIL_FIELD_NUMBER: _ClassVar[int]
-    ROLEIDS_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserId: int
-    fullName: str
-    jobTitle: str
-    email: str
-    roleIds: _containers.RepeatedScalarFieldContainer[int]
-    def __init__(self, enterpriseUserId: _Optional[int] = ..., fullName: _Optional[str] = ..., jobTitle: _Optional[str] = ..., email: _Optional[str] = ..., roleIds: _Optional[_Iterable[int]] = ...) -> None: ...
-
-class RecordPermission(_message.Message):
-    __slots__ = ("recordUid", "permissionBits")
-    RECORDUID_FIELD_NUMBER: _ClassVar[int]
-    PERMISSIONBITS_FIELD_NUMBER: _ClassVar[int]
-    recordUid: bytes
-    permissionBits: int
-    def __init__(self, recordUid: _Optional[bytes] = ..., permissionBits: _Optional[int] = ...) -> None: ...
-
-class UserRecord(_message.Message):
-    __slots__ = ("enterpriseUserId", "recordPermissions")
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    RECORDPERMISSIONS_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserId: int
-    recordPermissions: _containers.RepeatedCompositeFieldContainer[RecordPermission]
-    def __init__(self, enterpriseUserId: _Optional[int] = ..., recordPermissions: _Optional[_Iterable[_Union[RecordPermission, _Mapping]]] = ...) -> None: ...
-
-class AuditTeam(_message.Message):
-    __slots__ = ("teamUid", "teamName", "restrictEdit", "restrictShare")
-    TEAMUID_FIELD_NUMBER: _ClassVar[int]
-    TEAMNAME_FIELD_NUMBER: _ClassVar[int]
-    RESTRICTEDIT_FIELD_NUMBER: _ClassVar[int]
-    RESTRICTSHARE_FIELD_NUMBER: _ClassVar[int]
-    teamUid: bytes
-    teamName: str
-    restrictEdit: bool
-    restrictShare: bool
-    def __init__(self, teamUid: _Optional[bytes] = ..., teamName: _Optional[str] = ..., restrictEdit: bool = ..., restrictShare: bool = ...) -> None: ...
-
-class AuditTeamUser(_message.Message):
-    __slots__ = ("teamUid", "enterpriseUserIds")
-    TEAMUID_FIELD_NUMBER: _ClassVar[int]
-    ENTERPRISEUSERIDS_FIELD_NUMBER: _ClassVar[int]
-    teamUid: bytes
-    enterpriseUserIds: _containers.RepeatedScalarFieldContainer[int]
-    def __init__(self, teamUid: _Optional[bytes] = ..., enterpriseUserIds: _Optional[_Iterable[int]] = ...) -> None: ...
-
-class SharedFolderRecord(_message.Message):
-    __slots__ = ("sharedFolderUid", "recordPermissions", "shareAdminRecords")
-    SHAREDFOLDERUID_FIELD_NUMBER: _ClassVar[int]
-    RECORDPERMISSIONS_FIELD_NUMBER: _ClassVar[int]
-    SHAREADMINRECORDS_FIELD_NUMBER: _ClassVar[int]
-    sharedFolderUid: bytes
-    recordPermissions: _containers.RepeatedCompositeFieldContainer[RecordPermission]
-    shareAdminRecords: _containers.RepeatedCompositeFieldContainer[ShareAdminRecord]
-    def __init__(self, sharedFolderUid: _Optional[bytes] = ..., recordPermissions: _Optional[_Iterable[_Union[RecordPermission, _Mapping]]] = ..., shareAdminRecords: _Optional[_Iterable[_Union[ShareAdminRecord, _Mapping]]] = ...) -> None: ...
-
-class ShareAdminRecord(_message.Message):
-    __slots__ = ("enterpriseUserId", "recordPermissionIndexes")
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    RECORDPERMISSIONINDEXES_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserId: int
-    recordPermissionIndexes: _containers.RepeatedScalarFieldContainer[int]
-    def __init__(self, enterpriseUserId: _Optional[int] = ..., recordPermissionIndexes: _Optional[_Iterable[int]] = ...) -> None: ...
-
-class SharedFolderUser(_message.Message):
-    __slots__ = ("sharedFolderUid", "enterpriseUserIds")
-    SHAREDFOLDERUID_FIELD_NUMBER: _ClassVar[int]
-    ENTERPRISEUSERIDS_FIELD_NUMBER: _ClassVar[int]
-    sharedFolderUid: bytes
-    enterpriseUserIds: _containers.RepeatedScalarFieldContainer[int]
-    def __init__(self, sharedFolderUid: _Optional[bytes] = ..., enterpriseUserIds: _Optional[_Iterable[int]] = ...) -> None: ...
-
-class SharedFolderTeam(_message.Message):
-    __slots__ = ("sharedFolderUid", "teamUids")
-    SHAREDFOLDERUID_FIELD_NUMBER: _ClassVar[int]
-    TEAMUIDS_FIELD_NUMBER: _ClassVar[int]
-    sharedFolderUid: bytes
-    teamUids: _containers.RepeatedScalarFieldContainer[bytes]
-    def __init__(self, sharedFolderUid: _Optional[bytes] = ..., teamUids: _Optional[_Iterable[bytes]] = ...) -> None: ...
-
-class GetComplianceReportRequest(_message.Message):
-    __slots__ = ("reportUid",)
-    REPORTUID_FIELD_NUMBER: _ClassVar[int]
-    reportUid: bytes
-    def __init__(self, reportUid: _Optional[bytes] = ...) -> None: ...
-
-class GetComplianceReportResponse(_message.Message):
-    __slots__ = ("downloadUrl",)
-    DOWNLOADURL_FIELD_NUMBER: _ClassVar[int]
-    downloadUrl: str
-    def __init__(self, downloadUrl: _Optional[str] = ...) -> None: ...
-
-class ComplianceReportCriteriaRequest(_message.Message):
-    __slots__ = ("criteriaUid",)
-    CRITERIAUID_FIELD_NUMBER: _ClassVar[int]
-    criteriaUid: bytes
-    def __init__(self, criteriaUid: _Optional[bytes] = ...) -> None: ...
-
-class SaveComplianceReportCriteriaResponse(_message.Message):
-    __slots__ = ("criteriaUid",)
-    CRITERIAUID_FIELD_NUMBER: _ClassVar[int]
-    criteriaUid: bytes
-    def __init__(self, criteriaUid: _Optional[bytes] = ...) -> None: ...
-
-class LinkedRecord(_message.Message):
-    __slots__ = ("ownerUid", "recordUids")
-    OWNERUID_FIELD_NUMBER: _ClassVar[int]
-    RECORDUIDS_FIELD_NUMBER: _ClassVar[int]
-    ownerUid: bytes
-    recordUids: _containers.RepeatedScalarFieldContainer[bytes]
-    def __init__(self, ownerUid: _Optional[bytes] = ..., recordUids: _Optional[_Iterable[bytes]] = ...) -> None: ...
-
-class GetSharingAdminsRequest(_message.Message):
-    __slots__ = ("sharedFolderUid", "recordUid", "username")
-    SHAREDFOLDERUID_FIELD_NUMBER: _ClassVar[int]
-    RECORDUID_FIELD_NUMBER: _ClassVar[int]
-    USERNAME_FIELD_NUMBER: _ClassVar[int]
-    sharedFolderUid: bytes
-    recordUid: bytes
-    username: str
-    def __init__(self, sharedFolderUid: _Optional[bytes] = ..., recordUid: _Optional[bytes] = ..., username: _Optional[str] = ...) -> None: ...
-
-class UserProfileExt(_message.Message):
-    __slots__ = ("email", "fullName", "jobTitle", "isMSPMCAdmin", "isInSharedFolder", "isShareAdminForRequestedObject", "isShareAdminForSharedFolderOwner", "hasAccessToObject")
-    EMAIL_FIELD_NUMBER: _ClassVar[int]
-    FULLNAME_FIELD_NUMBER: _ClassVar[int]
-    JOBTITLE_FIELD_NUMBER: _ClassVar[int]
-    ISMSPMCADMIN_FIELD_NUMBER: _ClassVar[int]
-    ISINSHAREDFOLDER_FIELD_NUMBER: _ClassVar[int]
-    ISSHAREADMINFORREQUESTEDOBJECT_FIELD_NUMBER: _ClassVar[int]
-    ISSHAREADMINFORSHAREDFOLDEROWNER_FIELD_NUMBER: _ClassVar[int]
-    HASACCESSTOOBJECT_FIELD_NUMBER: _ClassVar[int]
-    email: str
-    fullName: str
-    jobTitle: str
-    isMSPMCAdmin: bool
-    isInSharedFolder: bool
-    isShareAdminForRequestedObject: bool
-    isShareAdminForSharedFolderOwner: bool
-    hasAccessToObject: bool
-    def __init__(self, email: _Optional[str] = ..., fullName: _Optional[str] = ..., jobTitle: _Optional[str] = ..., isMSPMCAdmin: bool = ..., isInSharedFolder: bool = ..., isShareAdminForRequestedObject: bool = ..., isShareAdminForSharedFolderOwner: bool = ..., hasAccessToObject: bool = ...) -> None: ...
-
-class GetSharingAdminsResponse(_message.Message):
-    __slots__ = ("userProfileExts",)
-    USERPROFILEEXTS_FIELD_NUMBER: _ClassVar[int]
-    userProfileExts: _containers.RepeatedCompositeFieldContainer[UserProfileExt]
-    def __init__(self, userProfileExts: _Optional[_Iterable[_Union[UserProfileExt, _Mapping]]] = ...) -> None: ...
-
-class TeamsEnterpriseUsersAddRequest(_message.Message):
-    __slots__ = ("teams",)
-    TEAMS_FIELD_NUMBER: _ClassVar[int]
-    teams: _containers.RepeatedCompositeFieldContainer[TeamsEnterpriseUsersAddTeamRequest]
-    def __init__(self, teams: _Optional[_Iterable[_Union[TeamsEnterpriseUsersAddTeamRequest, _Mapping]]] = ...) -> None: ...
-
-class TeamsEnterpriseUsersAddTeamRequest(_message.Message):
-    __slots__ = ("teamUid", "users")
-    TEAMUID_FIELD_NUMBER: _ClassVar[int]
-    USERS_FIELD_NUMBER: _ClassVar[int]
-    teamUid: bytes
-    users: _containers.RepeatedCompositeFieldContainer[TeamsEnterpriseUsersAddUserRequest]
-    def __init__(self, teamUid: _Optional[bytes] = ..., users: _Optional[_Iterable[_Union[TeamsEnterpriseUsersAddUserRequest, _Mapping]]] = ...) -> None: ...
-
-class TeamsEnterpriseUsersAddUserRequest(_message.Message):
-    __slots__ = ("enterpriseUserId", "userType", "teamKey", "typedTeamKey")
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    USERTYPE_FIELD_NUMBER: _ClassVar[int]
-    TEAMKEY_FIELD_NUMBER: _ClassVar[int]
-    TYPEDTEAMKEY_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserId: int
-    userType: TeamUserType
-    teamKey: str
-    typedTeamKey: TypedKey
-    def __init__(self, enterpriseUserId: _Optional[int] = ..., userType: _Optional[_Union[TeamUserType, str]] = ..., teamKey: _Optional[str] = ..., typedTeamKey: _Optional[_Union[TypedKey, _Mapping]] = ...) -> None: ...
-
-class TypedKey(_message.Message):
-    __slots__ = ("key", "keyType")
-    KEY_FIELD_NUMBER: _ClassVar[int]
-    KEYTYPE_FIELD_NUMBER: _ClassVar[int]
-    key: bytes
-    keyType: EncryptedKeyType
-    def __init__(self, key: _Optional[bytes] = ..., keyType: _Optional[_Union[EncryptedKeyType, str]] = ...) -> None: ...
-
-class TeamsEnterpriseUsersAddResponse(_message.Message):
-    __slots__ = ("teams", "revision")
-    TEAMS_FIELD_NUMBER: _ClassVar[int]
-    REVISION_FIELD_NUMBER: _ClassVar[int]
-    teams: _containers.RepeatedCompositeFieldContainer[TeamsEnterpriseUsersAddTeamResponse]
-    revision: int
-    def __init__(self, teams: _Optional[_Iterable[_Union[TeamsEnterpriseUsersAddTeamResponse, _Mapping]]] = ..., revision: _Optional[int] = ...) -> None: ...
-
-class TeamsEnterpriseUsersAddTeamResponse(_message.Message):
-    __slots__ = ("teamUid", "users", "success", "message", "resultCode", "additionalInfo")
-    TEAMUID_FIELD_NUMBER: _ClassVar[int]
-    USERS_FIELD_NUMBER: _ClassVar[int]
-    SUCCESS_FIELD_NUMBER: _ClassVar[int]
-    MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    RESULTCODE_FIELD_NUMBER: _ClassVar[int]
-    ADDITIONALINFO_FIELD_NUMBER: _ClassVar[int]
-    teamUid: bytes
-    users: _containers.RepeatedCompositeFieldContainer[TeamsEnterpriseUsersAddUserResponse]
-    success: bool
-    message: str
-    resultCode: str
-    additionalInfo: str
-    def __init__(self, teamUid: _Optional[bytes] = ..., users: _Optional[_Iterable[_Union[TeamsEnterpriseUsersAddUserResponse, _Mapping]]] = ..., success: bool = ..., message: _Optional[str] = ..., resultCode: _Optional[str] = ..., additionalInfo: _Optional[str] = ...) -> None: ...
-
-class TeamsEnterpriseUsersAddUserResponse(_message.Message):
-    __slots__ = ("enterpriseUserId", "revision", "success", "message", "resultCode", "additionalInfo")
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    REVISION_FIELD_NUMBER: _ClassVar[int]
-    SUCCESS_FIELD_NUMBER: _ClassVar[int]
-    MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    RESULTCODE_FIELD_NUMBER: _ClassVar[int]
-    ADDITIONALINFO_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserId: int
-    revision: int
-    success: bool
-    message: str
-    resultCode: str
-    additionalInfo: str
-    def __init__(self, enterpriseUserId: _Optional[int] = ..., revision: _Optional[int] = ..., success: bool = ..., message: _Optional[str] = ..., resultCode: _Optional[str] = ..., additionalInfo: _Optional[str] = ...) -> None: ...
-
-class DomainAlias(_message.Message):
-    __slots__ = ("domain", "alias", "status", "message")
-    DOMAIN_FIELD_NUMBER: _ClassVar[int]
-    ALIAS_FIELD_NUMBER: _ClassVar[int]
-    STATUS_FIELD_NUMBER: _ClassVar[int]
-    MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    domain: str
-    alias: str
-    status: int
-    message: str
-    def __init__(self, domain: _Optional[str] = ..., alias: _Optional[str] = ..., status: _Optional[int] = ..., message: _Optional[str] = ...) -> None: ...
-
-class DomainAliasRequest(_message.Message):
-    __slots__ = ("domainAlias",)
-    DOMAINALIAS_FIELD_NUMBER: _ClassVar[int]
-    domainAlias: _containers.RepeatedCompositeFieldContainer[DomainAlias]
-    def __init__(self, domainAlias: _Optional[_Iterable[_Union[DomainAlias, _Mapping]]] = ...) -> None: ...
-
-class DomainAliasResponse(_message.Message):
-    __slots__ = ("domainAlias",)
-    DOMAINALIAS_FIELD_NUMBER: _ClassVar[int]
-    domainAlias: _containers.RepeatedCompositeFieldContainer[DomainAlias]
-    def __init__(self, domainAlias: _Optional[_Iterable[_Union[DomainAlias, _Mapping]]] = ...) -> None: ...
-
-class EnterpriseUsersProvisionRequest(_message.Message):
-    __slots__ = ("users", "clientVersion")
-    USERS_FIELD_NUMBER: _ClassVar[int]
-    CLIENTVERSION_FIELD_NUMBER: _ClassVar[int]
-    users: _containers.RepeatedCompositeFieldContainer[EnterpriseUsersProvision]
-    clientVersion: str
-    def __init__(self, users: _Optional[_Iterable[_Union[EnterpriseUsersProvision, _Mapping]]] = ..., clientVersion: _Optional[str] = ...) -> None: ...
-
-class EnterpriseUsersProvision(_message.Message):
-    __slots__ = ("enterpriseUserId", "username", "nodeId", "encryptedData", "keyType", "fullName", "jobTitle", "enterpriseUsersDataKey", "authVerifier", "encryptionParams", "rsaPublicKey", "rsaEncryptedPrivateKey", "eccPublicKey", "eccEncryptedPrivateKey", "encryptedDeviceToken", "encryptedClientKey")
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    USERNAME_FIELD_NUMBER: _ClassVar[int]
-    NODEID_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDDATA_FIELD_NUMBER: _ClassVar[int]
-    KEYTYPE_FIELD_NUMBER: _ClassVar[int]
-    FULLNAME_FIELD_NUMBER: _ClassVar[int]
-    JOBTITLE_FIELD_NUMBER: _ClassVar[int]
-    ENTERPRISEUSERSDATAKEY_FIELD_NUMBER: _ClassVar[int]
-    AUTHVERIFIER_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTIONPARAMS_FIELD_NUMBER: _ClassVar[int]
-    RSAPUBLICKEY_FIELD_NUMBER: _ClassVar[int]
-    RSAENCRYPTEDPRIVATEKEY_FIELD_NUMBER: _ClassVar[int]
-    ECCPUBLICKEY_FIELD_NUMBER: _ClassVar[int]
-    ECCENCRYPTEDPRIVATEKEY_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDCLIENTKEY_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserId: int
-    username: str
-    nodeId: int
-    encryptedData: str
-    keyType: EncryptedKeyType
-    fullName: str
-    jobTitle: str
-    enterpriseUsersDataKey: bytes
-    authVerifier: bytes
-    encryptionParams: bytes
-    rsaPublicKey: bytes
-    rsaEncryptedPrivateKey: bytes
-    eccPublicKey: bytes
-    eccEncryptedPrivateKey: bytes
-    encryptedDeviceToken: bytes
-    encryptedClientKey: bytes
-    def __init__(self, enterpriseUserId: _Optional[int] = ..., username: _Optional[str] = ..., nodeId: _Optional[int] = ..., encryptedData: _Optional[str] = ..., keyType: _Optional[_Union[EncryptedKeyType, str]] = ..., fullName: _Optional[str] = ..., jobTitle: _Optional[str] = ..., enterpriseUsersDataKey: _Optional[bytes] = ..., authVerifier: _Optional[bytes] = ..., encryptionParams: _Optional[bytes] = ..., rsaPublicKey: _Optional[bytes] = ..., rsaEncryptedPrivateKey: _Optional[bytes] = ..., eccPublicKey: _Optional[bytes] = ..., eccEncryptedPrivateKey: _Optional[bytes] = ..., encryptedDeviceToken: _Optional[bytes] = ..., encryptedClientKey: _Optional[bytes] = ...) -> None: ...
-
-class EnterpriseUsersProvisionResponse(_message.Message):
-    __slots__ = ("results",)
-    RESULTS_FIELD_NUMBER: _ClassVar[int]
-    results: _containers.RepeatedCompositeFieldContainer[EnterpriseUsersProvisionResult]
-    def __init__(self, results: _Optional[_Iterable[_Union[EnterpriseUsersProvisionResult, _Mapping]]] = ...) -> None: ...
-
-class EnterpriseUsersProvisionResult(_message.Message):
-    __slots__ = ("enterpriseUserId", "code", "message", "additionalInfo")
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    CODE_FIELD_NUMBER: _ClassVar[int]
-    MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    ADDITIONALINFO_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserId: int
-    code: str
-    message: str
-    additionalInfo: str
-    def __init__(self, enterpriseUserId: _Optional[int] = ..., code: _Optional[str] = ..., message: _Optional[str] = ..., additionalInfo: _Optional[str] = ...) -> None: ...
-
-class EnterpriseUsersAddRequest(_message.Message):
-    __slots__ = ("users", "clientVersion")
-    USERS_FIELD_NUMBER: _ClassVar[int]
-    CLIENTVERSION_FIELD_NUMBER: _ClassVar[int]
-    users: _containers.RepeatedCompositeFieldContainer[EnterpriseUsersAdd]
-    clientVersion: str
-    def __init__(self, users: _Optional[_Iterable[_Union[EnterpriseUsersAdd, _Mapping]]] = ..., clientVersion: _Optional[str] = ...) -> None: ...
-
-class EnterpriseUsersAdd(_message.Message):
-    __slots__ = ("enterpriseUserId", "username", "nodeId", "encryptedData", "keyType", "fullName", "jobTitle", "suppressEmailInvite", "inviteeLocale", "move", "roleId")
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    USERNAME_FIELD_NUMBER: _ClassVar[int]
-    NODEID_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDDATA_FIELD_NUMBER: _ClassVar[int]
-    KEYTYPE_FIELD_NUMBER: _ClassVar[int]
-    FULLNAME_FIELD_NUMBER: _ClassVar[int]
-    JOBTITLE_FIELD_NUMBER: _ClassVar[int]
-    SUPPRESSEMAILINVITE_FIELD_NUMBER: _ClassVar[int]
-    INVITEELOCALE_FIELD_NUMBER: _ClassVar[int]
-    MOVE_FIELD_NUMBER: _ClassVar[int]
-    ROLEID_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserId: int
-    username: str
-    nodeId: int
-    encryptedData: str
-    keyType: EncryptedKeyType
-    fullName: str
-    jobTitle: str
-    suppressEmailInvite: bool
-    inviteeLocale: str
-    move: bool
-    roleId: int
-    def __init__(self, enterpriseUserId: _Optional[int] = ..., username: _Optional[str] = ..., nodeId: _Optional[int] = ..., encryptedData: _Optional[str] = ..., keyType: _Optional[_Union[EncryptedKeyType, str]] = ..., fullName: _Optional[str] = ..., jobTitle: _Optional[str] = ..., suppressEmailInvite: bool = ..., inviteeLocale: _Optional[str] = ..., move: bool = ..., roleId: _Optional[int] = ...) -> None: ...
-
-class EnterpriseUsersAddResponse(_message.Message):
-    __slots__ = ("results", "success", "code", "message", "additionalInfo")
-    RESULTS_FIELD_NUMBER: _ClassVar[int]
-    SUCCESS_FIELD_NUMBER: _ClassVar[int]
-    CODE_FIELD_NUMBER: _ClassVar[int]
-    MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    ADDITIONALINFO_FIELD_NUMBER: _ClassVar[int]
-    results: _containers.RepeatedCompositeFieldContainer[EnterpriseUsersAddResult]
-    success: bool
-    code: str
-    message: str
-    additionalInfo: str
-    def __init__(self, results: _Optional[_Iterable[_Union[EnterpriseUsersAddResult, _Mapping]]] = ..., success: bool = ..., code: _Optional[str] = ..., message: _Optional[str] = ..., additionalInfo: _Optional[str] = ...) -> None: ...
-
-class EnterpriseUsersAddResult(_message.Message):
-    __slots__ = ("enterpriseUserId", "success", "verificationCode", "code", "message", "additionalInfo")
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    SUCCESS_FIELD_NUMBER: _ClassVar[int]
-    VERIFICATIONCODE_FIELD_NUMBER: _ClassVar[int]
-    CODE_FIELD_NUMBER: _ClassVar[int]
-    MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    ADDITIONALINFO_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserId: int
-    success: bool
-    verificationCode: str
-    code: str
-    message: str
-    additionalInfo: str
-    def __init__(self, enterpriseUserId: _Optional[int] = ..., success: bool = ..., verificationCode: _Optional[str] = ..., code: _Optional[str] = ..., message: _Optional[str] = ..., additionalInfo: _Optional[str] = ...) -> None: ...
-
-class UpdateMSPPermitsRequest(_message.Message):
-    __slots__ = ("mspEnterpriseId", "maxAllowedLicenses", "allowedMcProducts", "allowedAddOns", "maxFilePlanType", "allowUnlimitedLicenses")
-    MSPENTERPRISEID_FIELD_NUMBER: _ClassVar[int]
-    MAXALLOWEDLICENSES_FIELD_NUMBER: _ClassVar[int]
-    ALLOWEDMCPRODUCTS_FIELD_NUMBER: _ClassVar[int]
-    ALLOWEDADDONS_FIELD_NUMBER: _ClassVar[int]
-    MAXFILEPLANTYPE_FIELD_NUMBER: _ClassVar[int]
-    ALLOWUNLIMITEDLICENSES_FIELD_NUMBER: _ClassVar[int]
-    mspEnterpriseId: int
-    maxAllowedLicenses: int
-    allowedMcProducts: _containers.RepeatedScalarFieldContainer[str]
-    allowedAddOns: _containers.RepeatedScalarFieldContainer[str]
-    maxFilePlanType: str
-    allowUnlimitedLicenses: bool
-    def __init__(self, mspEnterpriseId: _Optional[int] = ..., maxAllowedLicenses: _Optional[int] = ..., allowedMcProducts: _Optional[_Iterable[str]] = ..., allowedAddOns: _Optional[_Iterable[str]] = ..., maxFilePlanType: _Optional[str] = ..., allowUnlimitedLicenses: bool = ...) -> None: ...
-
-class DeleteEnterpriseUsersRequest(_message.Message):
-    __slots__ = ("enterpriseUserIds",)
-    ENTERPRISEUSERIDS_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserIds: _containers.RepeatedScalarFieldContainer[int]
-    def __init__(self, enterpriseUserIds: _Optional[_Iterable[int]] = ...) -> None: ...
-
-class DeleteEnterpriseUserStatus(_message.Message):
-    __slots__ = ("enterpriseUserId", "status")
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    STATUS_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserId: int
-    status: DeleteEnterpriseUsersResult
-    def __init__(self, enterpriseUserId: _Optional[int] = ..., status: _Optional[_Union[DeleteEnterpriseUsersResult, str]] = ...) -> None: ...
-
-class DeleteEnterpriseUsersResponse(_message.Message):
-    __slots__ = ("deleteStatus",)
-    DELETESTATUS_FIELD_NUMBER: _ClassVar[int]
-    deleteStatus: _containers.RepeatedCompositeFieldContainer[DeleteEnterpriseUserStatus]
-    def __init__(self, deleteStatus: _Optional[_Iterable[_Union[DeleteEnterpriseUserStatus, _Mapping]]] = ...) -> None: ...
-
-class ClearSecurityDataRequest(_message.Message):
-    __slots__ = ("enterpriseUserId", "allUsers", "type")
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    ALLUSERS_FIELD_NUMBER: _ClassVar[int]
-    TYPE_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserId: _containers.RepeatedScalarFieldContainer[int]
-    allUsers: bool
-    type: ClearSecurityDataType
-    def __init__(self, enterpriseUserId: _Optional[_Iterable[int]] = ..., allUsers: bool = ..., type: _Optional[_Union[ClearSecurityDataType, str]] = ...) -> None: ...
+"""
+@generated by mypy-protobuf.  Do not edit manually!
+isort:skip_file
+"""
+
+import builtins
+import collections.abc
+import google.protobuf.descriptor
+import google.protobuf.internal.containers
+import google.protobuf.internal.enum_type_wrapper
+import google.protobuf.message
+import sys
+import typing
+
+if sys.version_info >= (3, 10):
+    import typing as typing_extensions
+else:
+    import typing_extensions
+
+DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
+
+class _KeyType:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _KeyTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_KeyType.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    RSA: _KeyType.ValueType  # 0
+    ECC: _KeyType.ValueType  # 1
+
+class KeyType(_KeyType, metaclass=_KeyTypeEnumTypeWrapper): ...
+
+RSA: KeyType.ValueType  # 0
+ECC: KeyType.ValueType  # 1
+global___KeyType = KeyType
+
+class _RoleUserModifyStatus:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _RoleUserModifyStatusEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_RoleUserModifyStatus.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    ROLE_EXISTS: _RoleUserModifyStatus.ValueType  # 0
+    """the supplied role_id already exists"""
+    MISSING_TREE_KEY: _RoleUserModifyStatus.ValueType  # 1
+    MISSING_ROLE_KEY: _RoleUserModifyStatus.ValueType  # 2
+    INVALID_ENTERPRISE_USER_ID: _RoleUserModifyStatus.ValueType  # 3
+    """the supplied enterprise_user_id does not belong to the same enterprise as the calling user"""
+    PENDING_ENTERPRISE_USER: _RoleUserModifyStatus.ValueType  # 4
+    """cannot add a pending enterprise user to a role"""
+    INVALID_NODE_ID: _RoleUserModifyStatus.ValueType  # 5
+    """the supplied node_id is not valid"""
+    MAY_NOT_REMOVE_SELF_FROM_ROLE: _RoleUserModifyStatus.ValueType  # 6
+    MUST_HAVE_ONE_USER_ADMIN: _RoleUserModifyStatus.ValueType  # 7
+
+class RoleUserModifyStatus(_RoleUserModifyStatus, metaclass=_RoleUserModifyStatusEnumTypeWrapper): ...
+
+ROLE_EXISTS: RoleUserModifyStatus.ValueType  # 0
+"""the supplied role_id already exists"""
+MISSING_TREE_KEY: RoleUserModifyStatus.ValueType  # 1
+MISSING_ROLE_KEY: RoleUserModifyStatus.ValueType  # 2
+INVALID_ENTERPRISE_USER_ID: RoleUserModifyStatus.ValueType  # 3
+"""the supplied enterprise_user_id does not belong to the same enterprise as the calling user"""
+PENDING_ENTERPRISE_USER: RoleUserModifyStatus.ValueType  # 4
+"""cannot add a pending enterprise user to a role"""
+INVALID_NODE_ID: RoleUserModifyStatus.ValueType  # 5
+"""the supplied node_id is not valid"""
+MAY_NOT_REMOVE_SELF_FROM_ROLE: RoleUserModifyStatus.ValueType  # 6
+MUST_HAVE_ONE_USER_ADMIN: RoleUserModifyStatus.ValueType  # 7
+global___RoleUserModifyStatus = RoleUserModifyStatus
+
+class _EnterpriseType:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _EnterpriseTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_EnterpriseType.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    ENTERPRISE_STANDARD: _EnterpriseType.ValueType  # 0
+    ENTERPRISE_MSP: _EnterpriseType.ValueType  # 1
+
+class EnterpriseType(_EnterpriseType, metaclass=_EnterpriseTypeEnumTypeWrapper): ...
+
+ENTERPRISE_STANDARD: EnterpriseType.ValueType  # 0
+ENTERPRISE_MSP: EnterpriseType.ValueType  # 1
+global___EnterpriseType = EnterpriseType
+
+class _TransferAcceptanceStatus:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _TransferAcceptanceStatusEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_TransferAcceptanceStatus.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    UNDEFINED: _TransferAcceptanceStatus.ValueType  # 0
+    NOT_REQUIRED: _TransferAcceptanceStatus.ValueType  # 1
+    NOT_ACCEPTED: _TransferAcceptanceStatus.ValueType  # 2
+    PARTIALLY_ACCEPTED: _TransferAcceptanceStatus.ValueType  # 3
+    ACCEPTED: _TransferAcceptanceStatus.ValueType  # 4
+
+class TransferAcceptanceStatus(_TransferAcceptanceStatus, metaclass=_TransferAcceptanceStatusEnumTypeWrapper): ...
+
+UNDEFINED: TransferAcceptanceStatus.ValueType  # 0
+NOT_REQUIRED: TransferAcceptanceStatus.ValueType  # 1
+NOT_ACCEPTED: TransferAcceptanceStatus.ValueType  # 2
+PARTIALLY_ACCEPTED: TransferAcceptanceStatus.ValueType  # 3
+ACCEPTED: TransferAcceptanceStatus.ValueType  # 4
+global___TransferAcceptanceStatus = TransferAcceptanceStatus
+
+class _EnterpriseDataEntity:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _EnterpriseDataEntityEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_EnterpriseDataEntity.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    UNKNOWN: _EnterpriseDataEntity.ValueType  # 0
+    NODES: _EnterpriseDataEntity.ValueType  # 1
+    ROLES: _EnterpriseDataEntity.ValueType  # 2
+    USERS: _EnterpriseDataEntity.ValueType  # 3
+    TEAMS: _EnterpriseDataEntity.ValueType  # 4
+    TEAM_USERS: _EnterpriseDataEntity.ValueType  # 5
+    ROLE_USERS: _EnterpriseDataEntity.ValueType  # 6
+    ROLE_PRIVILEGES: _EnterpriseDataEntity.ValueType  # 7
+    ROLE_ENFORCEMENTS: _EnterpriseDataEntity.ValueType  # 8
+    ROLE_TEAMS: _EnterpriseDataEntity.ValueType  # 9
+    LICENSES: _EnterpriseDataEntity.ValueType  # 10
+    MANAGED_NODES: _EnterpriseDataEntity.ValueType  # 11
+    MANAGED_COMPANIES: _EnterpriseDataEntity.ValueType  # 12
+    BRIDGES: _EnterpriseDataEntity.ValueType  # 13
+    SCIMS: _EnterpriseDataEntity.ValueType  # 14
+    EMAIL_PROVISION: _EnterpriseDataEntity.ValueType  # 15
+    QUEUED_TEAMS: _EnterpriseDataEntity.ValueType  # 16
+    QUEUED_TEAM_USERS: _EnterpriseDataEntity.ValueType  # 17
+    SSO_SERVICES: _EnterpriseDataEntity.ValueType  # 18
+    REPORT_FILTER_USERS: _EnterpriseDataEntity.ValueType  # 19
+    DEVICES_REQUEST_FOR_ADMIN_APPROVAL: _EnterpriseDataEntity.ValueType  # 20
+    USER_ALIASES: _EnterpriseDataEntity.ValueType  # 21
+    COMPLIANCE_REPORT_CRITERIA_AND_FILTER: _EnterpriseDataEntity.ValueType  # 22
+    COMPLIANCE_REPORTS: _EnterpriseDataEntity.ValueType  # 23
+    QUEUED_TEAM_USERS_INCLUDING_PENDING: _EnterpriseDataEntity.ValueType  # 24
+
+class EnterpriseDataEntity(_EnterpriseDataEntity, metaclass=_EnterpriseDataEntityEnumTypeWrapper): ...
+
+UNKNOWN: EnterpriseDataEntity.ValueType  # 0
+NODES: EnterpriseDataEntity.ValueType  # 1
+ROLES: EnterpriseDataEntity.ValueType  # 2
+USERS: EnterpriseDataEntity.ValueType  # 3
+TEAMS: EnterpriseDataEntity.ValueType  # 4
+TEAM_USERS: EnterpriseDataEntity.ValueType  # 5
+ROLE_USERS: EnterpriseDataEntity.ValueType  # 6
+ROLE_PRIVILEGES: EnterpriseDataEntity.ValueType  # 7
+ROLE_ENFORCEMENTS: EnterpriseDataEntity.ValueType  # 8
+ROLE_TEAMS: EnterpriseDataEntity.ValueType  # 9
+LICENSES: EnterpriseDataEntity.ValueType  # 10
+MANAGED_NODES: EnterpriseDataEntity.ValueType  # 11
+MANAGED_COMPANIES: EnterpriseDataEntity.ValueType  # 12
+BRIDGES: EnterpriseDataEntity.ValueType  # 13
+SCIMS: EnterpriseDataEntity.ValueType  # 14
+EMAIL_PROVISION: EnterpriseDataEntity.ValueType  # 15
+QUEUED_TEAMS: EnterpriseDataEntity.ValueType  # 16
+QUEUED_TEAM_USERS: EnterpriseDataEntity.ValueType  # 17
+SSO_SERVICES: EnterpriseDataEntity.ValueType  # 18
+REPORT_FILTER_USERS: EnterpriseDataEntity.ValueType  # 19
+DEVICES_REQUEST_FOR_ADMIN_APPROVAL: EnterpriseDataEntity.ValueType  # 20
+USER_ALIASES: EnterpriseDataEntity.ValueType  # 21
+COMPLIANCE_REPORT_CRITERIA_AND_FILTER: EnterpriseDataEntity.ValueType  # 22
+COMPLIANCE_REPORTS: EnterpriseDataEntity.ValueType  # 23
+QUEUED_TEAM_USERS_INCLUDING_PENDING: EnterpriseDataEntity.ValueType  # 24
+global___EnterpriseDataEntity = EnterpriseDataEntity
+
+class _CacheStatus:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _CacheStatusEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_CacheStatus.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    KEEP: _CacheStatus.ValueType  # 0
+    CLEAR: _CacheStatus.ValueType  # 1
+
+class CacheStatus(_CacheStatus, metaclass=_CacheStatusEnumTypeWrapper): ...
+
+KEEP: CacheStatus.ValueType  # 0
+CLEAR: CacheStatus.ValueType  # 1
+global___CacheStatus = CacheStatus
+
+class _BackupKeyType:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _BackupKeyTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_BackupKeyType.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    NO_KEY: _BackupKeyType.ValueType  # 0
+    ENCRYPTED_BY_DATA_KEY: _BackupKeyType.ValueType  # 1
+    ENCRYPTED_BY_PUBLIC_KEY: _BackupKeyType.ValueType  # 2
+    ENCRYPTED_BY_DATA_KEY_GCM: _BackupKeyType.ValueType  # 3
+    ENCRYPTED_BY_PUBLIC_KEY_ECC: _BackupKeyType.ValueType  # 4
+
+class BackupKeyType(_BackupKeyType, metaclass=_BackupKeyTypeEnumTypeWrapper): ...
+
+NO_KEY: BackupKeyType.ValueType  # 0
+ENCRYPTED_BY_DATA_KEY: BackupKeyType.ValueType  # 1
+ENCRYPTED_BY_PUBLIC_KEY: BackupKeyType.ValueType  # 2
+ENCRYPTED_BY_DATA_KEY_GCM: BackupKeyType.ValueType  # 3
+ENCRYPTED_BY_PUBLIC_KEY_ECC: BackupKeyType.ValueType  # 4
+global___BackupKeyType = BackupKeyType
+
+class _BackupUserDataKeyType:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _BackupUserDataKeyTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_BackupUserDataKeyType.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    OWN: _BackupUserDataKeyType.ValueType  # 0
+    SHARED_TO_ENTERPRISE: _BackupUserDataKeyType.ValueType  # 1
+
+class BackupUserDataKeyType(_BackupUserDataKeyType, metaclass=_BackupUserDataKeyTypeEnumTypeWrapper): ...
+
+OWN: BackupUserDataKeyType.ValueType  # 0
+SHARED_TO_ENTERPRISE: BackupUserDataKeyType.ValueType  # 1
+global___BackupUserDataKeyType = BackupUserDataKeyType
+
+class _EncryptedKeyType:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _EncryptedKeyTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_EncryptedKeyType.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    KT_NO_KEY: _EncryptedKeyType.ValueType  # 0
+    KT_ENCRYPTED_BY_DATA_KEY: _EncryptedKeyType.ValueType  # 1
+    KT_ENCRYPTED_BY_PUBLIC_KEY: _EncryptedKeyType.ValueType  # 2
+    KT_ENCRYPTED_BY_DATA_KEY_GCM: _EncryptedKeyType.ValueType  # 3
+    KT_ENCRYPTED_BY_PUBLIC_KEY_ECC: _EncryptedKeyType.ValueType  # 4
+
+class EncryptedKeyType(_EncryptedKeyType, metaclass=_EncryptedKeyTypeEnumTypeWrapper): ...
+
+KT_NO_KEY: EncryptedKeyType.ValueType  # 0
+KT_ENCRYPTED_BY_DATA_KEY: EncryptedKeyType.ValueType  # 1
+KT_ENCRYPTED_BY_PUBLIC_KEY: EncryptedKeyType.ValueType  # 2
+KT_ENCRYPTED_BY_DATA_KEY_GCM: EncryptedKeyType.ValueType  # 3
+KT_ENCRYPTED_BY_PUBLIC_KEY_ECC: EncryptedKeyType.ValueType  # 4
+global___EncryptedKeyType = EncryptedKeyType
+
+class _EnterpriseFlagType:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _EnterpriseFlagTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_EnterpriseFlagType.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    INVALID: _EnterpriseFlagType.ValueType  # 0
+    ALLOW_PERSONAL_LICENSE: _EnterpriseFlagType.ValueType  # 1
+    SPECIAL_PROVISIONING: _EnterpriseFlagType.ValueType  # 2
+    RECORD_TYPES: _EnterpriseFlagType.ValueType  # 3
+    SECRETS_MANAGER: _EnterpriseFlagType.ValueType  # 4
+    ENTERPRISE_LOCKED: _EnterpriseFlagType.ValueType  # 5
+    FORBID_KEY_TYPE_2: _EnterpriseFlagType.ValueType  # 6
+    CONSOLE_ONBOARDED: _EnterpriseFlagType.ValueType  # 7
+    FORBID_ACCOUNT_TRANSFER: _EnterpriseFlagType.ValueType  # 8
+    NPS_POPUP_OPT_OUT: _EnterpriseFlagType.ValueType  # 9
+    SHOW_USER_ONBOARD: _EnterpriseFlagType.ValueType  # 10
+
+class EnterpriseFlagType(_EnterpriseFlagType, metaclass=_EnterpriseFlagTypeEnumTypeWrapper): ...
+
+INVALID: EnterpriseFlagType.ValueType  # 0
+ALLOW_PERSONAL_LICENSE: EnterpriseFlagType.ValueType  # 1
+SPECIAL_PROVISIONING: EnterpriseFlagType.ValueType  # 2
+RECORD_TYPES: EnterpriseFlagType.ValueType  # 3
+SECRETS_MANAGER: EnterpriseFlagType.ValueType  # 4
+ENTERPRISE_LOCKED: EnterpriseFlagType.ValueType  # 5
+FORBID_KEY_TYPE_2: EnterpriseFlagType.ValueType  # 6
+CONSOLE_ONBOARDED: EnterpriseFlagType.ValueType  # 7
+FORBID_ACCOUNT_TRANSFER: EnterpriseFlagType.ValueType  # 8
+NPS_POPUP_OPT_OUT: EnterpriseFlagType.ValueType  # 9
+SHOW_USER_ONBOARD: EnterpriseFlagType.ValueType  # 10
+global___EnterpriseFlagType = EnterpriseFlagType
+
+class _UserUpdateStatus:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _UserUpdateStatusEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_UserUpdateStatus.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    USER_UPDATE_OK: _UserUpdateStatus.ValueType  # 0
+    """ can't use OK because it's already defined in AuditUserStatus"""
+    USER_UPDATE_ACCESS_DENIED: _UserUpdateStatus.ValueType  # 1
+    """ same deal for ACCESS_DENIED"""
+
+class UserUpdateStatus(_UserUpdateStatus, metaclass=_UserUpdateStatusEnumTypeWrapper): ...
+
+USER_UPDATE_OK: UserUpdateStatus.ValueType  # 0
+""" can't use OK because it's already defined in AuditUserStatus"""
+USER_UPDATE_ACCESS_DENIED: UserUpdateStatus.ValueType  # 1
+""" same deal for ACCESS_DENIED"""
+global___UserUpdateStatus = UserUpdateStatus
+
+class _AuditUserStatus:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _AuditUserStatusEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_AuditUserStatus.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    OK: _AuditUserStatus.ValueType  # 0
+    ACCESS_DENIED: _AuditUserStatus.ValueType  # 1
+    """on a node with no privilege"""
+    NO_LONGER_IN_ENTERPRISE: _AuditUserStatus.ValueType  # 2
+    """because user isn't in enterprise, i.e. deleted"""
+
+class AuditUserStatus(_AuditUserStatus, metaclass=_AuditUserStatusEnumTypeWrapper): ...
+
+OK: AuditUserStatus.ValueType  # 0
+ACCESS_DENIED: AuditUserStatus.ValueType  # 1
+"""on a node with no privilege"""
+NO_LONGER_IN_ENTERPRISE: AuditUserStatus.ValueType  # 2
+"""because user isn't in enterprise, i.e. deleted"""
+global___AuditUserStatus = AuditUserStatus
+
+class _TeamUserType:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _TeamUserTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_TeamUserType.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    USER: _TeamUserType.ValueType  # 0
+    ADMIN: _TeamUserType.ValueType  # 1
+    ADMIN_ONLY: _TeamUserType.ValueType  # 2
+
+class TeamUserType(_TeamUserType, metaclass=_TeamUserTypeEnumTypeWrapper): ...
+
+USER: TeamUserType.ValueType  # 0
+ADMIN: TeamUserType.ValueType  # 1
+ADMIN_ONLY: TeamUserType.ValueType  # 2
+global___TeamUserType = TeamUserType
+
+class _AppClientType:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _AppClientTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_AppClientType.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    NOT_USED: _AppClientType.ValueType  # 0
+    GENERAL: _AppClientType.ValueType  # 1
+    DISCOVERY_AND_ROTATION_CONTROLLER: _AppClientType.ValueType  # 2
+    KCM_CONTROLLER: _AppClientType.ValueType  # 3
+    SELF_DESTRUCT: _AppClientType.ValueType  # 4
+
+class AppClientType(_AppClientType, metaclass=_AppClientTypeEnumTypeWrapper): ...
+
+NOT_USED: AppClientType.ValueType  # 0
+GENERAL: AppClientType.ValueType  # 1
+DISCOVERY_AND_ROTATION_CONTROLLER: AppClientType.ValueType  # 2
+KCM_CONTROLLER: AppClientType.ValueType  # 3
+SELF_DESTRUCT: AppClientType.ValueType  # 4
+global___AppClientType = AppClientType
+
+class _DeleteEnterpriseUsersResult:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _DeleteEnterpriseUsersResultEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_DeleteEnterpriseUsersResult.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    SUCCESS: _DeleteEnterpriseUsersResult.ValueType  # 0
+    NOT_AN_ENTERPRISE_USER: _DeleteEnterpriseUsersResult.ValueType  # 1
+    """the delete user is not an enterprise user"""
+    CANNOT_DELETE_SELF: _DeleteEnterpriseUsersResult.ValueType  # 2
+    """the delete user is the same as the calling user"""
+    BRIDGE_CANNOT_DELETE_ACTIVE_USER: _DeleteEnterpriseUsersResult.ValueType  # 3
+    """bridge cannot delete active user"""
+    ERROR: _DeleteEnterpriseUsersResult.ValueType  # 4
+    """unexpected internal error"""
+
+class DeleteEnterpriseUsersResult(_DeleteEnterpriseUsersResult, metaclass=_DeleteEnterpriseUsersResultEnumTypeWrapper): ...
+
+SUCCESS: DeleteEnterpriseUsersResult.ValueType  # 0
+NOT_AN_ENTERPRISE_USER: DeleteEnterpriseUsersResult.ValueType  # 1
+"""the delete user is not an enterprise user"""
+CANNOT_DELETE_SELF: DeleteEnterpriseUsersResult.ValueType  # 2
+"""the delete user is the same as the calling user"""
+BRIDGE_CANNOT_DELETE_ACTIVE_USER: DeleteEnterpriseUsersResult.ValueType  # 3
+"""bridge cannot delete active user"""
+ERROR: DeleteEnterpriseUsersResult.ValueType  # 4
+"""unexpected internal error"""
+global___DeleteEnterpriseUsersResult = DeleteEnterpriseUsersResult
+
+class _ClearSecurityDataType:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _ClearSecurityDataTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_ClearSecurityDataType.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    RECALCULATE_SUMMARY_REPORT: _ClearSecurityDataType.ValueType  # 0
+    FORCE_CLIENT_CHECK_FOR_MISSING_DATA: _ClearSecurityDataType.ValueType  # 1
+    FORCE_CLIENT_RESEND_SECURITY_DATA: _ClearSecurityDataType.ValueType  # 2
+
+class ClearSecurityDataType(_ClearSecurityDataType, metaclass=_ClearSecurityDataTypeEnumTypeWrapper): ...
+
+RECALCULATE_SUMMARY_REPORT: ClearSecurityDataType.ValueType  # 0
+FORCE_CLIENT_CHECK_FOR_MISSING_DATA: ClearSecurityDataType.ValueType  # 1
+FORCE_CLIENT_RESEND_SECURITY_DATA: ClearSecurityDataType.ValueType  # 2
+global___ClearSecurityDataType = ClearSecurityDataType
+
+@typing.final
+class EnterpriseKeyPairRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEPUBLICKEY_FIELD_NUMBER: builtins.int
+    ENCRYPTEDENTERPRISEPRIVATEKEY_FIELD_NUMBER: builtins.int
+    KEYTYPE_FIELD_NUMBER: builtins.int
+    enterprisePublicKey: builtins.bytes
+    encryptedEnterprisePrivateKey: builtins.bytes
+    keyType: global___KeyType.ValueType
+    def __init__(
+        self,
+        *,
+        enterprisePublicKey: builtins.bytes = ...,
+        encryptedEnterprisePrivateKey: builtins.bytes = ...,
+        keyType: global___KeyType.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["encryptedEnterprisePrivateKey", b"encryptedEnterprisePrivateKey", "enterprisePublicKey", b"enterprisePublicKey", "keyType", b"keyType"]) -> None: ...
+
+global___EnterpriseKeyPairRequest = EnterpriseKeyPairRequest
+
+@typing.final
+class GetTeamMemberRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TEAMUID_FIELD_NUMBER: builtins.int
+    teamUid: builtins.bytes
+    def __init__(
+        self,
+        *,
+        teamUid: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["teamUid", b"teamUid"]) -> None: ...
+
+global___GetTeamMemberRequest = GetTeamMemberRequest
+
+@typing.final
+class EnterpriseUser(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    EMAIL_FIELD_NUMBER: builtins.int
+    ENTERPRISEUSERNAME_FIELD_NUMBER: builtins.int
+    ISSHAREADMIN_FIELD_NUMBER: builtins.int
+    USERNAME_FIELD_NUMBER: builtins.int
+    enterpriseUserId: builtins.int
+    email: builtins.str
+    enterpriseUsername: builtins.str
+    isShareAdmin: builtins.bool
+    username: builtins.str
+    def __init__(
+        self,
+        *,
+        enterpriseUserId: builtins.int = ...,
+        email: builtins.str = ...,
+        enterpriseUsername: builtins.str = ...,
+        isShareAdmin: builtins.bool = ...,
+        username: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["email", b"email", "enterpriseUserId", b"enterpriseUserId", "enterpriseUsername", b"enterpriseUsername", "isShareAdmin", b"isShareAdmin", "username", b"username"]) -> None: ...
+
+global___EnterpriseUser = EnterpriseUser
+
+@typing.final
+class GetTeamMemberResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSER_FIELD_NUMBER: builtins.int
+    @property
+    def enterpriseUser(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___EnterpriseUser]: ...
+    def __init__(
+        self,
+        *,
+        enterpriseUser: collections.abc.Iterable[global___EnterpriseUser] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enterpriseUser", b"enterpriseUser"]) -> None: ...
+
+global___GetTeamMemberResponse = GetTeamMemberResponse
+
+@typing.final
+class EnterpriseUserIds(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    @property
+    def enterpriseUserId(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]: ...
+    def __init__(
+        self,
+        *,
+        enterpriseUserId: collections.abc.Iterable[builtins.int] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enterpriseUserId", b"enterpriseUserId"]) -> None: ...
+
+global___EnterpriseUserIds = EnterpriseUserIds
+
+@typing.final
+class EnterprisePersonalAccount(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    EMAIL_FIELD_NUMBER: builtins.int
+    OBSOLETE_FIELD_FIELD_NUMBER: builtins.int
+    email: builtins.str
+    OBSOLETE_FIELD: builtins.bytes
+    """DO NOT RE-USE. placeholder for backwards compatability"""
+    def __init__(
+        self,
+        *,
+        email: builtins.str = ...,
+        OBSOLETE_FIELD: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["OBSOLETE_FIELD", b"OBSOLETE_FIELD", "email", b"email"]) -> None: ...
+
+global___EnterprisePersonalAccount = EnterprisePersonalAccount
+
+@typing.final
+class EncryptedTeamKeyRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TEAMUID_FIELD_NUMBER: builtins.int
+    ENCRYPTEDTEAMKEY_FIELD_NUMBER: builtins.int
+    FORCE_FIELD_NUMBER: builtins.int
+    teamUid: builtins.bytes
+    encryptedTeamKey: builtins.bytes
+    force: builtins.bool
+    """if false, existing team key must be null to succeed"""
+    def __init__(
+        self,
+        *,
+        teamUid: builtins.bytes = ...,
+        encryptedTeamKey: builtins.bytes = ...,
+        force: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["encryptedTeamKey", b"encryptedTeamKey", "force", b"force", "teamUid", b"teamUid"]) -> None: ...
+
+global___EncryptedTeamKeyRequest = EncryptedTeamKeyRequest
+
+@typing.final
+class ReEncryptedData(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ID_FIELD_NUMBER: builtins.int
+    DATA_FIELD_NUMBER: builtins.int
+    id: builtins.int
+    data: builtins.str
+    def __init__(
+        self,
+        *,
+        id: builtins.int = ...,
+        data: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["data", b"data", "id", b"id"]) -> None: ...
+
+global___ReEncryptedData = ReEncryptedData
+
+@typing.final
+class ReEncryptedRoleKey(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ROLE_ID_FIELD_NUMBER: builtins.int
+    ENCRYPTEDROLEKEY_FIELD_NUMBER: builtins.int
+    role_id: builtins.int
+    encryptedRoleKey: builtins.bytes
+    def __init__(
+        self,
+        *,
+        role_id: builtins.int = ...,
+        encryptedRoleKey: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["encryptedRoleKey", b"encryptedRoleKey", "role_id", b"role_id"]) -> None: ...
+
+global___ReEncryptedRoleKey = ReEncryptedRoleKey
+
+@typing.final
+class ReEncryptedUserDataKey(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    USERENCRYPTEDDATAKEY_FIELD_NUMBER: builtins.int
+    enterpriseUserId: builtins.int
+    userEncryptedDataKey: builtins.bytes
+    def __init__(
+        self,
+        *,
+        enterpriseUserId: builtins.int = ...,
+        userEncryptedDataKey: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enterpriseUserId", b"enterpriseUserId", "userEncryptedDataKey", b"userEncryptedDataKey"]) -> None: ...
+
+global___ReEncryptedUserDataKey = ReEncryptedUserDataKey
+
+@typing.final
+class NodeToManagedCompanyRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    COMPANYID_FIELD_NUMBER: builtins.int
+    NODES_FIELD_NUMBER: builtins.int
+    ROLES_FIELD_NUMBER: builtins.int
+    USERS_FIELD_NUMBER: builtins.int
+    ROLEKEYS_FIELD_NUMBER: builtins.int
+    TEAMKEYS_FIELD_NUMBER: builtins.int
+    USERSDATAKEYS_FIELD_NUMBER: builtins.int
+    companyId: builtins.int
+    @property
+    def nodes(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ReEncryptedData]: ...
+    @property
+    def roles(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ReEncryptedData]: ...
+    @property
+    def users(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ReEncryptedData]: ...
+    @property
+    def roleKeys(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ReEncryptedRoleKey]: ...
+    @property
+    def teamKeys(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___EncryptedTeamKeyRequest]: ...
+    @property
+    def usersDataKeys(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ReEncryptedUserDataKey]: ...
+    def __init__(
+        self,
+        *,
+        companyId: builtins.int = ...,
+        nodes: collections.abc.Iterable[global___ReEncryptedData] | None = ...,
+        roles: collections.abc.Iterable[global___ReEncryptedData] | None = ...,
+        users: collections.abc.Iterable[global___ReEncryptedData] | None = ...,
+        roleKeys: collections.abc.Iterable[global___ReEncryptedRoleKey] | None = ...,
+        teamKeys: collections.abc.Iterable[global___EncryptedTeamKeyRequest] | None = ...,
+        usersDataKeys: collections.abc.Iterable[global___ReEncryptedUserDataKey] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["companyId", b"companyId", "nodes", b"nodes", "roleKeys", b"roleKeys", "roles", b"roles", "teamKeys", b"teamKeys", "users", b"users", "usersDataKeys", b"usersDataKeys"]) -> None: ...
+
+global___NodeToManagedCompanyRequest = NodeToManagedCompanyRequest
+
+@typing.final
+class RoleTeam(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ROLE_ID_FIELD_NUMBER: builtins.int
+    TEAMUID_FIELD_NUMBER: builtins.int
+    role_id: builtins.int
+    teamUid: builtins.bytes
+    def __init__(
+        self,
+        *,
+        role_id: builtins.int = ...,
+        teamUid: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["role_id", b"role_id", "teamUid", b"teamUid"]) -> None: ...
+
+global___RoleTeam = RoleTeam
+
+@typing.final
+class RoleTeams(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ROLE_TEAM_FIELD_NUMBER: builtins.int
+    @property
+    def role_team(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RoleTeam]:
+        """100 max"""
+
+    def __init__(
+        self,
+        *,
+        role_team: collections.abc.Iterable[global___RoleTeam] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["role_team", b"role_team"]) -> None: ...
+
+global___RoleTeams = RoleTeams
+
+@typing.final
+class RoleUserAddKeys(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    TREEKEY_FIELD_NUMBER: builtins.int
+    ROLEADMINKEY_FIELD_NUMBER: builtins.int
+    enterpriseUserId: builtins.int
+    treeKey: builtins.str
+    """TODO: is this necessary? we only use it for validation. URLSafe base 64 key encrypted with the user's public key if this role is a role with managed nodes"""
+    roleAdminKey: builtins.str
+    """TODO: is this necessary? we only use it for validation. URLSafe base 64 role_key encrypted with the user's public key. cannot add a user to a role that has a key and you are not a member of."""
+    def __init__(
+        self,
+        *,
+        enterpriseUserId: builtins.int = ...,
+        treeKey: builtins.str = ...,
+        roleAdminKey: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enterpriseUserId", b"enterpriseUserId", "roleAdminKey", b"roleAdminKey", "treeKey", b"treeKey"]) -> None: ...
+
+global___RoleUserAddKeys = RoleUserAddKeys
+
+@typing.final
+class RoleUserAdd(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ROLE_ID_FIELD_NUMBER: builtins.int
+    ROLEUSERADDKEYS_FIELD_NUMBER: builtins.int
+    role_id: builtins.int
+    @property
+    def roleUserAddKeys(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RoleUserAddKeys]: ...
+    def __init__(
+        self,
+        *,
+        role_id: builtins.int = ...,
+        roleUserAddKeys: collections.abc.Iterable[global___RoleUserAddKeys] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["roleUserAddKeys", b"roleUserAddKeys", "role_id", b"role_id"]) -> None: ...
+
+global___RoleUserAdd = RoleUserAdd
+
+@typing.final
+class RoleUsersAddRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ROLEUSERADDS_FIELD_NUMBER: builtins.int
+    @property
+    def roleUserAdds(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RoleUserAdd]:
+        """1000 max"""
+
+    def __init__(
+        self,
+        *,
+        roleUserAdds: collections.abc.Iterable[global___RoleUserAdd] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["roleUserAdds", b"roleUserAdds"]) -> None: ...
+
+global___RoleUsersAddRequest = RoleUsersAddRequest
+
+@typing.final
+class RoleUserAddResult(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ROLEID_FIELD_NUMBER: builtins.int
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    STATUS_FIELD_NUMBER: builtins.int
+    MESSAGE_FIELD_NUMBER: builtins.int
+    roleId: builtins.int
+    enterpriseUserId: builtins.int
+    status: global___RoleUserModifyStatus.ValueType
+    message: builtins.str
+    def __init__(
+        self,
+        *,
+        roleId: builtins.int = ...,
+        enterpriseUserId: builtins.int = ...,
+        status: global___RoleUserModifyStatus.ValueType = ...,
+        message: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enterpriseUserId", b"enterpriseUserId", "message", b"message", "roleId", b"roleId", "status", b"status"]) -> None: ...
+
+global___RoleUserAddResult = RoleUserAddResult
+
+@typing.final
+class RoleUsersAddResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RESULTS_FIELD_NUMBER: builtins.int
+    @property
+    def results(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RoleUserAddResult]: ...
+    def __init__(
+        self,
+        *,
+        results: collections.abc.Iterable[global___RoleUserAddResult] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["results", b"results"]) -> None: ...
+
+global___RoleUsersAddResponse = RoleUsersAddResponse
+
+@typing.final
+class RoleUserRemove(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ROLE_ID_FIELD_NUMBER: builtins.int
+    ENTERPRISEUSERIDS_FIELD_NUMBER: builtins.int
+    role_id: builtins.int
+    @property
+    def enterpriseUserIds(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]:
+        """1000 max"""
+
+    def __init__(
+        self,
+        *,
+        role_id: builtins.int = ...,
+        enterpriseUserIds: collections.abc.Iterable[builtins.int] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enterpriseUserIds", b"enterpriseUserIds", "role_id", b"role_id"]) -> None: ...
+
+global___RoleUserRemove = RoleUserRemove
+
+@typing.final
+class RoleUsersRemoveRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ROLEUSERREMOVES_FIELD_NUMBER: builtins.int
+    @property
+    def roleUserRemoves(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RoleUserRemove]:
+        """100 max"""
+
+    def __init__(
+        self,
+        *,
+        roleUserRemoves: collections.abc.Iterable[global___RoleUserRemove] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["roleUserRemoves", b"roleUserRemoves"]) -> None: ...
+
+global___RoleUsersRemoveRequest = RoleUsersRemoveRequest
+
+@typing.final
+class RoleUserRemoveResult(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ROLEID_FIELD_NUMBER: builtins.int
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    STATUS_FIELD_NUMBER: builtins.int
+    MESSAGE_FIELD_NUMBER: builtins.int
+    roleId: builtins.int
+    enterpriseUserId: builtins.int
+    status: global___RoleUserModifyStatus.ValueType
+    message: builtins.str
+    def __init__(
+        self,
+        *,
+        roleId: builtins.int = ...,
+        enterpriseUserId: builtins.int = ...,
+        status: global___RoleUserModifyStatus.ValueType = ...,
+        message: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enterpriseUserId", b"enterpriseUserId", "message", b"message", "roleId", b"roleId", "status", b"status"]) -> None: ...
+
+global___RoleUserRemoveResult = RoleUserRemoveResult
+
+@typing.final
+class RoleUsersRemoveResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RESULTS_FIELD_NUMBER: builtins.int
+    @property
+    def results(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RoleUserRemoveResult]: ...
+    def __init__(
+        self,
+        *,
+        results: collections.abc.Iterable[global___RoleUserRemoveResult] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["results", b"results"]) -> None: ...
+
+global___RoleUsersRemoveResponse = RoleUsersRemoveResponse
+
+@typing.final
+class EnterpriseRegistration(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENCRYPTEDTREEKEY_FIELD_NUMBER: builtins.int
+    ENTERPRISENAME_FIELD_NUMBER: builtins.int
+    ROOTNODEDATA_FIELD_NUMBER: builtins.int
+    ADMINUSERDATA_FIELD_NUMBER: builtins.int
+    ADMINNAME_FIELD_NUMBER: builtins.int
+    ROLEDATA_FIELD_NUMBER: builtins.int
+    RSAKEYPAIR_FIELD_NUMBER: builtins.int
+    NUMBERSEATS_FIELD_NUMBER: builtins.int
+    ENTERPRISETYPE_FIELD_NUMBER: builtins.int
+    ROLEPUBLICKEY_FIELD_NUMBER: builtins.int
+    ROLEPRIVATEKEYENCRYPTEDWITHROLEKEY_FIELD_NUMBER: builtins.int
+    ROLEKEYENCRYPTEDWITHTREEKEY_FIELD_NUMBER: builtins.int
+    ECCKEYPAIR_FIELD_NUMBER: builtins.int
+    ALLUSERSROLEDATA_FIELD_NUMBER: builtins.int
+    ROLEKEYENCRYPTEDWITHUSERPUBLICKEY_FIELD_NUMBER: builtins.int
+    APPROVERROLEDATA_FIELD_NUMBER: builtins.int
+    encryptedTreeKey: builtins.bytes
+    """AES 256 key encrypted with admin's data key"""
+    enterpriseName: builtins.str
+    """plain text name"""
+    rootNodeData: builtins.bytes
+    """encrypted node data"""
+    adminUserData: builtins.bytes
+    """encrypted user data"""
+    adminName: builtins.str
+    """full name of admin"""
+    roleData: builtins.bytes
+    """encrypted role data for admin role"""
+    numberSeats: builtins.int
+    """should this be part of the request?"""
+    enterpriseType: global___EnterpriseType.ValueType
+    rolePublicKey: builtins.bytes
+    rolePrivateKeyEncryptedWithRoleKey: builtins.bytes
+    roleKeyEncryptedWithTreeKey: builtins.bytes
+    allUsersRoleData: builtins.bytes
+    """encrypted role data for all_users role"""
+    roleKeyEncryptedWithUserPublicKey: builtins.bytes
+    approverRoleData: builtins.bytes
+    """encrypted role data for PEDM approver role"""
+    @property
+    def rsaKeyPair(self) -> global___EnterpriseKeyPairRequest:
+        """for sharing to the enterprise"""
+
+    @property
+    def eccKeyPair(self) -> global___EnterpriseKeyPairRequest: ...
+    def __init__(
+        self,
+        *,
+        encryptedTreeKey: builtins.bytes = ...,
+        enterpriseName: builtins.str = ...,
+        rootNodeData: builtins.bytes = ...,
+        adminUserData: builtins.bytes = ...,
+        adminName: builtins.str = ...,
+        roleData: builtins.bytes = ...,
+        rsaKeyPair: global___EnterpriseKeyPairRequest | None = ...,
+        numberSeats: builtins.int = ...,
+        enterpriseType: global___EnterpriseType.ValueType = ...,
+        rolePublicKey: builtins.bytes = ...,
+        rolePrivateKeyEncryptedWithRoleKey: builtins.bytes = ...,
+        roleKeyEncryptedWithTreeKey: builtins.bytes = ...,
+        eccKeyPair: global___EnterpriseKeyPairRequest | None = ...,
+        allUsersRoleData: builtins.bytes = ...,
+        roleKeyEncryptedWithUserPublicKey: builtins.bytes = ...,
+        approverRoleData: builtins.bytes = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["eccKeyPair", b"eccKeyPair", "rsaKeyPair", b"rsaKeyPair"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["adminName", b"adminName", "adminUserData", b"adminUserData", "allUsersRoleData", b"allUsersRoleData", "approverRoleData", b"approverRoleData", "eccKeyPair", b"eccKeyPair", "encryptedTreeKey", b"encryptedTreeKey", "enterpriseName", b"enterpriseName", "enterpriseType", b"enterpriseType", "numberSeats", b"numberSeats", "roleData", b"roleData", "roleKeyEncryptedWithTreeKey", b"roleKeyEncryptedWithTreeKey", "roleKeyEncryptedWithUserPublicKey", b"roleKeyEncryptedWithUserPublicKey", "rolePrivateKeyEncryptedWithRoleKey", b"rolePrivateKeyEncryptedWithRoleKey", "rolePublicKey", b"rolePublicKey", "rootNodeData", b"rootNodeData", "rsaKeyPair", b"rsaKeyPair"]) -> None: ...
+
+global___EnterpriseRegistration = EnterpriseRegistration
+
+@typing.final
+class DomainPasswordRulesRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    USERNAME_FIELD_NUMBER: builtins.int
+    VERIFICATIONCODE_FIELD_NUMBER: builtins.int
+    username: builtins.str
+    verificationCode: builtins.str
+    """If supplied and is valid, will use the password rules for the given user's account"""
+    def __init__(
+        self,
+        *,
+        username: builtins.str = ...,
+        verificationCode: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["username", b"username", "verificationCode", b"verificationCode"]) -> None: ...
+
+global___DomainPasswordRulesRequest = DomainPasswordRulesRequest
+
+@typing.final
+class DomainPasswordRulesFields(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TYPE_FIELD_NUMBER: builtins.int
+    MINIMUM_FIELD_NUMBER: builtins.int
+    MAXIMUM_FIELD_NUMBER: builtins.int
+    ALLOWED_FIELD_NUMBER: builtins.int
+    type: builtins.str
+    minimum: builtins.int
+    maximum: builtins.int
+    allowed: builtins.bool
+    def __init__(
+        self,
+        *,
+        type: builtins.str = ...,
+        minimum: builtins.int = ...,
+        maximum: builtins.int = ...,
+        allowed: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["allowed", b"allowed", "maximum", b"maximum", "minimum", b"minimum", "type", b"type"]) -> None: ...
+
+global___DomainPasswordRulesFields = DomainPasswordRulesFields
+
+@typing.final
+class LoginToMcRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    MCENTERPRISEID_FIELD_NUMBER: builtins.int
+    MESSAGESESSIONUID_FIELD_NUMBER: builtins.int
+    mcEnterpriseId: builtins.int
+    messageSessionUid: builtins.bytes
+    def __init__(
+        self,
+        *,
+        mcEnterpriseId: builtins.int = ...,
+        messageSessionUid: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["mcEnterpriseId", b"mcEnterpriseId", "messageSessionUid", b"messageSessionUid"]) -> None: ...
+
+global___LoginToMcRequest = LoginToMcRequest
+
+@typing.final
+class LoginToMcResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENCRYPTEDSESSIONTOKEN_FIELD_NUMBER: builtins.int
+    ENCRYPTEDTREEKEY_FIELD_NUMBER: builtins.int
+    encryptedSessionToken: builtins.bytes
+    encryptedTreeKey: builtins.str
+    """MC's tree key encrypted with MSP's tree key"""
+    def __init__(
+        self,
+        *,
+        encryptedSessionToken: builtins.bytes = ...,
+        encryptedTreeKey: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["encryptedSessionToken", b"encryptedSessionToken", "encryptedTreeKey", b"encryptedTreeKey"]) -> None: ...
+
+global___LoginToMcResponse = LoginToMcResponse
+
+@typing.final
+class DomainPasswordRulesResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    DOMAINPASSWORDRULESFIELDS_FIELD_NUMBER: builtins.int
+    @property
+    def domainPasswordRulesFields(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___DomainPasswordRulesFields]: ...
+    def __init__(
+        self,
+        *,
+        domainPasswordRulesFields: collections.abc.Iterable[global___DomainPasswordRulesFields] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["domainPasswordRulesFields", b"domainPasswordRulesFields"]) -> None: ...
+
+global___DomainPasswordRulesResponse = DomainPasswordRulesResponse
+
+@typing.final
+class ApproveUserDeviceRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: builtins.int
+    ENCRYPTEDDEVICEDATAKEY_FIELD_NUMBER: builtins.int
+    DENYAPPROVAL_FIELD_NUMBER: builtins.int
+    enterpriseUserId: builtins.int
+    encryptedDeviceToken: builtins.bytes
+    encryptedDeviceDataKey: builtins.bytes
+    """required for cloud sso"""
+    denyApproval: builtins.bool
+    def __init__(
+        self,
+        *,
+        enterpriseUserId: builtins.int = ...,
+        encryptedDeviceToken: builtins.bytes = ...,
+        encryptedDeviceDataKey: builtins.bytes = ...,
+        denyApproval: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["denyApproval", b"denyApproval", "encryptedDeviceDataKey", b"encryptedDeviceDataKey", "encryptedDeviceToken", b"encryptedDeviceToken", "enterpriseUserId", b"enterpriseUserId"]) -> None: ...
+
+global___ApproveUserDeviceRequest = ApproveUserDeviceRequest
+
+@typing.final
+class ApproveUserDeviceResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: builtins.int
+    FAILED_FIELD_NUMBER: builtins.int
+    MESSAGE_FIELD_NUMBER: builtins.int
+    enterpriseUserId: builtins.int
+    encryptedDeviceToken: builtins.bytes
+    failed: builtins.bool
+    message: builtins.str
+    def __init__(
+        self,
+        *,
+        enterpriseUserId: builtins.int = ...,
+        encryptedDeviceToken: builtins.bytes = ...,
+        failed: builtins.bool = ...,
+        message: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["encryptedDeviceToken", b"encryptedDeviceToken", "enterpriseUserId", b"enterpriseUserId", "failed", b"failed", "message", b"message"]) -> None: ...
+
+global___ApproveUserDeviceResponse = ApproveUserDeviceResponse
+
+@typing.final
+class ApproveUserDevicesRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    DEVICEREQUESTS_FIELD_NUMBER: builtins.int
+    @property
+    def deviceRequests(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ApproveUserDeviceRequest]: ...
+    def __init__(
+        self,
+        *,
+        deviceRequests: collections.abc.Iterable[global___ApproveUserDeviceRequest] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["deviceRequests", b"deviceRequests"]) -> None: ...
+
+global___ApproveUserDevicesRequest = ApproveUserDevicesRequest
+
+@typing.final
+class ApproveUserDevicesResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    DEVICERESPONSES_FIELD_NUMBER: builtins.int
+    @property
+    def deviceResponses(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ApproveUserDeviceResponse]: ...
+    def __init__(
+        self,
+        *,
+        deviceResponses: collections.abc.Iterable[global___ApproveUserDeviceResponse] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["deviceResponses", b"deviceResponses"]) -> None: ...
+
+global___ApproveUserDevicesResponse = ApproveUserDevicesResponse
+
+@typing.final
+class EnterpriseUserDataKey(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    USERENCRYPTEDDATAKEY_FIELD_NUMBER: builtins.int
+    KEYTYPEID_FIELD_NUMBER: builtins.int
+    ROLEKEY_FIELD_NUMBER: builtins.int
+    PRIVATEKEY_FIELD_NUMBER: builtins.int
+    enterpriseUserId: builtins.int
+    userEncryptedDataKey: builtins.bytes
+    keyTypeId: builtins.int
+    roleKey: builtins.bytes
+    """Used for migration"""
+    privateKey: builtins.bytes
+    """Used for migration"""
+    def __init__(
+        self,
+        *,
+        enterpriseUserId: builtins.int = ...,
+        userEncryptedDataKey: builtins.bytes = ...,
+        keyTypeId: builtins.int = ...,
+        roleKey: builtins.bytes = ...,
+        privateKey: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enterpriseUserId", b"enterpriseUserId", "keyTypeId", b"keyTypeId", "privateKey", b"privateKey", "roleKey", b"roleKey", "userEncryptedDataKey", b"userEncryptedDataKey"]) -> None: ...
+
+global___EnterpriseUserDataKey = EnterpriseUserDataKey
+
+@typing.final
+class EnterpriseUserDataKeys(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    KEYS_FIELD_NUMBER: builtins.int
+    @property
+    def keys(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___EnterpriseUserDataKey]: ...
+    def __init__(
+        self,
+        *,
+        keys: collections.abc.Iterable[global___EnterpriseUserDataKey] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["keys", b"keys"]) -> None: ...
+
+global___EnterpriseUserDataKeys = EnterpriseUserDataKeys
+
+@typing.final
+class EnterpriseUserDataKeyLight(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    USERENCRYPTEDDATAKEY_FIELD_NUMBER: builtins.int
+    KEYTYPEID_FIELD_NUMBER: builtins.int
+    enterpriseUserId: builtins.int
+    userEncryptedDataKey: builtins.bytes
+    keyTypeId: builtins.int
+    def __init__(
+        self,
+        *,
+        enterpriseUserId: builtins.int = ...,
+        userEncryptedDataKey: builtins.bytes = ...,
+        keyTypeId: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enterpriseUserId", b"enterpriseUserId", "keyTypeId", b"keyTypeId", "userEncryptedDataKey", b"userEncryptedDataKey"]) -> None: ...
+
+global___EnterpriseUserDataKeyLight = EnterpriseUserDataKeyLight
+
+@typing.final
+class EnterpriseUserDataKeysByNode(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    NODEID_FIELD_NUMBER: builtins.int
+    KEYS_FIELD_NUMBER: builtins.int
+    nodeId: builtins.int
+    @property
+    def keys(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___EnterpriseUserDataKeyLight]: ...
+    def __init__(
+        self,
+        *,
+        nodeId: builtins.int = ...,
+        keys: collections.abc.Iterable[global___EnterpriseUserDataKeyLight] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["keys", b"keys", "nodeId", b"nodeId"]) -> None: ...
+
+global___EnterpriseUserDataKeysByNode = EnterpriseUserDataKeysByNode
+
+@typing.final
+class EnterpriseUserDataKeysByNodeResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    KEYS_FIELD_NUMBER: builtins.int
+    @property
+    def keys(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___EnterpriseUserDataKeysByNode]: ...
+    def __init__(
+        self,
+        *,
+        keys: collections.abc.Iterable[global___EnterpriseUserDataKeysByNode] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["keys", b"keys"]) -> None: ...
+
+global___EnterpriseUserDataKeysByNodeResponse = EnterpriseUserDataKeysByNodeResponse
+
+@typing.final
+class EnterpriseDataRequest(google.protobuf.message.Message):
+    """Enterprise Data messages"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CONTINUATIONTOKEN_FIELD_NUMBER: builtins.int
+    continuationToken: builtins.bytes
+    def __init__(
+        self,
+        *,
+        continuationToken: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["continuationToken", b"continuationToken"]) -> None: ...
+
+global___EnterpriseDataRequest = EnterpriseDataRequest
+
+@typing.final
+class SpecialProvisioning(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    URL_FIELD_NUMBER: builtins.int
+    NAME_FIELD_NUMBER: builtins.int
+    url: builtins.str
+    name: builtins.str
+    def __init__(
+        self,
+        *,
+        url: builtins.str = ...,
+        name: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["name", b"name", "url", b"url"]) -> None: ...
+
+global___SpecialProvisioning = SpecialProvisioning
+
+@typing.final
+class GeneralDataEntity(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISENAME_FIELD_NUMBER: builtins.int
+    RESTRICTVISIBILITY_FIELD_NUMBER: builtins.int
+    SPECIALPROVISIONING_FIELD_NUMBER: builtins.int
+    USERPRIVILEGE_FIELD_NUMBER: builtins.int
+    DISTRIBUTOR_FIELD_NUMBER: builtins.int
+    FORBIDACCOUNTTRANSFER_FIELD_NUMBER: builtins.int
+    SHOWUSERONBOARD_FIELD_NUMBER: builtins.int
+    enterpriseName: builtins.str
+    restrictVisibility: builtins.bool
+    distributor: builtins.bool
+    forbidAccountTransfer: builtins.bool
+    """ If true:
+     - role_enforcement_add won't let you add the REQUIRE_ACCOUNT_SHARE enforcement
+     - account_summary won't ask clients to share their data key for account share
+     - share_account, pre_account_transfer, & transfer_and_delete_user will abort
+    """
+    showUserOnboard: builtins.bool
+    @property
+    def specialProvisioning(self) -> global___SpecialProvisioning: ...
+    @property
+    def userPrivilege(self) -> global___UserPrivilege: ...
+    def __init__(
+        self,
+        *,
+        enterpriseName: builtins.str = ...,
+        restrictVisibility: builtins.bool = ...,
+        specialProvisioning: global___SpecialProvisioning | None = ...,
+        userPrivilege: global___UserPrivilege | None = ...,
+        distributor: builtins.bool = ...,
+        forbidAccountTransfer: builtins.bool = ...,
+        showUserOnboard: builtins.bool = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["specialProvisioning", b"specialProvisioning", "userPrivilege", b"userPrivilege"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["distributor", b"distributor", "enterpriseName", b"enterpriseName", "forbidAccountTransfer", b"forbidAccountTransfer", "restrictVisibility", b"restrictVisibility", "showUserOnboard", b"showUserOnboard", "specialProvisioning", b"specialProvisioning", "userPrivilege", b"userPrivilege"]) -> None: ...
+
+global___GeneralDataEntity = GeneralDataEntity
+
+@typing.final
+class Node(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    NODEID_FIELD_NUMBER: builtins.int
+    PARENTID_FIELD_NUMBER: builtins.int
+    BRIDGEID_FIELD_NUMBER: builtins.int
+    SCIMID_FIELD_NUMBER: builtins.int
+    LICENSEID_FIELD_NUMBER: builtins.int
+    ENCRYPTEDDATA_FIELD_NUMBER: builtins.int
+    DUOENABLED_FIELD_NUMBER: builtins.int
+    RSAENABLED_FIELD_NUMBER: builtins.int
+    SSOSERVICEPROVIDERID_FIELD_NUMBER: builtins.int
+    RESTRICTVISIBILITY_FIELD_NUMBER: builtins.int
+    SSOSERVICEPROVIDERIDS_FIELD_NUMBER: builtins.int
+    nodeId: builtins.int
+    parentId: builtins.int
+    bridgeId: builtins.int
+    scimId: builtins.int
+    licenseId: builtins.int
+    encryptedData: builtins.str
+    duoEnabled: builtins.bool
+    rsaEnabled: builtins.bool
+    ssoServiceProviderId: builtins.int
+    restrictVisibility: builtins.bool
+    @property
+    def ssoServiceProviderIds(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]:
+        """Nov 2021 - Nodes can now have more than one sso ServiceProviderId."""
+
+    def __init__(
+        self,
+        *,
+        nodeId: builtins.int = ...,
+        parentId: builtins.int = ...,
+        bridgeId: builtins.int = ...,
+        scimId: builtins.int = ...,
+        licenseId: builtins.int = ...,
+        encryptedData: builtins.str = ...,
+        duoEnabled: builtins.bool = ...,
+        rsaEnabled: builtins.bool = ...,
+        ssoServiceProviderId: builtins.int = ...,
+        restrictVisibility: builtins.bool = ...,
+        ssoServiceProviderIds: collections.abc.Iterable[builtins.int] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["bridgeId", b"bridgeId", "duoEnabled", b"duoEnabled", "encryptedData", b"encryptedData", "licenseId", b"licenseId", "nodeId", b"nodeId", "parentId", b"parentId", "restrictVisibility", b"restrictVisibility", "rsaEnabled", b"rsaEnabled", "scimId", b"scimId", "ssoServiceProviderId", b"ssoServiceProviderId", "ssoServiceProviderIds", b"ssoServiceProviderIds"]) -> None: ...
+
+global___Node = Node
+
+@typing.final
+class Role(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ROLEID_FIELD_NUMBER: builtins.int
+    NODEID_FIELD_NUMBER: builtins.int
+    ENCRYPTEDDATA_FIELD_NUMBER: builtins.int
+    KEYTYPE_FIELD_NUMBER: builtins.int
+    VISIBLEBELOW_FIELD_NUMBER: builtins.int
+    NEWUSERINHERIT_FIELD_NUMBER: builtins.int
+    ROLETYPE_FIELD_NUMBER: builtins.int
+    roleId: builtins.int
+    nodeId: builtins.int
+    encryptedData: builtins.str
+    keyType: builtins.str
+    visibleBelow: builtins.bool
+    newUserInherit: builtins.bool
+    roleType: builtins.str
+    def __init__(
+        self,
+        *,
+        roleId: builtins.int = ...,
+        nodeId: builtins.int = ...,
+        encryptedData: builtins.str = ...,
+        keyType: builtins.str = ...,
+        visibleBelow: builtins.bool = ...,
+        newUserInherit: builtins.bool = ...,
+        roleType: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["encryptedData", b"encryptedData", "keyType", b"keyType", "newUserInherit", b"newUserInherit", "nodeId", b"nodeId", "roleId", b"roleId", "roleType", b"roleType", "visibleBelow", b"visibleBelow"]) -> None: ...
+
+global___Role = Role
+
+@typing.final
+class User(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    NODEID_FIELD_NUMBER: builtins.int
+    ENCRYPTEDDATA_FIELD_NUMBER: builtins.int
+    KEYTYPE_FIELD_NUMBER: builtins.int
+    USERNAME_FIELD_NUMBER: builtins.int
+    STATUS_FIELD_NUMBER: builtins.int
+    LOCK_FIELD_NUMBER: builtins.int
+    USERID_FIELD_NUMBER: builtins.int
+    ACCOUNTSHAREEXPIRATION_FIELD_NUMBER: builtins.int
+    FULLNAME_FIELD_NUMBER: builtins.int
+    JOBTITLE_FIELD_NUMBER: builtins.int
+    TFAENABLED_FIELD_NUMBER: builtins.int
+    TRANSFERACCEPTANCESTATUS_FIELD_NUMBER: builtins.int
+    enterpriseUserId: builtins.int
+    nodeId: builtins.int
+    encryptedData: builtins.str
+    keyType: builtins.str
+    username: builtins.str
+    status: builtins.str
+    lock: builtins.int
+    userId: builtins.int
+    accountShareExpiration: builtins.int
+    fullName: builtins.str
+    jobTitle: builtins.str
+    tfaEnabled: builtins.bool
+    transferAcceptanceStatus: global___TransferAcceptanceStatus.ValueType
+    def __init__(
+        self,
+        *,
+        enterpriseUserId: builtins.int = ...,
+        nodeId: builtins.int = ...,
+        encryptedData: builtins.str = ...,
+        keyType: builtins.str = ...,
+        username: builtins.str = ...,
+        status: builtins.str = ...,
+        lock: builtins.int = ...,
+        userId: builtins.int = ...,
+        accountShareExpiration: builtins.int = ...,
+        fullName: builtins.str = ...,
+        jobTitle: builtins.str = ...,
+        tfaEnabled: builtins.bool = ...,
+        transferAcceptanceStatus: global___TransferAcceptanceStatus.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["accountShareExpiration", b"accountShareExpiration", "encryptedData", b"encryptedData", "enterpriseUserId", b"enterpriseUserId", "fullName", b"fullName", "jobTitle", b"jobTitle", "keyType", b"keyType", "lock", b"lock", "nodeId", b"nodeId", "status", b"status", "tfaEnabled", b"tfaEnabled", "transferAcceptanceStatus", b"transferAcceptanceStatus", "userId", b"userId", "username", b"username"]) -> None: ...
+
+global___User = User
+
+@typing.final
+class UserAlias(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    USERNAME_FIELD_NUMBER: builtins.int
+    enterpriseUserId: builtins.int
+    username: builtins.str
+    def __init__(
+        self,
+        *,
+        enterpriseUserId: builtins.int = ...,
+        username: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enterpriseUserId", b"enterpriseUserId", "username", b"username"]) -> None: ...
+
+global___UserAlias = UserAlias
+
+@typing.final
+class ComplianceReportMetaData(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    REPORTUID_FIELD_NUMBER: builtins.int
+    NODEID_FIELD_NUMBER: builtins.int
+    REPORTNAME_FIELD_NUMBER: builtins.int
+    DATEGENERATED_FIELD_NUMBER: builtins.int
+    RUNBYNAME_FIELD_NUMBER: builtins.int
+    NUMBEROFOWNERS_FIELD_NUMBER: builtins.int
+    NUMBEROFRECORDS_FIELD_NUMBER: builtins.int
+    reportUid: builtins.bytes
+    nodeId: builtins.int
+    """ node where the report was generated"""
+    reportName: builtins.str
+    dateGenerated: builtins.int
+    runByName: builtins.str
+    """ user who generated the report"""
+    numberOfOwners: builtins.int
+    """ number of record owners included in the report"""
+    numberOfRecords: builtins.int
+    """ number of records included in the report"""
+    def __init__(
+        self,
+        *,
+        reportUid: builtins.bytes = ...,
+        nodeId: builtins.int = ...,
+        reportName: builtins.str = ...,
+        dateGenerated: builtins.int = ...,
+        runByName: builtins.str = ...,
+        numberOfOwners: builtins.int = ...,
+        numberOfRecords: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["dateGenerated", b"dateGenerated", "nodeId", b"nodeId", "numberOfOwners", b"numberOfOwners", "numberOfRecords", b"numberOfRecords", "reportName", b"reportName", "reportUid", b"reportUid", "runByName", b"runByName"]) -> None: ...
+
+global___ComplianceReportMetaData = ComplianceReportMetaData
+
+@typing.final
+class ManagedNode(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ROLEID_FIELD_NUMBER: builtins.int
+    MANAGEDNODEID_FIELD_NUMBER: builtins.int
+    CASCADENODEMANAGEMENT_FIELD_NUMBER: builtins.int
+    roleId: builtins.int
+    managedNodeId: builtins.int
+    cascadeNodeManagement: builtins.bool
+    def __init__(
+        self,
+        *,
+        roleId: builtins.int = ...,
+        managedNodeId: builtins.int = ...,
+        cascadeNodeManagement: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["cascadeNodeManagement", b"cascadeNodeManagement", "managedNodeId", b"managedNodeId", "roleId", b"roleId"]) -> None: ...
+
+global___ManagedNode = ManagedNode
+
+@typing.final
+class UserManagedNode(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    NODEID_FIELD_NUMBER: builtins.int
+    CASCADENODEMANAGEMENT_FIELD_NUMBER: builtins.int
+    PRIVILEGES_FIELD_NUMBER: builtins.int
+    nodeId: builtins.int
+    cascadeNodeManagement: builtins.bool
+    @property
+    def privileges(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    def __init__(
+        self,
+        *,
+        nodeId: builtins.int = ...,
+        cascadeNodeManagement: builtins.bool = ...,
+        privileges: collections.abc.Iterable[builtins.str] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["cascadeNodeManagement", b"cascadeNodeManagement", "nodeId", b"nodeId", "privileges", b"privileges"]) -> None: ...
+
+global___UserManagedNode = UserManagedNode
+
+@typing.final
+class UserPrivilege(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    USERMANAGEDNODES_FIELD_NUMBER: builtins.int
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    ENCRYPTEDDATA_FIELD_NUMBER: builtins.int
+    enterpriseUserId: builtins.int
+    encryptedData: builtins.str
+    @property
+    def userManagedNodes(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___UserManagedNode]: ...
+    def __init__(
+        self,
+        *,
+        userManagedNodes: collections.abc.Iterable[global___UserManagedNode] | None = ...,
+        enterpriseUserId: builtins.int = ...,
+        encryptedData: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["encryptedData", b"encryptedData", "enterpriseUserId", b"enterpriseUserId", "userManagedNodes", b"userManagedNodes"]) -> None: ...
+
+global___UserPrivilege = UserPrivilege
+
+@typing.final
+class RoleUser(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ROLEID_FIELD_NUMBER: builtins.int
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    roleId: builtins.int
+    enterpriseUserId: builtins.int
+    def __init__(
+        self,
+        *,
+        roleId: builtins.int = ...,
+        enterpriseUserId: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enterpriseUserId", b"enterpriseUserId", "roleId", b"roleId"]) -> None: ...
+
+global___RoleUser = RoleUser
+
+@typing.final
+class RolePrivilege(google.protobuf.message.Message):
+    """possible values for privilegeType
+    UNKNOWN = 0
+    MANAGE_USER = 1
+    MANAGE_NODES = 2
+    MANAGE_LICENCES = 3
+    MANAGE_ROLES = 4
+    MANAGE_TEAMS = 5
+    TRANSFER_ACCOUNT = 6
+    RUN_REPORTS = 7
+    VIEW_TREE = 8
+    MANAGE_BRIDGE = 9
+    MANAGE_COMPANIES = 10
+    ALLOCATE_POOL_LICENSES = 11
+    APPROVE_DEVICE = 13
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    MANAGEDNODEID_FIELD_NUMBER: builtins.int
+    ROLEID_FIELD_NUMBER: builtins.int
+    PRIVILEGETYPE_FIELD_NUMBER: builtins.int
+    managedNodeId: builtins.int
+    roleId: builtins.int
+    privilegeType: builtins.str
+    def __init__(
+        self,
+        *,
+        managedNodeId: builtins.int = ...,
+        roleId: builtins.int = ...,
+        privilegeType: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["managedNodeId", b"managedNodeId", "privilegeType", b"privilegeType", "roleId", b"roleId"]) -> None: ...
+
+global___RolePrivilege = RolePrivilege
+
+@typing.final
+class RoleEnforcement(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ROLEID_FIELD_NUMBER: builtins.int
+    ENFORCEMENTTYPE_FIELD_NUMBER: builtins.int
+    VALUE_FIELD_NUMBER: builtins.int
+    roleId: builtins.int
+    enforcementType: builtins.str
+    value: builtins.str
+    def __init__(
+        self,
+        *,
+        roleId: builtins.int = ...,
+        enforcementType: builtins.str = ...,
+        value: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enforcementType", b"enforcementType", "roleId", b"roleId", "value", b"value"]) -> None: ...
+
+global___RoleEnforcement = RoleEnforcement
+
+@typing.final
+class Team(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TEAMUID_FIELD_NUMBER: builtins.int
+    NAME_FIELD_NUMBER: builtins.int
+    NODEID_FIELD_NUMBER: builtins.int
+    RESTRICTEDIT_FIELD_NUMBER: builtins.int
+    RESTRICTSHARE_FIELD_NUMBER: builtins.int
+    RESTRICTVIEW_FIELD_NUMBER: builtins.int
+    ENCRYPTEDDATA_FIELD_NUMBER: builtins.int
+    ENCRYPTEDTEAMKEY_FIELD_NUMBER: builtins.int
+    teamUid: builtins.bytes
+    name: builtins.str
+    nodeId: builtins.int
+    restrictEdit: builtins.bool
+    restrictShare: builtins.bool
+    restrictView: builtins.bool
+    encryptedData: builtins.str
+    encryptedTeamKey: builtins.str
+    def __init__(
+        self,
+        *,
+        teamUid: builtins.bytes = ...,
+        name: builtins.str = ...,
+        nodeId: builtins.int = ...,
+        restrictEdit: builtins.bool = ...,
+        restrictShare: builtins.bool = ...,
+        restrictView: builtins.bool = ...,
+        encryptedData: builtins.str = ...,
+        encryptedTeamKey: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["encryptedData", b"encryptedData", "encryptedTeamKey", b"encryptedTeamKey", "name", b"name", "nodeId", b"nodeId", "restrictEdit", b"restrictEdit", "restrictShare", b"restrictShare", "restrictView", b"restrictView", "teamUid", b"teamUid"]) -> None: ...
+
+global___Team = Team
+
+@typing.final
+class TeamUser(google.protobuf.message.Message):
+    """possible value for userType
+    USER = 0;
+    ADMIN = 1;
+    ADMIN_HIDE_SHARED_FOLDERS = 2;
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TEAMUID_FIELD_NUMBER: builtins.int
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    USERTYPE_FIELD_NUMBER: builtins.int
+    teamUid: builtins.bytes
+    enterpriseUserId: builtins.int
+    userType: builtins.str
+    def __init__(
+        self,
+        *,
+        teamUid: builtins.bytes = ...,
+        enterpriseUserId: builtins.int = ...,
+        userType: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enterpriseUserId", b"enterpriseUserId", "teamUid", b"teamUid", "userType", b"userType"]) -> None: ...
+
+global___TeamUser = TeamUser
+
+@typing.final
+class GetDistributorInfoResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    DISTRIBUTORS_FIELD_NUMBER: builtins.int
+    @property
+    def distributors(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Distributor]: ...
+    def __init__(
+        self,
+        *,
+        distributors: collections.abc.Iterable[global___Distributor] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["distributors", b"distributors"]) -> None: ...
+
+global___GetDistributorInfoResponse = GetDistributorInfoResponse
+
+@typing.final
+class Distributor(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    NAME_FIELD_NUMBER: builtins.int
+    MSPINFOS_FIELD_NUMBER: builtins.int
+    name: builtins.str
+    @property
+    def mspInfos(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___MspInfo]: ...
+    def __init__(
+        self,
+        *,
+        name: builtins.str = ...,
+        mspInfos: collections.abc.Iterable[global___MspInfo] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["mspInfos", b"mspInfos", "name", b"name"]) -> None: ...
+
+global___Distributor = Distributor
+
+@typing.final
+class MspInfo(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEID_FIELD_NUMBER: builtins.int
+    ENTERPRISENAME_FIELD_NUMBER: builtins.int
+    ALLOCATEDLICENSES_FIELD_NUMBER: builtins.int
+    ALLOWEDMCPRODUCTS_FIELD_NUMBER: builtins.int
+    ALLOWEDADDONS_FIELD_NUMBER: builtins.int
+    MAXFILEPLANTYPE_FIELD_NUMBER: builtins.int
+    MANAGEDCOMPANIES_FIELD_NUMBER: builtins.int
+    ALLOWUNLIMITEDLICENSES_FIELD_NUMBER: builtins.int
+    ADDONS_FIELD_NUMBER: builtins.int
+    enterpriseId: builtins.int
+    enterpriseName: builtins.str
+    allocatedLicenses: builtins.int
+    """MAX_INT is infinity"""
+    maxFilePlanType: builtins.str
+    allowUnlimitedLicenses: builtins.bool
+    """Allows MSP allocate Infinity as number of licenses to its MCs."""
+    @property
+    def allowedMcProducts(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """codes of allowed MC Products"""
+
+    @property
+    def allowedAddOns(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    @property
+    def managedCompanies(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ManagedCompany]: ...
+    @property
+    def addOns(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___LicenseAddOn]: ...
+    def __init__(
+        self,
+        *,
+        enterpriseId: builtins.int = ...,
+        enterpriseName: builtins.str = ...,
+        allocatedLicenses: builtins.int = ...,
+        allowedMcProducts: collections.abc.Iterable[builtins.str] | None = ...,
+        allowedAddOns: collections.abc.Iterable[builtins.str] | None = ...,
+        maxFilePlanType: builtins.str = ...,
+        managedCompanies: collections.abc.Iterable[global___ManagedCompany] | None = ...,
+        allowUnlimitedLicenses: builtins.bool = ...,
+        addOns: collections.abc.Iterable[global___LicenseAddOn] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["addOns", b"addOns", "allocatedLicenses", b"allocatedLicenses", "allowUnlimitedLicenses", b"allowUnlimitedLicenses", "allowedAddOns", b"allowedAddOns", "allowedMcProducts", b"allowedMcProducts", "enterpriseId", b"enterpriseId", "enterpriseName", b"enterpriseName", "managedCompanies", b"managedCompanies", "maxFilePlanType", b"maxFilePlanType"]) -> None: ...
+
+global___MspInfo = MspInfo
+
+@typing.final
+class ManagedCompany(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    MCENTERPRISEID_FIELD_NUMBER: builtins.int
+    MCENTERPRISENAME_FIELD_NUMBER: builtins.int
+    MSPNODEID_FIELD_NUMBER: builtins.int
+    NUMBEROFSEATS_FIELD_NUMBER: builtins.int
+    NUMBEROFUSERS_FIELD_NUMBER: builtins.int
+    PRODUCTID_FIELD_NUMBER: builtins.int
+    ISEXPIRED_FIELD_NUMBER: builtins.int
+    TREEKEY_FIELD_NUMBER: builtins.int
+    TREE_KEY_ROLE_FIELD_NUMBER: builtins.int
+    FILEPLANTYPE_FIELD_NUMBER: builtins.int
+    ADDONS_FIELD_NUMBER: builtins.int
+    mcEnterpriseId: builtins.int
+    mcEnterpriseName: builtins.str
+    mspNodeId: builtins.int
+    numberOfSeats: builtins.int
+    numberOfUsers: builtins.int
+    productId: builtins.str
+    isExpired: builtins.bool
+    """this is also the indication of whether or not it is expired as it gets expired when it is paused."""
+    treeKey: builtins.str
+    tree_key_role: builtins.int
+    filePlanType: builtins.str
+    @property
+    def addOns(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___LicenseAddOn]: ...
+    def __init__(
+        self,
+        *,
+        mcEnterpriseId: builtins.int = ...,
+        mcEnterpriseName: builtins.str = ...,
+        mspNodeId: builtins.int = ...,
+        numberOfSeats: builtins.int = ...,
+        numberOfUsers: builtins.int = ...,
+        productId: builtins.str = ...,
+        isExpired: builtins.bool = ...,
+        treeKey: builtins.str = ...,
+        tree_key_role: builtins.int = ...,
+        filePlanType: builtins.str = ...,
+        addOns: collections.abc.Iterable[global___LicenseAddOn] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["addOns", b"addOns", "filePlanType", b"filePlanType", "isExpired", b"isExpired", "mcEnterpriseId", b"mcEnterpriseId", "mcEnterpriseName", b"mcEnterpriseName", "mspNodeId", b"mspNodeId", "numberOfSeats", b"numberOfSeats", "numberOfUsers", b"numberOfUsers", "productId", b"productId", "treeKey", b"treeKey", "tree_key_role", b"tree_key_role"]) -> None: ...
+
+global___ManagedCompany = ManagedCompany
+
+@typing.final
+class MSPPool(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    PRODUCTID_FIELD_NUMBER: builtins.int
+    SEATS_FIELD_NUMBER: builtins.int
+    AVAILABLESEATS_FIELD_NUMBER: builtins.int
+    STASH_FIELD_NUMBER: builtins.int
+    productId: builtins.str
+    seats: builtins.int
+    availableSeats: builtins.int
+    stash: builtins.int
+    def __init__(
+        self,
+        *,
+        productId: builtins.str = ...,
+        seats: builtins.int = ...,
+        availableSeats: builtins.int = ...,
+        stash: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["availableSeats", b"availableSeats", "productId", b"productId", "seats", b"seats", "stash", b"stash"]) -> None: ...
+
+global___MSPPool = MSPPool
+
+@typing.final
+class MSPContact(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEID_FIELD_NUMBER: builtins.int
+    ENTERPRISENAME_FIELD_NUMBER: builtins.int
+    enterpriseId: builtins.int
+    enterpriseName: builtins.str
+    def __init__(
+        self,
+        *,
+        enterpriseId: builtins.int = ...,
+        enterpriseName: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enterpriseId", b"enterpriseId", "enterpriseName", b"enterpriseName"]) -> None: ...
+
+global___MSPContact = MSPContact
+
+@typing.final
+class LicenseAddOn(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    NAME_FIELD_NUMBER: builtins.int
+    ENABLED_FIELD_NUMBER: builtins.int
+    ISTRIAL_FIELD_NUMBER: builtins.int
+    EXPIRATION_FIELD_NUMBER: builtins.int
+    CREATED_FIELD_NUMBER: builtins.int
+    SEATS_FIELD_NUMBER: builtins.int
+    ACTIVATIONTIME_FIELD_NUMBER: builtins.int
+    INCLUDEDINPRODUCT_FIELD_NUMBER: builtins.int
+    APICALLCOUNT_FIELD_NUMBER: builtins.int
+    TIERDESCRIPTION_FIELD_NUMBER: builtins.int
+    SEATSALLOCATED_FIELD_NUMBER: builtins.int
+    name: builtins.str
+    enabled: builtins.bool
+    isTrial: builtins.bool
+    expiration: builtins.int
+    created: builtins.int
+    seats: builtins.int
+    activationTime: builtins.int
+    includedInProduct: builtins.bool
+    apiCallCount: builtins.int
+    tierDescription: builtins.str
+    seatsAllocated: builtins.int
+    def __init__(
+        self,
+        *,
+        name: builtins.str = ...,
+        enabled: builtins.bool = ...,
+        isTrial: builtins.bool = ...,
+        expiration: builtins.int = ...,
+        created: builtins.int = ...,
+        seats: builtins.int = ...,
+        activationTime: builtins.int = ...,
+        includedInProduct: builtins.bool = ...,
+        apiCallCount: builtins.int = ...,
+        tierDescription: builtins.str = ...,
+        seatsAllocated: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["activationTime", b"activationTime", "apiCallCount", b"apiCallCount", "created", b"created", "enabled", b"enabled", "expiration", b"expiration", "includedInProduct", b"includedInProduct", "isTrial", b"isTrial", "name", b"name", "seats", b"seats", "seatsAllocated", b"seatsAllocated", "tierDescription", b"tierDescription"]) -> None: ...
+
+global___LicenseAddOn = LicenseAddOn
+
+@typing.final
+class MCDefault(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    MCPRODUCT_FIELD_NUMBER: builtins.int
+    ADDONS_FIELD_NUMBER: builtins.int
+    FILEPLANTYPE_FIELD_NUMBER: builtins.int
+    MAXLICENSES_FIELD_NUMBER: builtins.int
+    FIXEDMAXLICENSES_FIELD_NUMBER: builtins.int
+    mcProduct: builtins.str
+    filePlanType: builtins.str
+    maxLicenses: builtins.int
+    fixedMaxLicenses: builtins.bool
+    @property
+    def addOns(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    def __init__(
+        self,
+        *,
+        mcProduct: builtins.str = ...,
+        addOns: collections.abc.Iterable[builtins.str] | None = ...,
+        filePlanType: builtins.str = ...,
+        maxLicenses: builtins.int = ...,
+        fixedMaxLicenses: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["addOns", b"addOns", "filePlanType", b"filePlanType", "fixedMaxLicenses", b"fixedMaxLicenses", "maxLicenses", b"maxLicenses", "mcProduct", b"mcProduct"]) -> None: ...
+
+global___MCDefault = MCDefault
+
+@typing.final
+class MSPPermits(google.protobuf.message.Message):
+    """permits granted by a distributor to its MSP to pass to MC"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RESTRICTED_FIELD_NUMBER: builtins.int
+    MAXALLOWEDLICENSES_FIELD_NUMBER: builtins.int
+    ALLOWEDMCPRODUCTS_FIELD_NUMBER: builtins.int
+    ALLOWEDADDONS_FIELD_NUMBER: builtins.int
+    MAXFILEPLANTYPE_FIELD_NUMBER: builtins.int
+    ALLOWUNLIMITEDLICENSES_FIELD_NUMBER: builtins.int
+    MCDEFAULTS_FIELD_NUMBER: builtins.int
+    restricted: builtins.bool
+    """if false then no need to check the rest"""
+    maxAllowedLicenses: builtins.int
+    """obsolete in favor of allowUnlimitedLicenses"""
+    maxFilePlanType: builtins.str
+    allowUnlimitedLicenses: builtins.bool
+    @property
+    def allowedMcProducts(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    @property
+    def allowedAddOns(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    @property
+    def mcDefaults(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___MCDefault]: ...
+    def __init__(
+        self,
+        *,
+        restricted: builtins.bool = ...,
+        maxAllowedLicenses: builtins.int = ...,
+        allowedMcProducts: collections.abc.Iterable[builtins.str] | None = ...,
+        allowedAddOns: collections.abc.Iterable[builtins.str] | None = ...,
+        maxFilePlanType: builtins.str = ...,
+        allowUnlimitedLicenses: builtins.bool = ...,
+        mcDefaults: collections.abc.Iterable[global___MCDefault] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["allowUnlimitedLicenses", b"allowUnlimitedLicenses", "allowedAddOns", b"allowedAddOns", "allowedMcProducts", b"allowedMcProducts", "maxAllowedLicenses", b"maxAllowedLicenses", "maxFilePlanType", b"maxFilePlanType", "mcDefaults", b"mcDefaults", "restricted", b"restricted"]) -> None: ...
+
+global___MSPPermits = MSPPermits
+
+@typing.final
+class License(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    PAID_FIELD_NUMBER: builtins.int
+    NUMBEROFSEATS_FIELD_NUMBER: builtins.int
+    EXPIRATION_FIELD_NUMBER: builtins.int
+    LICENSEKEYID_FIELD_NUMBER: builtins.int
+    PRODUCTTYPEID_FIELD_NUMBER: builtins.int
+    NAME_FIELD_NUMBER: builtins.int
+    ENTERPRISELICENSEID_FIELD_NUMBER: builtins.int
+    SEATSALLOCATED_FIELD_NUMBER: builtins.int
+    SEATSPENDING_FIELD_NUMBER: builtins.int
+    TIER_FIELD_NUMBER: builtins.int
+    FILEPLANTYPEID_FIELD_NUMBER: builtins.int
+    MAXBYTES_FIELD_NUMBER: builtins.int
+    STORAGEEXPIRATION_FIELD_NUMBER: builtins.int
+    LICENSESTATUS_FIELD_NUMBER: builtins.int
+    MSPPOOL_FIELD_NUMBER: builtins.int
+    MANAGEDBY_FIELD_NUMBER: builtins.int
+    ADDONS_FIELD_NUMBER: builtins.int
+    NEXTBILLINGDATE_FIELD_NUMBER: builtins.int
+    HASMSPLEGACYLOG_FIELD_NUMBER: builtins.int
+    MSPPERMITS_FIELD_NUMBER: builtins.int
+    DISTRIBUTOR_FIELD_NUMBER: builtins.int
+    paid: builtins.bool
+    numberOfSeats: builtins.int
+    expiration: builtins.int
+    licenseKeyId: builtins.int
+    productTypeId: builtins.int
+    name: builtins.str
+    enterpriseLicenseId: builtins.int
+    seatsAllocated: builtins.int
+    seatsPending: builtins.int
+    tier: builtins.int
+    filePlanTypeId: builtins.int
+    maxBytes: builtins.int
+    storageExpiration: builtins.int
+    licenseStatus: builtins.str
+    nextBillingDate: builtins.int
+    hasMSPLegacyLog: builtins.bool
+    distributor: builtins.bool
+    @property
+    def mspPool(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___MSPPool]: ...
+    @property
+    def managedBy(self) -> global___MSPContact: ...
+    @property
+    def addOns(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___LicenseAddOn]: ...
+    @property
+    def mspPermits(self) -> global___MSPPermits: ...
+    def __init__(
+        self,
+        *,
+        paid: builtins.bool = ...,
+        numberOfSeats: builtins.int = ...,
+        expiration: builtins.int = ...,
+        licenseKeyId: builtins.int = ...,
+        productTypeId: builtins.int = ...,
+        name: builtins.str = ...,
+        enterpriseLicenseId: builtins.int = ...,
+        seatsAllocated: builtins.int = ...,
+        seatsPending: builtins.int = ...,
+        tier: builtins.int = ...,
+        filePlanTypeId: builtins.int = ...,
+        maxBytes: builtins.int = ...,
+        storageExpiration: builtins.int = ...,
+        licenseStatus: builtins.str = ...,
+        mspPool: collections.abc.Iterable[global___MSPPool] | None = ...,
+        managedBy: global___MSPContact | None = ...,
+        addOns: collections.abc.Iterable[global___LicenseAddOn] | None = ...,
+        nextBillingDate: builtins.int = ...,
+        hasMSPLegacyLog: builtins.bool = ...,
+        mspPermits: global___MSPPermits | None = ...,
+        distributor: builtins.bool = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["managedBy", b"managedBy", "mspPermits", b"mspPermits"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["addOns", b"addOns", "distributor", b"distributor", "enterpriseLicenseId", b"enterpriseLicenseId", "expiration", b"expiration", "filePlanTypeId", b"filePlanTypeId", "hasMSPLegacyLog", b"hasMSPLegacyLog", "licenseKeyId", b"licenseKeyId", "licenseStatus", b"licenseStatus", "managedBy", b"managedBy", "maxBytes", b"maxBytes", "mspPermits", b"mspPermits", "mspPool", b"mspPool", "name", b"name", "nextBillingDate", b"nextBillingDate", "numberOfSeats", b"numberOfSeats", "paid", b"paid", "productTypeId", b"productTypeId", "seatsAllocated", b"seatsAllocated", "seatsPending", b"seatsPending", "storageExpiration", b"storageExpiration", "tier", b"tier"]) -> None: ...
+
+global___License = License
+
+@typing.final
+class Bridge(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    BRIDGEID_FIELD_NUMBER: builtins.int
+    NODEID_FIELD_NUMBER: builtins.int
+    WANIPENFORCEMENT_FIELD_NUMBER: builtins.int
+    LANIPENFORCEMENT_FIELD_NUMBER: builtins.int
+    STATUS_FIELD_NUMBER: builtins.int
+    bridgeId: builtins.int
+    nodeId: builtins.int
+    wanIpEnforcement: builtins.str
+    lanIpEnforcement: builtins.str
+    status: builtins.str
+    def __init__(
+        self,
+        *,
+        bridgeId: builtins.int = ...,
+        nodeId: builtins.int = ...,
+        wanIpEnforcement: builtins.str = ...,
+        lanIpEnforcement: builtins.str = ...,
+        status: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["bridgeId", b"bridgeId", "lanIpEnforcement", b"lanIpEnforcement", "nodeId", b"nodeId", "status", b"status", "wanIpEnforcement", b"wanIpEnforcement"]) -> None: ...
+
+global___Bridge = Bridge
+
+@typing.final
+class Scim(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SCIMID_FIELD_NUMBER: builtins.int
+    NODEID_FIELD_NUMBER: builtins.int
+    STATUS_FIELD_NUMBER: builtins.int
+    LASTSYNCED_FIELD_NUMBER: builtins.int
+    ROLEPREFIX_FIELD_NUMBER: builtins.int
+    UNIQUEGROUPS_FIELD_NUMBER: builtins.int
+    scimId: builtins.int
+    nodeId: builtins.int
+    status: builtins.str
+    lastSynced: builtins.int
+    rolePrefix: builtins.str
+    uniqueGroups: builtins.bool
+    def __init__(
+        self,
+        *,
+        scimId: builtins.int = ...,
+        nodeId: builtins.int = ...,
+        status: builtins.str = ...,
+        lastSynced: builtins.int = ...,
+        rolePrefix: builtins.str = ...,
+        uniqueGroups: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["lastSynced", b"lastSynced", "nodeId", b"nodeId", "rolePrefix", b"rolePrefix", "scimId", b"scimId", "status", b"status", "uniqueGroups", b"uniqueGroups"]) -> None: ...
+
+global___Scim = Scim
+
+@typing.final
+class EmailProvision(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ID_FIELD_NUMBER: builtins.int
+    NODEID_FIELD_NUMBER: builtins.int
+    DOMAIN_FIELD_NUMBER: builtins.int
+    METHOD_FIELD_NUMBER: builtins.int
+    id: builtins.int
+    nodeId: builtins.int
+    domain: builtins.str
+    method: builtins.str
+    def __init__(
+        self,
+        *,
+        id: builtins.int = ...,
+        nodeId: builtins.int = ...,
+        domain: builtins.str = ...,
+        method: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["domain", b"domain", "id", b"id", "method", b"method", "nodeId", b"nodeId"]) -> None: ...
+
+global___EmailProvision = EmailProvision
+
+@typing.final
+class QueuedTeam(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TEAMUID_FIELD_NUMBER: builtins.int
+    NAME_FIELD_NUMBER: builtins.int
+    NODEID_FIELD_NUMBER: builtins.int
+    ENCRYPTEDDATA_FIELD_NUMBER: builtins.int
+    teamUid: builtins.bytes
+    name: builtins.str
+    nodeId: builtins.int
+    encryptedData: builtins.str
+    def __init__(
+        self,
+        *,
+        teamUid: builtins.bytes = ...,
+        name: builtins.str = ...,
+        nodeId: builtins.int = ...,
+        encryptedData: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["encryptedData", b"encryptedData", "name", b"name", "nodeId", b"nodeId", "teamUid", b"teamUid"]) -> None: ...
+
+global___QueuedTeam = QueuedTeam
+
+@typing.final
+class QueuedTeamUser(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TEAMUID_FIELD_NUMBER: builtins.int
+    USERS_FIELD_NUMBER: builtins.int
+    teamUid: builtins.bytes
+    @property
+    def users(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]: ...
+    def __init__(
+        self,
+        *,
+        teamUid: builtins.bytes = ...,
+        users: collections.abc.Iterable[builtins.int] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["teamUid", b"teamUid", "users", b"users"]) -> None: ...
+
+global___QueuedTeamUser = QueuedTeamUser
+
+@typing.final
+class TeamsAddResult(google.protobuf.message.Message):
+    """*
+    This is not used in an API yet.
+    It can be used in a new teams_add API if we do one.
+    It is currently used internally when creating teams.
+
+    The command is successful if at least one of the teams was added successfully.
+    The top-level errorMessage field is used only when the top-level result is "error".
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SUCCESSFULTEAMADD_FIELD_NUMBER: builtins.int
+    UNSUCCESSFULTEAMADD_FIELD_NUMBER: builtins.int
+    RESULT_FIELD_NUMBER: builtins.int
+    ERRORMESSAGE_FIELD_NUMBER: builtins.int
+    result: builtins.str
+    """"success" or "fail" """
+    errorMessage: builtins.str
+    """only used if result == "fail" """
+    @property
+    def successfulTeamAdd(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___TeamAddResult]: ...
+    @property
+    def unsuccessfulTeamAdd(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___TeamAddResult]: ...
+    def __init__(
+        self,
+        *,
+        successfulTeamAdd: collections.abc.Iterable[global___TeamAddResult] | None = ...,
+        unsuccessfulTeamAdd: collections.abc.Iterable[global___TeamAddResult] | None = ...,
+        result: builtins.str = ...,
+        errorMessage: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["errorMessage", b"errorMessage", "result", b"result", "successfulTeamAdd", b"successfulTeamAdd", "unsuccessfulTeamAdd", b"unsuccessfulTeamAdd"]) -> None: ...
+
+global___TeamsAddResult = TeamsAddResult
+
+@typing.final
+class TeamAddResult(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TEAM_FIELD_NUMBER: builtins.int
+    RESULT_FIELD_NUMBER: builtins.int
+    ERRORMESSAGE_FIELD_NUMBER: builtins.int
+    result: builtins.str
+    """"success" or "fail" """
+    errorMessage: builtins.str
+    """only used if result == "fail" """
+    @property
+    def team(self) -> global___Team:
+        """team info.  May not be completely filled out"""
+
+    def __init__(
+        self,
+        *,
+        team: global___Team | None = ...,
+        result: builtins.str = ...,
+        errorMessage: builtins.str = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["team", b"team"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["errorMessage", b"errorMessage", "result", b"result", "team", b"team"]) -> None: ...
+
+global___TeamAddResult = TeamAddResult
+
+@typing.final
+class SsoService(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SSOSERVICEPROVIDERID_FIELD_NUMBER: builtins.int
+    NODEID_FIELD_NUMBER: builtins.int
+    NAME_FIELD_NUMBER: builtins.int
+    SP_URL_FIELD_NUMBER: builtins.int
+    INVITENEWUSERS_FIELD_NUMBER: builtins.int
+    ACTIVE_FIELD_NUMBER: builtins.int
+    ISCLOUD_FIELD_NUMBER: builtins.int
+    ssoServiceProviderId: builtins.int
+    nodeId: builtins.int
+    name: builtins.str
+    sp_url: builtins.str
+    inviteNewUsers: builtins.bool
+    active: builtins.bool
+    isCloud: builtins.bool
+    def __init__(
+        self,
+        *,
+        ssoServiceProviderId: builtins.int = ...,
+        nodeId: builtins.int = ...,
+        name: builtins.str = ...,
+        sp_url: builtins.str = ...,
+        inviteNewUsers: builtins.bool = ...,
+        active: builtins.bool = ...,
+        isCloud: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["active", b"active", "inviteNewUsers", b"inviteNewUsers", "isCloud", b"isCloud", "name", b"name", "nodeId", b"nodeId", "sp_url", b"sp_url", "ssoServiceProviderId", b"ssoServiceProviderId"]) -> None: ...
+
+global___SsoService = SsoService
+
+@typing.final
+class ReportFilterUser(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    USERID_FIELD_NUMBER: builtins.int
+    EMAIL_FIELD_NUMBER: builtins.int
+    userId: builtins.int
+    email: builtins.str
+    def __init__(
+        self,
+        *,
+        userId: builtins.int = ...,
+        email: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["email", b"email", "userId", b"userId"]) -> None: ...
+
+global___ReportFilterUser = ReportFilterUser
+
+@typing.final
+class DeviceRequestForAdminApproval(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    DEVICEID_FIELD_NUMBER: builtins.int
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: builtins.int
+    DEVICEPUBLICKEY_FIELD_NUMBER: builtins.int
+    DEVICENAME_FIELD_NUMBER: builtins.int
+    CLIENTVERSION_FIELD_NUMBER: builtins.int
+    DEVICETYPE_FIELD_NUMBER: builtins.int
+    DATE_FIELD_NUMBER: builtins.int
+    IPADDRESS_FIELD_NUMBER: builtins.int
+    LOCATION_FIELD_NUMBER: builtins.int
+    EMAIL_FIELD_NUMBER: builtins.int
+    ACCOUNTUID_FIELD_NUMBER: builtins.int
+    deviceId: builtins.int
+    enterpriseUserId: builtins.int
+    encryptedDeviceToken: builtins.bytes
+    devicePublicKey: builtins.bytes
+    deviceName: builtins.str
+    clientVersion: builtins.str
+    deviceType: builtins.str
+    date: builtins.int
+    ipAddress: builtins.str
+    location: builtins.str
+    email: builtins.str
+    accountUid: builtins.bytes
+    def __init__(
+        self,
+        *,
+        deviceId: builtins.int = ...,
+        enterpriseUserId: builtins.int = ...,
+        encryptedDeviceToken: builtins.bytes = ...,
+        devicePublicKey: builtins.bytes = ...,
+        deviceName: builtins.str = ...,
+        clientVersion: builtins.str = ...,
+        deviceType: builtins.str = ...,
+        date: builtins.int = ...,
+        ipAddress: builtins.str = ...,
+        location: builtins.str = ...,
+        email: builtins.str = ...,
+        accountUid: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["accountUid", b"accountUid", "clientVersion", b"clientVersion", "date", b"date", "deviceId", b"deviceId", "deviceName", b"deviceName", "devicePublicKey", b"devicePublicKey", "deviceType", b"deviceType", "email", b"email", "encryptedDeviceToken", b"encryptedDeviceToken", "enterpriseUserId", b"enterpriseUserId", "ipAddress", b"ipAddress", "location", b"location"]) -> None: ...
+
+global___DeviceRequestForAdminApproval = DeviceRequestForAdminApproval
+
+@typing.final
+class EnterpriseData(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTITY_FIELD_NUMBER: builtins.int
+    DELETE_FIELD_NUMBER: builtins.int
+    DATA_FIELD_NUMBER: builtins.int
+    entity: global___EnterpriseDataEntity.ValueType
+    delete: builtins.bool
+    @property
+    def data(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]:
+        """If delete==false then it's list of entity objects (Node, Users etc...). If delete==true then those objects have only ids but no other info."""
+
+    def __init__(
+        self,
+        *,
+        entity: global___EnterpriseDataEntity.ValueType = ...,
+        delete: builtins.bool = ...,
+        data: collections.abc.Iterable[builtins.bytes] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["data", b"data", "delete", b"delete", "entity", b"entity"]) -> None: ...
+
+global___EnterpriseData = EnterpriseData
+
+@typing.final
+class EnterpriseDataResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CONTINUATIONTOKEN_FIELD_NUMBER: builtins.int
+    HASMORE_FIELD_NUMBER: builtins.int
+    CACHESTATUS_FIELD_NUMBER: builtins.int
+    DATA_FIELD_NUMBER: builtins.int
+    GENERALDATA_FIELD_NUMBER: builtins.int
+    continuationToken: builtins.bytes
+    hasMore: builtins.bool
+    cacheStatus: global___CacheStatus.ValueType
+    @property
+    def data(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___EnterpriseData]: ...
+    @property
+    def generalData(self) -> global___GeneralDataEntity: ...
+    def __init__(
+        self,
+        *,
+        continuationToken: builtins.bytes = ...,
+        hasMore: builtins.bool = ...,
+        cacheStatus: global___CacheStatus.ValueType = ...,
+        data: collections.abc.Iterable[global___EnterpriseData] | None = ...,
+        generalData: global___GeneralDataEntity | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["generalData", b"generalData"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["cacheStatus", b"cacheStatus", "continuationToken", b"continuationToken", "data", b"data", "generalData", b"generalData", "hasMore", b"hasMore"]) -> None: ...
+
+global___EnterpriseDataResponse = EnterpriseDataResponse
+
+@typing.final
+class BackupRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CONTINUATIONTOKEN_FIELD_NUMBER: builtins.int
+    continuationToken: builtins.bytes
+    def __init__(
+        self,
+        *,
+        continuationToken: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["continuationToken", b"continuationToken"]) -> None: ...
+
+global___BackupRequest = BackupRequest
+
+@typing.final
+class BackupRecord(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    USERID_FIELD_NUMBER: builtins.int
+    RECORDUID_FIELD_NUMBER: builtins.int
+    KEY_FIELD_NUMBER: builtins.int
+    KEYTYPE_FIELD_NUMBER: builtins.int
+    VERSION_FIELD_NUMBER: builtins.int
+    DATA_FIELD_NUMBER: builtins.int
+    EXTRA_FIELD_NUMBER: builtins.int
+    userId: builtins.int
+    recordUid: builtins.bytes
+    key: builtins.bytes
+    keyType: global___BackupKeyType.ValueType
+    version: builtins.int
+    data: builtins.bytes
+    extra: builtins.bytes
+    def __init__(
+        self,
+        *,
+        userId: builtins.int = ...,
+        recordUid: builtins.bytes = ...,
+        key: builtins.bytes = ...,
+        keyType: global___BackupKeyType.ValueType = ...,
+        version: builtins.int = ...,
+        data: builtins.bytes = ...,
+        extra: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["data", b"data", "extra", b"extra", "key", b"key", "keyType", b"keyType", "recordUid", b"recordUid", "userId", b"userId", "version", b"version"]) -> None: ...
+
+global___BackupRecord = BackupRecord
+
+@typing.final
+class BackupKey(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    USERID_FIELD_NUMBER: builtins.int
+    BACKUPKEY_FIELD_NUMBER: builtins.int
+    userId: builtins.int
+    backupKey: builtins.bytes
+    def __init__(
+        self,
+        *,
+        userId: builtins.int = ...,
+        backupKey: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["backupKey", b"backupKey", "userId", b"userId"]) -> None: ...
+
+global___BackupKey = BackupKey
+
+@typing.final
+class BackupUser(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    USERID_FIELD_NUMBER: builtins.int
+    USERNAME_FIELD_NUMBER: builtins.int
+    DATAKEY_FIELD_NUMBER: builtins.int
+    DATAKEYTYPE_FIELD_NUMBER: builtins.int
+    PRIVATEKEY_FIELD_NUMBER: builtins.int
+    TREEKEY_FIELD_NUMBER: builtins.int
+    TREEKEYTYPE_FIELD_NUMBER: builtins.int
+    BACKUPKEYS_FIELD_NUMBER: builtins.int
+    PRIVATEECKEY_FIELD_NUMBER: builtins.int
+    userId: builtins.int
+    userName: builtins.str
+    dataKey: builtins.bytes
+    dataKeyType: global___BackupUserDataKeyType.ValueType
+    privateKey: builtins.bytes
+    treeKey: builtins.bytes
+    treeKeyType: global___BackupKeyType.ValueType
+    privateECKey: builtins.bytes
+    @property
+    def backupKeys(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___BackupKey]: ...
+    def __init__(
+        self,
+        *,
+        userId: builtins.int = ...,
+        userName: builtins.str = ...,
+        dataKey: builtins.bytes = ...,
+        dataKeyType: global___BackupUserDataKeyType.ValueType = ...,
+        privateKey: builtins.bytes = ...,
+        treeKey: builtins.bytes = ...,
+        treeKeyType: global___BackupKeyType.ValueType = ...,
+        backupKeys: collections.abc.Iterable[global___BackupKey] | None = ...,
+        privateECKey: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["backupKeys", b"backupKeys", "dataKey", b"dataKey", "dataKeyType", b"dataKeyType", "privateECKey", b"privateECKey", "privateKey", b"privateKey", "treeKey", b"treeKey", "treeKeyType", b"treeKeyType", "userId", b"userId", "userName", b"userName"]) -> None: ...
+
+global___BackupUser = BackupUser
+
+@typing.final
+class BackupResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEECCPRIVATEKEY_FIELD_NUMBER: builtins.int
+    USERS_FIELD_NUMBER: builtins.int
+    RECORDS_FIELD_NUMBER: builtins.int
+    CONTINUATIONTOKEN_FIELD_NUMBER: builtins.int
+    enterpriseEccPrivateKey: builtins.bytes
+    continuationToken: builtins.bytes
+    @property
+    def users(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___BackupUser]: ...
+    @property
+    def records(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___BackupRecord]: ...
+    def __init__(
+        self,
+        *,
+        enterpriseEccPrivateKey: builtins.bytes = ...,
+        users: collections.abc.Iterable[global___BackupUser] | None = ...,
+        records: collections.abc.Iterable[global___BackupRecord] | None = ...,
+        continuationToken: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["continuationToken", b"continuationToken", "enterpriseEccPrivateKey", b"enterpriseEccPrivateKey", "records", b"records", "users", b"users"]) -> None: ...
+
+global___BackupResponse = BackupResponse
+
+@typing.final
+class BackupFile(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    USER_FIELD_NUMBER: builtins.int
+    BACKUPUID_FIELD_NUMBER: builtins.int
+    FILENAME_FIELD_NUMBER: builtins.int
+    CREATED_FIELD_NUMBER: builtins.int
+    DOWNLOADURL_FIELD_NUMBER: builtins.int
+    user: builtins.str
+    backupUid: builtins.bytes
+    fileName: builtins.str
+    created: builtins.int
+    downloadUrl: builtins.str
+    def __init__(
+        self,
+        *,
+        user: builtins.str = ...,
+        backupUid: builtins.bytes = ...,
+        fileName: builtins.str = ...,
+        created: builtins.int = ...,
+        downloadUrl: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["backupUid", b"backupUid", "created", b"created", "downloadUrl", b"downloadUrl", "fileName", b"fileName", "user", b"user"]) -> None: ...
+
+global___BackupFile = BackupFile
+
+@typing.final
+class BackupsResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    FILES_FIELD_NUMBER: builtins.int
+    @property
+    def files(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___BackupFile]: ...
+    def __init__(
+        self,
+        *,
+        files: collections.abc.Iterable[global___BackupFile] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["files", b"files"]) -> None: ...
+
+global___BackupsResponse = BackupsResponse
+
+@typing.final
+class GetEnterpriseDataKeysRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ROLEID_FIELD_NUMBER: builtins.int
+    @property
+    def roleId(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]: ...
+    def __init__(
+        self,
+        *,
+        roleId: collections.abc.Iterable[builtins.int] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["roleId", b"roleId"]) -> None: ...
+
+global___GetEnterpriseDataKeysRequest = GetEnterpriseDataKeysRequest
+
+@typing.final
+class GetEnterpriseDataKeysResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    REENCRYPTEDROLEKEY_FIELD_NUMBER: builtins.int
+    ROLEKEY_FIELD_NUMBER: builtins.int
+    MSPKEY_FIELD_NUMBER: builtins.int
+    ENTERPRISEKEYS_FIELD_NUMBER: builtins.int
+    TREEKEY_FIELD_NUMBER: builtins.int
+    @property
+    def reEncryptedRoleKey(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ReEncryptedRoleKey]: ...
+    @property
+    def roleKey(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RoleKey]: ...
+    @property
+    def mspKey(self) -> global___MspKey: ...
+    @property
+    def enterpriseKeys(self) -> global___EnterpriseKeys: ...
+    @property
+    def treeKey(self) -> global___TreeKey: ...
+    def __init__(
+        self,
+        *,
+        reEncryptedRoleKey: collections.abc.Iterable[global___ReEncryptedRoleKey] | None = ...,
+        roleKey: collections.abc.Iterable[global___RoleKey] | None = ...,
+        mspKey: global___MspKey | None = ...,
+        enterpriseKeys: global___EnterpriseKeys | None = ...,
+        treeKey: global___TreeKey | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["enterpriseKeys", b"enterpriseKeys", "mspKey", b"mspKey", "treeKey", b"treeKey"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["enterpriseKeys", b"enterpriseKeys", "mspKey", b"mspKey", "reEncryptedRoleKey", b"reEncryptedRoleKey", "roleKey", b"roleKey", "treeKey", b"treeKey"]) -> None: ...
+
+global___GetEnterpriseDataKeysResponse = GetEnterpriseDataKeysResponse
+
+@typing.final
+class RoleKey(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ROLEID_FIELD_NUMBER: builtins.int
+    ENCRYPTEDKEY_FIELD_NUMBER: builtins.int
+    KEYTYPE_FIELD_NUMBER: builtins.int
+    roleId: builtins.int
+    encryptedKey: builtins.str
+    keyType: global___EncryptedKeyType.ValueType
+    def __init__(
+        self,
+        *,
+        roleId: builtins.int = ...,
+        encryptedKey: builtins.str = ...,
+        keyType: global___EncryptedKeyType.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["encryptedKey", b"encryptedKey", "keyType", b"keyType", "roleId", b"roleId"]) -> None: ...
+
+global___RoleKey = RoleKey
+
+@typing.final
+class MspKey(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENCRYPTEDMSPTREEKEY_FIELD_NUMBER: builtins.int
+    ENCRYPTEDMSPTREEKEYTYPE_FIELD_NUMBER: builtins.int
+    encryptedMspTreeKey: builtins.str
+    encryptedMspTreeKeyType: global___EncryptedKeyType.ValueType
+    def __init__(
+        self,
+        *,
+        encryptedMspTreeKey: builtins.str = ...,
+        encryptedMspTreeKeyType: global___EncryptedKeyType.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["encryptedMspTreeKey", b"encryptedMspTreeKey", "encryptedMspTreeKeyType", b"encryptedMspTreeKeyType"]) -> None: ...
+
+global___MspKey = MspKey
+
+@typing.final
+class EnterpriseKeys(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RSAPUBLICKEY_FIELD_NUMBER: builtins.int
+    RSAENCRYPTEDPRIVATEKEY_FIELD_NUMBER: builtins.int
+    ECCPUBLICKEY_FIELD_NUMBER: builtins.int
+    ECCENCRYPTEDPRIVATEKEY_FIELD_NUMBER: builtins.int
+    rsaPublicKey: builtins.bytes
+    rsaEncryptedPrivateKey: builtins.bytes
+    eccPublicKey: builtins.bytes
+    eccEncryptedPrivateKey: builtins.bytes
+    def __init__(
+        self,
+        *,
+        rsaPublicKey: builtins.bytes = ...,
+        rsaEncryptedPrivateKey: builtins.bytes = ...,
+        eccPublicKey: builtins.bytes = ...,
+        eccEncryptedPrivateKey: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["eccEncryptedPrivateKey", b"eccEncryptedPrivateKey", "eccPublicKey", b"eccPublicKey", "rsaEncryptedPrivateKey", b"rsaEncryptedPrivateKey", "rsaPublicKey", b"rsaPublicKey"]) -> None: ...
+
+global___EnterpriseKeys = EnterpriseKeys
+
+@typing.final
+class TreeKey(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TREEKEY_FIELD_NUMBER: builtins.int
+    KEYTYPEID_FIELD_NUMBER: builtins.int
+    treeKey: builtins.str
+    keyTypeId: global___BackupKeyType.ValueType
+    def __init__(
+        self,
+        *,
+        treeKey: builtins.str = ...,
+        keyTypeId: global___BackupKeyType.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["keyTypeId", b"keyTypeId", "treeKey", b"treeKey"]) -> None: ...
+
+global___TreeKey = TreeKey
+
+@typing.final
+class SharedRecordResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    EVENTS_FIELD_NUMBER: builtins.int
+    @property
+    def events(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___SharedRecordEvent]: ...
+    def __init__(
+        self,
+        *,
+        events: collections.abc.Iterable[global___SharedRecordEvent] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["events", b"events"]) -> None: ...
+
+global___SharedRecordResponse = SharedRecordResponse
+
+@typing.final
+class SharedRecordEvent(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORDUID_FIELD_NUMBER: builtins.int
+    USERNAME_FIELD_NUMBER: builtins.int
+    CANEDIT_FIELD_NUMBER: builtins.int
+    CANRESHARE_FIELD_NUMBER: builtins.int
+    SHAREFROM_FIELD_NUMBER: builtins.int
+    recordUid: builtins.bytes
+    userName: builtins.str
+    canEdit: builtins.bool
+    canReshare: builtins.bool
+    shareFrom: builtins.int
+    """1 is direct share, 2 share folder, 3 share team folder"""
+    def __init__(
+        self,
+        *,
+        recordUid: builtins.bytes = ...,
+        userName: builtins.str = ...,
+        canEdit: builtins.bool = ...,
+        canReshare: builtins.bool = ...,
+        shareFrom: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["canEdit", b"canEdit", "canReshare", b"canReshare", "recordUid", b"recordUid", "shareFrom", b"shareFrom", "userName", b"userName"]) -> None: ...
+
+global___SharedRecordEvent = SharedRecordEvent
+
+@typing.final
+class SetRestrictVisibilityRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    NODEID_FIELD_NUMBER: builtins.int
+    nodeId: builtins.int
+    def __init__(
+        self,
+        *,
+        nodeId: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["nodeId", b"nodeId"]) -> None: ...
+
+global___SetRestrictVisibilityRequest = SetRestrictVisibilityRequest
+
+@typing.final
+class UserAddRequest(google.protobuf.message.Message):
+    """ Note that this guy's not currently used!  We will probably make
+     enterprise_user_add take multiple users like enterprise_user_update.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    NODEID_FIELD_NUMBER: builtins.int
+    ENCRYPTEDDATA_FIELD_NUMBER: builtins.int
+    KEYTYPE_FIELD_NUMBER: builtins.int
+    FULLNAME_FIELD_NUMBER: builtins.int
+    JOBTITLE_FIELD_NUMBER: builtins.int
+    EMAIL_FIELD_NUMBER: builtins.int
+    SUPPRESSEMAILINVITE_FIELD_NUMBER: builtins.int
+    enterpriseUserId: builtins.int
+    nodeId: builtins.int
+    encryptedData: builtins.bytes
+    """Data encrypted with the tree key, i.e. { display_name="first name middle last name"}"""
+    keyType: global___EncryptedKeyType.ValueType
+    fullName: builtins.str
+    """The user full name, i.e. {John Doe}"""
+    jobTitle: builtins.str
+    """The job tile, i.e. {Chief Financial Officer}"""
+    email: builtins.str
+    """The email address of new the enterprise user"""
+    suppressEmailInvite: builtins.bool
+    """Optional field, if true, server will not send the user an invite email, but instead will return the verification code in the response"""
+    def __init__(
+        self,
+        *,
+        enterpriseUserId: builtins.int = ...,
+        nodeId: builtins.int = ...,
+        encryptedData: builtins.bytes = ...,
+        keyType: global___EncryptedKeyType.ValueType = ...,
+        fullName: builtins.str = ...,
+        jobTitle: builtins.str = ...,
+        email: builtins.str = ...,
+        suppressEmailInvite: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["email", b"email", "encryptedData", b"encryptedData", "enterpriseUserId", b"enterpriseUserId", "fullName", b"fullName", "jobTitle", b"jobTitle", "keyType", b"keyType", "nodeId", b"nodeId", "suppressEmailInvite", b"suppressEmailInvite"]) -> None: ...
+
+global___UserAddRequest = UserAddRequest
+
+@typing.final
+class UserUpdateRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    USERS_FIELD_NUMBER: builtins.int
+    @property
+    def users(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___UserUpdate]: ...
+    def __init__(
+        self,
+        *,
+        users: collections.abc.Iterable[global___UserUpdate] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["users", b"users"]) -> None: ...
+
+global___UserUpdateRequest = UserUpdateRequest
+
+@typing.final
+class UserUpdate(google.protobuf.message.Message):
+    """ Note that ONLY fullName is currently supported!"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    NODEID_FIELD_NUMBER: builtins.int
+    ENCRYPTEDDATA_FIELD_NUMBER: builtins.int
+    KEYTYPE_FIELD_NUMBER: builtins.int
+    FULLNAME_FIELD_NUMBER: builtins.int
+    JOBTITLE_FIELD_NUMBER: builtins.int
+    EMAIL_FIELD_NUMBER: builtins.int
+    enterpriseUserId: builtins.int
+    nodeId: builtins.int
+    encryptedData: builtins.bytes
+    """Data encrypted with the tree key, i.e. { display_name="first name middle last name"}"""
+    keyType: global___EncryptedKeyType.ValueType
+    fullName: builtins.str
+    """The user full name, e.g. "Explodin' Dr. Jaggers Flymo".  Sending an empty string will leave the name unchanged; sending all whitespace will clear the name."""
+    jobTitle: builtins.str
+    """The job tile, e.g. "Drums".  Sending an empty string will leave the title unchanged; sending all whitespace will clear the title."""
+    email: builtins.str
+    """The new email address of the enterprise user."""
+    def __init__(
+        self,
+        *,
+        enterpriseUserId: builtins.int = ...,
+        nodeId: builtins.int = ...,
+        encryptedData: builtins.bytes = ...,
+        keyType: global___EncryptedKeyType.ValueType = ...,
+        fullName: builtins.str = ...,
+        jobTitle: builtins.str = ...,
+        email: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["email", b"email", "encryptedData", b"encryptedData", "enterpriseUserId", b"enterpriseUserId", "fullName", b"fullName", "jobTitle", b"jobTitle", "keyType", b"keyType", "nodeId", b"nodeId"]) -> None: ...
+
+global___UserUpdate = UserUpdate
+
+@typing.final
+class UserUpdateResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    USERS_FIELD_NUMBER: builtins.int
+    @property
+    def users(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___UserUpdateResult]: ...
+    def __init__(
+        self,
+        *,
+        users: collections.abc.Iterable[global___UserUpdateResult] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["users", b"users"]) -> None: ...
+
+global___UserUpdateResponse = UserUpdateResponse
+
+@typing.final
+class UserUpdateResult(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    STATUS_FIELD_NUMBER: builtins.int
+    enterpriseUserId: builtins.int
+    status: global___UserUpdateStatus.ValueType
+    def __init__(
+        self,
+        *,
+        enterpriseUserId: builtins.int = ...,
+        status: global___UserUpdateStatus.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enterpriseUserId", b"enterpriseUserId", "status", b"status"]) -> None: ...
+
+global___UserUpdateResult = UserUpdateResult
+
+@typing.final
+class ComplianceRecordOwnersRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    NODEIDS_FIELD_NUMBER: builtins.int
+    INCLUDENONSHARED_FIELD_NUMBER: builtins.int
+    includeNonShared: builtins.bool
+    @property
+    def nodeIds(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]: ...
+    def __init__(
+        self,
+        *,
+        nodeIds: collections.abc.Iterable[builtins.int] | None = ...,
+        includeNonShared: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["includeNonShared", b"includeNonShared", "nodeIds", b"nodeIds"]) -> None: ...
+
+global___ComplianceRecordOwnersRequest = ComplianceRecordOwnersRequest
+
+@typing.final
+class ComplianceRecordOwnersResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORDOWNERS_FIELD_NUMBER: builtins.int
+    @property
+    def recordOwners(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RecordOwner]: ...
+    def __init__(
+        self,
+        *,
+        recordOwners: collections.abc.Iterable[global___RecordOwner] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["recordOwners", b"recordOwners"]) -> None: ...
+
+global___ComplianceRecordOwnersResponse = ComplianceRecordOwnersResponse
+
+@typing.final
+class RecordOwner(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    SHARED_FIELD_NUMBER: builtins.int
+    enterpriseUserId: builtins.int
+    shared: builtins.bool
+    """ true if at least one owned record is shared."""
+    def __init__(
+        self,
+        *,
+        enterpriseUserId: builtins.int = ...,
+        shared: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enterpriseUserId", b"enterpriseUserId", "shared", b"shared"]) -> None: ...
+
+global___RecordOwner = RecordOwner
+
+@typing.final
+class PreliminaryComplianceDataRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERIDS_FIELD_NUMBER: builtins.int
+    INCLUDENONSHARED_FIELD_NUMBER: builtins.int
+    CONTINUATIONTOKEN_FIELD_NUMBER: builtins.int
+    INCLUDETOTALMATCHINGRECORDSINFIRSTRESPONSE_FIELD_NUMBER: builtins.int
+    includeNonShared: builtins.bool
+    """Default is false, meaning we'll consider only records which are shared.  If true, we'll include the list of records that are not shared."""
+    continuationToken: builtins.bytes
+    includeTotalMatchingRecordsInFirstResponse: builtins.bool
+    @property
+    def enterpriseUserIds(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]: ...
+    def __init__(
+        self,
+        *,
+        enterpriseUserIds: collections.abc.Iterable[builtins.int] | None = ...,
+        includeNonShared: builtins.bool = ...,
+        continuationToken: builtins.bytes = ...,
+        includeTotalMatchingRecordsInFirstResponse: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["continuationToken", b"continuationToken", "enterpriseUserIds", b"enterpriseUserIds", "includeNonShared", b"includeNonShared", "includeTotalMatchingRecordsInFirstResponse", b"includeTotalMatchingRecordsInFirstResponse"]) -> None: ...
+
+global___PreliminaryComplianceDataRequest = PreliminaryComplianceDataRequest
+
+@typing.final
+class PreliminaryComplianceDataResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    AUDITUSERDATA_FIELD_NUMBER: builtins.int
+    CONTINUATIONTOKEN_FIELD_NUMBER: builtins.int
+    HASMORE_FIELD_NUMBER: builtins.int
+    TOTALMATCHINGRECORDS_FIELD_NUMBER: builtins.int
+    continuationToken: builtins.bytes
+    hasMore: builtins.bool
+    totalMatchingRecords: builtins.int
+    @property
+    def auditUserData(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___AuditUserData]: ...
+    def __init__(
+        self,
+        *,
+        auditUserData: collections.abc.Iterable[global___AuditUserData] | None = ...,
+        continuationToken: builtins.bytes = ...,
+        hasMore: builtins.bool = ...,
+        totalMatchingRecords: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["auditUserData", b"auditUserData", "continuationToken", b"continuationToken", "hasMore", b"hasMore", "totalMatchingRecords", b"totalMatchingRecords"]) -> None: ...
+
+global___PreliminaryComplianceDataResponse = PreliminaryComplianceDataResponse
+
+@typing.final
+class AuditUserRecord(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORDUID_FIELD_NUMBER: builtins.int
+    ENCRYPTEDDATA_FIELD_NUMBER: builtins.int
+    SHARED_FIELD_NUMBER: builtins.int
+    recordUid: builtins.bytes
+    encryptedData: builtins.bytes
+    """audit data encrypted with the audit key."""
+    shared: builtins.bool
+    """Default is false. If true, this record is shared."""
+    def __init__(
+        self,
+        *,
+        recordUid: builtins.bytes = ...,
+        encryptedData: builtins.bytes = ...,
+        shared: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["encryptedData", b"encryptedData", "recordUid", b"recordUid", "shared", b"shared"]) -> None: ...
+
+global___AuditUserRecord = AuditUserRecord
+
+@typing.final
+class AuditUserData(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    AUDITUSERRECORDS_FIELD_NUMBER: builtins.int
+    STATUS_FIELD_NUMBER: builtins.int
+    enterpriseUserId: builtins.int
+    status: global___AuditUserStatus.ValueType
+    """Status of user for report"""
+    @property
+    def auditUserRecords(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___AuditUserRecord]:
+        """The list of record owned or owned and shared by this user."""
+
+    def __init__(
+        self,
+        *,
+        enterpriseUserId: builtins.int = ...,
+        auditUserRecords: collections.abc.Iterable[global___AuditUserRecord] | None = ...,
+        status: global___AuditUserStatus.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["auditUserRecords", b"auditUserRecords", "enterpriseUserId", b"enterpriseUserId", "status", b"status"]) -> None: ...
+
+global___AuditUserData = AuditUserData
+
+@typing.final
+class ComplianceReportFilters(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORDTITLES_FIELD_NUMBER: builtins.int
+    RECORDUIDS_FIELD_NUMBER: builtins.int
+    JOBTITLES_FIELD_NUMBER: builtins.int
+    URLS_FIELD_NUMBER: builtins.int
+    ENTERPRISEUSERIDS_FIELD_NUMBER: builtins.int
+    @property
+    def recordTitles(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """The list of record titles."""
+
+    @property
+    def recordUids(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]:
+        """The list of record UIDs."""
+
+    @property
+    def jobTitles(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]:
+        """The list of user job titles."""
+
+    @property
+    def urls(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """The list of record URLs."""
+
+    @property
+    def enterpriseUserIds(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]:
+        """The list of users chosen."""
+
+    def __init__(
+        self,
+        *,
+        recordTitles: collections.abc.Iterable[builtins.str] | None = ...,
+        recordUids: collections.abc.Iterable[builtins.bytes] | None = ...,
+        jobTitles: collections.abc.Iterable[builtins.int] | None = ...,
+        urls: collections.abc.Iterable[builtins.str] | None = ...,
+        enterpriseUserIds: collections.abc.Iterable[builtins.int] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enterpriseUserIds", b"enterpriseUserIds", "jobTitles", b"jobTitles", "recordTitles", b"recordTitles", "recordUids", b"recordUids", "urls", b"urls"]) -> None: ...
+
+global___ComplianceReportFilters = ComplianceReportFilters
+
+@typing.final
+class ComplianceReportRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    COMPLIANCEREPORTRUN_FIELD_NUMBER: builtins.int
+    REPORTNAME_FIELD_NUMBER: builtins.int
+    SAVEREPORT_FIELD_NUMBER: builtins.int
+    reportName: builtins.str
+    """The report name (only required when we want to save the report)."""
+    saveReport: builtins.bool
+    """Default is false.  True means we will save the report."""
+    @property
+    def complianceReportRun(self) -> global___ComplianceReportRun: ...
+    def __init__(
+        self,
+        *,
+        complianceReportRun: global___ComplianceReportRun | None = ...,
+        reportName: builtins.str = ...,
+        saveReport: builtins.bool = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["complianceReportRun", b"complianceReportRun"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["complianceReportRun", b"complianceReportRun", "reportName", b"reportName", "saveReport", b"saveReport"]) -> None: ...
+
+global___ComplianceReportRequest = ComplianceReportRequest
+
+@typing.final
+class ComplianceReportRun(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    REPORTCRITERIAANDFILTER_FIELD_NUMBER: builtins.int
+    USERS_FIELD_NUMBER: builtins.int
+    RECORDS_FIELD_NUMBER: builtins.int
+    @property
+    def reportCriteriaAndFilter(self) -> global___ComplianceReportCriteriaAndFilter: ...
+    @property
+    def users(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]:
+        """List of enterprise user IDs sent to get_preliminary_compliance_data."""
+
+    @property
+    def records(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]:
+        """These are the records that will be run.  Max number of recordUids is 1000."""
+
+    def __init__(
+        self,
+        *,
+        reportCriteriaAndFilter: global___ComplianceReportCriteriaAndFilter | None = ...,
+        users: collections.abc.Iterable[builtins.int] | None = ...,
+        records: collections.abc.Iterable[builtins.bytes] | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["reportCriteriaAndFilter", b"reportCriteriaAndFilter"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["records", b"records", "reportCriteriaAndFilter", b"reportCriteriaAndFilter", "users", b"users"]) -> None: ...
+
+global___ComplianceReportRun = ComplianceReportRun
+
+@typing.final
+class ComplianceReportCriteriaAndFilter(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    NODEID_FIELD_NUMBER: builtins.int
+    CRITERIAUID_FIELD_NUMBER: builtins.int
+    CRITERIANAME_FIELD_NUMBER: builtins.int
+    CRITERIA_FIELD_NUMBER: builtins.int
+    FILTERS_FIELD_NUMBER: builtins.int
+    LASTMODIFIED_FIELD_NUMBER: builtins.int
+    NODEENCRYPTEDDATA_FIELD_NUMBER: builtins.int
+    nodeId: builtins.int
+    criteriaUid: builtins.bytes
+    """Uid provided by the client"""
+    criteriaName: builtins.str
+    lastModified: builtins.int
+    nodeEncryptedData: builtins.bytes
+    """The node data object encrypted with the tree key that contains the nodeName"""
+    @property
+    def criteria(self) -> global___ComplianceReportCriteria: ...
+    @property
+    def filters(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ComplianceReportFilter]: ...
+    def __init__(
+        self,
+        *,
+        nodeId: builtins.int = ...,
+        criteriaUid: builtins.bytes = ...,
+        criteriaName: builtins.str = ...,
+        criteria: global___ComplianceReportCriteria | None = ...,
+        filters: collections.abc.Iterable[global___ComplianceReportFilter] | None = ...,
+        lastModified: builtins.int = ...,
+        nodeEncryptedData: builtins.bytes = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["criteria", b"criteria"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["criteria", b"criteria", "criteriaName", b"criteriaName", "criteriaUid", b"criteriaUid", "filters", b"filters", "lastModified", b"lastModified", "nodeEncryptedData", b"nodeEncryptedData", "nodeId", b"nodeId"]) -> None: ...
+
+global___ComplianceReportCriteriaAndFilter = ComplianceReportCriteriaAndFilter
+
+@typing.final
+class ComplianceReportCriteria(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    JOBTITLES_FIELD_NUMBER: builtins.int
+    ENTERPRISEUSERIDS_FIELD_NUMBER: builtins.int
+    INCLUDENONSHARED_FIELD_NUMBER: builtins.int
+    includeNonShared: builtins.bool
+    """If true, include the list the records that are not shared"""
+    @property
+    def jobTitles(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """The list of job titles chosen."""
+
+    @property
+    def enterpriseUserIds(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]:
+        """The list of users chosen."""
+
+    def __init__(
+        self,
+        *,
+        jobTitles: collections.abc.Iterable[builtins.str] | None = ...,
+        enterpriseUserIds: collections.abc.Iterable[builtins.int] | None = ...,
+        includeNonShared: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enterpriseUserIds", b"enterpriseUserIds", "includeNonShared", b"includeNonShared", "jobTitles", b"jobTitles"]) -> None: ...
+
+global___ComplianceReportCriteria = ComplianceReportCriteria
+
+@typing.final
+class ComplianceReportFilter(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORDTITLES_FIELD_NUMBER: builtins.int
+    RECORDUIDS_FIELD_NUMBER: builtins.int
+    JOBTITLES_FIELD_NUMBER: builtins.int
+    URLS_FIELD_NUMBER: builtins.int
+    RECORDTYPES_FIELD_NUMBER: builtins.int
+    @property
+    def recordTitles(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    @property
+    def recordUids(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]: ...
+    @property
+    def jobTitles(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    @property
+    def urls(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    @property
+    def recordTypes(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    def __init__(
+        self,
+        *,
+        recordTitles: collections.abc.Iterable[builtins.str] | None = ...,
+        recordUids: collections.abc.Iterable[builtins.bytes] | None = ...,
+        jobTitles: collections.abc.Iterable[builtins.str] | None = ...,
+        urls: collections.abc.Iterable[builtins.str] | None = ...,
+        recordTypes: collections.abc.Iterable[builtins.str] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["jobTitles", b"jobTitles", "recordTitles", b"recordTitles", "recordTypes", b"recordTypes", "recordUids", b"recordUids", "urls", b"urls"]) -> None: ...
+
+global___ComplianceReportFilter = ComplianceReportFilter
+
+@typing.final
+class ComplianceReportResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    DATEGENERATED_FIELD_NUMBER: builtins.int
+    RUNBYUSERNAME_FIELD_NUMBER: builtins.int
+    REPORTNAME_FIELD_NUMBER: builtins.int
+    REPORTUID_FIELD_NUMBER: builtins.int
+    COMPLIANCEREPORTRUN_FIELD_NUMBER: builtins.int
+    USERPROFILES_FIELD_NUMBER: builtins.int
+    AUDITTEAMS_FIELD_NUMBER: builtins.int
+    AUDITRECORDS_FIELD_NUMBER: builtins.int
+    USERRECORDS_FIELD_NUMBER: builtins.int
+    SHAREDFOLDERRECORDS_FIELD_NUMBER: builtins.int
+    SHAREDFOLDERUSERS_FIELD_NUMBER: builtins.int
+    SHAREDFOLDERTEAMS_FIELD_NUMBER: builtins.int
+    AUDITTEAMUSERS_FIELD_NUMBER: builtins.int
+    AUDITROLES_FIELD_NUMBER: builtins.int
+    LINKEDRECORDS_FIELD_NUMBER: builtins.int
+    dateGenerated: builtins.int
+    runByUserName: builtins.str
+    reportName: builtins.str
+    reportUid: builtins.bytes
+    @property
+    def complianceReportRun(self) -> global___ComplianceReportRun: ...
+    @property
+    def userProfiles(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___UserProfile]: ...
+    @property
+    def auditTeams(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___AuditTeam]: ...
+    @property
+    def auditRecords(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___AuditRecord]: ...
+    @property
+    def userRecords(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___UserRecord]: ...
+    @property
+    def sharedFolderRecords(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___SharedFolderRecord]: ...
+    @property
+    def sharedFolderUsers(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___SharedFolderUser]: ...
+    @property
+    def sharedFolderTeams(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___SharedFolderTeam]: ...
+    @property
+    def auditTeamUsers(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___AuditTeamUser]: ...
+    @property
+    def auditRoles(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___AuditRole]: ...
+    @property
+    def linkedRecords(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___LinkedRecord]: ...
+    def __init__(
+        self,
+        *,
+        dateGenerated: builtins.int = ...,
+        runByUserName: builtins.str = ...,
+        reportName: builtins.str = ...,
+        reportUid: builtins.bytes = ...,
+        complianceReportRun: global___ComplianceReportRun | None = ...,
+        userProfiles: collections.abc.Iterable[global___UserProfile] | None = ...,
+        auditTeams: collections.abc.Iterable[global___AuditTeam] | None = ...,
+        auditRecords: collections.abc.Iterable[global___AuditRecord] | None = ...,
+        userRecords: collections.abc.Iterable[global___UserRecord] | None = ...,
+        sharedFolderRecords: collections.abc.Iterable[global___SharedFolderRecord] | None = ...,
+        sharedFolderUsers: collections.abc.Iterable[global___SharedFolderUser] | None = ...,
+        sharedFolderTeams: collections.abc.Iterable[global___SharedFolderTeam] | None = ...,
+        auditTeamUsers: collections.abc.Iterable[global___AuditTeamUser] | None = ...,
+        auditRoles: collections.abc.Iterable[global___AuditRole] | None = ...,
+        linkedRecords: collections.abc.Iterable[global___LinkedRecord] | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["complianceReportRun", b"complianceReportRun"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["auditRecords", b"auditRecords", "auditRoles", b"auditRoles", "auditTeamUsers", b"auditTeamUsers", "auditTeams", b"auditTeams", "complianceReportRun", b"complianceReportRun", "dateGenerated", b"dateGenerated", "linkedRecords", b"linkedRecords", "reportName", b"reportName", "reportUid", b"reportUid", "runByUserName", b"runByUserName", "sharedFolderRecords", b"sharedFolderRecords", "sharedFolderTeams", b"sharedFolderTeams", "sharedFolderUsers", b"sharedFolderUsers", "userProfiles", b"userProfiles", "userRecords", b"userRecords"]) -> None: ...
+
+global___ComplianceReportResponse = ComplianceReportResponse
+
+@typing.final
+class AuditRecord(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORDUID_FIELD_NUMBER: builtins.int
+    AUDITDATA_FIELD_NUMBER: builtins.int
+    HASATTACHMENTS_FIELD_NUMBER: builtins.int
+    INTRASH_FIELD_NUMBER: builtins.int
+    TREELEFT_FIELD_NUMBER: builtins.int
+    TREERIGHT_FIELD_NUMBER: builtins.int
+    recordUid: builtins.bytes
+    auditData: builtins.bytes
+    hasAttachments: builtins.bool
+    inTrash: builtins.bool
+    """ true if this record is in its owner's trash/"deleted items".  Not set on older saved reports."""
+    treeLeft: builtins.int
+    """ record's owner's node.  Not set in older saved reports."""
+    treeRight: builtins.int
+    """ record's owner's node.  Not set in older saved reports."""
+    def __init__(
+        self,
+        *,
+        recordUid: builtins.bytes = ...,
+        auditData: builtins.bytes = ...,
+        hasAttachments: builtins.bool = ...,
+        inTrash: builtins.bool = ...,
+        treeLeft: builtins.int = ...,
+        treeRight: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["auditData", b"auditData", "hasAttachments", b"hasAttachments", "inTrash", b"inTrash", "recordUid", b"recordUid", "treeLeft", b"treeLeft", "treeRight", b"treeRight"]) -> None: ...
+
+global___AuditRecord = AuditRecord
+
+@typing.final
+class AuditRole(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ROLEID_FIELD_NUMBER: builtins.int
+    ENCRYPTEDDATA_FIELD_NUMBER: builtins.int
+    RESTRICTSHAREOUTSIDEENTERPRISE_FIELD_NUMBER: builtins.int
+    RESTRICTSHAREALL_FIELD_NUMBER: builtins.int
+    RESTRICTSHAREOFATTACHMENTS_FIELD_NUMBER: builtins.int
+    RESTRICTMASKPASSWORDSWHILEEDITING_FIELD_NUMBER: builtins.int
+    ROLENODEMANAGEMENTS_FIELD_NUMBER: builtins.int
+    roleId: builtins.int
+    encryptedData: builtins.bytes
+    restrictShareOutsideEnterprise: builtins.bool
+    """True means cannot share records to others not in the same enterprise"""
+    restrictShareAll: builtins.bool
+    """True means can't share records"""
+    restrictShareOfAttachments: builtins.bool
+    """True means can't share records with attachments"""
+    restrictMaskPasswordsWhileEditing: builtins.bool
+    """True means you can't even see the password when you are editing"""
+    @property
+    def roleNodeManagements(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RoleNodeManagement]: ...
+    def __init__(
+        self,
+        *,
+        roleId: builtins.int = ...,
+        encryptedData: builtins.bytes = ...,
+        restrictShareOutsideEnterprise: builtins.bool = ...,
+        restrictShareAll: builtins.bool = ...,
+        restrictShareOfAttachments: builtins.bool = ...,
+        restrictMaskPasswordsWhileEditing: builtins.bool = ...,
+        roleNodeManagements: collections.abc.Iterable[global___RoleNodeManagement] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["encryptedData", b"encryptedData", "restrictMaskPasswordsWhileEditing", b"restrictMaskPasswordsWhileEditing", "restrictShareAll", b"restrictShareAll", "restrictShareOfAttachments", b"restrictShareOfAttachments", "restrictShareOutsideEnterprise", b"restrictShareOutsideEnterprise", "roleId", b"roleId", "roleNodeManagements", b"roleNodeManagements"]) -> None: ...
+
+global___AuditRole = AuditRole
+
+@typing.final
+class RoleNodeManagement(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TREELEFT_FIELD_NUMBER: builtins.int
+    TREERIGHT_FIELD_NUMBER: builtins.int
+    CASCADE_FIELD_NUMBER: builtins.int
+    PRIVILEGES_FIELD_NUMBER: builtins.int
+    treeLeft: builtins.int
+    treeRight: builtins.int
+    cascade: builtins.bool
+    privileges: builtins.int
+    """ bit field; 1 is SHARING_ADMINISTRATOR"""
+    def __init__(
+        self,
+        *,
+        treeLeft: builtins.int = ...,
+        treeRight: builtins.int = ...,
+        cascade: builtins.bool = ...,
+        privileges: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["cascade", b"cascade", "privileges", b"privileges", "treeLeft", b"treeLeft", "treeRight", b"treeRight"]) -> None: ...
+
+global___RoleNodeManagement = RoleNodeManagement
+
+@typing.final
+class UserProfile(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    FULLNAME_FIELD_NUMBER: builtins.int
+    JOBTITLE_FIELD_NUMBER: builtins.int
+    EMAIL_FIELD_NUMBER: builtins.int
+    ROLEIDS_FIELD_NUMBER: builtins.int
+    enterpriseUserId: builtins.int
+    fullName: builtins.str
+    """The user's full name."""
+    jobTitle: builtins.str
+    email: builtins.str
+    @property
+    def roleIds(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]: ...
+    def __init__(
+        self,
+        *,
+        enterpriseUserId: builtins.int = ...,
+        fullName: builtins.str = ...,
+        jobTitle: builtins.str = ...,
+        email: builtins.str = ...,
+        roleIds: collections.abc.Iterable[builtins.int] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["email", b"email", "enterpriseUserId", b"enterpriseUserId", "fullName", b"fullName", "jobTitle", b"jobTitle", "roleIds", b"roleIds"]) -> None: ...
+
+global___UserProfile = UserProfile
+
+@typing.final
+class RecordPermission(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORDUID_FIELD_NUMBER: builtins.int
+    PERMISSIONBITS_FIELD_NUMBER: builtins.int
+    recordUid: builtins.bytes
+    permissionBits: builtins.int
+    def __init__(
+        self,
+        *,
+        recordUid: builtins.bytes = ...,
+        permissionBits: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["permissionBits", b"permissionBits", "recordUid", b"recordUid"]) -> None: ...
+
+global___RecordPermission = RecordPermission
+
+@typing.final
+class UserRecord(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    RECORDPERMISSIONS_FIELD_NUMBER: builtins.int
+    enterpriseUserId: builtins.int
+    @property
+    def recordPermissions(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RecordPermission]: ...
+    def __init__(
+        self,
+        *,
+        enterpriseUserId: builtins.int = ...,
+        recordPermissions: collections.abc.Iterable[global___RecordPermission] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enterpriseUserId", b"enterpriseUserId", "recordPermissions", b"recordPermissions"]) -> None: ...
+
+global___UserRecord = UserRecord
+
+@typing.final
+class AuditTeam(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TEAMUID_FIELD_NUMBER: builtins.int
+    TEAMNAME_FIELD_NUMBER: builtins.int
+    RESTRICTEDIT_FIELD_NUMBER: builtins.int
+    RESTRICTSHARE_FIELD_NUMBER: builtins.int
+    teamUid: builtins.bytes
+    teamName: builtins.str
+    restrictEdit: builtins.bool
+    restrictShare: builtins.bool
+    def __init__(
+        self,
+        *,
+        teamUid: builtins.bytes = ...,
+        teamName: builtins.str = ...,
+        restrictEdit: builtins.bool = ...,
+        restrictShare: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["restrictEdit", b"restrictEdit", "restrictShare", b"restrictShare", "teamName", b"teamName", "teamUid", b"teamUid"]) -> None: ...
+
+global___AuditTeam = AuditTeam
+
+@typing.final
+class AuditTeamUser(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TEAMUID_FIELD_NUMBER: builtins.int
+    ENTERPRISEUSERIDS_FIELD_NUMBER: builtins.int
+    teamUid: builtins.bytes
+    @property
+    def enterpriseUserIds(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]: ...
+    def __init__(
+        self,
+        *,
+        teamUid: builtins.bytes = ...,
+        enterpriseUserIds: collections.abc.Iterable[builtins.int] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enterpriseUserIds", b"enterpriseUserIds", "teamUid", b"teamUid"]) -> None: ...
+
+global___AuditTeamUser = AuditTeamUser
+
+@typing.final
+class SharedFolderRecord(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SHAREDFOLDERUID_FIELD_NUMBER: builtins.int
+    RECORDPERMISSIONS_FIELD_NUMBER: builtins.int
+    SHAREADMINRECORDS_FIELD_NUMBER: builtins.int
+    sharedFolderUid: builtins.bytes
+    @property
+    def recordPermissions(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RecordPermission]: ...
+    @property
+    def shareAdminRecords(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ShareAdminRecord]: ...
+    def __init__(
+        self,
+        *,
+        sharedFolderUid: builtins.bytes = ...,
+        recordPermissions: collections.abc.Iterable[global___RecordPermission] | None = ...,
+        shareAdminRecords: collections.abc.Iterable[global___ShareAdminRecord] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["recordPermissions", b"recordPermissions", "shareAdminRecords", b"shareAdminRecords", "sharedFolderUid", b"sharedFolderUid"]) -> None: ...
+
+global___SharedFolderRecord = SharedFolderRecord
+
+@typing.final
+class ShareAdminRecord(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    RECORDPERMISSIONINDEXES_FIELD_NUMBER: builtins.int
+    enterpriseUserId: builtins.int
+    @property
+    def recordPermissionIndexes(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]: ...
+    def __init__(
+        self,
+        *,
+        enterpriseUserId: builtins.int = ...,
+        recordPermissionIndexes: collections.abc.Iterable[builtins.int] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enterpriseUserId", b"enterpriseUserId", "recordPermissionIndexes", b"recordPermissionIndexes"]) -> None: ...
+
+global___ShareAdminRecord = ShareAdminRecord
+
+@typing.final
+class SharedFolderUser(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SHAREDFOLDERUID_FIELD_NUMBER: builtins.int
+    ENTERPRISEUSERIDS_FIELD_NUMBER: builtins.int
+    sharedFolderUid: builtins.bytes
+    @property
+    def enterpriseUserIds(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]: ...
+    def __init__(
+        self,
+        *,
+        sharedFolderUid: builtins.bytes = ...,
+        enterpriseUserIds: collections.abc.Iterable[builtins.int] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enterpriseUserIds", b"enterpriseUserIds", "sharedFolderUid", b"sharedFolderUid"]) -> None: ...
+
+global___SharedFolderUser = SharedFolderUser
+
+@typing.final
+class SharedFolderTeam(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SHAREDFOLDERUID_FIELD_NUMBER: builtins.int
+    TEAMUIDS_FIELD_NUMBER: builtins.int
+    sharedFolderUid: builtins.bytes
+    @property
+    def teamUids(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]: ...
+    def __init__(
+        self,
+        *,
+        sharedFolderUid: builtins.bytes = ...,
+        teamUids: collections.abc.Iterable[builtins.bytes] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["sharedFolderUid", b"sharedFolderUid", "teamUids", b"teamUids"]) -> None: ...
+
+global___SharedFolderTeam = SharedFolderTeam
+
+@typing.final
+class GetComplianceReportRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    REPORTUID_FIELD_NUMBER: builtins.int
+    reportUid: builtins.bytes
+    def __init__(
+        self,
+        *,
+        reportUid: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["reportUid", b"reportUid"]) -> None: ...
+
+global___GetComplianceReportRequest = GetComplianceReportRequest
+
+@typing.final
+class GetComplianceReportResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    DOWNLOADURL_FIELD_NUMBER: builtins.int
+    downloadUrl: builtins.str
+    def __init__(
+        self,
+        *,
+        downloadUrl: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["downloadUrl", b"downloadUrl"]) -> None: ...
+
+global___GetComplianceReportResponse = GetComplianceReportResponse
+
+@typing.final
+class ComplianceReportCriteriaRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CRITERIAUID_FIELD_NUMBER: builtins.int
+    criteriaUid: builtins.bytes
+    def __init__(
+        self,
+        *,
+        criteriaUid: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["criteriaUid", b"criteriaUid"]) -> None: ...
+
+global___ComplianceReportCriteriaRequest = ComplianceReportCriteriaRequest
+
+@typing.final
+class SaveComplianceReportCriteriaResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CRITERIAUID_FIELD_NUMBER: builtins.int
+    criteriaUid: builtins.bytes
+    def __init__(
+        self,
+        *,
+        criteriaUid: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["criteriaUid", b"criteriaUid"]) -> None: ...
+
+global___SaveComplianceReportCriteriaResponse = SaveComplianceReportCriteriaResponse
+
+@typing.final
+class LinkedRecord(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    OWNERUID_FIELD_NUMBER: builtins.int
+    RECORDUIDS_FIELD_NUMBER: builtins.int
+    ownerUid: builtins.bytes
+    """ This is the owner *record* UID."""
+    @property
+    def recordUids(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]:
+        """ A child record may have multiple parent/"owner" records, but will not itself be an owner."""
+
+    def __init__(
+        self,
+        *,
+        ownerUid: builtins.bytes = ...,
+        recordUids: collections.abc.Iterable[builtins.bytes] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["ownerUid", b"ownerUid", "recordUids", b"recordUids"]) -> None: ...
+
+global___LinkedRecord = LinkedRecord
+
+@typing.final
+class GetSharingAdminsRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SHAREDFOLDERUID_FIELD_NUMBER: builtins.int
+    RECORDUID_FIELD_NUMBER: builtins.int
+    USERNAME_FIELD_NUMBER: builtins.int
+    sharedFolderUid: builtins.bytes
+    recordUid: builtins.bytes
+    username: builtins.str
+    def __init__(
+        self,
+        *,
+        sharedFolderUid: builtins.bytes = ...,
+        recordUid: builtins.bytes = ...,
+        username: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["recordUid", b"recordUid", "sharedFolderUid", b"sharedFolderUid", "username", b"username"]) -> None: ...
+
+global___GetSharingAdminsRequest = GetSharingAdminsRequest
+
+@typing.final
+class UserProfileExt(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    EMAIL_FIELD_NUMBER: builtins.int
+    FULLNAME_FIELD_NUMBER: builtins.int
+    JOBTITLE_FIELD_NUMBER: builtins.int
+    ISMSPMCADMIN_FIELD_NUMBER: builtins.int
+    ISINSHAREDFOLDER_FIELD_NUMBER: builtins.int
+    ISSHAREADMINFORREQUESTEDOBJECT_FIELD_NUMBER: builtins.int
+    ISSHAREADMINFORSHAREDFOLDEROWNER_FIELD_NUMBER: builtins.int
+    HASACCESSTOOBJECT_FIELD_NUMBER: builtins.int
+    email: builtins.str
+    fullName: builtins.str
+    """The user's full name."""
+    jobTitle: builtins.str
+    isMSPMCAdmin: builtins.bool
+    isInSharedFolder: builtins.bool
+    isShareAdminForRequestedObject: builtins.bool
+    isShareAdminForSharedFolderOwner: builtins.bool
+    hasAccessToObject: builtins.bool
+    def __init__(
+        self,
+        *,
+        email: builtins.str = ...,
+        fullName: builtins.str = ...,
+        jobTitle: builtins.str = ...,
+        isMSPMCAdmin: builtins.bool = ...,
+        isInSharedFolder: builtins.bool = ...,
+        isShareAdminForRequestedObject: builtins.bool = ...,
+        isShareAdminForSharedFolderOwner: builtins.bool = ...,
+        hasAccessToObject: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["email", b"email", "fullName", b"fullName", "hasAccessToObject", b"hasAccessToObject", "isInSharedFolder", b"isInSharedFolder", "isMSPMCAdmin", b"isMSPMCAdmin", "isShareAdminForRequestedObject", b"isShareAdminForRequestedObject", "isShareAdminForSharedFolderOwner", b"isShareAdminForSharedFolderOwner", "jobTitle", b"jobTitle"]) -> None: ...
+
+global___UserProfileExt = UserProfileExt
+
+@typing.final
+class GetSharingAdminsResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    USERPROFILEEXTS_FIELD_NUMBER: builtins.int
+    @property
+    def userProfileExts(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___UserProfileExt]: ...
+    def __init__(
+        self,
+        *,
+        userProfileExts: collections.abc.Iterable[global___UserProfileExt] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["userProfileExts", b"userProfileExts"]) -> None: ...
+
+global___GetSharingAdminsResponse = GetSharingAdminsResponse
+
+@typing.final
+class TeamsEnterpriseUsersAddRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TEAMS_FIELD_NUMBER: builtins.int
+    @property
+    def teams(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___TeamsEnterpriseUsersAddTeamRequest]: ...
+    def __init__(
+        self,
+        *,
+        teams: collections.abc.Iterable[global___TeamsEnterpriseUsersAddTeamRequest] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["teams", b"teams"]) -> None: ...
+
+global___TeamsEnterpriseUsersAddRequest = TeamsEnterpriseUsersAddRequest
+
+@typing.final
+class TeamsEnterpriseUsersAddTeamRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TEAMUID_FIELD_NUMBER: builtins.int
+    USERS_FIELD_NUMBER: builtins.int
+    teamUid: builtins.bytes
+    @property
+    def users(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___TeamsEnterpriseUsersAddUserRequest]: ...
+    def __init__(
+        self,
+        *,
+        teamUid: builtins.bytes = ...,
+        users: collections.abc.Iterable[global___TeamsEnterpriseUsersAddUserRequest] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["teamUid", b"teamUid", "users", b"users"]) -> None: ...
+
+global___TeamsEnterpriseUsersAddTeamRequest = TeamsEnterpriseUsersAddTeamRequest
+
+@typing.final
+class TeamsEnterpriseUsersAddUserRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    USERTYPE_FIELD_NUMBER: builtins.int
+    TEAMKEY_FIELD_NUMBER: builtins.int
+    TYPEDTEAMKEY_FIELD_NUMBER: builtins.int
+    enterpriseUserId: builtins.int
+    userType: global___TeamUserType.ValueType
+    teamKey: builtins.str
+    """encrypted with the user's public key - KT_ENCRYPTED_BY_PUBLIC_KEY aka RSA"""
+    @property
+    def typedTeamKey(self) -> global___TypedKey:
+        """the substitute for teamKey, explicitly specifies key type (primarily will be KT_ENCRYPTED_BY_PUBLIC_KEY_ECC in this case)"""
+
+    def __init__(
+        self,
+        *,
+        enterpriseUserId: builtins.int = ...,
+        userType: global___TeamUserType.ValueType = ...,
+        teamKey: builtins.str = ...,
+        typedTeamKey: global___TypedKey | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["typedTeamKey", b"typedTeamKey"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["enterpriseUserId", b"enterpriseUserId", "teamKey", b"teamKey", "typedTeamKey", b"typedTeamKey", "userType", b"userType"]) -> None: ...
+
+global___TeamsEnterpriseUsersAddUserRequest = TeamsEnterpriseUsersAddUserRequest
+
+@typing.final
+class TypedKey(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    KEY_FIELD_NUMBER: builtins.int
+    KEYTYPE_FIELD_NUMBER: builtins.int
+    key: builtins.bytes
+    keyType: global___EncryptedKeyType.ValueType
+    def __init__(
+        self,
+        *,
+        key: builtins.bytes = ...,
+        keyType: global___EncryptedKeyType.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["key", b"key", "keyType", b"keyType"]) -> None: ...
+
+global___TypedKey = TypedKey
+
+@typing.final
+class TeamsEnterpriseUsersAddResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TEAMS_FIELD_NUMBER: builtins.int
+    REVISION_FIELD_NUMBER: builtins.int
+    revision: builtins.int
+    @property
+    def teams(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___TeamsEnterpriseUsersAddTeamResponse]: ...
+    def __init__(
+        self,
+        *,
+        teams: collections.abc.Iterable[global___TeamsEnterpriseUsersAddTeamResponse] | None = ...,
+        revision: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["revision", b"revision", "teams", b"teams"]) -> None: ...
+
+global___TeamsEnterpriseUsersAddResponse = TeamsEnterpriseUsersAddResponse
+
+@typing.final
+class TeamsEnterpriseUsersAddTeamResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TEAMUID_FIELD_NUMBER: builtins.int
+    USERS_FIELD_NUMBER: builtins.int
+    SUCCESS_FIELD_NUMBER: builtins.int
+    MESSAGE_FIELD_NUMBER: builtins.int
+    RESULTCODE_FIELD_NUMBER: builtins.int
+    ADDITIONALINFO_FIELD_NUMBER: builtins.int
+    teamUid: builtins.bytes
+    success: builtins.bool
+    message: builtins.str
+    resultCode: builtins.str
+    additionalInfo: builtins.str
+    @property
+    def users(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___TeamsEnterpriseUsersAddUserResponse]: ...
+    def __init__(
+        self,
+        *,
+        teamUid: builtins.bytes = ...,
+        users: collections.abc.Iterable[global___TeamsEnterpriseUsersAddUserResponse] | None = ...,
+        success: builtins.bool = ...,
+        message: builtins.str = ...,
+        resultCode: builtins.str = ...,
+        additionalInfo: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["additionalInfo", b"additionalInfo", "message", b"message", "resultCode", b"resultCode", "success", b"success", "teamUid", b"teamUid", "users", b"users"]) -> None: ...
+
+global___TeamsEnterpriseUsersAddTeamResponse = TeamsEnterpriseUsersAddTeamResponse
+
+@typing.final
+class TeamsEnterpriseUsersAddUserResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    REVISION_FIELD_NUMBER: builtins.int
+    SUCCESS_FIELD_NUMBER: builtins.int
+    MESSAGE_FIELD_NUMBER: builtins.int
+    RESULTCODE_FIELD_NUMBER: builtins.int
+    ADDITIONALINFO_FIELD_NUMBER: builtins.int
+    enterpriseUserId: builtins.int
+    revision: builtins.int
+    success: builtins.bool
+    message: builtins.str
+    resultCode: builtins.str
+    additionalInfo: builtins.str
+    def __init__(
+        self,
+        *,
+        enterpriseUserId: builtins.int = ...,
+        revision: builtins.int = ...,
+        success: builtins.bool = ...,
+        message: builtins.str = ...,
+        resultCode: builtins.str = ...,
+        additionalInfo: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["additionalInfo", b"additionalInfo", "enterpriseUserId", b"enterpriseUserId", "message", b"message", "resultCode", b"resultCode", "revision", b"revision", "success", b"success"]) -> None: ...
+
+global___TeamsEnterpriseUsersAddUserResponse = TeamsEnterpriseUsersAddUserResponse
+
+@typing.final
+class DomainAlias(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    DOMAIN_FIELD_NUMBER: builtins.int
+    ALIAS_FIELD_NUMBER: builtins.int
+    STATUS_FIELD_NUMBER: builtins.int
+    MESSAGE_FIELD_NUMBER: builtins.int
+    domain: builtins.str
+    alias: builtins.str
+    status: builtins.int
+    """0-Success else Error"""
+    message: builtins.str
+    def __init__(
+        self,
+        *,
+        domain: builtins.str = ...,
+        alias: builtins.str = ...,
+        status: builtins.int = ...,
+        message: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["alias", b"alias", "domain", b"domain", "message", b"message", "status", b"status"]) -> None: ...
+
+global___DomainAlias = DomainAlias
+
+@typing.final
+class DomainAliasRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    DOMAINALIAS_FIELD_NUMBER: builtins.int
+    @property
+    def domainAlias(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___DomainAlias]: ...
+    def __init__(
+        self,
+        *,
+        domainAlias: collections.abc.Iterable[global___DomainAlias] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["domainAlias", b"domainAlias"]) -> None: ...
+
+global___DomainAliasRequest = DomainAliasRequest
+
+@typing.final
+class DomainAliasResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    DOMAINALIAS_FIELD_NUMBER: builtins.int
+    @property
+    def domainAlias(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___DomainAlias]: ...
+    def __init__(
+        self,
+        *,
+        domainAlias: collections.abc.Iterable[global___DomainAlias] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["domainAlias", b"domainAlias"]) -> None: ...
+
+global___DomainAliasResponse = DomainAliasResponse
+
+@typing.final
+class EnterpriseUsersProvisionRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    USERS_FIELD_NUMBER: builtins.int
+    CLIENTVERSION_FIELD_NUMBER: builtins.int
+    clientVersion: builtins.str
+    @property
+    def users(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___EnterpriseUsersProvision]: ...
+    def __init__(
+        self,
+        *,
+        users: collections.abc.Iterable[global___EnterpriseUsersProvision] | None = ...,
+        clientVersion: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["clientVersion", b"clientVersion", "users", b"users"]) -> None: ...
+
+global___EnterpriseUsersProvisionRequest = EnterpriseUsersProvisionRequest
+
+@typing.final
+class EnterpriseUsersProvision(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    USERNAME_FIELD_NUMBER: builtins.int
+    NODEID_FIELD_NUMBER: builtins.int
+    ENCRYPTEDDATA_FIELD_NUMBER: builtins.int
+    KEYTYPE_FIELD_NUMBER: builtins.int
+    FULLNAME_FIELD_NUMBER: builtins.int
+    JOBTITLE_FIELD_NUMBER: builtins.int
+    ENTERPRISEUSERSDATAKEY_FIELD_NUMBER: builtins.int
+    AUTHVERIFIER_FIELD_NUMBER: builtins.int
+    ENCRYPTIONPARAMS_FIELD_NUMBER: builtins.int
+    RSAPUBLICKEY_FIELD_NUMBER: builtins.int
+    RSAENCRYPTEDPRIVATEKEY_FIELD_NUMBER: builtins.int
+    ECCPUBLICKEY_FIELD_NUMBER: builtins.int
+    ECCENCRYPTEDPRIVATEKEY_FIELD_NUMBER: builtins.int
+    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: builtins.int
+    ENCRYPTEDCLIENTKEY_FIELD_NUMBER: builtins.int
+    enterpriseUserId: builtins.int
+    """from enterprise_user_add"""
+    username: builtins.str
+    nodeId: builtins.int
+    encryptedData: builtins.str
+    keyType: global___EncryptedKeyType.ValueType
+    fullName: builtins.str
+    jobTitle: builtins.str
+    enterpriseUsersDataKey: builtins.bytes
+    """from set_enterprise_user_data_key_by_admin"""
+    authVerifier: builtins.bytes
+    """from APIRequest.CreateUserRequest, used in /authentication/request_create_user"""
+    encryptionParams: builtins.bytes
+    rsaPublicKey: builtins.bytes
+    rsaEncryptedPrivateKey: builtins.bytes
+    eccPublicKey: builtins.bytes
+    eccEncryptedPrivateKey: builtins.bytes
+    encryptedDeviceToken: builtins.bytes
+    encryptedClientKey: builtins.bytes
+    def __init__(
+        self,
+        *,
+        enterpriseUserId: builtins.int = ...,
+        username: builtins.str = ...,
+        nodeId: builtins.int = ...,
+        encryptedData: builtins.str = ...,
+        keyType: global___EncryptedKeyType.ValueType = ...,
+        fullName: builtins.str = ...,
+        jobTitle: builtins.str = ...,
+        enterpriseUsersDataKey: builtins.bytes = ...,
+        authVerifier: builtins.bytes = ...,
+        encryptionParams: builtins.bytes = ...,
+        rsaPublicKey: builtins.bytes = ...,
+        rsaEncryptedPrivateKey: builtins.bytes = ...,
+        eccPublicKey: builtins.bytes = ...,
+        eccEncryptedPrivateKey: builtins.bytes = ...,
+        encryptedDeviceToken: builtins.bytes = ...,
+        encryptedClientKey: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["authVerifier", b"authVerifier", "eccEncryptedPrivateKey", b"eccEncryptedPrivateKey", "eccPublicKey", b"eccPublicKey", "encryptedClientKey", b"encryptedClientKey", "encryptedData", b"encryptedData", "encryptedDeviceToken", b"encryptedDeviceToken", "encryptionParams", b"encryptionParams", "enterpriseUserId", b"enterpriseUserId", "enterpriseUsersDataKey", b"enterpriseUsersDataKey", "fullName", b"fullName", "jobTitle", b"jobTitle", "keyType", b"keyType", "nodeId", b"nodeId", "rsaEncryptedPrivateKey", b"rsaEncryptedPrivateKey", "rsaPublicKey", b"rsaPublicKey", "username", b"username"]) -> None: ...
+
+global___EnterpriseUsersProvision = EnterpriseUsersProvision
+
+@typing.final
+class EnterpriseUsersProvisionResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RESULTS_FIELD_NUMBER: builtins.int
+    @property
+    def results(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___EnterpriseUsersProvisionResult]: ...
+    def __init__(
+        self,
+        *,
+        results: collections.abc.Iterable[global___EnterpriseUsersProvisionResult] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["results", b"results"]) -> None: ...
+
+global___EnterpriseUsersProvisionResponse = EnterpriseUsersProvisionResponse
+
+@typing.final
+class EnterpriseUsersProvisionResult(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    CODE_FIELD_NUMBER: builtins.int
+    MESSAGE_FIELD_NUMBER: builtins.int
+    ADDITIONALINFO_FIELD_NUMBER: builtins.int
+    enterpriseUserId: builtins.int
+    code: builtins.str
+    message: builtins.str
+    additionalInfo: builtins.str
+    def __init__(
+        self,
+        *,
+        enterpriseUserId: builtins.int = ...,
+        code: builtins.str = ...,
+        message: builtins.str = ...,
+        additionalInfo: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["additionalInfo", b"additionalInfo", "code", b"code", "enterpriseUserId", b"enterpriseUserId", "message", b"message"]) -> None: ...
+
+global___EnterpriseUsersProvisionResult = EnterpriseUsersProvisionResult
+
+@typing.final
+class EnterpriseUsersAddRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    USERS_FIELD_NUMBER: builtins.int
+    CLIENTVERSION_FIELD_NUMBER: builtins.int
+    clientVersion: builtins.str
+    @property
+    def users(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___EnterpriseUsersAdd]: ...
+    def __init__(
+        self,
+        *,
+        users: collections.abc.Iterable[global___EnterpriseUsersAdd] | None = ...,
+        clientVersion: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["clientVersion", b"clientVersion", "users", b"users"]) -> None: ...
+
+global___EnterpriseUsersAddRequest = EnterpriseUsersAddRequest
+
+@typing.final
+class EnterpriseUsersAdd(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    USERNAME_FIELD_NUMBER: builtins.int
+    NODEID_FIELD_NUMBER: builtins.int
+    ENCRYPTEDDATA_FIELD_NUMBER: builtins.int
+    KEYTYPE_FIELD_NUMBER: builtins.int
+    FULLNAME_FIELD_NUMBER: builtins.int
+    JOBTITLE_FIELD_NUMBER: builtins.int
+    SUPPRESSEMAILINVITE_FIELD_NUMBER: builtins.int
+    INVITEELOCALE_FIELD_NUMBER: builtins.int
+    MOVE_FIELD_NUMBER: builtins.int
+    ROLEID_FIELD_NUMBER: builtins.int
+    enterpriseUserId: builtins.int
+    username: builtins.str
+    nodeId: builtins.int
+    encryptedData: builtins.str
+    keyType: global___EncryptedKeyType.ValueType
+    fullName: builtins.str
+    jobTitle: builtins.str
+    suppressEmailInvite: builtins.bool
+    inviteeLocale: builtins.str
+    move: builtins.bool
+    roleId: builtins.int
+    def __init__(
+        self,
+        *,
+        enterpriseUserId: builtins.int = ...,
+        username: builtins.str = ...,
+        nodeId: builtins.int = ...,
+        encryptedData: builtins.str = ...,
+        keyType: global___EncryptedKeyType.ValueType = ...,
+        fullName: builtins.str = ...,
+        jobTitle: builtins.str = ...,
+        suppressEmailInvite: builtins.bool = ...,
+        inviteeLocale: builtins.str = ...,
+        move: builtins.bool = ...,
+        roleId: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["encryptedData", b"encryptedData", "enterpriseUserId", b"enterpriseUserId", "fullName", b"fullName", "inviteeLocale", b"inviteeLocale", "jobTitle", b"jobTitle", "keyType", b"keyType", "move", b"move", "nodeId", b"nodeId", "roleId", b"roleId", "suppressEmailInvite", b"suppressEmailInvite", "username", b"username"]) -> None: ...
+
+global___EnterpriseUsersAdd = EnterpriseUsersAdd
+
+@typing.final
+class EnterpriseUsersAddResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RESULTS_FIELD_NUMBER: builtins.int
+    SUCCESS_FIELD_NUMBER: builtins.int
+    CODE_FIELD_NUMBER: builtins.int
+    MESSAGE_FIELD_NUMBER: builtins.int
+    ADDITIONALINFO_FIELD_NUMBER: builtins.int
+    success: builtins.bool
+    code: builtins.str
+    message: builtins.str
+    additionalInfo: builtins.str
+    @property
+    def results(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___EnterpriseUsersAddResult]: ...
+    def __init__(
+        self,
+        *,
+        results: collections.abc.Iterable[global___EnterpriseUsersAddResult] | None = ...,
+        success: builtins.bool = ...,
+        code: builtins.str = ...,
+        message: builtins.str = ...,
+        additionalInfo: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["additionalInfo", b"additionalInfo", "code", b"code", "message", b"message", "results", b"results", "success", b"success"]) -> None: ...
+
+global___EnterpriseUsersAddResponse = EnterpriseUsersAddResponse
+
+@typing.final
+class EnterpriseUsersAddResult(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    SUCCESS_FIELD_NUMBER: builtins.int
+    VERIFICATIONCODE_FIELD_NUMBER: builtins.int
+    CODE_FIELD_NUMBER: builtins.int
+    MESSAGE_FIELD_NUMBER: builtins.int
+    ADDITIONALINFO_FIELD_NUMBER: builtins.int
+    enterpriseUserId: builtins.int
+    success: builtins.bool
+    verificationCode: builtins.str
+    code: builtins.str
+    message: builtins.str
+    additionalInfo: builtins.str
+    def __init__(
+        self,
+        *,
+        enterpriseUserId: builtins.int = ...,
+        success: builtins.bool = ...,
+        verificationCode: builtins.str = ...,
+        code: builtins.str = ...,
+        message: builtins.str = ...,
+        additionalInfo: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["additionalInfo", b"additionalInfo", "code", b"code", "enterpriseUserId", b"enterpriseUserId", "message", b"message", "success", b"success", "verificationCode", b"verificationCode"]) -> None: ...
+
+global___EnterpriseUsersAddResult = EnterpriseUsersAddResult
+
+@typing.final
+class UpdateMSPPermitsRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    MSPENTERPRISEID_FIELD_NUMBER: builtins.int
+    MAXALLOWEDLICENSES_FIELD_NUMBER: builtins.int
+    ALLOWEDMCPRODUCTS_FIELD_NUMBER: builtins.int
+    ALLOWEDADDONS_FIELD_NUMBER: builtins.int
+    MAXFILEPLANTYPE_FIELD_NUMBER: builtins.int
+    ALLOWUNLIMITEDLICENSES_FIELD_NUMBER: builtins.int
+    mspEnterpriseId: builtins.int
+    maxAllowedLicenses: builtins.int
+    """obsolete in favor of allowUnlimitedLicenses"""
+    maxFilePlanType: builtins.str
+    allowUnlimitedLicenses: builtins.bool
+    @property
+    def allowedMcProducts(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    @property
+    def allowedAddOns(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    def __init__(
+        self,
+        *,
+        mspEnterpriseId: builtins.int = ...,
+        maxAllowedLicenses: builtins.int = ...,
+        allowedMcProducts: collections.abc.Iterable[builtins.str] | None = ...,
+        allowedAddOns: collections.abc.Iterable[builtins.str] | None = ...,
+        maxFilePlanType: builtins.str = ...,
+        allowUnlimitedLicenses: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["allowUnlimitedLicenses", b"allowUnlimitedLicenses", "allowedAddOns", b"allowedAddOns", "allowedMcProducts", b"allowedMcProducts", "maxAllowedLicenses", b"maxAllowedLicenses", "maxFilePlanType", b"maxFilePlanType", "mspEnterpriseId", b"mspEnterpriseId"]) -> None: ...
+
+global___UpdateMSPPermitsRequest = UpdateMSPPermitsRequest
+
+@typing.final
+class DeleteEnterpriseUsersRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERIDS_FIELD_NUMBER: builtins.int
+    @property
+    def enterpriseUserIds(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]: ...
+    def __init__(
+        self,
+        *,
+        enterpriseUserIds: collections.abc.Iterable[builtins.int] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enterpriseUserIds", b"enterpriseUserIds"]) -> None: ...
+
+global___DeleteEnterpriseUsersRequest = DeleteEnterpriseUsersRequest
+
+@typing.final
+class DeleteEnterpriseUserStatus(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    STATUS_FIELD_NUMBER: builtins.int
+    enterpriseUserId: builtins.int
+    """the enterprise user id"""
+    status: global___DeleteEnterpriseUsersResult.ValueType
+    """the delete result"""
+    def __init__(
+        self,
+        *,
+        enterpriseUserId: builtins.int = ...,
+        status: global___DeleteEnterpriseUsersResult.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enterpriseUserId", b"enterpriseUserId", "status", b"status"]) -> None: ...
+
+global___DeleteEnterpriseUserStatus = DeleteEnterpriseUserStatus
+
+@typing.final
+class DeleteEnterpriseUsersResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    DELETESTATUS_FIELD_NUMBER: builtins.int
+    @property
+    def deleteStatus(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___DeleteEnterpriseUserStatus]: ...
+    def __init__(
+        self,
+        *,
+        deleteStatus: collections.abc.Iterable[global___DeleteEnterpriseUserStatus] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["deleteStatus", b"deleteStatus"]) -> None: ...
+
+global___DeleteEnterpriseUsersResponse = DeleteEnterpriseUsersResponse
+
+@typing.final
+class ClearSecurityDataRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    ALLUSERS_FIELD_NUMBER: builtins.int
+    TYPE_FIELD_NUMBER: builtins.int
+    allUsers: builtins.bool
+    type: global___ClearSecurityDataType.ValueType
+    @property
+    def enterpriseUserId(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]: ...
+    def __init__(
+        self,
+        *,
+        enterpriseUserId: collections.abc.Iterable[builtins.int] | None = ...,
+        allUsers: builtins.bool = ...,
+        type: global___ClearSecurityDataType.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["allUsers", b"allUsers", "enterpriseUserId", b"enterpriseUserId", "type", b"type"]) -> None: ...
+
+global___ClearSecurityDataRequest = ClearSecurityDataRequest

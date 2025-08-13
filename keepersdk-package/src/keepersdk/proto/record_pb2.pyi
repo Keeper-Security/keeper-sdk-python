@@ -1,985 +1,2086 @@
-from google.protobuf.internal import containers as _containers
-from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
-from google.protobuf import descriptor as _descriptor
-from google.protobuf import message as _message
-from typing import ClassVar as _ClassVar, Iterable as _Iterable, Mapping as _Mapping, Optional as _Optional, Union as _Union
-
-DESCRIPTOR: _descriptor.FileDescriptor
-
-class RecordTypeScope(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    RT_STANDARD: _ClassVar[RecordTypeScope]
-    RT_USER: _ClassVar[RecordTypeScope]
-    RT_ENTERPRISE: _ClassVar[RecordTypeScope]
-    RT_PAM: _ClassVar[RecordTypeScope]
-    RT_PAM_CONFIGURATION: _ClassVar[RecordTypeScope]
-
-class RecordKeyType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    NO_KEY: _ClassVar[RecordKeyType]
-    ENCRYPTED_BY_DATA_KEY: _ClassVar[RecordKeyType]
-    ENCRYPTED_BY_PUBLIC_KEY: _ClassVar[RecordKeyType]
-    ENCRYPTED_BY_DATA_KEY_GCM: _ClassVar[RecordKeyType]
-    ENCRYPTED_BY_PUBLIC_KEY_ECC: _ClassVar[RecordKeyType]
-    ENCRYPTED_BY_ROOT_KEY_CBC: _ClassVar[RecordKeyType]
-    ENCRYPTED_BY_ROOT_KEY_GCM: _ClassVar[RecordKeyType]
-
-class RecordFolderType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    user_folder: _ClassVar[RecordFolderType]
-    shared_folder: _ClassVar[RecordFolderType]
-    shared_folder_folder: _ClassVar[RecordFolderType]
-
-class RecordModifyResult(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    RS_SUCCESS: _ClassVar[RecordModifyResult]
-    RS_OUT_OF_SYNC: _ClassVar[RecordModifyResult]
-    RS_ACCESS_DENIED: _ClassVar[RecordModifyResult]
-    RS_SHARE_DENIED: _ClassVar[RecordModifyResult]
-    RS_RECORD_EXISTS: _ClassVar[RecordModifyResult]
-    RS_OLD_RECORD_VERSION_TYPE: _ClassVar[RecordModifyResult]
-    RS_NEW_RECORD_VERSION_TYPE: _ClassVar[RecordModifyResult]
-    RS_FILES_NOT_MATCH: _ClassVar[RecordModifyResult]
-    RS_RECORD_NOT_SHAREABLE: _ClassVar[RecordModifyResult]
-    RS_ATTACHMENT_NOT_SHAREABLE: _ClassVar[RecordModifyResult]
-    RS_FILE_LIMIT_REACHED: _ClassVar[RecordModifyResult]
-    RS_SIZE_EXCEEDED_LIMIT: _ClassVar[RecordModifyResult]
-    RS_ONLY_OWNER_CAN_MODIFY_SCRIPTS: _ClassVar[RecordModifyResult]
-
-class FileAddResult(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    FA_SUCCESS: _ClassVar[FileAddResult]
-    FA_ERROR: _ClassVar[FileAddResult]
-
-class FileGetResult(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    FG_SUCCESS: _ClassVar[FileGetResult]
-    FG_ERROR: _ClassVar[FileGetResult]
-    FG_ACCESS_DENIED: _ClassVar[FileGetResult]
-
-class RecordDetailsInclude(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    DATA_PLUS_SHARE: _ClassVar[RecordDetailsInclude]
-    DATA_ONLY: _ClassVar[RecordDetailsInclude]
-    SHARE_ONLY: _ClassVar[RecordDetailsInclude]
-
-class CheckShareAdminObjectType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    CHECK_SA_INVALID_TYPE: _ClassVar[CheckShareAdminObjectType]
-    CHECK_SA_ON_SF: _ClassVar[CheckShareAdminObjectType]
-    CHECK_SA_ON_RECORD: _ClassVar[CheckShareAdminObjectType]
-
-class ShareStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    ACTIVE: _ClassVar[ShareStatus]
-    BLOCK: _ClassVar[ShareStatus]
-    INVITED: _ClassVar[ShareStatus]
-
-class RecordTransactionType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    RTT_GENERAL: _ClassVar[RecordTransactionType]
-    RTT_ROTATION: _ClassVar[RecordTransactionType]
-
-class TimeLimitedAccessType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    INVALID_TIME_LIMITED_ACCESS_TYPE: _ClassVar[TimeLimitedAccessType]
-    USER_ACCESS_TO_RECORD: _ClassVar[TimeLimitedAccessType]
-    USER_OR_TEAM_ACCESS_TO_SHAREDFOLDER: _ClassVar[TimeLimitedAccessType]
-    RECORD_ACCESS_TO_SHAREDFOLDER: _ClassVar[TimeLimitedAccessType]
-    USER_ACCESS_TO_SHAREDFOLDER: _ClassVar[TimeLimitedAccessType]
-    TEAM_ACCESS_TO_SHAREDFOLDER: _ClassVar[TimeLimitedAccessType]
-
-class TimerNotificationType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    NOTIFICATION_OFF: _ClassVar[TimerNotificationType]
-    NOTIFY_OWNER: _ClassVar[TimerNotificationType]
-    NOTIFY_PRIVILEGED_USERS: _ClassVar[TimerNotificationType]
-RT_STANDARD: RecordTypeScope
-RT_USER: RecordTypeScope
-RT_ENTERPRISE: RecordTypeScope
-RT_PAM: RecordTypeScope
-RT_PAM_CONFIGURATION: RecordTypeScope
-NO_KEY: RecordKeyType
-ENCRYPTED_BY_DATA_KEY: RecordKeyType
-ENCRYPTED_BY_PUBLIC_KEY: RecordKeyType
-ENCRYPTED_BY_DATA_KEY_GCM: RecordKeyType
-ENCRYPTED_BY_PUBLIC_KEY_ECC: RecordKeyType
-ENCRYPTED_BY_ROOT_KEY_CBC: RecordKeyType
-ENCRYPTED_BY_ROOT_KEY_GCM: RecordKeyType
-user_folder: RecordFolderType
-shared_folder: RecordFolderType
-shared_folder_folder: RecordFolderType
-RS_SUCCESS: RecordModifyResult
-RS_OUT_OF_SYNC: RecordModifyResult
-RS_ACCESS_DENIED: RecordModifyResult
-RS_SHARE_DENIED: RecordModifyResult
-RS_RECORD_EXISTS: RecordModifyResult
-RS_OLD_RECORD_VERSION_TYPE: RecordModifyResult
-RS_NEW_RECORD_VERSION_TYPE: RecordModifyResult
-RS_FILES_NOT_MATCH: RecordModifyResult
-RS_RECORD_NOT_SHAREABLE: RecordModifyResult
-RS_ATTACHMENT_NOT_SHAREABLE: RecordModifyResult
-RS_FILE_LIMIT_REACHED: RecordModifyResult
-RS_SIZE_EXCEEDED_LIMIT: RecordModifyResult
-RS_ONLY_OWNER_CAN_MODIFY_SCRIPTS: RecordModifyResult
-FA_SUCCESS: FileAddResult
-FA_ERROR: FileAddResult
-FG_SUCCESS: FileGetResult
-FG_ERROR: FileGetResult
-FG_ACCESS_DENIED: FileGetResult
-DATA_PLUS_SHARE: RecordDetailsInclude
-DATA_ONLY: RecordDetailsInclude
-SHARE_ONLY: RecordDetailsInclude
-CHECK_SA_INVALID_TYPE: CheckShareAdminObjectType
-CHECK_SA_ON_SF: CheckShareAdminObjectType
-CHECK_SA_ON_RECORD: CheckShareAdminObjectType
-ACTIVE: ShareStatus
-BLOCK: ShareStatus
-INVITED: ShareStatus
-RTT_GENERAL: RecordTransactionType
-RTT_ROTATION: RecordTransactionType
-INVALID_TIME_LIMITED_ACCESS_TYPE: TimeLimitedAccessType
-USER_ACCESS_TO_RECORD: TimeLimitedAccessType
-USER_OR_TEAM_ACCESS_TO_SHAREDFOLDER: TimeLimitedAccessType
-RECORD_ACCESS_TO_SHAREDFOLDER: TimeLimitedAccessType
-USER_ACCESS_TO_SHAREDFOLDER: TimeLimitedAccessType
-TEAM_ACCESS_TO_SHAREDFOLDER: TimeLimitedAccessType
-NOTIFICATION_OFF: TimerNotificationType
-NOTIFY_OWNER: TimerNotificationType
-NOTIFY_PRIVILEGED_USERS: TimerNotificationType
-
-class RecordType(_message.Message):
-    __slots__ = ("recordTypeId", "content", "scope")
-    RECORDTYPEID_FIELD_NUMBER: _ClassVar[int]
-    CONTENT_FIELD_NUMBER: _ClassVar[int]
-    SCOPE_FIELD_NUMBER: _ClassVar[int]
-    recordTypeId: int
-    content: str
-    scope: RecordTypeScope
-    def __init__(self, recordTypeId: _Optional[int] = ..., content: _Optional[str] = ..., scope: _Optional[_Union[RecordTypeScope, str]] = ...) -> None: ...
-
-class RecordTypesRequest(_message.Message):
-    __slots__ = ("standard", "user", "enterprise", "pam")
-    STANDARD_FIELD_NUMBER: _ClassVar[int]
-    USER_FIELD_NUMBER: _ClassVar[int]
-    ENTERPRISE_FIELD_NUMBER: _ClassVar[int]
-    PAM_FIELD_NUMBER: _ClassVar[int]
-    standard: bool
-    user: bool
-    enterprise: bool
-    pam: bool
-    def __init__(self, standard: bool = ..., user: bool = ..., enterprise: bool = ..., pam: bool = ...) -> None: ...
-
-class RecordTypesResponse(_message.Message):
-    __slots__ = ("recordTypes", "standardCounter", "userCounter", "enterpriseCounter", "pamCounter")
-    RECORDTYPES_FIELD_NUMBER: _ClassVar[int]
-    STANDARDCOUNTER_FIELD_NUMBER: _ClassVar[int]
-    USERCOUNTER_FIELD_NUMBER: _ClassVar[int]
-    ENTERPRISECOUNTER_FIELD_NUMBER: _ClassVar[int]
-    PAMCOUNTER_FIELD_NUMBER: _ClassVar[int]
-    recordTypes: _containers.RepeatedCompositeFieldContainer[RecordType]
-    standardCounter: int
-    userCounter: int
-    enterpriseCounter: int
-    pamCounter: int
-    def __init__(self, recordTypes: _Optional[_Iterable[_Union[RecordType, _Mapping]]] = ..., standardCounter: _Optional[int] = ..., userCounter: _Optional[int] = ..., enterpriseCounter: _Optional[int] = ..., pamCounter: _Optional[int] = ...) -> None: ...
-
-class RecordTypeModifyResponse(_message.Message):
-    __slots__ = ("recordTypeId", "counter")
-    RECORDTYPEID_FIELD_NUMBER: _ClassVar[int]
-    COUNTER_FIELD_NUMBER: _ClassVar[int]
-    recordTypeId: int
-    counter: int
-    def __init__(self, recordTypeId: _Optional[int] = ..., counter: _Optional[int] = ...) -> None: ...
-
-class RecordsGetRequest(_message.Message):
-    __slots__ = ("record_uids", "client_time")
-    RECORD_UIDS_FIELD_NUMBER: _ClassVar[int]
-    CLIENT_TIME_FIELD_NUMBER: _ClassVar[int]
-    record_uids: _containers.RepeatedScalarFieldContainer[bytes]
-    client_time: int
-    def __init__(self, record_uids: _Optional[_Iterable[bytes]] = ..., client_time: _Optional[int] = ...) -> None: ...
-
-class Record(_message.Message):
-    __slots__ = ("record_uid", "record_key", "record_key_type", "data", "extra", "version", "client_modified_time", "revision", "file_ids")
-    RECORD_UID_FIELD_NUMBER: _ClassVar[int]
-    RECORD_KEY_FIELD_NUMBER: _ClassVar[int]
-    RECORD_KEY_TYPE_FIELD_NUMBER: _ClassVar[int]
-    DATA_FIELD_NUMBER: _ClassVar[int]
-    EXTRA_FIELD_NUMBER: _ClassVar[int]
-    VERSION_FIELD_NUMBER: _ClassVar[int]
-    CLIENT_MODIFIED_TIME_FIELD_NUMBER: _ClassVar[int]
-    REVISION_FIELD_NUMBER: _ClassVar[int]
-    FILE_IDS_FIELD_NUMBER: _ClassVar[int]
-    record_uid: bytes
-    record_key: bytes
-    record_key_type: RecordKeyType
-    data: bytes
-    extra: bytes
-    version: int
-    client_modified_time: int
-    revision: int
-    file_ids: _containers.RepeatedScalarFieldContainer[bytes]
-    def __init__(self, record_uid: _Optional[bytes] = ..., record_key: _Optional[bytes] = ..., record_key_type: _Optional[_Union[RecordKeyType, str]] = ..., data: _Optional[bytes] = ..., extra: _Optional[bytes] = ..., version: _Optional[int] = ..., client_modified_time: _Optional[int] = ..., revision: _Optional[int] = ..., file_ids: _Optional[_Iterable[bytes]] = ...) -> None: ...
-
-class FolderRecordKey(_message.Message):
-    __slots__ = ("folder_uid", "record_uid", "record_key")
-    FOLDER_UID_FIELD_NUMBER: _ClassVar[int]
-    RECORD_UID_FIELD_NUMBER: _ClassVar[int]
-    RECORD_KEY_FIELD_NUMBER: _ClassVar[int]
-    folder_uid: bytes
-    record_uid: bytes
-    record_key: bytes
-    def __init__(self, folder_uid: _Optional[bytes] = ..., record_uid: _Optional[bytes] = ..., record_key: _Optional[bytes] = ...) -> None: ...
-
-class Folder(_message.Message):
-    __slots__ = ("folder_uid", "folder_key", "folder_key_type")
-    FOLDER_UID_FIELD_NUMBER: _ClassVar[int]
-    FOLDER_KEY_FIELD_NUMBER: _ClassVar[int]
-    FOLDER_KEY_TYPE_FIELD_NUMBER: _ClassVar[int]
-    folder_uid: bytes
-    folder_key: bytes
-    folder_key_type: RecordKeyType
-    def __init__(self, folder_uid: _Optional[bytes] = ..., folder_key: _Optional[bytes] = ..., folder_key_type: _Optional[_Union[RecordKeyType, str]] = ...) -> None: ...
-
-class Team(_message.Message):
-    __slots__ = ("team_uid", "team_key", "team_private_key", "team_key_type", "folders")
-    TEAM_UID_FIELD_NUMBER: _ClassVar[int]
-    TEAM_KEY_FIELD_NUMBER: _ClassVar[int]
-    TEAM_PRIVATE_KEY_FIELD_NUMBER: _ClassVar[int]
-    TEAM_KEY_TYPE_FIELD_NUMBER: _ClassVar[int]
-    FOLDERS_FIELD_NUMBER: _ClassVar[int]
-    team_uid: bytes
-    team_key: bytes
-    team_private_key: bytes
-    team_key_type: RecordKeyType
-    folders: _containers.RepeatedCompositeFieldContainer[Folder]
-    def __init__(self, team_uid: _Optional[bytes] = ..., team_key: _Optional[bytes] = ..., team_private_key: _Optional[bytes] = ..., team_key_type: _Optional[_Union[RecordKeyType, str]] = ..., folders: _Optional[_Iterable[_Union[Folder, _Mapping]]] = ...) -> None: ...
-
-class RecordsGetResponse(_message.Message):
-    __slots__ = ("records", "folder_record_keys", "folders", "teams")
-    RECORDS_FIELD_NUMBER: _ClassVar[int]
-    FOLDER_RECORD_KEYS_FIELD_NUMBER: _ClassVar[int]
-    FOLDERS_FIELD_NUMBER: _ClassVar[int]
-    TEAMS_FIELD_NUMBER: _ClassVar[int]
-    records: _containers.RepeatedCompositeFieldContainer[Record]
-    folder_record_keys: _containers.RepeatedCompositeFieldContainer[FolderRecordKey]
-    folders: _containers.RepeatedCompositeFieldContainer[Folder]
-    teams: _containers.RepeatedCompositeFieldContainer[Team]
-    def __init__(self, records: _Optional[_Iterable[_Union[Record, _Mapping]]] = ..., folder_record_keys: _Optional[_Iterable[_Union[FolderRecordKey, _Mapping]]] = ..., folders: _Optional[_Iterable[_Union[Folder, _Mapping]]] = ..., teams: _Optional[_Iterable[_Union[Team, _Mapping]]] = ...) -> None: ...
-
-class RecordLink(_message.Message):
-    __slots__ = ("record_uid", "record_key")
-    RECORD_UID_FIELD_NUMBER: _ClassVar[int]
-    RECORD_KEY_FIELD_NUMBER: _ClassVar[int]
-    record_uid: bytes
-    record_key: bytes
-    def __init__(self, record_uid: _Optional[bytes] = ..., record_key: _Optional[bytes] = ...) -> None: ...
-
-class RecordAudit(_message.Message):
-    __slots__ = ("version", "data")
-    VERSION_FIELD_NUMBER: _ClassVar[int]
-    DATA_FIELD_NUMBER: _ClassVar[int]
-    version: int
-    data: bytes
-    def __init__(self, version: _Optional[int] = ..., data: _Optional[bytes] = ...) -> None: ...
-
-class SecurityData(_message.Message):
-    __slots__ = ("data",)
-    DATA_FIELD_NUMBER: _ClassVar[int]
-    data: bytes
-    def __init__(self, data: _Optional[bytes] = ...) -> None: ...
-
-class SecurityScoreData(_message.Message):
-    __slots__ = ("data",)
-    DATA_FIELD_NUMBER: _ClassVar[int]
-    data: bytes
-    def __init__(self, data: _Optional[bytes] = ...) -> None: ...
-
-class RecordAdd(_message.Message):
-    __slots__ = ("record_uid", "record_key", "client_modified_time", "data", "non_shared_data", "folder_type", "folder_uid", "folder_key", "record_links", "audit", "securityData", "securityScoreData")
-    RECORD_UID_FIELD_NUMBER: _ClassVar[int]
-    RECORD_KEY_FIELD_NUMBER: _ClassVar[int]
-    CLIENT_MODIFIED_TIME_FIELD_NUMBER: _ClassVar[int]
-    DATA_FIELD_NUMBER: _ClassVar[int]
-    NON_SHARED_DATA_FIELD_NUMBER: _ClassVar[int]
-    FOLDER_TYPE_FIELD_NUMBER: _ClassVar[int]
-    FOLDER_UID_FIELD_NUMBER: _ClassVar[int]
-    FOLDER_KEY_FIELD_NUMBER: _ClassVar[int]
-    RECORD_LINKS_FIELD_NUMBER: _ClassVar[int]
-    AUDIT_FIELD_NUMBER: _ClassVar[int]
-    SECURITYDATA_FIELD_NUMBER: _ClassVar[int]
-    SECURITYSCOREDATA_FIELD_NUMBER: _ClassVar[int]
-    record_uid: bytes
-    record_key: bytes
-    client_modified_time: int
-    data: bytes
-    non_shared_data: bytes
-    folder_type: RecordFolderType
-    folder_uid: bytes
-    folder_key: bytes
-    record_links: _containers.RepeatedCompositeFieldContainer[RecordLink]
-    audit: RecordAudit
-    securityData: SecurityData
-    securityScoreData: SecurityScoreData
-    def __init__(self, record_uid: _Optional[bytes] = ..., record_key: _Optional[bytes] = ..., client_modified_time: _Optional[int] = ..., data: _Optional[bytes] = ..., non_shared_data: _Optional[bytes] = ..., folder_type: _Optional[_Union[RecordFolderType, str]] = ..., folder_uid: _Optional[bytes] = ..., folder_key: _Optional[bytes] = ..., record_links: _Optional[_Iterable[_Union[RecordLink, _Mapping]]] = ..., audit: _Optional[_Union[RecordAudit, _Mapping]] = ..., securityData: _Optional[_Union[SecurityData, _Mapping]] = ..., securityScoreData: _Optional[_Union[SecurityScoreData, _Mapping]] = ...) -> None: ...
-
-class RecordsAddRequest(_message.Message):
-    __slots__ = ("records", "client_time", "security_data_key_type")
-    RECORDS_FIELD_NUMBER: _ClassVar[int]
-    CLIENT_TIME_FIELD_NUMBER: _ClassVar[int]
-    SECURITY_DATA_KEY_TYPE_FIELD_NUMBER: _ClassVar[int]
-    records: _containers.RepeatedCompositeFieldContainer[RecordAdd]
-    client_time: int
-    security_data_key_type: RecordKeyType
-    def __init__(self, records: _Optional[_Iterable[_Union[RecordAdd, _Mapping]]] = ..., client_time: _Optional[int] = ..., security_data_key_type: _Optional[_Union[RecordKeyType, str]] = ...) -> None: ...
-
-class RecordUpdate(_message.Message):
-    __slots__ = ("record_uid", "client_modified_time", "revision", "data", "non_shared_data", "record_links_add", "record_links_remove", "audit", "securityData", "securityScoreData")
-    RECORD_UID_FIELD_NUMBER: _ClassVar[int]
-    CLIENT_MODIFIED_TIME_FIELD_NUMBER: _ClassVar[int]
-    REVISION_FIELD_NUMBER: _ClassVar[int]
-    DATA_FIELD_NUMBER: _ClassVar[int]
-    NON_SHARED_DATA_FIELD_NUMBER: _ClassVar[int]
-    RECORD_LINKS_ADD_FIELD_NUMBER: _ClassVar[int]
-    RECORD_LINKS_REMOVE_FIELD_NUMBER: _ClassVar[int]
-    AUDIT_FIELD_NUMBER: _ClassVar[int]
-    SECURITYDATA_FIELD_NUMBER: _ClassVar[int]
-    SECURITYSCOREDATA_FIELD_NUMBER: _ClassVar[int]
-    record_uid: bytes
-    client_modified_time: int
-    revision: int
-    data: bytes
-    non_shared_data: bytes
-    record_links_add: _containers.RepeatedCompositeFieldContainer[RecordLink]
-    record_links_remove: _containers.RepeatedScalarFieldContainer[bytes]
-    audit: RecordAudit
-    securityData: SecurityData
-    securityScoreData: SecurityScoreData
-    def __init__(self, record_uid: _Optional[bytes] = ..., client_modified_time: _Optional[int] = ..., revision: _Optional[int] = ..., data: _Optional[bytes] = ..., non_shared_data: _Optional[bytes] = ..., record_links_add: _Optional[_Iterable[_Union[RecordLink, _Mapping]]] = ..., record_links_remove: _Optional[_Iterable[bytes]] = ..., audit: _Optional[_Union[RecordAudit, _Mapping]] = ..., securityData: _Optional[_Union[SecurityData, _Mapping]] = ..., securityScoreData: _Optional[_Union[SecurityScoreData, _Mapping]] = ...) -> None: ...
-
-class RecordsUpdateRequest(_message.Message):
-    __slots__ = ("records", "client_time", "security_data_key_type")
-    RECORDS_FIELD_NUMBER: _ClassVar[int]
-    CLIENT_TIME_FIELD_NUMBER: _ClassVar[int]
-    SECURITY_DATA_KEY_TYPE_FIELD_NUMBER: _ClassVar[int]
-    records: _containers.RepeatedCompositeFieldContainer[RecordUpdate]
-    client_time: int
-    security_data_key_type: RecordKeyType
-    def __init__(self, records: _Optional[_Iterable[_Union[RecordUpdate, _Mapping]]] = ..., client_time: _Optional[int] = ..., security_data_key_type: _Optional[_Union[RecordKeyType, str]] = ...) -> None: ...
-
-class RecordFileForConversion(_message.Message):
-    __slots__ = ("record_uid", "file_file_id", "thumb_file_id", "data", "record_key", "link_key")
-    RECORD_UID_FIELD_NUMBER: _ClassVar[int]
-    FILE_FILE_ID_FIELD_NUMBER: _ClassVar[int]
-    THUMB_FILE_ID_FIELD_NUMBER: _ClassVar[int]
-    DATA_FIELD_NUMBER: _ClassVar[int]
-    RECORD_KEY_FIELD_NUMBER: _ClassVar[int]
-    LINK_KEY_FIELD_NUMBER: _ClassVar[int]
-    record_uid: bytes
-    file_file_id: str
-    thumb_file_id: str
-    data: bytes
-    record_key: bytes
-    link_key: bytes
-    def __init__(self, record_uid: _Optional[bytes] = ..., file_file_id: _Optional[str] = ..., thumb_file_id: _Optional[str] = ..., data: _Optional[bytes] = ..., record_key: _Optional[bytes] = ..., link_key: _Optional[bytes] = ...) -> None: ...
-
-class RecordFolderForConversion(_message.Message):
-    __slots__ = ("folder_uid", "record_folder_key")
-    FOLDER_UID_FIELD_NUMBER: _ClassVar[int]
-    RECORD_FOLDER_KEY_FIELD_NUMBER: _ClassVar[int]
-    folder_uid: bytes
-    record_folder_key: bytes
-    def __init__(self, folder_uid: _Optional[bytes] = ..., record_folder_key: _Optional[bytes] = ...) -> None: ...
-
-class RecordConvertToV3(_message.Message):
-    __slots__ = ("record_uid", "client_modified_time", "revision", "data", "non_shared_data", "audit", "record_file", "folder_key")
-    RECORD_UID_FIELD_NUMBER: _ClassVar[int]
-    CLIENT_MODIFIED_TIME_FIELD_NUMBER: _ClassVar[int]
-    REVISION_FIELD_NUMBER: _ClassVar[int]
-    DATA_FIELD_NUMBER: _ClassVar[int]
-    NON_SHARED_DATA_FIELD_NUMBER: _ClassVar[int]
-    AUDIT_FIELD_NUMBER: _ClassVar[int]
-    RECORD_FILE_FIELD_NUMBER: _ClassVar[int]
-    FOLDER_KEY_FIELD_NUMBER: _ClassVar[int]
-    record_uid: bytes
-    client_modified_time: int
-    revision: int
-    data: bytes
-    non_shared_data: bytes
-    audit: RecordAudit
-    record_file: _containers.RepeatedCompositeFieldContainer[RecordFileForConversion]
-    folder_key: _containers.RepeatedCompositeFieldContainer[RecordFolderForConversion]
-    def __init__(self, record_uid: _Optional[bytes] = ..., client_modified_time: _Optional[int] = ..., revision: _Optional[int] = ..., data: _Optional[bytes] = ..., non_shared_data: _Optional[bytes] = ..., audit: _Optional[_Union[RecordAudit, _Mapping]] = ..., record_file: _Optional[_Iterable[_Union[RecordFileForConversion, _Mapping]]] = ..., folder_key: _Optional[_Iterable[_Union[RecordFolderForConversion, _Mapping]]] = ...) -> None: ...
-
-class RecordsConvertToV3Request(_message.Message):
-    __slots__ = ("records", "client_time")
-    RECORDS_FIELD_NUMBER: _ClassVar[int]
-    CLIENT_TIME_FIELD_NUMBER: _ClassVar[int]
-    records: _containers.RepeatedCompositeFieldContainer[RecordConvertToV3]
-    client_time: int
-    def __init__(self, records: _Optional[_Iterable[_Union[RecordConvertToV3, _Mapping]]] = ..., client_time: _Optional[int] = ...) -> None: ...
-
-class RecordsRemoveRequest(_message.Message):
-    __slots__ = ("records",)
-    RECORDS_FIELD_NUMBER: _ClassVar[int]
-    records: _containers.RepeatedScalarFieldContainer[bytes]
-    def __init__(self, records: _Optional[_Iterable[bytes]] = ...) -> None: ...
-
-class RecordRevert(_message.Message):
-    __slots__ = ("record_uid", "revert_to_revision")
-    RECORD_UID_FIELD_NUMBER: _ClassVar[int]
-    REVERT_TO_REVISION_FIELD_NUMBER: _ClassVar[int]
-    record_uid: bytes
-    revert_to_revision: int
-    def __init__(self, record_uid: _Optional[bytes] = ..., revert_to_revision: _Optional[int] = ...) -> None: ...
-
-class RecordsRevertRequest(_message.Message):
-    __slots__ = ("records",)
-    RECORDS_FIELD_NUMBER: _ClassVar[int]
-    records: _containers.RepeatedCompositeFieldContainer[RecordRevert]
-    def __init__(self, records: _Optional[_Iterable[_Union[RecordRevert, _Mapping]]] = ...) -> None: ...
-
-class RecordLinkError(_message.Message):
-    __slots__ = ("record_uid", "status", "message")
-    RECORD_UID_FIELD_NUMBER: _ClassVar[int]
-    STATUS_FIELD_NUMBER: _ClassVar[int]
-    MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    record_uid: bytes
-    status: RecordModifyResult
-    message: str
-    def __init__(self, record_uid: _Optional[bytes] = ..., status: _Optional[_Union[RecordModifyResult, str]] = ..., message: _Optional[str] = ...) -> None: ...
-
-class RecordModifyStatus(_message.Message):
-    __slots__ = ("record_uid", "status", "message", "link_errors")
-    RECORD_UID_FIELD_NUMBER: _ClassVar[int]
-    STATUS_FIELD_NUMBER: _ClassVar[int]
-    MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    LINK_ERRORS_FIELD_NUMBER: _ClassVar[int]
-    record_uid: bytes
-    status: RecordModifyResult
-    message: str
-    link_errors: _containers.RepeatedCompositeFieldContainer[RecordLinkError]
-    def __init__(self, record_uid: _Optional[bytes] = ..., status: _Optional[_Union[RecordModifyResult, str]] = ..., message: _Optional[str] = ..., link_errors: _Optional[_Iterable[_Union[RecordLinkError, _Mapping]]] = ...) -> None: ...
-
-class RecordsModifyResponse(_message.Message):
-    __slots__ = ("records", "revision")
-    RECORDS_FIELD_NUMBER: _ClassVar[int]
-    REVISION_FIELD_NUMBER: _ClassVar[int]
-    records: _containers.RepeatedCompositeFieldContainer[RecordModifyStatus]
-    revision: int
-    def __init__(self, records: _Optional[_Iterable[_Union[RecordModifyStatus, _Mapping]]] = ..., revision: _Optional[int] = ...) -> None: ...
-
-class RecordAddAuditData(_message.Message):
-    __slots__ = ("record_uid", "revision", "data", "version")
-    RECORD_UID_FIELD_NUMBER: _ClassVar[int]
-    REVISION_FIELD_NUMBER: _ClassVar[int]
-    DATA_FIELD_NUMBER: _ClassVar[int]
-    VERSION_FIELD_NUMBER: _ClassVar[int]
-    record_uid: bytes
-    revision: int
-    data: bytes
-    version: int
-    def __init__(self, record_uid: _Optional[bytes] = ..., revision: _Optional[int] = ..., data: _Optional[bytes] = ..., version: _Optional[int] = ...) -> None: ...
-
-class AddAuditDataRequest(_message.Message):
-    __slots__ = ("records",)
-    RECORDS_FIELD_NUMBER: _ClassVar[int]
-    records: _containers.RepeatedCompositeFieldContainer[RecordAddAuditData]
-    def __init__(self, records: _Optional[_Iterable[_Union[RecordAddAuditData, _Mapping]]] = ...) -> None: ...
-
-class File(_message.Message):
-    __slots__ = ("record_uid", "record_key", "data", "fileSize", "thumbSize", "is_script")
-    RECORD_UID_FIELD_NUMBER: _ClassVar[int]
-    RECORD_KEY_FIELD_NUMBER: _ClassVar[int]
-    DATA_FIELD_NUMBER: _ClassVar[int]
-    FILESIZE_FIELD_NUMBER: _ClassVar[int]
-    THUMBSIZE_FIELD_NUMBER: _ClassVar[int]
-    IS_SCRIPT_FIELD_NUMBER: _ClassVar[int]
-    record_uid: bytes
-    record_key: bytes
-    data: bytes
-    fileSize: int
-    thumbSize: int
-    is_script: bool
-    def __init__(self, record_uid: _Optional[bytes] = ..., record_key: _Optional[bytes] = ..., data: _Optional[bytes] = ..., fileSize: _Optional[int] = ..., thumbSize: _Optional[int] = ..., is_script: bool = ...) -> None: ...
-
-class FilesAddRequest(_message.Message):
-    __slots__ = ("files", "client_time")
-    FILES_FIELD_NUMBER: _ClassVar[int]
-    CLIENT_TIME_FIELD_NUMBER: _ClassVar[int]
-    files: _containers.RepeatedCompositeFieldContainer[File]
-    client_time: int
-    def __init__(self, files: _Optional[_Iterable[_Union[File, _Mapping]]] = ..., client_time: _Optional[int] = ...) -> None: ...
-
-class FileAddStatus(_message.Message):
-    __slots__ = ("record_uid", "status", "url", "parameters", "thumbnail_parameters", "success_status_code")
-    RECORD_UID_FIELD_NUMBER: _ClassVar[int]
-    STATUS_FIELD_NUMBER: _ClassVar[int]
-    URL_FIELD_NUMBER: _ClassVar[int]
-    PARAMETERS_FIELD_NUMBER: _ClassVar[int]
-    THUMBNAIL_PARAMETERS_FIELD_NUMBER: _ClassVar[int]
-    SUCCESS_STATUS_CODE_FIELD_NUMBER: _ClassVar[int]
-    record_uid: bytes
-    status: FileAddResult
-    url: str
-    parameters: str
-    thumbnail_parameters: str
-    success_status_code: int
-    def __init__(self, record_uid: _Optional[bytes] = ..., status: _Optional[_Union[FileAddResult, str]] = ..., url: _Optional[str] = ..., parameters: _Optional[str] = ..., thumbnail_parameters: _Optional[str] = ..., success_status_code: _Optional[int] = ...) -> None: ...
-
-class FilesAddResponse(_message.Message):
-    __slots__ = ("files", "revision")
-    FILES_FIELD_NUMBER: _ClassVar[int]
-    REVISION_FIELD_NUMBER: _ClassVar[int]
-    files: _containers.RepeatedCompositeFieldContainer[FileAddStatus]
-    revision: int
-    def __init__(self, files: _Optional[_Iterable[_Union[FileAddStatus, _Mapping]]] = ..., revision: _Optional[int] = ...) -> None: ...
-
-class FilesGetRequest(_message.Message):
-    __slots__ = ("record_uids", "for_thumbnails", "emergency_access_account_owner")
-    RECORD_UIDS_FIELD_NUMBER: _ClassVar[int]
-    FOR_THUMBNAILS_FIELD_NUMBER: _ClassVar[int]
-    EMERGENCY_ACCESS_ACCOUNT_OWNER_FIELD_NUMBER: _ClassVar[int]
-    record_uids: _containers.RepeatedScalarFieldContainer[bytes]
-    for_thumbnails: bool
-    emergency_access_account_owner: str
-    def __init__(self, record_uids: _Optional[_Iterable[bytes]] = ..., for_thumbnails: bool = ..., emergency_access_account_owner: _Optional[str] = ...) -> None: ...
-
-class FileGetStatus(_message.Message):
-    __slots__ = ("record_uid", "status", "url", "success_status_code", "fileKeyType")
-    RECORD_UID_FIELD_NUMBER: _ClassVar[int]
-    STATUS_FIELD_NUMBER: _ClassVar[int]
-    URL_FIELD_NUMBER: _ClassVar[int]
-    SUCCESS_STATUS_CODE_FIELD_NUMBER: _ClassVar[int]
-    FILEKEYTYPE_FIELD_NUMBER: _ClassVar[int]
-    record_uid: bytes
-    status: FileGetResult
-    url: str
-    success_status_code: int
-    fileKeyType: RecordKeyType
-    def __init__(self, record_uid: _Optional[bytes] = ..., status: _Optional[_Union[FileGetResult, str]] = ..., url: _Optional[str] = ..., success_status_code: _Optional[int] = ..., fileKeyType: _Optional[_Union[RecordKeyType, str]] = ...) -> None: ...
-
-class FilesGetResponse(_message.Message):
-    __slots__ = ("files",)
-    FILES_FIELD_NUMBER: _ClassVar[int]
-    files: _containers.RepeatedCompositeFieldContainer[FileGetStatus]
-    def __init__(self, files: _Optional[_Iterable[_Union[FileGetStatus, _Mapping]]] = ...) -> None: ...
-
-class ApplicationAddRequest(_message.Message):
-    __slots__ = ("app_uid", "record_key", "client_modified_time", "data", "audit")
-    APP_UID_FIELD_NUMBER: _ClassVar[int]
-    RECORD_KEY_FIELD_NUMBER: _ClassVar[int]
-    CLIENT_MODIFIED_TIME_FIELD_NUMBER: _ClassVar[int]
-    DATA_FIELD_NUMBER: _ClassVar[int]
-    AUDIT_FIELD_NUMBER: _ClassVar[int]
-    app_uid: bytes
-    record_key: bytes
-    client_modified_time: int
-    data: bytes
-    audit: RecordAudit
-    def __init__(self, app_uid: _Optional[bytes] = ..., record_key: _Optional[bytes] = ..., client_modified_time: _Optional[int] = ..., data: _Optional[bytes] = ..., audit: _Optional[_Union[RecordAudit, _Mapping]] = ...) -> None: ...
-
-class GetRecordDataWithAccessInfoRequest(_message.Message):
-    __slots__ = ("clientTime", "recordUid", "recordDetailsInclude")
-    CLIENTTIME_FIELD_NUMBER: _ClassVar[int]
-    RECORDUID_FIELD_NUMBER: _ClassVar[int]
-    RECORDDETAILSINCLUDE_FIELD_NUMBER: _ClassVar[int]
-    clientTime: int
-    recordUid: _containers.RepeatedScalarFieldContainer[bytes]
-    recordDetailsInclude: RecordDetailsInclude
-    def __init__(self, clientTime: _Optional[int] = ..., recordUid: _Optional[_Iterable[bytes]] = ..., recordDetailsInclude: _Optional[_Union[RecordDetailsInclude, str]] = ...) -> None: ...
-
-class UserPermission(_message.Message):
-    __slots__ = ("username", "owner", "shareAdmin", "sharable", "editable", "awaitingApproval", "expiration", "accountUid", "timerNotificationType", "rotateOnExpiration")
-    USERNAME_FIELD_NUMBER: _ClassVar[int]
-    OWNER_FIELD_NUMBER: _ClassVar[int]
-    SHAREADMIN_FIELD_NUMBER: _ClassVar[int]
-    SHARABLE_FIELD_NUMBER: _ClassVar[int]
-    EDITABLE_FIELD_NUMBER: _ClassVar[int]
-    AWAITINGAPPROVAL_FIELD_NUMBER: _ClassVar[int]
-    EXPIRATION_FIELD_NUMBER: _ClassVar[int]
-    ACCOUNTUID_FIELD_NUMBER: _ClassVar[int]
-    TIMERNOTIFICATIONTYPE_FIELD_NUMBER: _ClassVar[int]
-    ROTATEONEXPIRATION_FIELD_NUMBER: _ClassVar[int]
-    username: str
-    owner: bool
-    shareAdmin: bool
-    sharable: bool
-    editable: bool
-    awaitingApproval: bool
-    expiration: int
-    accountUid: bytes
-    timerNotificationType: TimerNotificationType
-    rotateOnExpiration: bool
-    def __init__(self, username: _Optional[str] = ..., owner: bool = ..., shareAdmin: bool = ..., sharable: bool = ..., editable: bool = ..., awaitingApproval: bool = ..., expiration: _Optional[int] = ..., accountUid: _Optional[bytes] = ..., timerNotificationType: _Optional[_Union[TimerNotificationType, str]] = ..., rotateOnExpiration: bool = ...) -> None: ...
-
-class SharedFolderPermission(_message.Message):
-    __slots__ = ("sharedFolderUid", "resharable", "editable", "revision", "expiration", "timerNotificationType", "rotateOnExpiration")
-    SHAREDFOLDERUID_FIELD_NUMBER: _ClassVar[int]
-    RESHARABLE_FIELD_NUMBER: _ClassVar[int]
-    EDITABLE_FIELD_NUMBER: _ClassVar[int]
-    REVISION_FIELD_NUMBER: _ClassVar[int]
-    EXPIRATION_FIELD_NUMBER: _ClassVar[int]
-    TIMERNOTIFICATIONTYPE_FIELD_NUMBER: _ClassVar[int]
-    ROTATEONEXPIRATION_FIELD_NUMBER: _ClassVar[int]
-    sharedFolderUid: bytes
-    resharable: bool
-    editable: bool
-    revision: int
-    expiration: int
-    timerNotificationType: TimerNotificationType
-    rotateOnExpiration: bool
-    def __init__(self, sharedFolderUid: _Optional[bytes] = ..., resharable: bool = ..., editable: bool = ..., revision: _Optional[int] = ..., expiration: _Optional[int] = ..., timerNotificationType: _Optional[_Union[TimerNotificationType, str]] = ..., rotateOnExpiration: bool = ...) -> None: ...
-
-class RecordData(_message.Message):
-    __slots__ = ("revision", "version", "shared", "encryptedRecordData", "encryptedExtraData", "clientModifiedTime", "nonSharedData", "linkedRecordData", "fileId", "fileSize", "thumbnailSize", "recordKeyType", "recordKey", "recordUid")
-    REVISION_FIELD_NUMBER: _ClassVar[int]
-    VERSION_FIELD_NUMBER: _ClassVar[int]
-    SHARED_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDRECORDDATA_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDEXTRADATA_FIELD_NUMBER: _ClassVar[int]
-    CLIENTMODIFIEDTIME_FIELD_NUMBER: _ClassVar[int]
-    NONSHAREDDATA_FIELD_NUMBER: _ClassVar[int]
-    LINKEDRECORDDATA_FIELD_NUMBER: _ClassVar[int]
-    FILEID_FIELD_NUMBER: _ClassVar[int]
-    FILESIZE_FIELD_NUMBER: _ClassVar[int]
-    THUMBNAILSIZE_FIELD_NUMBER: _ClassVar[int]
-    RECORDKEYTYPE_FIELD_NUMBER: _ClassVar[int]
-    RECORDKEY_FIELD_NUMBER: _ClassVar[int]
-    RECORDUID_FIELD_NUMBER: _ClassVar[int]
-    revision: int
-    version: int
-    shared: bool
-    encryptedRecordData: str
-    encryptedExtraData: str
-    clientModifiedTime: int
-    nonSharedData: str
-    linkedRecordData: _containers.RepeatedCompositeFieldContainer[RecordData]
-    fileId: _containers.RepeatedScalarFieldContainer[bytes]
-    fileSize: int
-    thumbnailSize: int
-    recordKeyType: RecordKeyType
-    recordKey: bytes
-    recordUid: bytes
-    def __init__(self, revision: _Optional[int] = ..., version: _Optional[int] = ..., shared: bool = ..., encryptedRecordData: _Optional[str] = ..., encryptedExtraData: _Optional[str] = ..., clientModifiedTime: _Optional[int] = ..., nonSharedData: _Optional[str] = ..., linkedRecordData: _Optional[_Iterable[_Union[RecordData, _Mapping]]] = ..., fileId: _Optional[_Iterable[bytes]] = ..., fileSize: _Optional[int] = ..., thumbnailSize: _Optional[int] = ..., recordKeyType: _Optional[_Union[RecordKeyType, str]] = ..., recordKey: _Optional[bytes] = ..., recordUid: _Optional[bytes] = ...) -> None: ...
-
-class RecordDataWithAccessInfo(_message.Message):
-    __slots__ = ("recordUid", "recordData", "userPermission", "sharedFolderPermission")
-    RECORDUID_FIELD_NUMBER: _ClassVar[int]
-    RECORDDATA_FIELD_NUMBER: _ClassVar[int]
-    USERPERMISSION_FIELD_NUMBER: _ClassVar[int]
-    SHAREDFOLDERPERMISSION_FIELD_NUMBER: _ClassVar[int]
-    recordUid: bytes
-    recordData: RecordData
-    userPermission: _containers.RepeatedCompositeFieldContainer[UserPermission]
-    sharedFolderPermission: _containers.RepeatedCompositeFieldContainer[SharedFolderPermission]
-    def __init__(self, recordUid: _Optional[bytes] = ..., recordData: _Optional[_Union[RecordData, _Mapping]] = ..., userPermission: _Optional[_Iterable[_Union[UserPermission, _Mapping]]] = ..., sharedFolderPermission: _Optional[_Iterable[_Union[SharedFolderPermission, _Mapping]]] = ...) -> None: ...
-
-class GetRecordDataWithAccessInfoResponse(_message.Message):
-    __slots__ = ("recordDataWithAccessInfo", "noPermissionRecordUid")
-    RECORDDATAWITHACCESSINFO_FIELD_NUMBER: _ClassVar[int]
-    NOPERMISSIONRECORDUID_FIELD_NUMBER: _ClassVar[int]
-    recordDataWithAccessInfo: _containers.RepeatedCompositeFieldContainer[RecordDataWithAccessInfo]
-    noPermissionRecordUid: _containers.RepeatedScalarFieldContainer[bytes]
-    def __init__(self, recordDataWithAccessInfo: _Optional[_Iterable[_Union[RecordDataWithAccessInfo, _Mapping]]] = ..., noPermissionRecordUid: _Optional[_Iterable[bytes]] = ...) -> None: ...
-
-class IsObjectShareAdmin(_message.Message):
-    __slots__ = ("uid", "isAdmin", "objectType")
-    UID_FIELD_NUMBER: _ClassVar[int]
-    ISADMIN_FIELD_NUMBER: _ClassVar[int]
-    OBJECTTYPE_FIELD_NUMBER: _ClassVar[int]
-    uid: bytes
-    isAdmin: bool
-    objectType: CheckShareAdminObjectType
-    def __init__(self, uid: _Optional[bytes] = ..., isAdmin: bool = ..., objectType: _Optional[_Union[CheckShareAdminObjectType, str]] = ...) -> None: ...
-
-class AmIShareAdmin(_message.Message):
-    __slots__ = ("isObjectShareAdmin",)
-    ISOBJECTSHAREADMIN_FIELD_NUMBER: _ClassVar[int]
-    isObjectShareAdmin: _containers.RepeatedCompositeFieldContainer[IsObjectShareAdmin]
-    def __init__(self, isObjectShareAdmin: _Optional[_Iterable[_Union[IsObjectShareAdmin, _Mapping]]] = ...) -> None: ...
-
-class RecordShareUpdateRequest(_message.Message):
-    __slots__ = ("addSharedRecord", "updateSharedRecord", "removeSharedRecord", "pt")
-    ADDSHAREDRECORD_FIELD_NUMBER: _ClassVar[int]
-    UPDATESHAREDRECORD_FIELD_NUMBER: _ClassVar[int]
-    REMOVESHAREDRECORD_FIELD_NUMBER: _ClassVar[int]
-    PT_FIELD_NUMBER: _ClassVar[int]
-    addSharedRecord: _containers.RepeatedCompositeFieldContainer[SharedRecord]
-    updateSharedRecord: _containers.RepeatedCompositeFieldContainer[SharedRecord]
-    removeSharedRecord: _containers.RepeatedCompositeFieldContainer[SharedRecord]
-    pt: str
-    def __init__(self, addSharedRecord: _Optional[_Iterable[_Union[SharedRecord, _Mapping]]] = ..., updateSharedRecord: _Optional[_Iterable[_Union[SharedRecord, _Mapping]]] = ..., removeSharedRecord: _Optional[_Iterable[_Union[SharedRecord, _Mapping]]] = ..., pt: _Optional[str] = ...) -> None: ...
-
-class SharedRecord(_message.Message):
-    __slots__ = ("toUsername", "recordUid", "recordKey", "sharedFolderUid", "teamUid", "editable", "shareable", "transfer", "useEccKey", "removeVaultData", "expiration", "timerNotificationType", "rotateOnExpiration")
-    TOUSERNAME_FIELD_NUMBER: _ClassVar[int]
-    RECORDUID_FIELD_NUMBER: _ClassVar[int]
-    RECORDKEY_FIELD_NUMBER: _ClassVar[int]
-    SHAREDFOLDERUID_FIELD_NUMBER: _ClassVar[int]
-    TEAMUID_FIELD_NUMBER: _ClassVar[int]
-    EDITABLE_FIELD_NUMBER: _ClassVar[int]
-    SHAREABLE_FIELD_NUMBER: _ClassVar[int]
-    TRANSFER_FIELD_NUMBER: _ClassVar[int]
-    USEECCKEY_FIELD_NUMBER: _ClassVar[int]
-    REMOVEVAULTDATA_FIELD_NUMBER: _ClassVar[int]
-    EXPIRATION_FIELD_NUMBER: _ClassVar[int]
-    TIMERNOTIFICATIONTYPE_FIELD_NUMBER: _ClassVar[int]
-    ROTATEONEXPIRATION_FIELD_NUMBER: _ClassVar[int]
-    toUsername: str
-    recordUid: bytes
-    recordKey: bytes
-    sharedFolderUid: bytes
-    teamUid: bytes
-    editable: bool
-    shareable: bool
-    transfer: bool
-    useEccKey: bool
-    removeVaultData: bool
-    expiration: int
-    timerNotificationType: TimerNotificationType
-    rotateOnExpiration: bool
-    def __init__(self, toUsername: _Optional[str] = ..., recordUid: _Optional[bytes] = ..., recordKey: _Optional[bytes] = ..., sharedFolderUid: _Optional[bytes] = ..., teamUid: _Optional[bytes] = ..., editable: bool = ..., shareable: bool = ..., transfer: bool = ..., useEccKey: bool = ..., removeVaultData: bool = ..., expiration: _Optional[int] = ..., timerNotificationType: _Optional[_Union[TimerNotificationType, str]] = ..., rotateOnExpiration: bool = ...) -> None: ...
-
-class RecordShareUpdateResponse(_message.Message):
-    __slots__ = ("addSharedRecordStatus", "updateSharedRecordStatus", "removeSharedRecordStatus")
-    ADDSHAREDRECORDSTATUS_FIELD_NUMBER: _ClassVar[int]
-    UPDATESHAREDRECORDSTATUS_FIELD_NUMBER: _ClassVar[int]
-    REMOVESHAREDRECORDSTATUS_FIELD_NUMBER: _ClassVar[int]
-    addSharedRecordStatus: _containers.RepeatedCompositeFieldContainer[SharedRecordStatus]
-    updateSharedRecordStatus: _containers.RepeatedCompositeFieldContainer[SharedRecordStatus]
-    removeSharedRecordStatus: _containers.RepeatedCompositeFieldContainer[SharedRecordStatus]
-    def __init__(self, addSharedRecordStatus: _Optional[_Iterable[_Union[SharedRecordStatus, _Mapping]]] = ..., updateSharedRecordStatus: _Optional[_Iterable[_Union[SharedRecordStatus, _Mapping]]] = ..., removeSharedRecordStatus: _Optional[_Iterable[_Union[SharedRecordStatus, _Mapping]]] = ...) -> None: ...
-
-class SharedRecordStatus(_message.Message):
-    __slots__ = ("recordUid", "status", "message", "username")
-    RECORDUID_FIELD_NUMBER: _ClassVar[int]
-    STATUS_FIELD_NUMBER: _ClassVar[int]
-    MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    USERNAME_FIELD_NUMBER: _ClassVar[int]
-    recordUid: bytes
-    status: str
-    message: str
-    username: str
-    def __init__(self, recordUid: _Optional[bytes] = ..., status: _Optional[str] = ..., message: _Optional[str] = ..., username: _Optional[str] = ...) -> None: ...
-
-class GetRecordPermissionsRequest(_message.Message):
-    __slots__ = ("recordUids", "isShareAdmin")
-    RECORDUIDS_FIELD_NUMBER: _ClassVar[int]
-    ISSHAREADMIN_FIELD_NUMBER: _ClassVar[int]
-    recordUids: _containers.RepeatedScalarFieldContainer[bytes]
-    isShareAdmin: bool
-    def __init__(self, recordUids: _Optional[_Iterable[bytes]] = ..., isShareAdmin: bool = ...) -> None: ...
-
-class GetRecordPermissionsResponse(_message.Message):
-    __slots__ = ("recordPermissions",)
-    RECORDPERMISSIONS_FIELD_NUMBER: _ClassVar[int]
-    recordPermissions: _containers.RepeatedCompositeFieldContainer[RecordPermission]
-    def __init__(self, recordPermissions: _Optional[_Iterable[_Union[RecordPermission, _Mapping]]] = ...) -> None: ...
-
-class RecordPermission(_message.Message):
-    __slots__ = ("recordUid", "owner", "canEdit", "canShare", "canTransfer")
-    RECORDUID_FIELD_NUMBER: _ClassVar[int]
-    OWNER_FIELD_NUMBER: _ClassVar[int]
-    CANEDIT_FIELD_NUMBER: _ClassVar[int]
-    CANSHARE_FIELD_NUMBER: _ClassVar[int]
-    CANTRANSFER_FIELD_NUMBER: _ClassVar[int]
-    recordUid: bytes
-    owner: bool
-    canEdit: bool
-    canShare: bool
-    canTransfer: bool
-    def __init__(self, recordUid: _Optional[bytes] = ..., owner: bool = ..., canEdit: bool = ..., canShare: bool = ..., canTransfer: bool = ...) -> None: ...
-
-class GetShareObjectsRequest(_message.Message):
-    __slots__ = ("startWith", "contains", "filtered", "sharedFolderUid")
-    STARTWITH_FIELD_NUMBER: _ClassVar[int]
-    CONTAINS_FIELD_NUMBER: _ClassVar[int]
-    FILTERED_FIELD_NUMBER: _ClassVar[int]
-    SHAREDFOLDERUID_FIELD_NUMBER: _ClassVar[int]
-    startWith: str
-    contains: str
-    filtered: bool
-    sharedFolderUid: bytes
-    def __init__(self, startWith: _Optional[str] = ..., contains: _Optional[str] = ..., filtered: bool = ..., sharedFolderUid: _Optional[bytes] = ...) -> None: ...
-
-class GetShareObjectsResponse(_message.Message):
-    __slots__ = ("shareRelationships", "shareFamilyUsers", "shareEnterpriseUsers", "shareTeams", "shareMCTeams", "shareMCEnterpriseUsers", "shareEnterpriseNames")
-    SHARERELATIONSHIPS_FIELD_NUMBER: _ClassVar[int]
-    SHAREFAMILYUSERS_FIELD_NUMBER: _ClassVar[int]
-    SHAREENTERPRISEUSERS_FIELD_NUMBER: _ClassVar[int]
-    SHARETEAMS_FIELD_NUMBER: _ClassVar[int]
-    SHAREMCTEAMS_FIELD_NUMBER: _ClassVar[int]
-    SHAREMCENTERPRISEUSERS_FIELD_NUMBER: _ClassVar[int]
-    SHAREENTERPRISENAMES_FIELD_NUMBER: _ClassVar[int]
-    shareRelationships: _containers.RepeatedCompositeFieldContainer[ShareUser]
-    shareFamilyUsers: _containers.RepeatedCompositeFieldContainer[ShareUser]
-    shareEnterpriseUsers: _containers.RepeatedCompositeFieldContainer[ShareUser]
-    shareTeams: _containers.RepeatedCompositeFieldContainer[ShareTeam]
-    shareMCTeams: _containers.RepeatedCompositeFieldContainer[ShareTeam]
-    shareMCEnterpriseUsers: _containers.RepeatedCompositeFieldContainer[ShareUser]
-    shareEnterpriseNames: _containers.RepeatedCompositeFieldContainer[ShareEnterprise]
-    def __init__(self, shareRelationships: _Optional[_Iterable[_Union[ShareUser, _Mapping]]] = ..., shareFamilyUsers: _Optional[_Iterable[_Union[ShareUser, _Mapping]]] = ..., shareEnterpriseUsers: _Optional[_Iterable[_Union[ShareUser, _Mapping]]] = ..., shareTeams: _Optional[_Iterable[_Union[ShareTeam, _Mapping]]] = ..., shareMCTeams: _Optional[_Iterable[_Union[ShareTeam, _Mapping]]] = ..., shareMCEnterpriseUsers: _Optional[_Iterable[_Union[ShareUser, _Mapping]]] = ..., shareEnterpriseNames: _Optional[_Iterable[_Union[ShareEnterprise, _Mapping]]] = ...) -> None: ...
-
-class ShareUser(_message.Message):
-    __slots__ = ("username", "fullname", "enterpriseId", "status", "isShareAdmin", "isAdminOfSharedFolderOwner")
-    USERNAME_FIELD_NUMBER: _ClassVar[int]
-    FULLNAME_FIELD_NUMBER: _ClassVar[int]
-    ENTERPRISEID_FIELD_NUMBER: _ClassVar[int]
-    STATUS_FIELD_NUMBER: _ClassVar[int]
-    ISSHAREADMIN_FIELD_NUMBER: _ClassVar[int]
-    ISADMINOFSHAREDFOLDEROWNER_FIELD_NUMBER: _ClassVar[int]
-    username: str
-    fullname: str
-    enterpriseId: int
-    status: ShareStatus
-    isShareAdmin: bool
-    isAdminOfSharedFolderOwner: bool
-    def __init__(self, username: _Optional[str] = ..., fullname: _Optional[str] = ..., enterpriseId: _Optional[int] = ..., status: _Optional[_Union[ShareStatus, str]] = ..., isShareAdmin: bool = ..., isAdminOfSharedFolderOwner: bool = ...) -> None: ...
-
-class ShareTeam(_message.Message):
-    __slots__ = ("teamname", "enterpriseId", "teamUid")
-    TEAMNAME_FIELD_NUMBER: _ClassVar[int]
-    ENTERPRISEID_FIELD_NUMBER: _ClassVar[int]
-    TEAMUID_FIELD_NUMBER: _ClassVar[int]
-    teamname: str
-    enterpriseId: int
-    teamUid: bytes
-    def __init__(self, teamname: _Optional[str] = ..., enterpriseId: _Optional[int] = ..., teamUid: _Optional[bytes] = ...) -> None: ...
-
-class ShareEnterprise(_message.Message):
-    __slots__ = ("enterprisename", "enterpriseId")
-    ENTERPRISENAME_FIELD_NUMBER: _ClassVar[int]
-    ENTERPRISEID_FIELD_NUMBER: _ClassVar[int]
-    enterprisename: str
-    enterpriseId: int
-    def __init__(self, enterprisename: _Optional[str] = ..., enterpriseId: _Optional[int] = ...) -> None: ...
-
-class RecordsOnwershipTransferRequest(_message.Message):
-    __slots__ = ("transferRecords",)
-    TRANSFERRECORDS_FIELD_NUMBER: _ClassVar[int]
-    transferRecords: _containers.RepeatedCompositeFieldContainer[TransferRecord]
-    def __init__(self, transferRecords: _Optional[_Iterable[_Union[TransferRecord, _Mapping]]] = ...) -> None: ...
-
-class TransferRecord(_message.Message):
-    __slots__ = ("username", "recordUid", "recordKey", "useEccKey")
-    USERNAME_FIELD_NUMBER: _ClassVar[int]
-    RECORDUID_FIELD_NUMBER: _ClassVar[int]
-    RECORDKEY_FIELD_NUMBER: _ClassVar[int]
-    USEECCKEY_FIELD_NUMBER: _ClassVar[int]
-    username: str
-    recordUid: bytes
-    recordKey: bytes
-    useEccKey: bool
-    def __init__(self, username: _Optional[str] = ..., recordUid: _Optional[bytes] = ..., recordKey: _Optional[bytes] = ..., useEccKey: bool = ...) -> None: ...
-
-class RecordsOnwershipTransferResponse(_message.Message):
-    __slots__ = ("transferRecordStatus",)
-    TRANSFERRECORDSTATUS_FIELD_NUMBER: _ClassVar[int]
-    transferRecordStatus: _containers.RepeatedCompositeFieldContainer[TransferRecordStatus]
-    def __init__(self, transferRecordStatus: _Optional[_Iterable[_Union[TransferRecordStatus, _Mapping]]] = ...) -> None: ...
-
-class TransferRecordStatus(_message.Message):
-    __slots__ = ("username", "recordUid", "status", "message")
-    USERNAME_FIELD_NUMBER: _ClassVar[int]
-    RECORDUID_FIELD_NUMBER: _ClassVar[int]
-    STATUS_FIELD_NUMBER: _ClassVar[int]
-    MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    username: str
-    recordUid: bytes
-    status: str
-    message: str
-    def __init__(self, username: _Optional[str] = ..., recordUid: _Optional[bytes] = ..., status: _Optional[str] = ..., message: _Optional[str] = ...) -> None: ...
-
-class RecordsUnshareRequest(_message.Message):
-    __slots__ = ("sharedFolders", "users")
-    SHAREDFOLDERS_FIELD_NUMBER: _ClassVar[int]
-    USERS_FIELD_NUMBER: _ClassVar[int]
-    sharedFolders: _containers.RepeatedCompositeFieldContainer[RecordsUnshareFolder]
-    users: _containers.RepeatedCompositeFieldContainer[RecordsUnshareUser]
-    def __init__(self, sharedFolders: _Optional[_Iterable[_Union[RecordsUnshareFolder, _Mapping]]] = ..., users: _Optional[_Iterable[_Union[RecordsUnshareUser, _Mapping]]] = ...) -> None: ...
-
-class RecordsUnshareResponse(_message.Message):
-    __slots__ = ("sharedFolders", "users")
-    SHAREDFOLDERS_FIELD_NUMBER: _ClassVar[int]
-    USERS_FIELD_NUMBER: _ClassVar[int]
-    sharedFolders: _containers.RepeatedCompositeFieldContainer[RecordsUnshareFolderStatus]
-    users: _containers.RepeatedCompositeFieldContainer[RecordsUnshareUserStatus]
-    def __init__(self, sharedFolders: _Optional[_Iterable[_Union[RecordsUnshareFolderStatus, _Mapping]]] = ..., users: _Optional[_Iterable[_Union[RecordsUnshareUserStatus, _Mapping]]] = ...) -> None: ...
-
-class RecordsUnshareFolder(_message.Message):
-    __slots__ = ("recordUid", "sharedFolderUid")
-    RECORDUID_FIELD_NUMBER: _ClassVar[int]
-    SHAREDFOLDERUID_FIELD_NUMBER: _ClassVar[int]
-    recordUid: bytes
-    sharedFolderUid: bytes
-    def __init__(self, recordUid: _Optional[bytes] = ..., sharedFolderUid: _Optional[bytes] = ...) -> None: ...
-
-class RecordsUnshareUser(_message.Message):
-    __slots__ = ("recordUid", "accountUid")
-    RECORDUID_FIELD_NUMBER: _ClassVar[int]
-    ACCOUNTUID_FIELD_NUMBER: _ClassVar[int]
-    recordUid: bytes
-    accountUid: bytes
-    def __init__(self, recordUid: _Optional[bytes] = ..., accountUid: _Optional[bytes] = ...) -> None: ...
-
-class RecordsUnshareFolderStatus(_message.Message):
-    __slots__ = ("recordUid", "sharedFolderUid")
-    RECORDUID_FIELD_NUMBER: _ClassVar[int]
-    SHAREDFOLDERUID_FIELD_NUMBER: _ClassVar[int]
-    recordUid: bytes
-    sharedFolderUid: bytes
-    def __init__(self, recordUid: _Optional[bytes] = ..., sharedFolderUid: _Optional[bytes] = ...) -> None: ...
-
-class RecordsUnshareUserStatus(_message.Message):
-    __slots__ = ("recordUid", "accountUid")
-    RECORDUID_FIELD_NUMBER: _ClassVar[int]
-    ACCOUNTUID_FIELD_NUMBER: _ClassVar[int]
-    recordUid: bytes
-    accountUid: bytes
-    def __init__(self, recordUid: _Optional[bytes] = ..., accountUid: _Optional[bytes] = ...) -> None: ...
-
-class TimedAccessCallbackPayload(_message.Message):
-    __slots__ = ("timeLimitedAccessType",)
-    TIMELIMITEDACCESSTYPE_FIELD_NUMBER: _ClassVar[int]
-    timeLimitedAccessType: TimeLimitedAccessType
-    def __init__(self, timeLimitedAccessType: _Optional[_Union[TimeLimitedAccessType, str]] = ...) -> None: ...
-
-class TimeLimitedAccessRequest(_message.Message):
-    __slots__ = ("accountUid", "teamUid", "recordUid", "sharedObjectUid", "timeLimitedAccessType", "expiration", "timerNotificationType")
-    ACCOUNTUID_FIELD_NUMBER: _ClassVar[int]
-    TEAMUID_FIELD_NUMBER: _ClassVar[int]
-    RECORDUID_FIELD_NUMBER: _ClassVar[int]
-    SHAREDOBJECTUID_FIELD_NUMBER: _ClassVar[int]
-    TIMELIMITEDACCESSTYPE_FIELD_NUMBER: _ClassVar[int]
-    EXPIRATION_FIELD_NUMBER: _ClassVar[int]
-    TIMERNOTIFICATIONTYPE_FIELD_NUMBER: _ClassVar[int]
-    accountUid: _containers.RepeatedScalarFieldContainer[bytes]
-    teamUid: _containers.RepeatedScalarFieldContainer[bytes]
-    recordUid: _containers.RepeatedScalarFieldContainer[bytes]
-    sharedObjectUid: bytes
-    timeLimitedAccessType: TimeLimitedAccessType
-    expiration: int
-    timerNotificationType: TimerNotificationType
-    def __init__(self, accountUid: _Optional[_Iterable[bytes]] = ..., teamUid: _Optional[_Iterable[bytes]] = ..., recordUid: _Optional[_Iterable[bytes]] = ..., sharedObjectUid: _Optional[bytes] = ..., timeLimitedAccessType: _Optional[_Union[TimeLimitedAccessType, str]] = ..., expiration: _Optional[int] = ..., timerNotificationType: _Optional[_Union[TimerNotificationType, str]] = ...) -> None: ...
-
-class TimeLimitedAccessStatus(_message.Message):
-    __slots__ = ("uid", "message")
-    UID_FIELD_NUMBER: _ClassVar[int]
-    MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    uid: bytes
-    message: str
-    def __init__(self, uid: _Optional[bytes] = ..., message: _Optional[str] = ...) -> None: ...
-
-class TimeLimitedAccessResponse(_message.Message):
-    __slots__ = ("revision", "userAccessStatus", "teamAccessStatus", "recordAccessStatus")
-    REVISION_FIELD_NUMBER: _ClassVar[int]
-    USERACCESSSTATUS_FIELD_NUMBER: _ClassVar[int]
-    TEAMACCESSSTATUS_FIELD_NUMBER: _ClassVar[int]
-    RECORDACCESSSTATUS_FIELD_NUMBER: _ClassVar[int]
-    revision: int
-    userAccessStatus: _containers.RepeatedCompositeFieldContainer[TimeLimitedAccessStatus]
-    teamAccessStatus: _containers.RepeatedCompositeFieldContainer[TimeLimitedAccessStatus]
-    recordAccessStatus: _containers.RepeatedCompositeFieldContainer[TimeLimitedAccessStatus]
-    def __init__(self, revision: _Optional[int] = ..., userAccessStatus: _Optional[_Iterable[_Union[TimeLimitedAccessStatus, _Mapping]]] = ..., teamAccessStatus: _Optional[_Iterable[_Union[TimeLimitedAccessStatus, _Mapping]]] = ..., recordAccessStatus: _Optional[_Iterable[_Union[TimeLimitedAccessStatus, _Mapping]]] = ...) -> None: ...
+"""
+@generated by mypy-protobuf.  Do not edit manually!
+isort:skip_file
+"""
+
+import builtins
+import collections.abc
+import google.protobuf.descriptor
+import google.protobuf.internal.containers
+import google.protobuf.internal.enum_type_wrapper
+import google.protobuf.message
+import sys
+import typing
+
+if sys.version_info >= (3, 10):
+    import typing as typing_extensions
+else:
+    import typing_extensions
+
+DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
+
+class _RecordTypeScope:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _RecordTypeScopeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_RecordTypeScope.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    RT_STANDARD: _RecordTypeScope.ValueType  # 0
+    RT_USER: _RecordTypeScope.ValueType  # 1
+    RT_ENTERPRISE: _RecordTypeScope.ValueType  # 2
+    RT_PAM: _RecordTypeScope.ValueType  # 3
+    RT_PAM_CONFIGURATION: _RecordTypeScope.ValueType  # 4
+
+class RecordTypeScope(_RecordTypeScope, metaclass=_RecordTypeScopeEnumTypeWrapper):
+    """Record types"""
+
+RT_STANDARD: RecordTypeScope.ValueType  # 0
+RT_USER: RecordTypeScope.ValueType  # 1
+RT_ENTERPRISE: RecordTypeScope.ValueType  # 2
+RT_PAM: RecordTypeScope.ValueType  # 3
+RT_PAM_CONFIGURATION: RecordTypeScope.ValueType  # 4
+global___RecordTypeScope = RecordTypeScope
+
+class _RecordKeyType:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _RecordKeyTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_RecordKeyType.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    NO_KEY: _RecordKeyType.ValueType  # 0
+    ENCRYPTED_BY_DATA_KEY: _RecordKeyType.ValueType  # 1
+    ENCRYPTED_BY_PUBLIC_KEY: _RecordKeyType.ValueType  # 2
+    ENCRYPTED_BY_DATA_KEY_GCM: _RecordKeyType.ValueType  # 3
+    ENCRYPTED_BY_PUBLIC_KEY_ECC: _RecordKeyType.ValueType  # 4
+    ENCRYPTED_BY_ROOT_KEY_CBC: _RecordKeyType.ValueType  # 5
+    ENCRYPTED_BY_ROOT_KEY_GCM: _RecordKeyType.ValueType  # 6
+
+class RecordKeyType(_RecordKeyType, metaclass=_RecordKeyTypeEnumTypeWrapper): ...
+
+NO_KEY: RecordKeyType.ValueType  # 0
+ENCRYPTED_BY_DATA_KEY: RecordKeyType.ValueType  # 1
+ENCRYPTED_BY_PUBLIC_KEY: RecordKeyType.ValueType  # 2
+ENCRYPTED_BY_DATA_KEY_GCM: RecordKeyType.ValueType  # 3
+ENCRYPTED_BY_PUBLIC_KEY_ECC: RecordKeyType.ValueType  # 4
+ENCRYPTED_BY_ROOT_KEY_CBC: RecordKeyType.ValueType  # 5
+ENCRYPTED_BY_ROOT_KEY_GCM: RecordKeyType.ValueType  # 6
+global___RecordKeyType = RecordKeyType
+
+class _RecordFolderType:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _RecordFolderTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_RecordFolderType.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    user_folder: _RecordFolderType.ValueType  # 0
+    shared_folder: _RecordFolderType.ValueType  # 1
+    shared_folder_folder: _RecordFolderType.ValueType  # 2
+
+class RecordFolderType(_RecordFolderType, metaclass=_RecordFolderTypeEnumTypeWrapper): ...
+
+user_folder: RecordFolderType.ValueType  # 0
+shared_folder: RecordFolderType.ValueType  # 1
+shared_folder_folder: RecordFolderType.ValueType  # 2
+global___RecordFolderType = RecordFolderType
+
+class _RecordModifyResult:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _RecordModifyResultEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_RecordModifyResult.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    RS_SUCCESS: _RecordModifyResult.ValueType  # 0
+    RS_OUT_OF_SYNC: _RecordModifyResult.ValueType  # 1
+    RS_ACCESS_DENIED: _RecordModifyResult.ValueType  # 2
+    RS_SHARE_DENIED: _RecordModifyResult.ValueType  # 3
+    RS_RECORD_EXISTS: _RecordModifyResult.ValueType  # 4
+    RS_OLD_RECORD_VERSION_TYPE: _RecordModifyResult.ValueType  # 5
+    RS_NEW_RECORD_VERSION_TYPE: _RecordModifyResult.ValueType  # 6
+    RS_FILES_NOT_MATCH: _RecordModifyResult.ValueType  # 7
+    RS_RECORD_NOT_SHAREABLE: _RecordModifyResult.ValueType  # 8
+    RS_ATTACHMENT_NOT_SHAREABLE: _RecordModifyResult.ValueType  # 9
+    RS_FILE_LIMIT_REACHED: _RecordModifyResult.ValueType  # 10
+    RS_SIZE_EXCEEDED_LIMIT: _RecordModifyResult.ValueType  # 11
+    RS_ONLY_OWNER_CAN_MODIFY_SCRIPTS: _RecordModifyResult.ValueType  # 12
+
+class RecordModifyResult(_RecordModifyResult, metaclass=_RecordModifyResultEnumTypeWrapper): ...
+
+RS_SUCCESS: RecordModifyResult.ValueType  # 0
+RS_OUT_OF_SYNC: RecordModifyResult.ValueType  # 1
+RS_ACCESS_DENIED: RecordModifyResult.ValueType  # 2
+RS_SHARE_DENIED: RecordModifyResult.ValueType  # 3
+RS_RECORD_EXISTS: RecordModifyResult.ValueType  # 4
+RS_OLD_RECORD_VERSION_TYPE: RecordModifyResult.ValueType  # 5
+RS_NEW_RECORD_VERSION_TYPE: RecordModifyResult.ValueType  # 6
+RS_FILES_NOT_MATCH: RecordModifyResult.ValueType  # 7
+RS_RECORD_NOT_SHAREABLE: RecordModifyResult.ValueType  # 8
+RS_ATTACHMENT_NOT_SHAREABLE: RecordModifyResult.ValueType  # 9
+RS_FILE_LIMIT_REACHED: RecordModifyResult.ValueType  # 10
+RS_SIZE_EXCEEDED_LIMIT: RecordModifyResult.ValueType  # 11
+RS_ONLY_OWNER_CAN_MODIFY_SCRIPTS: RecordModifyResult.ValueType  # 12
+global___RecordModifyResult = RecordModifyResult
+
+class _FileAddResult:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _FileAddResultEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_FileAddResult.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    FA_SUCCESS: _FileAddResult.ValueType  # 0
+    FA_ERROR: _FileAddResult.ValueType  # 1
+
+class FileAddResult(_FileAddResult, metaclass=_FileAddResultEnumTypeWrapper): ...
+
+FA_SUCCESS: FileAddResult.ValueType  # 0
+FA_ERROR: FileAddResult.ValueType  # 1
+global___FileAddResult = FileAddResult
+
+class _FileGetResult:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _FileGetResultEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_FileGetResult.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    FG_SUCCESS: _FileGetResult.ValueType  # 0
+    FG_ERROR: _FileGetResult.ValueType  # 1
+    FG_ACCESS_DENIED: _FileGetResult.ValueType  # 2
+
+class FileGetResult(_FileGetResult, metaclass=_FileGetResultEnumTypeWrapper): ...
+
+FG_SUCCESS: FileGetResult.ValueType  # 0
+FG_ERROR: FileGetResult.ValueType  # 1
+FG_ACCESS_DENIED: FileGetResult.ValueType  # 2
+global___FileGetResult = FileGetResult
+
+class _RecordDetailsInclude:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _RecordDetailsIncludeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_RecordDetailsInclude.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    DATA_PLUS_SHARE: _RecordDetailsInclude.ValueType  # 0
+    DATA_ONLY: _RecordDetailsInclude.ValueType  # 1
+    SHARE_ONLY: _RecordDetailsInclude.ValueType  # 2
+
+class RecordDetailsInclude(_RecordDetailsInclude, metaclass=_RecordDetailsIncludeEnumTypeWrapper): ...
+
+DATA_PLUS_SHARE: RecordDetailsInclude.ValueType  # 0
+DATA_ONLY: RecordDetailsInclude.ValueType  # 1
+SHARE_ONLY: RecordDetailsInclude.ValueType  # 2
+global___RecordDetailsInclude = RecordDetailsInclude
+
+class _CheckShareAdminObjectType:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _CheckShareAdminObjectTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_CheckShareAdminObjectType.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    CHECK_SA_INVALID_TYPE: _CheckShareAdminObjectType.ValueType  # 0
+    CHECK_SA_ON_SF: _CheckShareAdminObjectType.ValueType  # 1
+    CHECK_SA_ON_RECORD: _CheckShareAdminObjectType.ValueType  # 2
+
+class CheckShareAdminObjectType(_CheckShareAdminObjectType, metaclass=_CheckShareAdminObjectTypeEnumTypeWrapper): ...
+
+CHECK_SA_INVALID_TYPE: CheckShareAdminObjectType.ValueType  # 0
+CHECK_SA_ON_SF: CheckShareAdminObjectType.ValueType  # 1
+CHECK_SA_ON_RECORD: CheckShareAdminObjectType.ValueType  # 2
+global___CheckShareAdminObjectType = CheckShareAdminObjectType
+
+class _ShareStatus:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _ShareStatusEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_ShareStatus.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    ACTIVE: _ShareStatus.ValueType  # 0
+    BLOCK: _ShareStatus.ValueType  # 1
+    INVITED: _ShareStatus.ValueType  # 2
+
+class ShareStatus(_ShareStatus, metaclass=_ShareStatusEnumTypeWrapper): ...
+
+ACTIVE: ShareStatus.ValueType  # 0
+BLOCK: ShareStatus.ValueType  # 1
+INVITED: ShareStatus.ValueType  # 2
+global___ShareStatus = ShareStatus
+
+class _RecordTransactionType:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _RecordTransactionTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_RecordTransactionType.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    RTT_GENERAL: _RecordTransactionType.ValueType  # 0
+    RTT_ROTATION: _RecordTransactionType.ValueType  # 1
+
+class RecordTransactionType(_RecordTransactionType, metaclass=_RecordTransactionTypeEnumTypeWrapper): ...
+
+RTT_GENERAL: RecordTransactionType.ValueType  # 0
+RTT_ROTATION: RecordTransactionType.ValueType  # 1
+global___RecordTransactionType = RecordTransactionType
+
+class _TimeLimitedAccessType:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _TimeLimitedAccessTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_TimeLimitedAccessType.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    INVALID_TIME_LIMITED_ACCESS_TYPE: _TimeLimitedAccessType.ValueType  # 0
+    USER_ACCESS_TO_RECORD: _TimeLimitedAccessType.ValueType  # 1
+    USER_OR_TEAM_ACCESS_TO_SHAREDFOLDER: _TimeLimitedAccessType.ValueType  # 2
+    RECORD_ACCESS_TO_SHAREDFOLDER: _TimeLimitedAccessType.ValueType  # 3
+    USER_ACCESS_TO_SHAREDFOLDER: _TimeLimitedAccessType.ValueType  # 4
+    """used for scheduler callback"""
+    TEAM_ACCESS_TO_SHAREDFOLDER: _TimeLimitedAccessType.ValueType  # 5
+    """used for scheduler callback"""
+
+class TimeLimitedAccessType(_TimeLimitedAccessType, metaclass=_TimeLimitedAccessTypeEnumTypeWrapper): ...
+
+INVALID_TIME_LIMITED_ACCESS_TYPE: TimeLimitedAccessType.ValueType  # 0
+USER_ACCESS_TO_RECORD: TimeLimitedAccessType.ValueType  # 1
+USER_OR_TEAM_ACCESS_TO_SHAREDFOLDER: TimeLimitedAccessType.ValueType  # 2
+RECORD_ACCESS_TO_SHAREDFOLDER: TimeLimitedAccessType.ValueType  # 3
+USER_ACCESS_TO_SHAREDFOLDER: TimeLimitedAccessType.ValueType  # 4
+"""used for scheduler callback"""
+TEAM_ACCESS_TO_SHAREDFOLDER: TimeLimitedAccessType.ValueType  # 5
+"""used for scheduler callback"""
+global___TimeLimitedAccessType = TimeLimitedAccessType
+
+class _TimerNotificationType:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _TimerNotificationTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_TimerNotificationType.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    NOTIFICATION_OFF: _TimerNotificationType.ValueType  # 0
+    NOTIFY_OWNER: _TimerNotificationType.ValueType  # 1
+    NOTIFY_PRIVILEGED_USERS: _TimerNotificationType.ValueType  # 2
+
+class TimerNotificationType(_TimerNotificationType, metaclass=_TimerNotificationTypeEnumTypeWrapper): ...
+
+NOTIFICATION_OFF: TimerNotificationType.ValueType  # 0
+NOTIFY_OWNER: TimerNotificationType.ValueType  # 1
+NOTIFY_PRIVILEGED_USERS: TimerNotificationType.ValueType  # 2
+global___TimerNotificationType = TimerNotificationType
+
+@typing.final
+class RecordType(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORDTYPEID_FIELD_NUMBER: builtins.int
+    CONTENT_FIELD_NUMBER: builtins.int
+    SCOPE_FIELD_NUMBER: builtins.int
+    recordTypeId: builtins.int
+    content: builtins.str
+    scope: global___RecordTypeScope.ValueType
+    def __init__(
+        self,
+        *,
+        recordTypeId: builtins.int = ...,
+        content: builtins.str = ...,
+        scope: global___RecordTypeScope.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["content", b"content", "recordTypeId", b"recordTypeId", "scope", b"scope"]) -> None: ...
+
+global___RecordType = RecordType
+
+@typing.final
+class RecordTypesRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    STANDARD_FIELD_NUMBER: builtins.int
+    USER_FIELD_NUMBER: builtins.int
+    ENTERPRISE_FIELD_NUMBER: builtins.int
+    PAM_FIELD_NUMBER: builtins.int
+    standard: builtins.bool
+    user: builtins.bool
+    enterprise: builtins.bool
+    pam: builtins.bool
+    def __init__(
+        self,
+        *,
+        standard: builtins.bool = ...,
+        user: builtins.bool = ...,
+        enterprise: builtins.bool = ...,
+        pam: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enterprise", b"enterprise", "pam", b"pam", "standard", b"standard", "user", b"user"]) -> None: ...
+
+global___RecordTypesRequest = RecordTypesRequest
+
+@typing.final
+class RecordTypesResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORDTYPES_FIELD_NUMBER: builtins.int
+    STANDARDCOUNTER_FIELD_NUMBER: builtins.int
+    USERCOUNTER_FIELD_NUMBER: builtins.int
+    ENTERPRISECOUNTER_FIELD_NUMBER: builtins.int
+    PAMCOUNTER_FIELD_NUMBER: builtins.int
+    standardCounter: builtins.int
+    userCounter: builtins.int
+    enterpriseCounter: builtins.int
+    pamCounter: builtins.int
+    @property
+    def recordTypes(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RecordType]: ...
+    def __init__(
+        self,
+        *,
+        recordTypes: collections.abc.Iterable[global___RecordType] | None = ...,
+        standardCounter: builtins.int = ...,
+        userCounter: builtins.int = ...,
+        enterpriseCounter: builtins.int = ...,
+        pamCounter: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enterpriseCounter", b"enterpriseCounter", "pamCounter", b"pamCounter", "recordTypes", b"recordTypes", "standardCounter", b"standardCounter", "userCounter", b"userCounter"]) -> None: ...
+
+global___RecordTypesResponse = RecordTypesResponse
+
+@typing.final
+class RecordTypeModifyResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORDTYPEID_FIELD_NUMBER: builtins.int
+    COUNTER_FIELD_NUMBER: builtins.int
+    recordTypeId: builtins.int
+    """record id of the added, updated or removed record"""
+    counter: builtins.int
+    """updated counter for the scope affected"""
+    def __init__(
+        self,
+        *,
+        recordTypeId: builtins.int = ...,
+        counter: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["counter", b"counter", "recordTypeId", b"recordTypeId"]) -> None: ...
+
+global___RecordTypeModifyResponse = RecordTypeModifyResponse
+
+@typing.final
+class RecordsGetRequest(google.protobuf.message.Message):
+    """Records"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORD_UIDS_FIELD_NUMBER: builtins.int
+    CLIENT_TIME_FIELD_NUMBER: builtins.int
+    client_time: builtins.int
+    @property
+    def record_uids(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]: ...
+    def __init__(
+        self,
+        *,
+        record_uids: collections.abc.Iterable[builtins.bytes] | None = ...,
+        client_time: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["client_time", b"client_time", "record_uids", b"record_uids"]) -> None: ...
+
+global___RecordsGetRequest = RecordsGetRequest
+
+@typing.final
+class Record(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORD_UID_FIELD_NUMBER: builtins.int
+    RECORD_KEY_FIELD_NUMBER: builtins.int
+    RECORD_KEY_TYPE_FIELD_NUMBER: builtins.int
+    DATA_FIELD_NUMBER: builtins.int
+    EXTRA_FIELD_NUMBER: builtins.int
+    VERSION_FIELD_NUMBER: builtins.int
+    CLIENT_MODIFIED_TIME_FIELD_NUMBER: builtins.int
+    REVISION_FIELD_NUMBER: builtins.int
+    FILE_IDS_FIELD_NUMBER: builtins.int
+    record_uid: builtins.bytes
+    record_key: builtins.bytes
+    record_key_type: global___RecordKeyType.ValueType
+    data: builtins.bytes
+    extra: builtins.bytes
+    version: builtins.int
+    client_modified_time: builtins.int
+    revision: builtins.int
+    @property
+    def file_ids(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]: ...
+    def __init__(
+        self,
+        *,
+        record_uid: builtins.bytes = ...,
+        record_key: builtins.bytes = ...,
+        record_key_type: global___RecordKeyType.ValueType = ...,
+        data: builtins.bytes = ...,
+        extra: builtins.bytes = ...,
+        version: builtins.int = ...,
+        client_modified_time: builtins.int = ...,
+        revision: builtins.int = ...,
+        file_ids: collections.abc.Iterable[builtins.bytes] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["client_modified_time", b"client_modified_time", "data", b"data", "extra", b"extra", "file_ids", b"file_ids", "record_key", b"record_key", "record_key_type", b"record_key_type", "record_uid", b"record_uid", "revision", b"revision", "version", b"version"]) -> None: ...
+
+global___Record = Record
+
+@typing.final
+class FolderRecordKey(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    FOLDER_UID_FIELD_NUMBER: builtins.int
+    RECORD_UID_FIELD_NUMBER: builtins.int
+    RECORD_KEY_FIELD_NUMBER: builtins.int
+    folder_uid: builtins.bytes
+    record_uid: builtins.bytes
+    record_key: builtins.bytes
+    def __init__(
+        self,
+        *,
+        folder_uid: builtins.bytes = ...,
+        record_uid: builtins.bytes = ...,
+        record_key: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["folder_uid", b"folder_uid", "record_key", b"record_key", "record_uid", b"record_uid"]) -> None: ...
+
+global___FolderRecordKey = FolderRecordKey
+
+@typing.final
+class Folder(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    FOLDER_UID_FIELD_NUMBER: builtins.int
+    FOLDER_KEY_FIELD_NUMBER: builtins.int
+    FOLDER_KEY_TYPE_FIELD_NUMBER: builtins.int
+    folder_uid: builtins.bytes
+    folder_key: builtins.bytes
+    folder_key_type: global___RecordKeyType.ValueType
+    def __init__(
+        self,
+        *,
+        folder_uid: builtins.bytes = ...,
+        folder_key: builtins.bytes = ...,
+        folder_key_type: global___RecordKeyType.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["folder_key", b"folder_key", "folder_key_type", b"folder_key_type", "folder_uid", b"folder_uid"]) -> None: ...
+
+global___Folder = Folder
+
+@typing.final
+class Team(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TEAM_UID_FIELD_NUMBER: builtins.int
+    TEAM_KEY_FIELD_NUMBER: builtins.int
+    TEAM_PRIVATE_KEY_FIELD_NUMBER: builtins.int
+    TEAM_KEY_TYPE_FIELD_NUMBER: builtins.int
+    FOLDERS_FIELD_NUMBER: builtins.int
+    team_uid: builtins.bytes
+    team_key: builtins.bytes
+    team_private_key: builtins.bytes
+    team_key_type: global___RecordKeyType.ValueType
+    @property
+    def folders(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Folder]: ...
+    def __init__(
+        self,
+        *,
+        team_uid: builtins.bytes = ...,
+        team_key: builtins.bytes = ...,
+        team_private_key: builtins.bytes = ...,
+        team_key_type: global___RecordKeyType.ValueType = ...,
+        folders: collections.abc.Iterable[global___Folder] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["folders", b"folders", "team_key", b"team_key", "team_key_type", b"team_key_type", "team_private_key", b"team_private_key", "team_uid", b"team_uid"]) -> None: ...
+
+global___Team = Team
+
+@typing.final
+class RecordsGetResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORDS_FIELD_NUMBER: builtins.int
+    FOLDER_RECORD_KEYS_FIELD_NUMBER: builtins.int
+    FOLDERS_FIELD_NUMBER: builtins.int
+    TEAMS_FIELD_NUMBER: builtins.int
+    @property
+    def records(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Record]: ...
+    @property
+    def folder_record_keys(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___FolderRecordKey]: ...
+    @property
+    def folders(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Folder]: ...
+    @property
+    def teams(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Team]: ...
+    def __init__(
+        self,
+        *,
+        records: collections.abc.Iterable[global___Record] | None = ...,
+        folder_record_keys: collections.abc.Iterable[global___FolderRecordKey] | None = ...,
+        folders: collections.abc.Iterable[global___Folder] | None = ...,
+        teams: collections.abc.Iterable[global___Team] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["folder_record_keys", b"folder_record_keys", "folders", b"folders", "records", b"records", "teams", b"teams"]) -> None: ...
+
+global___RecordsGetResponse = RecordsGetResponse
+
+@typing.final
+class RecordLink(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORD_UID_FIELD_NUMBER: builtins.int
+    RECORD_KEY_FIELD_NUMBER: builtins.int
+    record_uid: builtins.bytes
+    record_key: builtins.bytes
+    def __init__(
+        self,
+        *,
+        record_uid: builtins.bytes = ...,
+        record_key: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["record_key", b"record_key", "record_uid", b"record_uid"]) -> None: ...
+
+global___RecordLink = RecordLink
+
+@typing.final
+class RecordAudit(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    VERSION_FIELD_NUMBER: builtins.int
+    DATA_FIELD_NUMBER: builtins.int
+    version: builtins.int
+    data: builtins.bytes
+    def __init__(
+        self,
+        *,
+        version: builtins.int = ...,
+        data: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["data", b"data", "version", b"version"]) -> None: ...
+
+global___RecordAudit = RecordAudit
+
+@typing.final
+class SecurityData(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    DATA_FIELD_NUMBER: builtins.int
+    data: builtins.bytes
+    def __init__(
+        self,
+        *,
+        data: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["data", b"data"]) -> None: ...
+
+global___SecurityData = SecurityData
+
+@typing.final
+class SecurityScoreData(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    DATA_FIELD_NUMBER: builtins.int
+    data: builtins.bytes
+    def __init__(
+        self,
+        *,
+        data: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["data", b"data"]) -> None: ...
+
+global___SecurityScoreData = SecurityScoreData
+
+@typing.final
+class RecordAdd(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORD_UID_FIELD_NUMBER: builtins.int
+    RECORD_KEY_FIELD_NUMBER: builtins.int
+    CLIENT_MODIFIED_TIME_FIELD_NUMBER: builtins.int
+    DATA_FIELD_NUMBER: builtins.int
+    NON_SHARED_DATA_FIELD_NUMBER: builtins.int
+    FOLDER_TYPE_FIELD_NUMBER: builtins.int
+    FOLDER_UID_FIELD_NUMBER: builtins.int
+    FOLDER_KEY_FIELD_NUMBER: builtins.int
+    RECORD_LINKS_FIELD_NUMBER: builtins.int
+    AUDIT_FIELD_NUMBER: builtins.int
+    SECURITYDATA_FIELD_NUMBER: builtins.int
+    SECURITYSCOREDATA_FIELD_NUMBER: builtins.int
+    record_uid: builtins.bytes
+    record_key: builtins.bytes
+    client_modified_time: builtins.int
+    data: builtins.bytes
+    non_shared_data: builtins.bytes
+    folder_type: global___RecordFolderType.ValueType
+    folder_uid: builtins.bytes
+    folder_key: builtins.bytes
+    @property
+    def record_links(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RecordLink]: ...
+    @property
+    def audit(self) -> global___RecordAudit: ...
+    @property
+    def securityData(self) -> global___SecurityData: ...
+    @property
+    def securityScoreData(self) -> global___SecurityScoreData: ...
+    def __init__(
+        self,
+        *,
+        record_uid: builtins.bytes = ...,
+        record_key: builtins.bytes = ...,
+        client_modified_time: builtins.int = ...,
+        data: builtins.bytes = ...,
+        non_shared_data: builtins.bytes = ...,
+        folder_type: global___RecordFolderType.ValueType = ...,
+        folder_uid: builtins.bytes = ...,
+        folder_key: builtins.bytes = ...,
+        record_links: collections.abc.Iterable[global___RecordLink] | None = ...,
+        audit: global___RecordAudit | None = ...,
+        securityData: global___SecurityData | None = ...,
+        securityScoreData: global___SecurityScoreData | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["audit", b"audit", "securityData", b"securityData", "securityScoreData", b"securityScoreData"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["audit", b"audit", "client_modified_time", b"client_modified_time", "data", b"data", "folder_key", b"folder_key", "folder_type", b"folder_type", "folder_uid", b"folder_uid", "non_shared_data", b"non_shared_data", "record_key", b"record_key", "record_links", b"record_links", "record_uid", b"record_uid", "securityData", b"securityData", "securityScoreData", b"securityScoreData"]) -> None: ...
+
+global___RecordAdd = RecordAdd
+
+@typing.final
+class RecordsAddRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORDS_FIELD_NUMBER: builtins.int
+    CLIENT_TIME_FIELD_NUMBER: builtins.int
+    SECURITY_DATA_KEY_TYPE_FIELD_NUMBER: builtins.int
+    client_time: builtins.int
+    security_data_key_type: global___RecordKeyType.ValueType
+    @property
+    def records(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RecordAdd]: ...
+    def __init__(
+        self,
+        *,
+        records: collections.abc.Iterable[global___RecordAdd] | None = ...,
+        client_time: builtins.int = ...,
+        security_data_key_type: global___RecordKeyType.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["client_time", b"client_time", "records", b"records", "security_data_key_type", b"security_data_key_type"]) -> None: ...
+
+global___RecordsAddRequest = RecordsAddRequest
+
+@typing.final
+class RecordUpdate(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORD_UID_FIELD_NUMBER: builtins.int
+    CLIENT_MODIFIED_TIME_FIELD_NUMBER: builtins.int
+    REVISION_FIELD_NUMBER: builtins.int
+    DATA_FIELD_NUMBER: builtins.int
+    NON_SHARED_DATA_FIELD_NUMBER: builtins.int
+    RECORD_LINKS_ADD_FIELD_NUMBER: builtins.int
+    RECORD_LINKS_REMOVE_FIELD_NUMBER: builtins.int
+    AUDIT_FIELD_NUMBER: builtins.int
+    SECURITYDATA_FIELD_NUMBER: builtins.int
+    SECURITYSCOREDATA_FIELD_NUMBER: builtins.int
+    record_uid: builtins.bytes
+    client_modified_time: builtins.int
+    revision: builtins.int
+    data: builtins.bytes
+    non_shared_data: builtins.bytes
+    @property
+    def record_links_add(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RecordLink]: ...
+    @property
+    def record_links_remove(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]: ...
+    @property
+    def audit(self) -> global___RecordAudit: ...
+    @property
+    def securityData(self) -> global___SecurityData: ...
+    @property
+    def securityScoreData(self) -> global___SecurityScoreData: ...
+    def __init__(
+        self,
+        *,
+        record_uid: builtins.bytes = ...,
+        client_modified_time: builtins.int = ...,
+        revision: builtins.int = ...,
+        data: builtins.bytes = ...,
+        non_shared_data: builtins.bytes = ...,
+        record_links_add: collections.abc.Iterable[global___RecordLink] | None = ...,
+        record_links_remove: collections.abc.Iterable[builtins.bytes] | None = ...,
+        audit: global___RecordAudit | None = ...,
+        securityData: global___SecurityData | None = ...,
+        securityScoreData: global___SecurityScoreData | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["audit", b"audit", "securityData", b"securityData", "securityScoreData", b"securityScoreData"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["audit", b"audit", "client_modified_time", b"client_modified_time", "data", b"data", "non_shared_data", b"non_shared_data", "record_links_add", b"record_links_add", "record_links_remove", b"record_links_remove", "record_uid", b"record_uid", "revision", b"revision", "securityData", b"securityData", "securityScoreData", b"securityScoreData"]) -> None: ...
+
+global___RecordUpdate = RecordUpdate
+
+@typing.final
+class RecordsUpdateRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORDS_FIELD_NUMBER: builtins.int
+    CLIENT_TIME_FIELD_NUMBER: builtins.int
+    SECURITY_DATA_KEY_TYPE_FIELD_NUMBER: builtins.int
+    client_time: builtins.int
+    security_data_key_type: global___RecordKeyType.ValueType
+    @property
+    def records(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RecordUpdate]: ...
+    def __init__(
+        self,
+        *,
+        records: collections.abc.Iterable[global___RecordUpdate] | None = ...,
+        client_time: builtins.int = ...,
+        security_data_key_type: global___RecordKeyType.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["client_time", b"client_time", "records", b"records", "security_data_key_type", b"security_data_key_type"]) -> None: ...
+
+global___RecordsUpdateRequest = RecordsUpdateRequest
+
+@typing.final
+class RecordFileForConversion(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORD_UID_FIELD_NUMBER: builtins.int
+    FILE_FILE_ID_FIELD_NUMBER: builtins.int
+    THUMB_FILE_ID_FIELD_NUMBER: builtins.int
+    DATA_FIELD_NUMBER: builtins.int
+    RECORD_KEY_FIELD_NUMBER: builtins.int
+    LINK_KEY_FIELD_NUMBER: builtins.int
+    record_uid: builtins.bytes
+    file_file_id: builtins.str
+    thumb_file_id: builtins.str
+    data: builtins.bytes
+    record_key: builtins.bytes
+    """record_ref"""
+    link_key: builtins.bytes
+    """record_link"""
+    def __init__(
+        self,
+        *,
+        record_uid: builtins.bytes = ...,
+        file_file_id: builtins.str = ...,
+        thumb_file_id: builtins.str = ...,
+        data: builtins.bytes = ...,
+        record_key: builtins.bytes = ...,
+        link_key: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["data", b"data", "file_file_id", b"file_file_id", "link_key", b"link_key", "record_key", b"record_key", "record_uid", b"record_uid", "thumb_file_id", b"thumb_file_id"]) -> None: ...
+
+global___RecordFileForConversion = RecordFileForConversion
+
+@typing.final
+class RecordFolderForConversion(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    FOLDER_UID_FIELD_NUMBER: builtins.int
+    RECORD_FOLDER_KEY_FIELD_NUMBER: builtins.int
+    folder_uid: builtins.bytes
+    record_folder_key: builtins.bytes
+    """GCM-encrypted shared folder key"""
+    def __init__(
+        self,
+        *,
+        folder_uid: builtins.bytes = ...,
+        record_folder_key: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["folder_uid", b"folder_uid", "record_folder_key", b"record_folder_key"]) -> None: ...
+
+global___RecordFolderForConversion = RecordFolderForConversion
+
+@typing.final
+class RecordConvertToV3(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORD_UID_FIELD_NUMBER: builtins.int
+    CLIENT_MODIFIED_TIME_FIELD_NUMBER: builtins.int
+    REVISION_FIELD_NUMBER: builtins.int
+    DATA_FIELD_NUMBER: builtins.int
+    NON_SHARED_DATA_FIELD_NUMBER: builtins.int
+    AUDIT_FIELD_NUMBER: builtins.int
+    RECORD_FILE_FIELD_NUMBER: builtins.int
+    FOLDER_KEY_FIELD_NUMBER: builtins.int
+    record_uid: builtins.bytes
+    client_modified_time: builtins.int
+    revision: builtins.int
+    data: builtins.bytes
+    non_shared_data: builtins.bytes
+    @property
+    def audit(self) -> global___RecordAudit: ...
+    @property
+    def record_file(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RecordFileForConversion]: ...
+    @property
+    def folder_key(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RecordFolderForConversion]: ...
+    def __init__(
+        self,
+        *,
+        record_uid: builtins.bytes = ...,
+        client_modified_time: builtins.int = ...,
+        revision: builtins.int = ...,
+        data: builtins.bytes = ...,
+        non_shared_data: builtins.bytes = ...,
+        audit: global___RecordAudit | None = ...,
+        record_file: collections.abc.Iterable[global___RecordFileForConversion] | None = ...,
+        folder_key: collections.abc.Iterable[global___RecordFolderForConversion] | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["audit", b"audit"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["audit", b"audit", "client_modified_time", b"client_modified_time", "data", b"data", "folder_key", b"folder_key", "non_shared_data", b"non_shared_data", "record_file", b"record_file", "record_uid", b"record_uid", "revision", b"revision"]) -> None: ...
+
+global___RecordConvertToV3 = RecordConvertToV3
+
+@typing.final
+class RecordsConvertToV3Request(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORDS_FIELD_NUMBER: builtins.int
+    CLIENT_TIME_FIELD_NUMBER: builtins.int
+    client_time: builtins.int
+    @property
+    def records(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RecordConvertToV3]: ...
+    def __init__(
+        self,
+        *,
+        records: collections.abc.Iterable[global___RecordConvertToV3] | None = ...,
+        client_time: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["client_time", b"client_time", "records", b"records"]) -> None: ...
+
+global___RecordsConvertToV3Request = RecordsConvertToV3Request
+
+@typing.final
+class RecordsRemoveRequest(google.protobuf.message.Message):
+    """to be used with records_remove and records_delete"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORDS_FIELD_NUMBER: builtins.int
+    @property
+    def records(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]: ...
+    def __init__(
+        self,
+        *,
+        records: collections.abc.Iterable[builtins.bytes] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["records", b"records"]) -> None: ...
+
+global___RecordsRemoveRequest = RecordsRemoveRequest
+
+@typing.final
+class RecordRevert(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORD_UID_FIELD_NUMBER: builtins.int
+    REVERT_TO_REVISION_FIELD_NUMBER: builtins.int
+    record_uid: builtins.bytes
+    revert_to_revision: builtins.int
+    def __init__(
+        self,
+        *,
+        record_uid: builtins.bytes = ...,
+        revert_to_revision: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["record_uid", b"record_uid", "revert_to_revision", b"revert_to_revision"]) -> None: ...
+
+global___RecordRevert = RecordRevert
+
+@typing.final
+class RecordsRevertRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORDS_FIELD_NUMBER: builtins.int
+    @property
+    def records(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RecordRevert]: ...
+    def __init__(
+        self,
+        *,
+        records: collections.abc.Iterable[global___RecordRevert] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["records", b"records"]) -> None: ...
+
+global___RecordsRevertRequest = RecordsRevertRequest
+
+@typing.final
+class RecordLinkError(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORD_UID_FIELD_NUMBER: builtins.int
+    STATUS_FIELD_NUMBER: builtins.int
+    MESSAGE_FIELD_NUMBER: builtins.int
+    record_uid: builtins.bytes
+    status: global___RecordModifyResult.ValueType
+    message: builtins.str
+    def __init__(
+        self,
+        *,
+        record_uid: builtins.bytes = ...,
+        status: global___RecordModifyResult.ValueType = ...,
+        message: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["message", b"message", "record_uid", b"record_uid", "status", b"status"]) -> None: ...
+
+global___RecordLinkError = RecordLinkError
+
+@typing.final
+class RecordModifyStatus(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORD_UID_FIELD_NUMBER: builtins.int
+    STATUS_FIELD_NUMBER: builtins.int
+    MESSAGE_FIELD_NUMBER: builtins.int
+    LINK_ERRORS_FIELD_NUMBER: builtins.int
+    record_uid: builtins.bytes
+    status: global___RecordModifyResult.ValueType
+    message: builtins.str
+    @property
+    def link_errors(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RecordLinkError]: ...
+    def __init__(
+        self,
+        *,
+        record_uid: builtins.bytes = ...,
+        status: global___RecordModifyResult.ValueType = ...,
+        message: builtins.str = ...,
+        link_errors: collections.abc.Iterable[global___RecordLinkError] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["link_errors", b"link_errors", "message", b"message", "record_uid", b"record_uid", "status", b"status"]) -> None: ...
+
+global___RecordModifyStatus = RecordModifyStatus
+
+@typing.final
+class RecordsModifyResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORDS_FIELD_NUMBER: builtins.int
+    REVISION_FIELD_NUMBER: builtins.int
+    revision: builtins.int
+    @property
+    def records(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RecordModifyStatus]: ...
+    def __init__(
+        self,
+        *,
+        records: collections.abc.Iterable[global___RecordModifyStatus] | None = ...,
+        revision: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["records", b"records", "revision", b"revision"]) -> None: ...
+
+global___RecordsModifyResponse = RecordsModifyResponse
+
+@typing.final
+class RecordAddAuditData(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORD_UID_FIELD_NUMBER: builtins.int
+    REVISION_FIELD_NUMBER: builtins.int
+    DATA_FIELD_NUMBER: builtins.int
+    VERSION_FIELD_NUMBER: builtins.int
+    record_uid: builtins.bytes
+    revision: builtins.int
+    data: builtins.bytes
+    version: builtins.int
+    def __init__(
+        self,
+        *,
+        record_uid: builtins.bytes = ...,
+        revision: builtins.int = ...,
+        data: builtins.bytes = ...,
+        version: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["data", b"data", "record_uid", b"record_uid", "revision", b"revision", "version", b"version"]) -> None: ...
+
+global___RecordAddAuditData = RecordAddAuditData
+
+@typing.final
+class AddAuditDataRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORDS_FIELD_NUMBER: builtins.int
+    @property
+    def records(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RecordAddAuditData]: ...
+    def __init__(
+        self,
+        *,
+        records: collections.abc.Iterable[global___RecordAddAuditData] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["records", b"records"]) -> None: ...
+
+global___AddAuditDataRequest = AddAuditDataRequest
+
+@typing.final
+class File(google.protobuf.message.Message):
+    """Files"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORD_UID_FIELD_NUMBER: builtins.int
+    RECORD_KEY_FIELD_NUMBER: builtins.int
+    DATA_FIELD_NUMBER: builtins.int
+    FILESIZE_FIELD_NUMBER: builtins.int
+    THUMBSIZE_FIELD_NUMBER: builtins.int
+    IS_SCRIPT_FIELD_NUMBER: builtins.int
+    record_uid: builtins.bytes
+    record_key: builtins.bytes
+    data: builtins.bytes
+    fileSize: builtins.int
+    thumbSize: builtins.int
+    is_script: builtins.bool
+    def __init__(
+        self,
+        *,
+        record_uid: builtins.bytes = ...,
+        record_key: builtins.bytes = ...,
+        data: builtins.bytes = ...,
+        fileSize: builtins.int = ...,
+        thumbSize: builtins.int = ...,
+        is_script: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["data", b"data", "fileSize", b"fileSize", "is_script", b"is_script", "record_key", b"record_key", "record_uid", b"record_uid", "thumbSize", b"thumbSize"]) -> None: ...
+
+global___File = File
+
+@typing.final
+class FilesAddRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    FILES_FIELD_NUMBER: builtins.int
+    CLIENT_TIME_FIELD_NUMBER: builtins.int
+    client_time: builtins.int
+    @property
+    def files(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___File]: ...
+    def __init__(
+        self,
+        *,
+        files: collections.abc.Iterable[global___File] | None = ...,
+        client_time: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["client_time", b"client_time", "files", b"files"]) -> None: ...
+
+global___FilesAddRequest = FilesAddRequest
+
+@typing.final
+class FileAddStatus(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORD_UID_FIELD_NUMBER: builtins.int
+    STATUS_FIELD_NUMBER: builtins.int
+    URL_FIELD_NUMBER: builtins.int
+    PARAMETERS_FIELD_NUMBER: builtins.int
+    THUMBNAIL_PARAMETERS_FIELD_NUMBER: builtins.int
+    SUCCESS_STATUS_CODE_FIELD_NUMBER: builtins.int
+    record_uid: builtins.bytes
+    status: global___FileAddResult.ValueType
+    url: builtins.str
+    parameters: builtins.str
+    thumbnail_parameters: builtins.str
+    success_status_code: builtins.int
+    def __init__(
+        self,
+        *,
+        record_uid: builtins.bytes = ...,
+        status: global___FileAddResult.ValueType = ...,
+        url: builtins.str = ...,
+        parameters: builtins.str = ...,
+        thumbnail_parameters: builtins.str = ...,
+        success_status_code: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["parameters", b"parameters", "record_uid", b"record_uid", "status", b"status", "success_status_code", b"success_status_code", "thumbnail_parameters", b"thumbnail_parameters", "url", b"url"]) -> None: ...
+
+global___FileAddStatus = FileAddStatus
+
+@typing.final
+class FilesAddResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    FILES_FIELD_NUMBER: builtins.int
+    REVISION_FIELD_NUMBER: builtins.int
+    revision: builtins.int
+    @property
+    def files(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___FileAddStatus]: ...
+    def __init__(
+        self,
+        *,
+        files: collections.abc.Iterable[global___FileAddStatus] | None = ...,
+        revision: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["files", b"files", "revision", b"revision"]) -> None: ...
+
+global___FilesAddResponse = FilesAddResponse
+
+@typing.final
+class FilesGetRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORD_UIDS_FIELD_NUMBER: builtins.int
+    FOR_THUMBNAILS_FIELD_NUMBER: builtins.int
+    EMERGENCY_ACCESS_ACCOUNT_OWNER_FIELD_NUMBER: builtins.int
+    for_thumbnails: builtins.bool
+    emergency_access_account_owner: builtins.str
+    @property
+    def record_uids(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]: ...
+    def __init__(
+        self,
+        *,
+        record_uids: collections.abc.Iterable[builtins.bytes] | None = ...,
+        for_thumbnails: builtins.bool = ...,
+        emergency_access_account_owner: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["emergency_access_account_owner", b"emergency_access_account_owner", "for_thumbnails", b"for_thumbnails", "record_uids", b"record_uids"]) -> None: ...
+
+global___FilesGetRequest = FilesGetRequest
+
+@typing.final
+class FileGetStatus(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORD_UID_FIELD_NUMBER: builtins.int
+    STATUS_FIELD_NUMBER: builtins.int
+    URL_FIELD_NUMBER: builtins.int
+    SUCCESS_STATUS_CODE_FIELD_NUMBER: builtins.int
+    FILEKEYTYPE_FIELD_NUMBER: builtins.int
+    record_uid: builtins.bytes
+    status: global___FileGetResult.ValueType
+    url: builtins.str
+    success_status_code: builtins.int
+    fileKeyType: global___RecordKeyType.ValueType
+    def __init__(
+        self,
+        *,
+        record_uid: builtins.bytes = ...,
+        status: global___FileGetResult.ValueType = ...,
+        url: builtins.str = ...,
+        success_status_code: builtins.int = ...,
+        fileKeyType: global___RecordKeyType.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["fileKeyType", b"fileKeyType", "record_uid", b"record_uid", "status", b"status", "success_status_code", b"success_status_code", "url", b"url"]) -> None: ...
+
+global___FileGetStatus = FileGetStatus
+
+@typing.final
+class FilesGetResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    FILES_FIELD_NUMBER: builtins.int
+    @property
+    def files(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___FileGetStatus]: ...
+    def __init__(
+        self,
+        *,
+        files: collections.abc.Iterable[global___FileGetStatus] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["files", b"files"]) -> None: ...
+
+global___FilesGetResponse = FilesGetResponse
+
+@typing.final
+class ApplicationAddRequest(google.protobuf.message.Message):
+    """Apps"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    APP_UID_FIELD_NUMBER: builtins.int
+    RECORD_KEY_FIELD_NUMBER: builtins.int
+    CLIENT_MODIFIED_TIME_FIELD_NUMBER: builtins.int
+    DATA_FIELD_NUMBER: builtins.int
+    AUDIT_FIELD_NUMBER: builtins.int
+    app_uid: builtins.bytes
+    record_key: builtins.bytes
+    client_modified_time: builtins.int
+    data: builtins.bytes
+    @property
+    def audit(self) -> global___RecordAudit: ...
+    def __init__(
+        self,
+        *,
+        app_uid: builtins.bytes = ...,
+        record_key: builtins.bytes = ...,
+        client_modified_time: builtins.int = ...,
+        data: builtins.bytes = ...,
+        audit: global___RecordAudit | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["audit", b"audit"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["app_uid", b"app_uid", "audit", b"audit", "client_modified_time", b"client_modified_time", "data", b"data", "record_key", b"record_key"]) -> None: ...
+
+global___ApplicationAddRequest = ApplicationAddRequest
+
+@typing.final
+class GetRecordDataWithAccessInfoRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CLIENTTIME_FIELD_NUMBER: builtins.int
+    RECORDUID_FIELD_NUMBER: builtins.int
+    RECORDDETAILSINCLUDE_FIELD_NUMBER: builtins.int
+    clientTime: builtins.int
+    recordDetailsInclude: global___RecordDetailsInclude.ValueType
+    @property
+    def recordUid(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]: ...
+    def __init__(
+        self,
+        *,
+        clientTime: builtins.int = ...,
+        recordUid: collections.abc.Iterable[builtins.bytes] | None = ...,
+        recordDetailsInclude: global___RecordDetailsInclude.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["clientTime", b"clientTime", "recordDetailsInclude", b"recordDetailsInclude", "recordUid", b"recordUid"]) -> None: ...
+
+global___GetRecordDataWithAccessInfoRequest = GetRecordDataWithAccessInfoRequest
+
+@typing.final
+class UserPermission(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    USERNAME_FIELD_NUMBER: builtins.int
+    OWNER_FIELD_NUMBER: builtins.int
+    SHAREADMIN_FIELD_NUMBER: builtins.int
+    SHARABLE_FIELD_NUMBER: builtins.int
+    EDITABLE_FIELD_NUMBER: builtins.int
+    AWAITINGAPPROVAL_FIELD_NUMBER: builtins.int
+    EXPIRATION_FIELD_NUMBER: builtins.int
+    ACCOUNTUID_FIELD_NUMBER: builtins.int
+    TIMERNOTIFICATIONTYPE_FIELD_NUMBER: builtins.int
+    ROTATEONEXPIRATION_FIELD_NUMBER: builtins.int
+    username: builtins.str
+    owner: builtins.bool
+    shareAdmin: builtins.bool
+    sharable: builtins.bool
+    editable: builtins.bool
+    awaitingApproval: builtins.bool
+    """flag indicating if the record is awaiting approval from the user referenced in username"""
+    expiration: builtins.int
+    """time limit for the record directly shared to a user"""
+    accountUid: builtins.bytes
+    timerNotificationType: global___TimerNotificationType.ValueType
+    rotateOnExpiration: builtins.bool
+    def __init__(
+        self,
+        *,
+        username: builtins.str = ...,
+        owner: builtins.bool = ...,
+        shareAdmin: builtins.bool = ...,
+        sharable: builtins.bool = ...,
+        editable: builtins.bool = ...,
+        awaitingApproval: builtins.bool = ...,
+        expiration: builtins.int = ...,
+        accountUid: builtins.bytes = ...,
+        timerNotificationType: global___TimerNotificationType.ValueType = ...,
+        rotateOnExpiration: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["accountUid", b"accountUid", "awaitingApproval", b"awaitingApproval", "editable", b"editable", "expiration", b"expiration", "owner", b"owner", "rotateOnExpiration", b"rotateOnExpiration", "sharable", b"sharable", "shareAdmin", b"shareAdmin", "timerNotificationType", b"timerNotificationType", "username", b"username"]) -> None: ...
+
+global___UserPermission = UserPermission
+
+@typing.final
+class SharedFolderPermission(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SHAREDFOLDERUID_FIELD_NUMBER: builtins.int
+    RESHARABLE_FIELD_NUMBER: builtins.int
+    EDITABLE_FIELD_NUMBER: builtins.int
+    REVISION_FIELD_NUMBER: builtins.int
+    EXPIRATION_FIELD_NUMBER: builtins.int
+    TIMERNOTIFICATIONTYPE_FIELD_NUMBER: builtins.int
+    ROTATEONEXPIRATION_FIELD_NUMBER: builtins.int
+    sharedFolderUid: builtins.bytes
+    resharable: builtins.bool
+    editable: builtins.bool
+    revision: builtins.int
+    expiration: builtins.int
+    """time limit for the record in a shared folder"""
+    timerNotificationType: global___TimerNotificationType.ValueType
+    rotateOnExpiration: builtins.bool
+    def __init__(
+        self,
+        *,
+        sharedFolderUid: builtins.bytes = ...,
+        resharable: builtins.bool = ...,
+        editable: builtins.bool = ...,
+        revision: builtins.int = ...,
+        expiration: builtins.int = ...,
+        timerNotificationType: global___TimerNotificationType.ValueType = ...,
+        rotateOnExpiration: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["editable", b"editable", "expiration", b"expiration", "resharable", b"resharable", "revision", b"revision", "rotateOnExpiration", b"rotateOnExpiration", "sharedFolderUid", b"sharedFolderUid", "timerNotificationType", b"timerNotificationType"]) -> None: ...
+
+global___SharedFolderPermission = SharedFolderPermission
+
+@typing.final
+class RecordData(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    REVISION_FIELD_NUMBER: builtins.int
+    VERSION_FIELD_NUMBER: builtins.int
+    SHARED_FIELD_NUMBER: builtins.int
+    ENCRYPTEDRECORDDATA_FIELD_NUMBER: builtins.int
+    ENCRYPTEDEXTRADATA_FIELD_NUMBER: builtins.int
+    CLIENTMODIFIEDTIME_FIELD_NUMBER: builtins.int
+    NONSHAREDDATA_FIELD_NUMBER: builtins.int
+    LINKEDRECORDDATA_FIELD_NUMBER: builtins.int
+    FILEID_FIELD_NUMBER: builtins.int
+    FILESIZE_FIELD_NUMBER: builtins.int
+    THUMBNAILSIZE_FIELD_NUMBER: builtins.int
+    RECORDKEYTYPE_FIELD_NUMBER: builtins.int
+    RECORDKEY_FIELD_NUMBER: builtins.int
+    RECORDUID_FIELD_NUMBER: builtins.int
+    revision: builtins.int
+    version: builtins.int
+    """ORIGINAL(1), SUPPORTS_EXTRA(2), RECORD_TYPES(3), FILE(4), APP(5);"""
+    shared: builtins.bool
+    encryptedRecordData: builtins.str
+    """record data encrypted with the record key"""
+    encryptedExtraData: builtins.str
+    """extra record data encrypted with the record key"""
+    clientModifiedTime: builtins.int
+    nonSharedData: builtins.str
+    fileSize: builtins.int
+    thumbnailSize: builtins.int
+    recordKeyType: global___RecordKeyType.ValueType
+    recordKey: builtins.bytes
+    recordUid: builtins.bytes
+    @property
+    def linkedRecordData(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RecordData]:
+        """a list of child record data"""
+
+    @property
+    def fileId(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]:
+        """json object of unencrypted data (currently contains only file ids)"""
+
+    def __init__(
+        self,
+        *,
+        revision: builtins.int = ...,
+        version: builtins.int = ...,
+        shared: builtins.bool = ...,
+        encryptedRecordData: builtins.str = ...,
+        encryptedExtraData: builtins.str = ...,
+        clientModifiedTime: builtins.int = ...,
+        nonSharedData: builtins.str = ...,
+        linkedRecordData: collections.abc.Iterable[global___RecordData] | None = ...,
+        fileId: collections.abc.Iterable[builtins.bytes] | None = ...,
+        fileSize: builtins.int = ...,
+        thumbnailSize: builtins.int = ...,
+        recordKeyType: global___RecordKeyType.ValueType = ...,
+        recordKey: builtins.bytes = ...,
+        recordUid: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["clientModifiedTime", b"clientModifiedTime", "encryptedExtraData", b"encryptedExtraData", "encryptedRecordData", b"encryptedRecordData", "fileId", b"fileId", "fileSize", b"fileSize", "linkedRecordData", b"linkedRecordData", "nonSharedData", b"nonSharedData", "recordKey", b"recordKey", "recordKeyType", b"recordKeyType", "recordUid", b"recordUid", "revision", b"revision", "shared", b"shared", "thumbnailSize", b"thumbnailSize", "version", b"version"]) -> None: ...
+
+global___RecordData = RecordData
+
+@typing.final
+class RecordDataWithAccessInfo(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORDUID_FIELD_NUMBER: builtins.int
+    RECORDDATA_FIELD_NUMBER: builtins.int
+    USERPERMISSION_FIELD_NUMBER: builtins.int
+    SHAREDFOLDERPERMISSION_FIELD_NUMBER: builtins.int
+    recordUid: builtins.bytes
+    @property
+    def recordData(self) -> global___RecordData: ...
+    @property
+    def userPermission(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___UserPermission]: ...
+    @property
+    def sharedFolderPermission(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___SharedFolderPermission]: ...
+    def __init__(
+        self,
+        *,
+        recordUid: builtins.bytes = ...,
+        recordData: global___RecordData | None = ...,
+        userPermission: collections.abc.Iterable[global___UserPermission] | None = ...,
+        sharedFolderPermission: collections.abc.Iterable[global___SharedFolderPermission] | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["recordData", b"recordData"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["recordData", b"recordData", "recordUid", b"recordUid", "sharedFolderPermission", b"sharedFolderPermission", "userPermission", b"userPermission"]) -> None: ...
+
+global___RecordDataWithAccessInfo = RecordDataWithAccessInfo
+
+@typing.final
+class GetRecordDataWithAccessInfoResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORDDATAWITHACCESSINFO_FIELD_NUMBER: builtins.int
+    NOPERMISSIONRECORDUID_FIELD_NUMBER: builtins.int
+    @property
+    def recordDataWithAccessInfo(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RecordDataWithAccessInfo]: ...
+    @property
+    def noPermissionRecordUid(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]: ...
+    def __init__(
+        self,
+        *,
+        recordDataWithAccessInfo: collections.abc.Iterable[global___RecordDataWithAccessInfo] | None = ...,
+        noPermissionRecordUid: collections.abc.Iterable[builtins.bytes] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["noPermissionRecordUid", b"noPermissionRecordUid", "recordDataWithAccessInfo", b"recordDataWithAccessInfo"]) -> None: ...
+
+global___GetRecordDataWithAccessInfoResponse = GetRecordDataWithAccessInfoResponse
+
+@typing.final
+class IsObjectShareAdmin(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    UID_FIELD_NUMBER: builtins.int
+    ISADMIN_FIELD_NUMBER: builtins.int
+    OBJECTTYPE_FIELD_NUMBER: builtins.int
+    uid: builtins.bytes
+    isAdmin: builtins.bool
+    """used in the response"""
+    objectType: global___CheckShareAdminObjectType.ValueType
+    def __init__(
+        self,
+        *,
+        uid: builtins.bytes = ...,
+        isAdmin: builtins.bool = ...,
+        objectType: global___CheckShareAdminObjectType.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["isAdmin", b"isAdmin", "objectType", b"objectType", "uid", b"uid"]) -> None: ...
+
+global___IsObjectShareAdmin = IsObjectShareAdmin
+
+@typing.final
+class AmIShareAdmin(google.protobuf.message.Message):
+    """used for both request and response"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ISOBJECTSHAREADMIN_FIELD_NUMBER: builtins.int
+    @property
+    def isObjectShareAdmin(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___IsObjectShareAdmin]: ...
+    def __init__(
+        self,
+        *,
+        isObjectShareAdmin: collections.abc.Iterable[global___IsObjectShareAdmin] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["isObjectShareAdmin", b"isObjectShareAdmin"]) -> None: ...
+
+global___AmIShareAdmin = AmIShareAdmin
+
+@typing.final
+class RecordShareUpdateRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ADDSHAREDRECORD_FIELD_NUMBER: builtins.int
+    UPDATESHAREDRECORD_FIELD_NUMBER: builtins.int
+    REMOVESHAREDRECORD_FIELD_NUMBER: builtins.int
+    PT_FIELD_NUMBER: builtins.int
+    pt: builtins.str
+    @property
+    def addSharedRecord(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___SharedRecord]: ...
+    @property
+    def updateSharedRecord(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___SharedRecord]: ...
+    @property
+    def removeSharedRecord(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___SharedRecord]: ...
+    def __init__(
+        self,
+        *,
+        addSharedRecord: collections.abc.Iterable[global___SharedRecord] | None = ...,
+        updateSharedRecord: collections.abc.Iterable[global___SharedRecord] | None = ...,
+        removeSharedRecord: collections.abc.Iterable[global___SharedRecord] | None = ...,
+        pt: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["addSharedRecord", b"addSharedRecord", "pt", b"pt", "removeSharedRecord", b"removeSharedRecord", "updateSharedRecord", b"updateSharedRecord"]) -> None: ...
+
+global___RecordShareUpdateRequest = RecordShareUpdateRequest
+
+@typing.final
+class SharedRecord(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TOUSERNAME_FIELD_NUMBER: builtins.int
+    RECORDUID_FIELD_NUMBER: builtins.int
+    RECORDKEY_FIELD_NUMBER: builtins.int
+    SHAREDFOLDERUID_FIELD_NUMBER: builtins.int
+    TEAMUID_FIELD_NUMBER: builtins.int
+    EDITABLE_FIELD_NUMBER: builtins.int
+    SHAREABLE_FIELD_NUMBER: builtins.int
+    TRANSFER_FIELD_NUMBER: builtins.int
+    USEECCKEY_FIELD_NUMBER: builtins.int
+    REMOVEVAULTDATA_FIELD_NUMBER: builtins.int
+    EXPIRATION_FIELD_NUMBER: builtins.int
+    TIMERNOTIFICATIONTYPE_FIELD_NUMBER: builtins.int
+    ROTATEONEXPIRATION_FIELD_NUMBER: builtins.int
+    toUsername: builtins.str
+    recordUid: builtins.bytes
+    recordKey: builtins.bytes
+    sharedFolderUid: builtins.bytes
+    teamUid: builtins.bytes
+    editable: builtins.bool
+    shareable: builtins.bool
+    transfer: builtins.bool
+    useEccKey: builtins.bool
+    removeVaultData: builtins.bool
+    expiration: builtins.int
+    timerNotificationType: global___TimerNotificationType.ValueType
+    rotateOnExpiration: builtins.bool
+    def __init__(
+        self,
+        *,
+        toUsername: builtins.str = ...,
+        recordUid: builtins.bytes = ...,
+        recordKey: builtins.bytes = ...,
+        sharedFolderUid: builtins.bytes = ...,
+        teamUid: builtins.bytes = ...,
+        editable: builtins.bool = ...,
+        shareable: builtins.bool = ...,
+        transfer: builtins.bool = ...,
+        useEccKey: builtins.bool = ...,
+        removeVaultData: builtins.bool = ...,
+        expiration: builtins.int = ...,
+        timerNotificationType: global___TimerNotificationType.ValueType = ...,
+        rotateOnExpiration: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["editable", b"editable", "expiration", b"expiration", "recordKey", b"recordKey", "recordUid", b"recordUid", "removeVaultData", b"removeVaultData", "rotateOnExpiration", b"rotateOnExpiration", "shareable", b"shareable", "sharedFolderUid", b"sharedFolderUid", "teamUid", b"teamUid", "timerNotificationType", b"timerNotificationType", "toUsername", b"toUsername", "transfer", b"transfer", "useEccKey", b"useEccKey"]) -> None: ...
+
+global___SharedRecord = SharedRecord
+
+@typing.final
+class RecordShareUpdateResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ADDSHAREDRECORDSTATUS_FIELD_NUMBER: builtins.int
+    UPDATESHAREDRECORDSTATUS_FIELD_NUMBER: builtins.int
+    REMOVESHAREDRECORDSTATUS_FIELD_NUMBER: builtins.int
+    @property
+    def addSharedRecordStatus(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___SharedRecordStatus]: ...
+    @property
+    def updateSharedRecordStatus(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___SharedRecordStatus]: ...
+    @property
+    def removeSharedRecordStatus(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___SharedRecordStatus]: ...
+    def __init__(
+        self,
+        *,
+        addSharedRecordStatus: collections.abc.Iterable[global___SharedRecordStatus] | None = ...,
+        updateSharedRecordStatus: collections.abc.Iterable[global___SharedRecordStatus] | None = ...,
+        removeSharedRecordStatus: collections.abc.Iterable[global___SharedRecordStatus] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["addSharedRecordStatus", b"addSharedRecordStatus", "removeSharedRecordStatus", b"removeSharedRecordStatus", "updateSharedRecordStatus", b"updateSharedRecordStatus"]) -> None: ...
+
+global___RecordShareUpdateResponse = RecordShareUpdateResponse
+
+@typing.final
+class SharedRecordStatus(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORDUID_FIELD_NUMBER: builtins.int
+    STATUS_FIELD_NUMBER: builtins.int
+    MESSAGE_FIELD_NUMBER: builtins.int
+    USERNAME_FIELD_NUMBER: builtins.int
+    recordUid: builtins.bytes
+    status: builtins.str
+    """success, pending_accept, user_not_found, already_shared, not_allowed_to_share, access_denied, not_allowed_to_set_permission"""
+    message: builtins.str
+    username: builtins.str
+    def __init__(
+        self,
+        *,
+        recordUid: builtins.bytes = ...,
+        status: builtins.str = ...,
+        message: builtins.str = ...,
+        username: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["message", b"message", "recordUid", b"recordUid", "status", b"status", "username", b"username"]) -> None: ...
+
+global___SharedRecordStatus = SharedRecordStatus
+
+@typing.final
+class GetRecordPermissionsRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORDUIDS_FIELD_NUMBER: builtins.int
+    ISSHAREADMIN_FIELD_NUMBER: builtins.int
+    isShareAdmin: builtins.bool
+    @property
+    def recordUids(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]: ...
+    def __init__(
+        self,
+        *,
+        recordUids: collections.abc.Iterable[builtins.bytes] | None = ...,
+        isShareAdmin: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["isShareAdmin", b"isShareAdmin", "recordUids", b"recordUids"]) -> None: ...
+
+global___GetRecordPermissionsRequest = GetRecordPermissionsRequest
+
+@typing.final
+class GetRecordPermissionsResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORDPERMISSIONS_FIELD_NUMBER: builtins.int
+    @property
+    def recordPermissions(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RecordPermission]: ...
+    def __init__(
+        self,
+        *,
+        recordPermissions: collections.abc.Iterable[global___RecordPermission] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["recordPermissions", b"recordPermissions"]) -> None: ...
+
+global___GetRecordPermissionsResponse = GetRecordPermissionsResponse
+
+@typing.final
+class RecordPermission(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORDUID_FIELD_NUMBER: builtins.int
+    OWNER_FIELD_NUMBER: builtins.int
+    CANEDIT_FIELD_NUMBER: builtins.int
+    CANSHARE_FIELD_NUMBER: builtins.int
+    CANTRANSFER_FIELD_NUMBER: builtins.int
+    recordUid: builtins.bytes
+    owner: builtins.bool
+    canEdit: builtins.bool
+    canShare: builtins.bool
+    canTransfer: builtins.bool
+    def __init__(
+        self,
+        *,
+        recordUid: builtins.bytes = ...,
+        owner: builtins.bool = ...,
+        canEdit: builtins.bool = ...,
+        canShare: builtins.bool = ...,
+        canTransfer: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["canEdit", b"canEdit", "canShare", b"canShare", "canTransfer", b"canTransfer", "owner", b"owner", "recordUid", b"recordUid"]) -> None: ...
+
+global___RecordPermission = RecordPermission
+
+@typing.final
+class GetShareObjectsRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    STARTWITH_FIELD_NUMBER: builtins.int
+    CONTAINS_FIELD_NUMBER: builtins.int
+    FILTERED_FIELD_NUMBER: builtins.int
+    SHAREDFOLDERUID_FIELD_NUMBER: builtins.int
+    startWith: builtins.str
+    """return share objects that start with this value"""
+    contains: builtins.str
+    """return share objects that contains this value"""
+    filtered: builtins.bool
+    """users with status != ACTIVE will not be returned if true - used for autoshare, false - used for manage share relationships"""
+    sharedFolderUid: builtins.bytes
+    """the shared folder uid"""
+    def __init__(
+        self,
+        *,
+        startWith: builtins.str = ...,
+        contains: builtins.str = ...,
+        filtered: builtins.bool = ...,
+        sharedFolderUid: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["contains", b"contains", "filtered", b"filtered", "sharedFolderUid", b"sharedFolderUid", "startWith", b"startWith"]) -> None: ...
+
+global___GetShareObjectsRequest = GetShareObjectsRequest
+
+@typing.final
+class GetShareObjectsResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SHARERELATIONSHIPS_FIELD_NUMBER: builtins.int
+    SHAREFAMILYUSERS_FIELD_NUMBER: builtins.int
+    SHAREENTERPRISEUSERS_FIELD_NUMBER: builtins.int
+    SHARETEAMS_FIELD_NUMBER: builtins.int
+    SHAREMCTEAMS_FIELD_NUMBER: builtins.int
+    SHAREMCENTERPRISEUSERS_FIELD_NUMBER: builtins.int
+    SHAREENTERPRISENAMES_FIELD_NUMBER: builtins.int
+    @property
+    def shareRelationships(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ShareUser]:
+        """for user sharing relationships"""
+
+    @property
+    def shareFamilyUsers(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ShareUser]:
+        """for family"""
+
+    @property
+    def shareEnterpriseUsers(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ShareUser]:
+        """for visible users of enterprise"""
+
+    @property
+    def shareTeams(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ShareTeam]:
+        """for visible teams of enterprise"""
+
+    @property
+    def shareMCTeams(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ShareTeam]:
+        """only for mc admins, teams associated with the MC"""
+
+    @property
+    def shareMCEnterpriseUsers(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ShareUser]:
+        """only for mc admins"""
+
+    @property
+    def shareEnterpriseNames(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ShareEnterprise]:
+        """to send the names of enterprises in which the users are members of"""
+
+    def __init__(
+        self,
+        *,
+        shareRelationships: collections.abc.Iterable[global___ShareUser] | None = ...,
+        shareFamilyUsers: collections.abc.Iterable[global___ShareUser] | None = ...,
+        shareEnterpriseUsers: collections.abc.Iterable[global___ShareUser] | None = ...,
+        shareTeams: collections.abc.Iterable[global___ShareTeam] | None = ...,
+        shareMCTeams: collections.abc.Iterable[global___ShareTeam] | None = ...,
+        shareMCEnterpriseUsers: collections.abc.Iterable[global___ShareUser] | None = ...,
+        shareEnterpriseNames: collections.abc.Iterable[global___ShareEnterprise] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["shareEnterpriseNames", b"shareEnterpriseNames", "shareEnterpriseUsers", b"shareEnterpriseUsers", "shareFamilyUsers", b"shareFamilyUsers", "shareMCEnterpriseUsers", b"shareMCEnterpriseUsers", "shareMCTeams", b"shareMCTeams", "shareRelationships", b"shareRelationships", "shareTeams", b"shareTeams"]) -> None: ...
+
+global___GetShareObjectsResponse = GetShareObjectsResponse
+
+@typing.final
+class ShareUser(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    USERNAME_FIELD_NUMBER: builtins.int
+    FULLNAME_FIELD_NUMBER: builtins.int
+    ENTERPRISEID_FIELD_NUMBER: builtins.int
+    STATUS_FIELD_NUMBER: builtins.int
+    ISSHAREADMIN_FIELD_NUMBER: builtins.int
+    ISADMINOFSHAREDFOLDEROWNER_FIELD_NUMBER: builtins.int
+    username: builtins.str
+    fullname: builtins.str
+    enterpriseId: builtins.int
+    """only for enterprise user"""
+    status: global___ShareStatus.ValueType
+    isShareAdmin: builtins.bool
+    """only for enterprise user"""
+    isAdminOfSharedFolderOwner: builtins.bool
+    """only used for enterprise user"""
+    def __init__(
+        self,
+        *,
+        username: builtins.str = ...,
+        fullname: builtins.str = ...,
+        enterpriseId: builtins.int = ...,
+        status: global___ShareStatus.ValueType = ...,
+        isShareAdmin: builtins.bool = ...,
+        isAdminOfSharedFolderOwner: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enterpriseId", b"enterpriseId", "fullname", b"fullname", "isAdminOfSharedFolderOwner", b"isAdminOfSharedFolderOwner", "isShareAdmin", b"isShareAdmin", "status", b"status", "username", b"username"]) -> None: ...
+
+global___ShareUser = ShareUser
+
+@typing.final
+class ShareTeam(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TEAMNAME_FIELD_NUMBER: builtins.int
+    ENTERPRISEID_FIELD_NUMBER: builtins.int
+    TEAMUID_FIELD_NUMBER: builtins.int
+    teamname: builtins.str
+    enterpriseId: builtins.int
+    teamUid: builtins.bytes
+    def __init__(
+        self,
+        *,
+        teamname: builtins.str = ...,
+        enterpriseId: builtins.int = ...,
+        teamUid: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enterpriseId", b"enterpriseId", "teamUid", b"teamUid", "teamname", b"teamname"]) -> None: ...
+
+global___ShareTeam = ShareTeam
+
+@typing.final
+class ShareEnterprise(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISENAME_FIELD_NUMBER: builtins.int
+    ENTERPRISEID_FIELD_NUMBER: builtins.int
+    enterprisename: builtins.str
+    enterpriseId: builtins.int
+    def __init__(
+        self,
+        *,
+        enterprisename: builtins.str = ...,
+        enterpriseId: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enterpriseId", b"enterpriseId", "enterprisename", b"enterprisename"]) -> None: ...
+
+global___ShareEnterprise = ShareEnterprise
+
+@typing.final
+class RecordsOnwershipTransferRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TRANSFERRECORDS_FIELD_NUMBER: builtins.int
+    @property
+    def transferRecords(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___TransferRecord]: ...
+    def __init__(
+        self,
+        *,
+        transferRecords: collections.abc.Iterable[global___TransferRecord] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["transferRecords", b"transferRecords"]) -> None: ...
+
+global___RecordsOnwershipTransferRequest = RecordsOnwershipTransferRequest
+
+@typing.final
+class TransferRecord(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    USERNAME_FIELD_NUMBER: builtins.int
+    RECORDUID_FIELD_NUMBER: builtins.int
+    RECORDKEY_FIELD_NUMBER: builtins.int
+    USEECCKEY_FIELD_NUMBER: builtins.int
+    username: builtins.str
+    recordUid: builtins.bytes
+    recordKey: builtins.bytes
+    useEccKey: builtins.bool
+    def __init__(
+        self,
+        *,
+        username: builtins.str = ...,
+        recordUid: builtins.bytes = ...,
+        recordKey: builtins.bytes = ...,
+        useEccKey: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["recordKey", b"recordKey", "recordUid", b"recordUid", "useEccKey", b"useEccKey", "username", b"username"]) -> None: ...
+
+global___TransferRecord = TransferRecord
+
+@typing.final
+class RecordsOnwershipTransferResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TRANSFERRECORDSTATUS_FIELD_NUMBER: builtins.int
+    @property
+    def transferRecordStatus(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___TransferRecordStatus]: ...
+    def __init__(
+        self,
+        *,
+        transferRecordStatus: collections.abc.Iterable[global___TransferRecordStatus] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["transferRecordStatus", b"transferRecordStatus"]) -> None: ...
+
+global___RecordsOnwershipTransferResponse = RecordsOnwershipTransferResponse
+
+@typing.final
+class TransferRecordStatus(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    USERNAME_FIELD_NUMBER: builtins.int
+    RECORDUID_FIELD_NUMBER: builtins.int
+    STATUS_FIELD_NUMBER: builtins.int
+    MESSAGE_FIELD_NUMBER: builtins.int
+    username: builtins.str
+    recordUid: builtins.bytes
+    status: builtins.str
+    message: builtins.str
+    def __init__(
+        self,
+        *,
+        username: builtins.str = ...,
+        recordUid: builtins.bytes = ...,
+        status: builtins.str = ...,
+        message: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["message", b"message", "recordUid", b"recordUid", "status", b"status", "username", b"username"]) -> None: ...
+
+global___TransferRecordStatus = TransferRecordStatus
+
+@typing.final
+class RecordsUnshareRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SHAREDFOLDERS_FIELD_NUMBER: builtins.int
+    USERS_FIELD_NUMBER: builtins.int
+    @property
+    def sharedFolders(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RecordsUnshareFolder]: ...
+    @property
+    def users(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RecordsUnshareUser]: ...
+    def __init__(
+        self,
+        *,
+        sharedFolders: collections.abc.Iterable[global___RecordsUnshareFolder] | None = ...,
+        users: collections.abc.Iterable[global___RecordsUnshareUser] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["sharedFolders", b"sharedFolders", "users", b"users"]) -> None: ...
+
+global___RecordsUnshareRequest = RecordsUnshareRequest
+
+@typing.final
+class RecordsUnshareResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SHAREDFOLDERS_FIELD_NUMBER: builtins.int
+    USERS_FIELD_NUMBER: builtins.int
+    @property
+    def sharedFolders(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RecordsUnshareFolderStatus]: ...
+    @property
+    def users(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RecordsUnshareUserStatus]: ...
+    def __init__(
+        self,
+        *,
+        sharedFolders: collections.abc.Iterable[global___RecordsUnshareFolderStatus] | None = ...,
+        users: collections.abc.Iterable[global___RecordsUnshareUserStatus] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["sharedFolders", b"sharedFolders", "users", b"users"]) -> None: ...
+
+global___RecordsUnshareResponse = RecordsUnshareResponse
+
+@typing.final
+class RecordsUnshareFolder(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORDUID_FIELD_NUMBER: builtins.int
+    SHAREDFOLDERUID_FIELD_NUMBER: builtins.int
+    recordUid: builtins.bytes
+    sharedFolderUid: builtins.bytes
+    def __init__(
+        self,
+        *,
+        recordUid: builtins.bytes = ...,
+        sharedFolderUid: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["recordUid", b"recordUid", "sharedFolderUid", b"sharedFolderUid"]) -> None: ...
+
+global___RecordsUnshareFolder = RecordsUnshareFolder
+
+@typing.final
+class RecordsUnshareUser(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORDUID_FIELD_NUMBER: builtins.int
+    ACCOUNTUID_FIELD_NUMBER: builtins.int
+    recordUid: builtins.bytes
+    accountUid: builtins.bytes
+    def __init__(
+        self,
+        *,
+        recordUid: builtins.bytes = ...,
+        accountUid: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["accountUid", b"accountUid", "recordUid", b"recordUid"]) -> None: ...
+
+global___RecordsUnshareUser = RecordsUnshareUser
+
+@typing.final
+class RecordsUnshareFolderStatus(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORDUID_FIELD_NUMBER: builtins.int
+    SHAREDFOLDERUID_FIELD_NUMBER: builtins.int
+    recordUid: builtins.bytes
+    sharedFolderUid: builtins.bytes
+    def __init__(
+        self,
+        *,
+        recordUid: builtins.bytes = ...,
+        sharedFolderUid: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["recordUid", b"recordUid", "sharedFolderUid", b"sharedFolderUid"]) -> None: ...
+
+global___RecordsUnshareFolderStatus = RecordsUnshareFolderStatus
+
+@typing.final
+class RecordsUnshareUserStatus(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORDUID_FIELD_NUMBER: builtins.int
+    ACCOUNTUID_FIELD_NUMBER: builtins.int
+    recordUid: builtins.bytes
+    accountUid: builtins.bytes
+    def __init__(
+        self,
+        *,
+        recordUid: builtins.bytes = ...,
+        accountUid: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["accountUid", b"accountUid", "recordUid", b"recordUid"]) -> None: ...
+
+global___RecordsUnshareUserStatus = RecordsUnshareUserStatus
+
+@typing.final
+class TimedAccessCallbackPayload(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TIMELIMITEDACCESSTYPE_FIELD_NUMBER: builtins.int
+    timeLimitedAccessType: global___TimeLimitedAccessType.ValueType
+    def __init__(
+        self,
+        *,
+        timeLimitedAccessType: global___TimeLimitedAccessType.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["timeLimitedAccessType", b"timeLimitedAccessType"]) -> None: ...
+
+global___TimedAccessCallbackPayload = TimedAccessCallbackPayload
+
+@typing.final
+class TimeLimitedAccessRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ACCOUNTUID_FIELD_NUMBER: builtins.int
+    TEAMUID_FIELD_NUMBER: builtins.int
+    RECORDUID_FIELD_NUMBER: builtins.int
+    SHAREDOBJECTUID_FIELD_NUMBER: builtins.int
+    TIMELIMITEDACCESSTYPE_FIELD_NUMBER: builtins.int
+    EXPIRATION_FIELD_NUMBER: builtins.int
+    TIMERNOTIFICATIONTYPE_FIELD_NUMBER: builtins.int
+    sharedObjectUid: builtins.bytes
+    """recordUid or sharedFolderUid of which the timer will be set or deleted"""
+    timeLimitedAccessType: global___TimeLimitedAccessType.ValueType
+    expiration: builtins.int
+    """delete timer when expiration==0"""
+    timerNotificationType: global___TimerNotificationType.ValueType
+    @property
+    def accountUid(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]:
+        """list of users that have access to a record or shared folder"""
+
+    @property
+    def teamUid(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]:
+        """list of teams that have access to a shared folder"""
+
+    @property
+    def recordUid(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]:
+        """list of records that have access to a shared folder (aka that are shared via a shared folder)"""
+
+    def __init__(
+        self,
+        *,
+        accountUid: collections.abc.Iterable[builtins.bytes] | None = ...,
+        teamUid: collections.abc.Iterable[builtins.bytes] | None = ...,
+        recordUid: collections.abc.Iterable[builtins.bytes] | None = ...,
+        sharedObjectUid: builtins.bytes = ...,
+        timeLimitedAccessType: global___TimeLimitedAccessType.ValueType = ...,
+        expiration: builtins.int = ...,
+        timerNotificationType: global___TimerNotificationType.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["accountUid", b"accountUid", "expiration", b"expiration", "recordUid", b"recordUid", "sharedObjectUid", b"sharedObjectUid", "teamUid", b"teamUid", "timeLimitedAccessType", b"timeLimitedAccessType", "timerNotificationType", b"timerNotificationType"]) -> None: ...
+
+global___TimeLimitedAccessRequest = TimeLimitedAccessRequest
+
+@typing.final
+class TimeLimitedAccessStatus(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    UID_FIELD_NUMBER: builtins.int
+    MESSAGE_FIELD_NUMBER: builtins.int
+    uid: builtins.bytes
+    """accountUid or teamUid or recordUid"""
+    message: builtins.str
+    def __init__(
+        self,
+        *,
+        uid: builtins.bytes = ...,
+        message: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["message", b"message", "uid", b"uid"]) -> None: ...
+
+global___TimeLimitedAccessStatus = TimeLimitedAccessStatus
+
+@typing.final
+class TimeLimitedAccessResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    REVISION_FIELD_NUMBER: builtins.int
+    USERACCESSSTATUS_FIELD_NUMBER: builtins.int
+    TEAMACCESSSTATUS_FIELD_NUMBER: builtins.int
+    RECORDACCESSSTATUS_FIELD_NUMBER: builtins.int
+    revision: builtins.int
+    @property
+    def userAccessStatus(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___TimeLimitedAccessStatus]:
+        """uid is accountUid"""
+
+    @property
+    def teamAccessStatus(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___TimeLimitedAccessStatus]:
+        """uid is teamUid"""
+
+    @property
+    def recordAccessStatus(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___TimeLimitedAccessStatus]:
+        """uid is recordUid"""
+
+    def __init__(
+        self,
+        *,
+        revision: builtins.int = ...,
+        userAccessStatus: collections.abc.Iterable[global___TimeLimitedAccessStatus] | None = ...,
+        teamAccessStatus: collections.abc.Iterable[global___TimeLimitedAccessStatus] | None = ...,
+        recordAccessStatus: collections.abc.Iterable[global___TimeLimitedAccessStatus] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["recordAccessStatus", b"recordAccessStatus", "revision", b"revision", "teamAccessStatus", b"teamAccessStatus", "userAccessStatus", b"userAccessStatus"]) -> None: ...
+
+global___TimeLimitedAccessResponse = TimeLimitedAccessResponse

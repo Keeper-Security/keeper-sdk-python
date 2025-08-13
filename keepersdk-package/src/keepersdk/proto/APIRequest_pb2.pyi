@@ -1,2211 +1,4908 @@
-import enterprise_pb2 as _enterprise_pb2
-from google.protobuf.internal import containers as _containers
-from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
-from google.protobuf import descriptor as _descriptor
-from google.protobuf import message as _message
-from typing import ClassVar as _ClassVar, Iterable as _Iterable, Mapping as _Mapping, Optional as _Optional, Union as _Union
-
-DESCRIPTOR: _descriptor.FileDescriptor
-
-class SupportedLanguage(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    ENGLISH: _ClassVar[SupportedLanguage]
-    ARABIC: _ClassVar[SupportedLanguage]
-    BRITISH: _ClassVar[SupportedLanguage]
-    CHINESE: _ClassVar[SupportedLanguage]
-    CHINESE_HONG_KONG: _ClassVar[SupportedLanguage]
-    CHINESE_TAIWAN: _ClassVar[SupportedLanguage]
-    DUTCH: _ClassVar[SupportedLanguage]
-    FRENCH: _ClassVar[SupportedLanguage]
-    GERMAN: _ClassVar[SupportedLanguage]
-    GREEK: _ClassVar[SupportedLanguage]
-    HEBREW: _ClassVar[SupportedLanguage]
-    ITALIAN: _ClassVar[SupportedLanguage]
-    JAPANESE: _ClassVar[SupportedLanguage]
-    KOREAN: _ClassVar[SupportedLanguage]
-    POLISH: _ClassVar[SupportedLanguage]
-    PORTUGUESE: _ClassVar[SupportedLanguage]
-    PORTUGUESE_BRAZIL: _ClassVar[SupportedLanguage]
-    ROMANIAN: _ClassVar[SupportedLanguage]
-    RUSSIAN: _ClassVar[SupportedLanguage]
-    SLOVAK: _ClassVar[SupportedLanguage]
-    SPANISH: _ClassVar[SupportedLanguage]
-
-class LoginType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    NORMAL: _ClassVar[LoginType]
-    SSO: _ClassVar[LoginType]
-    BIO: _ClassVar[LoginType]
-    ALTERNATE: _ClassVar[LoginType]
-    OFFLINE: _ClassVar[LoginType]
-    FORGOT_PASSWORD: _ClassVar[LoginType]
-    PASSKEY_BIO: _ClassVar[LoginType]
-
-class DeviceStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    DEVICE_NEEDS_APPROVAL: _ClassVar[DeviceStatus]
-    DEVICE_OK: _ClassVar[DeviceStatus]
-    DEVICE_DISABLED_BY_USER: _ClassVar[DeviceStatus]
-    DEVICE_LOCKED_BY_ADMIN: _ClassVar[DeviceStatus]
-
-class LicenseStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    OTHER: _ClassVar[LicenseStatus]
-    ACTIVE: _ClassVar[LicenseStatus]
-    EXPIRED: _ClassVar[LicenseStatus]
-    DISABLED: _ClassVar[LicenseStatus]
-
-class AccountType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    CONSUMER: _ClassVar[AccountType]
-    FAMILY: _ClassVar[AccountType]
-    ENTERPRISE: _ClassVar[AccountType]
-
-class SessionTokenType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    NO_RESTRICTION: _ClassVar[SessionTokenType]
-    ACCOUNT_RECOVERY: _ClassVar[SessionTokenType]
-    SHARE_ACCOUNT: _ClassVar[SessionTokenType]
-    PURCHASE: _ClassVar[SessionTokenType]
-    RESTRICT: _ClassVar[SessionTokenType]
-    ACCEPT_INVITE: _ClassVar[SessionTokenType]
-    SUPPORT_SERVER: _ClassVar[SessionTokenType]
-    ENTERPRISE_CREATION: _ClassVar[SessionTokenType]
-    EXPIRED_BUT_ALLOWED_TO_SYNC: _ClassVar[SessionTokenType]
-    ACCEPT_FAMILY_INVITE: _ClassVar[SessionTokenType]
-    ENTERPRISE_CREATION_PURCHASED: _ClassVar[SessionTokenType]
-    EMERGENCY_ACCESS: _ClassVar[SessionTokenType]
-
-class Version(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    invalid_version: _ClassVar[Version]
-    default_version: _ClassVar[Version]
-    second_version: _ClassVar[Version]
-
-class MasterPasswordReentryActionType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    UNMASK: _ClassVar[MasterPasswordReentryActionType]
-    COPY: _ClassVar[MasterPasswordReentryActionType]
-
-class LoginMethod(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    INVALID_LOGINMETHOD: _ClassVar[LoginMethod]
-    EXISTING_ACCOUNT: _ClassVar[LoginMethod]
-    SSO_DOMAIN: _ClassVar[LoginMethod]
-    AFTER_SSO: _ClassVar[LoginMethod]
-    NEW_ACCOUNT: _ClassVar[LoginMethod]
-
-class LoginState(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    INVALID_LOGINSTATE: _ClassVar[LoginState]
-    LOGGED_OUT: _ClassVar[LoginState]
-    DEVICE_APPROVAL_REQUIRED: _ClassVar[LoginState]
-    DEVICE_LOCKED: _ClassVar[LoginState]
-    ACCOUNT_LOCKED: _ClassVar[LoginState]
-    DEVICE_ACCOUNT_LOCKED: _ClassVar[LoginState]
-    UPGRADE: _ClassVar[LoginState]
-    LICENSE_EXPIRED: _ClassVar[LoginState]
-    REGION_REDIRECT: _ClassVar[LoginState]
-    REDIRECT_CLOUD_SSO: _ClassVar[LoginState]
-    REDIRECT_ONSITE_SSO: _ClassVar[LoginState]
-    REQUIRES_2FA: _ClassVar[LoginState]
-    REQUIRES_AUTH_HASH: _ClassVar[LoginState]
-    REQUIRES_USERNAME: _ClassVar[LoginState]
-    AFTER_CLOUD_SSO_LOGIN: _ClassVar[LoginState]
-    REQUIRES_ACCOUNT_CREATION: _ClassVar[LoginState]
-    REQUIRES_DEVICE_ENCRYPTED_DATA_KEY: _ClassVar[LoginState]
-    LOGIN_TOKEN_EXPIRED: _ClassVar[LoginState]
-    PASSKEY_INITIATE_CHALLENGE: _ClassVar[LoginState]
-    PASSKEY_AUTH_REQUIRED: _ClassVar[LoginState]
-    PASSKEY_VERIFY_AUTHENTICATION: _ClassVar[LoginState]
-    LOGGED_IN: _ClassVar[LoginState]
-
-class EncryptedDataKeyType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    NO_KEY: _ClassVar[EncryptedDataKeyType]
-    BY_DEVICE_PUBLIC_KEY: _ClassVar[EncryptedDataKeyType]
-    BY_PASSWORD: _ClassVar[EncryptedDataKeyType]
-    BY_ALTERNATE: _ClassVar[EncryptedDataKeyType]
-    BY_BIO: _ClassVar[EncryptedDataKeyType]
-
-class PasswordMethod(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    ENTERED: _ClassVar[PasswordMethod]
-    BIOMETRICS: _ClassVar[PasswordMethod]
-
-class TwoFactorPushType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    TWO_FA_PUSH_NONE: _ClassVar[TwoFactorPushType]
-    TWO_FA_PUSH_SMS: _ClassVar[TwoFactorPushType]
-    TWO_FA_PUSH_KEEPER: _ClassVar[TwoFactorPushType]
-    TWO_FA_PUSH_DUO_PUSH: _ClassVar[TwoFactorPushType]
-    TWO_FA_PUSH_DUO_TEXT: _ClassVar[TwoFactorPushType]
-    TWO_FA_PUSH_DUO_CALL: _ClassVar[TwoFactorPushType]
-    TWO_FA_PUSH_DNA: _ClassVar[TwoFactorPushType]
-
-class TwoFactorValueType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    TWO_FA_CODE_NONE: _ClassVar[TwoFactorValueType]
-    TWO_FA_CODE_TOTP: _ClassVar[TwoFactorValueType]
-    TWO_FA_CODE_SMS: _ClassVar[TwoFactorValueType]
-    TWO_FA_CODE_DUO: _ClassVar[TwoFactorValueType]
-    TWO_FA_CODE_RSA: _ClassVar[TwoFactorValueType]
-    TWO_FA_RESP_U2F: _ClassVar[TwoFactorValueType]
-    TWO_FA_RESP_WEBAUTHN: _ClassVar[TwoFactorValueType]
-    TWO_FA_CODE_DNA: _ClassVar[TwoFactorValueType]
-
-class TwoFactorChannelType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    TWO_FA_CT_NONE: _ClassVar[TwoFactorChannelType]
-    TWO_FA_CT_TOTP: _ClassVar[TwoFactorChannelType]
-    TWO_FA_CT_SMS: _ClassVar[TwoFactorChannelType]
-    TWO_FA_CT_DUO: _ClassVar[TwoFactorChannelType]
-    TWO_FA_CT_RSA: _ClassVar[TwoFactorChannelType]
-    TWO_FA_CT_BACKUP: _ClassVar[TwoFactorChannelType]
-    TWO_FA_CT_U2F: _ClassVar[TwoFactorChannelType]
-    TWO_FA_CT_WEBAUTHN: _ClassVar[TwoFactorChannelType]
-    TWO_FA_CT_KEEPER: _ClassVar[TwoFactorChannelType]
-    TWO_FA_CT_DNA: _ClassVar[TwoFactorChannelType]
-
-class TwoFactorExpiration(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    TWO_FA_EXP_IMMEDIATELY: _ClassVar[TwoFactorExpiration]
-    TWO_FA_EXP_5_MINUTES: _ClassVar[TwoFactorExpiration]
-    TWO_FA_EXP_12_HOURS: _ClassVar[TwoFactorExpiration]
-    TWO_FA_EXP_24_HOURS: _ClassVar[TwoFactorExpiration]
-    TWO_FA_EXP_30_DAYS: _ClassVar[TwoFactorExpiration]
-    TWO_FA_EXP_NEVER: _ClassVar[TwoFactorExpiration]
-
-class LicenseType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    VAULT: _ClassVar[LicenseType]
-    CHAT: _ClassVar[LicenseType]
-    STORAGE: _ClassVar[LicenseType]
-    BREACHWATCH: _ClassVar[LicenseType]
-
-class ObjectTypes(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    RECORD: _ClassVar[ObjectTypes]
-    SHARED_FOLDER_USER: _ClassVar[ObjectTypes]
-    SHARED_FOLDER_TEAM: _ClassVar[ObjectTypes]
-    USER_FOLDER: _ClassVar[ObjectTypes]
-    TEAM_USER: _ClassVar[ObjectTypes]
-
-class EncryptedObjectType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    EOT_UNSPECIFIED: _ClassVar[EncryptedObjectType]
-    EOT_RECORD_KEY: _ClassVar[EncryptedObjectType]
-    EOT_SHARED_FOLDER_USER_KEY: _ClassVar[EncryptedObjectType]
-    EOT_SHARED_FOLDER_TEAM_KEY: _ClassVar[EncryptedObjectType]
-    EOT_TEAM_USER_KEY: _ClassVar[EncryptedObjectType]
-    EOT_USER_FOLDER_KEY: _ClassVar[EncryptedObjectType]
-    EOT_SECURITY_DATA: _ClassVar[EncryptedObjectType]
-    EOT_SECURITY_DATA_MASTER_PASSWORD: _ClassVar[EncryptedObjectType]
-    EOT_EMERGENCY_ACCESS_KEY: _ClassVar[EncryptedObjectType]
-    EOT_V2_RECORD_KEY: _ClassVar[EncryptedObjectType]
-
-class MasterPasswordReentryStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    MP_UNKNOWN: _ClassVar[MasterPasswordReentryStatus]
-    MP_SUCCESS: _ClassVar[MasterPasswordReentryStatus]
-    MP_FAILURE: _ClassVar[MasterPasswordReentryStatus]
-
-class AlternateAuthenticationType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    ALTERNATE_MASTER_PASSWORD: _ClassVar[AlternateAuthenticationType]
-    BIOMETRIC: _ClassVar[AlternateAuthenticationType]
-    ACCOUNT_RECOVER: _ClassVar[AlternateAuthenticationType]
-
-class ThrottleType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    PASSWORD_RETRY_THROTTLE: _ClassVar[ThrottleType]
-    PASSWORD_RETRY_LEGACY_THROTTLE: _ClassVar[ThrottleType]
-    TWO_FA_THROTTLE: _ClassVar[ThrottleType]
-    TWO_FA_LEGACY_THROTTLE: _ClassVar[ThrottleType]
-    QA_RETRY_THROTTLE: _ClassVar[ThrottleType]
-    ACCOUNT_RECOVER_THROTTLE: _ClassVar[ThrottleType]
-    VALIDATE_DEVICE_VERIFICATION_CODE_THROTTLE: _ClassVar[ThrottleType]
-    VALIDATE_CREATE_USER_VERIFICATION_CODE_THROTTLE: _ClassVar[ThrottleType]
-
-class Region(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    UNKNOWN: _ClassVar[Region]
-    eu: _ClassVar[Region]
-    us: _ClassVar[Region]
-    usgov: _ClassVar[Region]
-    au: _ClassVar[Region]
-    jp: _ClassVar[Region]
-    ca: _ClassVar[Region]
-
-class ApplicationShareType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    SHARE_TYPE_RECORD: _ClassVar[ApplicationShareType]
-    SHARE_TYPE_FOLDER: _ClassVar[ApplicationShareType]
-
-class TimeLimitedAccessType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    INVALID_TIME_LIMITED_ACCESS_TYPE: _ClassVar[TimeLimitedAccessType]
-    USER_ACCESS_TO_RECORD: _ClassVar[TimeLimitedAccessType]
-    USER_OR_TEAM_ACCESS_TO_SHAREDFOLDER: _ClassVar[TimeLimitedAccessType]
-    RECORD_ACCESS_TO_SHAREDFOLDER: _ClassVar[TimeLimitedAccessType]
-
-class BackupKeyType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    BKT_SEC_ANSWER: _ClassVar[BackupKeyType]
-    BKT_PASSPHRASE_HASH: _ClassVar[BackupKeyType]
-
-class GenericStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    SUCCESS: _ClassVar[GenericStatus]
-    INVALID_OBJECT: _ClassVar[GenericStatus]
-    ALREADY_EXISTS: _ClassVar[GenericStatus]
-    ACCESS_DENIED: _ClassVar[GenericStatus]
-
-class AuthenticatorAttachment(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    CROSS_PLATFORM: _ClassVar[AuthenticatorAttachment]
-    PLATFORM: _ClassVar[AuthenticatorAttachment]
-    ALL_SUPPORTED: _ClassVar[AuthenticatorAttachment]
-
-class PasskeyPurpose(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = ()
-    PK_LOGIN: _ClassVar[PasskeyPurpose]
-    PK_REAUTH: _ClassVar[PasskeyPurpose]
-ENGLISH: SupportedLanguage
-ARABIC: SupportedLanguage
-BRITISH: SupportedLanguage
-CHINESE: SupportedLanguage
-CHINESE_HONG_KONG: SupportedLanguage
-CHINESE_TAIWAN: SupportedLanguage
-DUTCH: SupportedLanguage
-FRENCH: SupportedLanguage
-GERMAN: SupportedLanguage
-GREEK: SupportedLanguage
-HEBREW: SupportedLanguage
-ITALIAN: SupportedLanguage
-JAPANESE: SupportedLanguage
-KOREAN: SupportedLanguage
-POLISH: SupportedLanguage
-PORTUGUESE: SupportedLanguage
-PORTUGUESE_BRAZIL: SupportedLanguage
-ROMANIAN: SupportedLanguage
-RUSSIAN: SupportedLanguage
-SLOVAK: SupportedLanguage
-SPANISH: SupportedLanguage
-NORMAL: LoginType
-SSO: LoginType
-BIO: LoginType
-ALTERNATE: LoginType
-OFFLINE: LoginType
-FORGOT_PASSWORD: LoginType
-PASSKEY_BIO: LoginType
-DEVICE_NEEDS_APPROVAL: DeviceStatus
-DEVICE_OK: DeviceStatus
-DEVICE_DISABLED_BY_USER: DeviceStatus
-DEVICE_LOCKED_BY_ADMIN: DeviceStatus
-OTHER: LicenseStatus
-ACTIVE: LicenseStatus
-EXPIRED: LicenseStatus
-DISABLED: LicenseStatus
-CONSUMER: AccountType
-FAMILY: AccountType
-ENTERPRISE: AccountType
-NO_RESTRICTION: SessionTokenType
-ACCOUNT_RECOVERY: SessionTokenType
-SHARE_ACCOUNT: SessionTokenType
-PURCHASE: SessionTokenType
-RESTRICT: SessionTokenType
-ACCEPT_INVITE: SessionTokenType
-SUPPORT_SERVER: SessionTokenType
-ENTERPRISE_CREATION: SessionTokenType
-EXPIRED_BUT_ALLOWED_TO_SYNC: SessionTokenType
-ACCEPT_FAMILY_INVITE: SessionTokenType
-ENTERPRISE_CREATION_PURCHASED: SessionTokenType
-EMERGENCY_ACCESS: SessionTokenType
-invalid_version: Version
-default_version: Version
-second_version: Version
-UNMASK: MasterPasswordReentryActionType
-COPY: MasterPasswordReentryActionType
-INVALID_LOGINMETHOD: LoginMethod
-EXISTING_ACCOUNT: LoginMethod
-SSO_DOMAIN: LoginMethod
-AFTER_SSO: LoginMethod
-NEW_ACCOUNT: LoginMethod
-INVALID_LOGINSTATE: LoginState
-LOGGED_OUT: LoginState
-DEVICE_APPROVAL_REQUIRED: LoginState
-DEVICE_LOCKED: LoginState
-ACCOUNT_LOCKED: LoginState
-DEVICE_ACCOUNT_LOCKED: LoginState
-UPGRADE: LoginState
-LICENSE_EXPIRED: LoginState
-REGION_REDIRECT: LoginState
-REDIRECT_CLOUD_SSO: LoginState
-REDIRECT_ONSITE_SSO: LoginState
-REQUIRES_2FA: LoginState
-REQUIRES_AUTH_HASH: LoginState
-REQUIRES_USERNAME: LoginState
-AFTER_CLOUD_SSO_LOGIN: LoginState
-REQUIRES_ACCOUNT_CREATION: LoginState
-REQUIRES_DEVICE_ENCRYPTED_DATA_KEY: LoginState
-LOGIN_TOKEN_EXPIRED: LoginState
-PASSKEY_INITIATE_CHALLENGE: LoginState
-PASSKEY_AUTH_REQUIRED: LoginState
-PASSKEY_VERIFY_AUTHENTICATION: LoginState
-LOGGED_IN: LoginState
-NO_KEY: EncryptedDataKeyType
-BY_DEVICE_PUBLIC_KEY: EncryptedDataKeyType
-BY_PASSWORD: EncryptedDataKeyType
-BY_ALTERNATE: EncryptedDataKeyType
-BY_BIO: EncryptedDataKeyType
-ENTERED: PasswordMethod
-BIOMETRICS: PasswordMethod
-TWO_FA_PUSH_NONE: TwoFactorPushType
-TWO_FA_PUSH_SMS: TwoFactorPushType
-TWO_FA_PUSH_KEEPER: TwoFactorPushType
-TWO_FA_PUSH_DUO_PUSH: TwoFactorPushType
-TWO_FA_PUSH_DUO_TEXT: TwoFactorPushType
-TWO_FA_PUSH_DUO_CALL: TwoFactorPushType
-TWO_FA_PUSH_DNA: TwoFactorPushType
-TWO_FA_CODE_NONE: TwoFactorValueType
-TWO_FA_CODE_TOTP: TwoFactorValueType
-TWO_FA_CODE_SMS: TwoFactorValueType
-TWO_FA_CODE_DUO: TwoFactorValueType
-TWO_FA_CODE_RSA: TwoFactorValueType
-TWO_FA_RESP_U2F: TwoFactorValueType
-TWO_FA_RESP_WEBAUTHN: TwoFactorValueType
-TWO_FA_CODE_DNA: TwoFactorValueType
-TWO_FA_CT_NONE: TwoFactorChannelType
-TWO_FA_CT_TOTP: TwoFactorChannelType
-TWO_FA_CT_SMS: TwoFactorChannelType
-TWO_FA_CT_DUO: TwoFactorChannelType
-TWO_FA_CT_RSA: TwoFactorChannelType
-TWO_FA_CT_BACKUP: TwoFactorChannelType
-TWO_FA_CT_U2F: TwoFactorChannelType
-TWO_FA_CT_WEBAUTHN: TwoFactorChannelType
-TWO_FA_CT_KEEPER: TwoFactorChannelType
-TWO_FA_CT_DNA: TwoFactorChannelType
-TWO_FA_EXP_IMMEDIATELY: TwoFactorExpiration
-TWO_FA_EXP_5_MINUTES: TwoFactorExpiration
-TWO_FA_EXP_12_HOURS: TwoFactorExpiration
-TWO_FA_EXP_24_HOURS: TwoFactorExpiration
-TWO_FA_EXP_30_DAYS: TwoFactorExpiration
-TWO_FA_EXP_NEVER: TwoFactorExpiration
-VAULT: LicenseType
-CHAT: LicenseType
-STORAGE: LicenseType
-BREACHWATCH: LicenseType
-RECORD: ObjectTypes
-SHARED_FOLDER_USER: ObjectTypes
-SHARED_FOLDER_TEAM: ObjectTypes
-USER_FOLDER: ObjectTypes
-TEAM_USER: ObjectTypes
-EOT_UNSPECIFIED: EncryptedObjectType
-EOT_RECORD_KEY: EncryptedObjectType
-EOT_SHARED_FOLDER_USER_KEY: EncryptedObjectType
-EOT_SHARED_FOLDER_TEAM_KEY: EncryptedObjectType
-EOT_TEAM_USER_KEY: EncryptedObjectType
-EOT_USER_FOLDER_KEY: EncryptedObjectType
-EOT_SECURITY_DATA: EncryptedObjectType
-EOT_SECURITY_DATA_MASTER_PASSWORD: EncryptedObjectType
-EOT_EMERGENCY_ACCESS_KEY: EncryptedObjectType
-EOT_V2_RECORD_KEY: EncryptedObjectType
-MP_UNKNOWN: MasterPasswordReentryStatus
-MP_SUCCESS: MasterPasswordReentryStatus
-MP_FAILURE: MasterPasswordReentryStatus
-ALTERNATE_MASTER_PASSWORD: AlternateAuthenticationType
-BIOMETRIC: AlternateAuthenticationType
-ACCOUNT_RECOVER: AlternateAuthenticationType
-PASSWORD_RETRY_THROTTLE: ThrottleType
-PASSWORD_RETRY_LEGACY_THROTTLE: ThrottleType
-TWO_FA_THROTTLE: ThrottleType
-TWO_FA_LEGACY_THROTTLE: ThrottleType
-QA_RETRY_THROTTLE: ThrottleType
-ACCOUNT_RECOVER_THROTTLE: ThrottleType
-VALIDATE_DEVICE_VERIFICATION_CODE_THROTTLE: ThrottleType
-VALIDATE_CREATE_USER_VERIFICATION_CODE_THROTTLE: ThrottleType
-UNKNOWN: Region
-eu: Region
-us: Region
-usgov: Region
-au: Region
-jp: Region
-ca: Region
-SHARE_TYPE_RECORD: ApplicationShareType
-SHARE_TYPE_FOLDER: ApplicationShareType
-INVALID_TIME_LIMITED_ACCESS_TYPE: TimeLimitedAccessType
-USER_ACCESS_TO_RECORD: TimeLimitedAccessType
-USER_OR_TEAM_ACCESS_TO_SHAREDFOLDER: TimeLimitedAccessType
-RECORD_ACCESS_TO_SHAREDFOLDER: TimeLimitedAccessType
-BKT_SEC_ANSWER: BackupKeyType
-BKT_PASSPHRASE_HASH: BackupKeyType
-SUCCESS: GenericStatus
-INVALID_OBJECT: GenericStatus
-ALREADY_EXISTS: GenericStatus
-ACCESS_DENIED: GenericStatus
-CROSS_PLATFORM: AuthenticatorAttachment
-PLATFORM: AuthenticatorAttachment
-ALL_SUPPORTED: AuthenticatorAttachment
-PK_LOGIN: PasskeyPurpose
-PK_REAUTH: PasskeyPurpose
-
-class ApiRequest(_message.Message):
-    __slots__ = ("encryptedTransmissionKey", "publicKeyId", "locale", "encryptedPayload", "encryptionType", "recaptcha", "subEnvironment")
-    ENCRYPTEDTRANSMISSIONKEY_FIELD_NUMBER: _ClassVar[int]
-    PUBLICKEYID_FIELD_NUMBER: _ClassVar[int]
-    LOCALE_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDPAYLOAD_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTIONTYPE_FIELD_NUMBER: _ClassVar[int]
-    RECAPTCHA_FIELD_NUMBER: _ClassVar[int]
-    SUBENVIRONMENT_FIELD_NUMBER: _ClassVar[int]
-    encryptedTransmissionKey: bytes
-    publicKeyId: int
-    locale: str
-    encryptedPayload: bytes
-    encryptionType: int
-    recaptcha: str
-    subEnvironment: str
-    def __init__(self, encryptedTransmissionKey: _Optional[bytes] = ..., publicKeyId: _Optional[int] = ..., locale: _Optional[str] = ..., encryptedPayload: _Optional[bytes] = ..., encryptionType: _Optional[int] = ..., recaptcha: _Optional[str] = ..., subEnvironment: _Optional[str] = ...) -> None: ...
-
-class ApiRequestPayload(_message.Message):
-    __slots__ = ("payload", "encryptedSessionToken", "timeToken", "apiVersion")
-    PAYLOAD_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDSESSIONTOKEN_FIELD_NUMBER: _ClassVar[int]
-    TIMETOKEN_FIELD_NUMBER: _ClassVar[int]
-    APIVERSION_FIELD_NUMBER: _ClassVar[int]
-    payload: bytes
-    encryptedSessionToken: bytes
-    timeToken: bytes
-    apiVersion: int
-    def __init__(self, payload: _Optional[bytes] = ..., encryptedSessionToken: _Optional[bytes] = ..., timeToken: _Optional[bytes] = ..., apiVersion: _Optional[int] = ...) -> None: ...
-
-class Transform(_message.Message):
-    __slots__ = ("key", "encryptedDeviceToken")
-    KEY_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: _ClassVar[int]
-    key: bytes
-    encryptedDeviceToken: bytes
-    def __init__(self, key: _Optional[bytes] = ..., encryptedDeviceToken: _Optional[bytes] = ...) -> None: ...
-
-class DeviceRequest(_message.Message):
-    __slots__ = ("clientVersion", "deviceName")
-    CLIENTVERSION_FIELD_NUMBER: _ClassVar[int]
-    DEVICENAME_FIELD_NUMBER: _ClassVar[int]
-    clientVersion: str
-    deviceName: str
-    def __init__(self, clientVersion: _Optional[str] = ..., deviceName: _Optional[str] = ...) -> None: ...
-
-class AuthRequest(_message.Message):
-    __slots__ = ("clientVersion", "username", "encryptedDeviceToken")
-    CLIENTVERSION_FIELD_NUMBER: _ClassVar[int]
-    USERNAME_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: _ClassVar[int]
-    clientVersion: str
-    username: str
-    encryptedDeviceToken: bytes
-    def __init__(self, clientVersion: _Optional[str] = ..., username: _Optional[str] = ..., encryptedDeviceToken: _Optional[bytes] = ...) -> None: ...
-
-class NewUserMinimumParams(_message.Message):
-    __slots__ = ("minimumIterations", "passwordMatchRegex", "passwordMatchDescription", "isEnterpriseDomain", "enterpriseEccPublicKey", "forbidKeyType2")
-    MINIMUMITERATIONS_FIELD_NUMBER: _ClassVar[int]
-    PASSWORDMATCHREGEX_FIELD_NUMBER: _ClassVar[int]
-    PASSWORDMATCHDESCRIPTION_FIELD_NUMBER: _ClassVar[int]
-    ISENTERPRISEDOMAIN_FIELD_NUMBER: _ClassVar[int]
-    ENTERPRISEECCPUBLICKEY_FIELD_NUMBER: _ClassVar[int]
-    FORBIDKEYTYPE2_FIELD_NUMBER: _ClassVar[int]
-    minimumIterations: int
-    passwordMatchRegex: _containers.RepeatedScalarFieldContainer[str]
-    passwordMatchDescription: _containers.RepeatedScalarFieldContainer[str]
-    isEnterpriseDomain: bool
-    enterpriseEccPublicKey: bytes
-    forbidKeyType2: bool
-    def __init__(self, minimumIterations: _Optional[int] = ..., passwordMatchRegex: _Optional[_Iterable[str]] = ..., passwordMatchDescription: _Optional[_Iterable[str]] = ..., isEnterpriseDomain: bool = ..., enterpriseEccPublicKey: _Optional[bytes] = ..., forbidKeyType2: bool = ...) -> None: ...
-
-class PreLoginRequest(_message.Message):
-    __slots__ = ("authRequest", "loginType", "twoFactorToken")
-    AUTHREQUEST_FIELD_NUMBER: _ClassVar[int]
-    LOGINTYPE_FIELD_NUMBER: _ClassVar[int]
-    TWOFACTORTOKEN_FIELD_NUMBER: _ClassVar[int]
-    authRequest: AuthRequest
-    loginType: LoginType
-    twoFactorToken: bytes
-    def __init__(self, authRequest: _Optional[_Union[AuthRequest, _Mapping]] = ..., loginType: _Optional[_Union[LoginType, str]] = ..., twoFactorToken: _Optional[bytes] = ...) -> None: ...
-
-class LoginRequest(_message.Message):
-    __slots__ = ("authRequest", "loginType", "authenticationHashPrime", "encryptedLoginToken", "authResponse", "mcEnterpriseId", "push_token", "platform")
-    AUTHREQUEST_FIELD_NUMBER: _ClassVar[int]
-    LOGINTYPE_FIELD_NUMBER: _ClassVar[int]
-    AUTHENTICATIONHASHPRIME_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: _ClassVar[int]
-    AUTHRESPONSE_FIELD_NUMBER: _ClassVar[int]
-    MCENTERPRISEID_FIELD_NUMBER: _ClassVar[int]
-    PUSH_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    PLATFORM_FIELD_NUMBER: _ClassVar[int]
-    authRequest: AuthRequest
-    loginType: LoginType
-    authenticationHashPrime: bytes
-    encryptedLoginToken: bytes
-    authResponse: bytes
-    mcEnterpriseId: int
-    push_token: str
-    platform: str
-    def __init__(self, authRequest: _Optional[_Union[AuthRequest, _Mapping]] = ..., loginType: _Optional[_Union[LoginType, str]] = ..., authenticationHashPrime: _Optional[bytes] = ..., encryptedLoginToken: _Optional[bytes] = ..., authResponse: _Optional[bytes] = ..., mcEnterpriseId: _Optional[int] = ..., push_token: _Optional[str] = ..., platform: _Optional[str] = ...) -> None: ...
-
-class DeviceResponse(_message.Message):
-    __slots__ = ("encryptedDeviceToken", "status")
-    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: _ClassVar[int]
-    STATUS_FIELD_NUMBER: _ClassVar[int]
-    encryptedDeviceToken: bytes
-    status: DeviceStatus
-    def __init__(self, encryptedDeviceToken: _Optional[bytes] = ..., status: _Optional[_Union[DeviceStatus, str]] = ...) -> None: ...
-
-class Salt(_message.Message):
-    __slots__ = ("iterations", "salt", "algorithm", "uid", "name")
-    ITERATIONS_FIELD_NUMBER: _ClassVar[int]
-    SALT_FIELD_NUMBER: _ClassVar[int]
-    ALGORITHM_FIELD_NUMBER: _ClassVar[int]
-    UID_FIELD_NUMBER: _ClassVar[int]
-    NAME_FIELD_NUMBER: _ClassVar[int]
-    iterations: int
-    salt: bytes
-    algorithm: int
-    uid: bytes
-    name: str
-    def __init__(self, iterations: _Optional[int] = ..., salt: _Optional[bytes] = ..., algorithm: _Optional[int] = ..., uid: _Optional[bytes] = ..., name: _Optional[str] = ...) -> None: ...
-
-class TwoFactorChannel(_message.Message):
-    __slots__ = ("type",)
-    TYPE_FIELD_NUMBER: _ClassVar[int]
-    type: int
-    def __init__(self, type: _Optional[int] = ...) -> None: ...
-
-class StartLoginRequest(_message.Message):
-    __slots__ = ("encryptedDeviceToken", "username", "clientVersion", "messageSessionUid", "encryptedLoginToken", "loginType", "mcEnterpriseId", "loginMethod", "forceNewLogin", "cloneCode", "v2TwoFactorToken", "accountUid")
-    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: _ClassVar[int]
-    USERNAME_FIELD_NUMBER: _ClassVar[int]
-    CLIENTVERSION_FIELD_NUMBER: _ClassVar[int]
-    MESSAGESESSIONUID_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: _ClassVar[int]
-    LOGINTYPE_FIELD_NUMBER: _ClassVar[int]
-    MCENTERPRISEID_FIELD_NUMBER: _ClassVar[int]
-    LOGINMETHOD_FIELD_NUMBER: _ClassVar[int]
-    FORCENEWLOGIN_FIELD_NUMBER: _ClassVar[int]
-    CLONECODE_FIELD_NUMBER: _ClassVar[int]
-    V2TWOFACTORTOKEN_FIELD_NUMBER: _ClassVar[int]
-    ACCOUNTUID_FIELD_NUMBER: _ClassVar[int]
-    encryptedDeviceToken: bytes
-    username: str
-    clientVersion: str
-    messageSessionUid: bytes
-    encryptedLoginToken: bytes
-    loginType: LoginType
-    mcEnterpriseId: int
-    loginMethod: LoginMethod
-    forceNewLogin: bool
-    cloneCode: bytes
-    v2TwoFactorToken: str
-    accountUid: bytes
-    def __init__(self, encryptedDeviceToken: _Optional[bytes] = ..., username: _Optional[str] = ..., clientVersion: _Optional[str] = ..., messageSessionUid: _Optional[bytes] = ..., encryptedLoginToken: _Optional[bytes] = ..., loginType: _Optional[_Union[LoginType, str]] = ..., mcEnterpriseId: _Optional[int] = ..., loginMethod: _Optional[_Union[LoginMethod, str]] = ..., forceNewLogin: bool = ..., cloneCode: _Optional[bytes] = ..., v2TwoFactorToken: _Optional[str] = ..., accountUid: _Optional[bytes] = ...) -> None: ...
-
-class LoginResponse(_message.Message):
-    __slots__ = ("loginState", "accountUid", "primaryUsername", "encryptedDataKey", "encryptedDataKeyType", "encryptedLoginToken", "encryptedSessionToken", "sessionTokenType", "message", "url", "channels", "salt", "cloneCode", "stateSpecificValue", "ssoClientVersion", "sessionTokenTypeModifier")
-    LOGINSTATE_FIELD_NUMBER: _ClassVar[int]
-    ACCOUNTUID_FIELD_NUMBER: _ClassVar[int]
-    PRIMARYUSERNAME_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDDATAKEY_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDDATAKEYTYPE_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDSESSIONTOKEN_FIELD_NUMBER: _ClassVar[int]
-    SESSIONTOKENTYPE_FIELD_NUMBER: _ClassVar[int]
-    MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    URL_FIELD_NUMBER: _ClassVar[int]
-    CHANNELS_FIELD_NUMBER: _ClassVar[int]
-    SALT_FIELD_NUMBER: _ClassVar[int]
-    CLONECODE_FIELD_NUMBER: _ClassVar[int]
-    STATESPECIFICVALUE_FIELD_NUMBER: _ClassVar[int]
-    SSOCLIENTVERSION_FIELD_NUMBER: _ClassVar[int]
-    SESSIONTOKENTYPEMODIFIER_FIELD_NUMBER: _ClassVar[int]
-    loginState: LoginState
-    accountUid: bytes
-    primaryUsername: str
-    encryptedDataKey: bytes
-    encryptedDataKeyType: EncryptedDataKeyType
-    encryptedLoginToken: bytes
-    encryptedSessionToken: bytes
-    sessionTokenType: SessionTokenType
-    message: str
-    url: str
-    channels: _containers.RepeatedCompositeFieldContainer[TwoFactorChannelInfo]
-    salt: _containers.RepeatedCompositeFieldContainer[Salt]
-    cloneCode: bytes
-    stateSpecificValue: str
-    ssoClientVersion: str
-    sessionTokenTypeModifier: str
-    def __init__(self, loginState: _Optional[_Union[LoginState, str]] = ..., accountUid: _Optional[bytes] = ..., primaryUsername: _Optional[str] = ..., encryptedDataKey: _Optional[bytes] = ..., encryptedDataKeyType: _Optional[_Union[EncryptedDataKeyType, str]] = ..., encryptedLoginToken: _Optional[bytes] = ..., encryptedSessionToken: _Optional[bytes] = ..., sessionTokenType: _Optional[_Union[SessionTokenType, str]] = ..., message: _Optional[str] = ..., url: _Optional[str] = ..., channels: _Optional[_Iterable[_Union[TwoFactorChannelInfo, _Mapping]]] = ..., salt: _Optional[_Iterable[_Union[Salt, _Mapping]]] = ..., cloneCode: _Optional[bytes] = ..., stateSpecificValue: _Optional[str] = ..., ssoClientVersion: _Optional[str] = ..., sessionTokenTypeModifier: _Optional[str] = ...) -> None: ...
-
-class SsoUserInfo(_message.Message):
-    __slots__ = ("companyName", "samlRequest", "samlRequestType", "ssoDomainName", "loginUrl", "logoutUrl")
-    COMPANYNAME_FIELD_NUMBER: _ClassVar[int]
-    SAMLREQUEST_FIELD_NUMBER: _ClassVar[int]
-    SAMLREQUESTTYPE_FIELD_NUMBER: _ClassVar[int]
-    SSODOMAINNAME_FIELD_NUMBER: _ClassVar[int]
-    LOGINURL_FIELD_NUMBER: _ClassVar[int]
-    LOGOUTURL_FIELD_NUMBER: _ClassVar[int]
-    companyName: str
-    samlRequest: str
-    samlRequestType: str
-    ssoDomainName: str
-    loginUrl: str
-    logoutUrl: str
-    def __init__(self, companyName: _Optional[str] = ..., samlRequest: _Optional[str] = ..., samlRequestType: _Optional[str] = ..., ssoDomainName: _Optional[str] = ..., loginUrl: _Optional[str] = ..., logoutUrl: _Optional[str] = ...) -> None: ...
-
-class PreLoginResponse(_message.Message):
-    __slots__ = ("deviceStatus", "salt", "OBSOLETE_FIELD", "ssoUserInfo")
-    DEVICESTATUS_FIELD_NUMBER: _ClassVar[int]
-    SALT_FIELD_NUMBER: _ClassVar[int]
-    OBSOLETE_FIELD_FIELD_NUMBER: _ClassVar[int]
-    SSOUSERINFO_FIELD_NUMBER: _ClassVar[int]
-    deviceStatus: DeviceStatus
-    salt: _containers.RepeatedCompositeFieldContainer[Salt]
-    OBSOLETE_FIELD: _containers.RepeatedCompositeFieldContainer[TwoFactorChannel]
-    ssoUserInfo: SsoUserInfo
-    def __init__(self, deviceStatus: _Optional[_Union[DeviceStatus, str]] = ..., salt: _Optional[_Iterable[_Union[Salt, _Mapping]]] = ..., OBSOLETE_FIELD: _Optional[_Iterable[_Union[TwoFactorChannel, _Mapping]]] = ..., ssoUserInfo: _Optional[_Union[SsoUserInfo, _Mapping]] = ...) -> None: ...
-
-class LoginAsUserRequest(_message.Message):
-    __slots__ = ("username",)
-    USERNAME_FIELD_NUMBER: _ClassVar[int]
-    username: str
-    def __init__(self, username: _Optional[str] = ...) -> None: ...
-
-class LoginAsUserResponse(_message.Message):
-    __slots__ = ("encryptedSessionToken", "encryptedSharedAccountKey")
-    ENCRYPTEDSESSIONTOKEN_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDSHAREDACCOUNTKEY_FIELD_NUMBER: _ClassVar[int]
-    encryptedSessionToken: bytes
-    encryptedSharedAccountKey: bytes
-    def __init__(self, encryptedSessionToken: _Optional[bytes] = ..., encryptedSharedAccountKey: _Optional[bytes] = ...) -> None: ...
-
-class ValidateAuthHashRequest(_message.Message):
-    __slots__ = ("passwordMethod", "authResponse", "encryptedLoginToken")
-    PASSWORDMETHOD_FIELD_NUMBER: _ClassVar[int]
-    AUTHRESPONSE_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: _ClassVar[int]
-    passwordMethod: PasswordMethod
-    authResponse: bytes
-    encryptedLoginToken: bytes
-    def __init__(self, passwordMethod: _Optional[_Union[PasswordMethod, str]] = ..., authResponse: _Optional[bytes] = ..., encryptedLoginToken: _Optional[bytes] = ...) -> None: ...
-
-class TwoFactorChannelInfo(_message.Message):
-    __slots__ = ("channelType", "channel_uid", "channelName", "challenge", "capabilities", "phoneNumber", "maxExpiration", "createdOn", "lastFrequency")
-    CHANNELTYPE_FIELD_NUMBER: _ClassVar[int]
-    CHANNEL_UID_FIELD_NUMBER: _ClassVar[int]
-    CHANNELNAME_FIELD_NUMBER: _ClassVar[int]
-    CHALLENGE_FIELD_NUMBER: _ClassVar[int]
-    CAPABILITIES_FIELD_NUMBER: _ClassVar[int]
-    PHONENUMBER_FIELD_NUMBER: _ClassVar[int]
-    MAXEXPIRATION_FIELD_NUMBER: _ClassVar[int]
-    CREATEDON_FIELD_NUMBER: _ClassVar[int]
-    LASTFREQUENCY_FIELD_NUMBER: _ClassVar[int]
-    channelType: TwoFactorChannelType
-    channel_uid: bytes
-    channelName: str
-    challenge: str
-    capabilities: _containers.RepeatedScalarFieldContainer[str]
-    phoneNumber: str
-    maxExpiration: TwoFactorExpiration
-    createdOn: int
-    lastFrequency: TwoFactorExpiration
-    def __init__(self, channelType: _Optional[_Union[TwoFactorChannelType, str]] = ..., channel_uid: _Optional[bytes] = ..., channelName: _Optional[str] = ..., challenge: _Optional[str] = ..., capabilities: _Optional[_Iterable[str]] = ..., phoneNumber: _Optional[str] = ..., maxExpiration: _Optional[_Union[TwoFactorExpiration, str]] = ..., createdOn: _Optional[int] = ..., lastFrequency: _Optional[_Union[TwoFactorExpiration, str]] = ...) -> None: ...
-
-class TwoFactorDuoStatus(_message.Message):
-    __slots__ = ("capabilities", "phoneNumber", "enroll_url", "message")
-    CAPABILITIES_FIELD_NUMBER: _ClassVar[int]
-    PHONENUMBER_FIELD_NUMBER: _ClassVar[int]
-    ENROLL_URL_FIELD_NUMBER: _ClassVar[int]
-    MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    capabilities: _containers.RepeatedScalarFieldContainer[str]
-    phoneNumber: str
-    enroll_url: str
-    message: str
-    def __init__(self, capabilities: _Optional[_Iterable[str]] = ..., phoneNumber: _Optional[str] = ..., enroll_url: _Optional[str] = ..., message: _Optional[str] = ...) -> None: ...
-
-class TwoFactorAddRequest(_message.Message):
-    __slots__ = ("channelType", "channel_uid", "channelName", "phoneNumber", "duoPushType")
-    CHANNELTYPE_FIELD_NUMBER: _ClassVar[int]
-    CHANNEL_UID_FIELD_NUMBER: _ClassVar[int]
-    CHANNELNAME_FIELD_NUMBER: _ClassVar[int]
-    PHONENUMBER_FIELD_NUMBER: _ClassVar[int]
-    DUOPUSHTYPE_FIELD_NUMBER: _ClassVar[int]
-    channelType: TwoFactorChannelType
-    channel_uid: bytes
-    channelName: str
-    phoneNumber: str
-    duoPushType: TwoFactorPushType
-    def __init__(self, channelType: _Optional[_Union[TwoFactorChannelType, str]] = ..., channel_uid: _Optional[bytes] = ..., channelName: _Optional[str] = ..., phoneNumber: _Optional[str] = ..., duoPushType: _Optional[_Union[TwoFactorPushType, str]] = ...) -> None: ...
-
-class TwoFactorRenameRequest(_message.Message):
-    __slots__ = ("channel_uid", "channelName")
-    CHANNEL_UID_FIELD_NUMBER: _ClassVar[int]
-    CHANNELNAME_FIELD_NUMBER: _ClassVar[int]
-    channel_uid: bytes
-    channelName: str
-    def __init__(self, channel_uid: _Optional[bytes] = ..., channelName: _Optional[str] = ...) -> None: ...
-
-class TwoFactorAddResponse(_message.Message):
-    __slots__ = ("challenge", "backupKeys")
-    CHALLENGE_FIELD_NUMBER: _ClassVar[int]
-    BACKUPKEYS_FIELD_NUMBER: _ClassVar[int]
-    challenge: str
-    backupKeys: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, challenge: _Optional[str] = ..., backupKeys: _Optional[_Iterable[str]] = ...) -> None: ...
-
-class TwoFactorDeleteRequest(_message.Message):
-    __slots__ = ("channel_uid",)
-    CHANNEL_UID_FIELD_NUMBER: _ClassVar[int]
-    channel_uid: bytes
-    def __init__(self, channel_uid: _Optional[bytes] = ...) -> None: ...
-
-class TwoFactorListResponse(_message.Message):
-    __slots__ = ("channels", "expireOn")
-    CHANNELS_FIELD_NUMBER: _ClassVar[int]
-    EXPIREON_FIELD_NUMBER: _ClassVar[int]
-    channels: _containers.RepeatedCompositeFieldContainer[TwoFactorChannelInfo]
-    expireOn: int
-    def __init__(self, channels: _Optional[_Iterable[_Union[TwoFactorChannelInfo, _Mapping]]] = ..., expireOn: _Optional[int] = ...) -> None: ...
-
-class TwoFactorUpdateExpirationRequest(_message.Message):
-    __slots__ = ("expireIn",)
-    EXPIREIN_FIELD_NUMBER: _ClassVar[int]
-    expireIn: TwoFactorExpiration
-    def __init__(self, expireIn: _Optional[_Union[TwoFactorExpiration, str]] = ...) -> None: ...
-
-class TwoFactorValidateRequest(_message.Message):
-    __slots__ = ("encryptedLoginToken", "valueType", "value", "channel_uid", "expireIn")
-    ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: _ClassVar[int]
-    VALUETYPE_FIELD_NUMBER: _ClassVar[int]
-    VALUE_FIELD_NUMBER: _ClassVar[int]
-    CHANNEL_UID_FIELD_NUMBER: _ClassVar[int]
-    EXPIREIN_FIELD_NUMBER: _ClassVar[int]
-    encryptedLoginToken: bytes
-    valueType: TwoFactorValueType
-    value: str
-    channel_uid: bytes
-    expireIn: TwoFactorExpiration
-    def __init__(self, encryptedLoginToken: _Optional[bytes] = ..., valueType: _Optional[_Union[TwoFactorValueType, str]] = ..., value: _Optional[str] = ..., channel_uid: _Optional[bytes] = ..., expireIn: _Optional[_Union[TwoFactorExpiration, str]] = ...) -> None: ...
-
-class TwoFactorValidateResponse(_message.Message):
-    __slots__ = ("encryptedLoginToken",)
-    ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: _ClassVar[int]
-    encryptedLoginToken: bytes
-    def __init__(self, encryptedLoginToken: _Optional[bytes] = ...) -> None: ...
-
-class TwoFactorSendPushRequest(_message.Message):
-    __slots__ = ("encryptedLoginToken", "pushType", "channel_uid", "expireIn")
-    ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: _ClassVar[int]
-    PUSHTYPE_FIELD_NUMBER: _ClassVar[int]
-    CHANNEL_UID_FIELD_NUMBER: _ClassVar[int]
-    EXPIREIN_FIELD_NUMBER: _ClassVar[int]
-    encryptedLoginToken: bytes
-    pushType: TwoFactorPushType
-    channel_uid: bytes
-    expireIn: TwoFactorExpiration
-    def __init__(self, encryptedLoginToken: _Optional[bytes] = ..., pushType: _Optional[_Union[TwoFactorPushType, str]] = ..., channel_uid: _Optional[bytes] = ..., expireIn: _Optional[_Union[TwoFactorExpiration, str]] = ...) -> None: ...
-
-class License(_message.Message):
-    __slots__ = ("created", "expiration", "licenseStatus", "paid", "message")
-    CREATED_FIELD_NUMBER: _ClassVar[int]
-    EXPIRATION_FIELD_NUMBER: _ClassVar[int]
-    LICENSESTATUS_FIELD_NUMBER: _ClassVar[int]
-    PAID_FIELD_NUMBER: _ClassVar[int]
-    MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    created: int
-    expiration: int
-    licenseStatus: LicenseStatus
-    paid: bool
-    message: str
-    def __init__(self, created: _Optional[int] = ..., expiration: _Optional[int] = ..., licenseStatus: _Optional[_Union[LicenseStatus, str]] = ..., paid: bool = ..., message: _Optional[str] = ...) -> None: ...
-
-class OwnerlessRecord(_message.Message):
-    __slots__ = ("recordUid", "recordKey", "status")
-    RECORDUID_FIELD_NUMBER: _ClassVar[int]
-    RECORDKEY_FIELD_NUMBER: _ClassVar[int]
-    STATUS_FIELD_NUMBER: _ClassVar[int]
-    recordUid: bytes
-    recordKey: bytes
-    status: int
-    def __init__(self, recordUid: _Optional[bytes] = ..., recordKey: _Optional[bytes] = ..., status: _Optional[int] = ...) -> None: ...
-
-class OwnerlessRecords(_message.Message):
-    __slots__ = ("ownerlessRecord",)
-    OWNERLESSRECORD_FIELD_NUMBER: _ClassVar[int]
-    ownerlessRecord: _containers.RepeatedCompositeFieldContainer[OwnerlessRecord]
-    def __init__(self, ownerlessRecord: _Optional[_Iterable[_Union[OwnerlessRecord, _Mapping]]] = ...) -> None: ...
-
-class UserAuthRequest(_message.Message):
-    __slots__ = ("uid", "salt", "iterations", "encryptedClientKey", "authHash", "encryptedDataKey", "loginType", "name", "algorithm")
-    UID_FIELD_NUMBER: _ClassVar[int]
-    SALT_FIELD_NUMBER: _ClassVar[int]
-    ITERATIONS_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDCLIENTKEY_FIELD_NUMBER: _ClassVar[int]
-    AUTHHASH_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDDATAKEY_FIELD_NUMBER: _ClassVar[int]
-    LOGINTYPE_FIELD_NUMBER: _ClassVar[int]
-    NAME_FIELD_NUMBER: _ClassVar[int]
-    ALGORITHM_FIELD_NUMBER: _ClassVar[int]
-    uid: bytes
-    salt: bytes
-    iterations: int
-    encryptedClientKey: bytes
-    authHash: bytes
-    encryptedDataKey: bytes
-    loginType: LoginType
-    name: str
-    algorithm: int
-    def __init__(self, uid: _Optional[bytes] = ..., salt: _Optional[bytes] = ..., iterations: _Optional[int] = ..., encryptedClientKey: _Optional[bytes] = ..., authHash: _Optional[bytes] = ..., encryptedDataKey: _Optional[bytes] = ..., loginType: _Optional[_Union[LoginType, str]] = ..., name: _Optional[str] = ..., algorithm: _Optional[int] = ...) -> None: ...
-
-class UidRequest(_message.Message):
-    __slots__ = ("uid",)
-    UID_FIELD_NUMBER: _ClassVar[int]
-    uid: _containers.RepeatedScalarFieldContainer[bytes]
-    def __init__(self, uid: _Optional[_Iterable[bytes]] = ...) -> None: ...
-
-class DeviceUpdateRequest(_message.Message):
-    __slots__ = ("encryptedDeviceToken", "clientVersion", "deviceName", "devicePublicKey", "deviceStatus")
-    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: _ClassVar[int]
-    CLIENTVERSION_FIELD_NUMBER: _ClassVar[int]
-    DEVICENAME_FIELD_NUMBER: _ClassVar[int]
-    DEVICEPUBLICKEY_FIELD_NUMBER: _ClassVar[int]
-    DEVICESTATUS_FIELD_NUMBER: _ClassVar[int]
-    encryptedDeviceToken: bytes
-    clientVersion: str
-    deviceName: str
-    devicePublicKey: bytes
-    deviceStatus: DeviceStatus
-    def __init__(self, encryptedDeviceToken: _Optional[bytes] = ..., clientVersion: _Optional[str] = ..., deviceName: _Optional[str] = ..., devicePublicKey: _Optional[bytes] = ..., deviceStatus: _Optional[_Union[DeviceStatus, str]] = ...) -> None: ...
-
-class RegisterDeviceInRegionRequest(_message.Message):
-    __slots__ = ("encryptedDeviceToken", "clientVersion", "deviceName", "devicePublicKey")
-    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: _ClassVar[int]
-    CLIENTVERSION_FIELD_NUMBER: _ClassVar[int]
-    DEVICENAME_FIELD_NUMBER: _ClassVar[int]
-    DEVICEPUBLICKEY_FIELD_NUMBER: _ClassVar[int]
-    encryptedDeviceToken: bytes
-    clientVersion: str
-    deviceName: str
-    devicePublicKey: bytes
-    def __init__(self, encryptedDeviceToken: _Optional[bytes] = ..., clientVersion: _Optional[str] = ..., deviceName: _Optional[str] = ..., devicePublicKey: _Optional[bytes] = ...) -> None: ...
-
-class RegistrationRequest(_message.Message):
-    __slots__ = ("authRequest", "userAuthRequest", "encryptedClientKey", "encryptedPrivateKey", "publicKey", "verificationCode", "deprecatedAuthHashHash", "deprecatedEncryptedClientKey", "deprecatedEncryptedPrivateKey", "deprecatedEncryptionParams")
-    AUTHREQUEST_FIELD_NUMBER: _ClassVar[int]
-    USERAUTHREQUEST_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDCLIENTKEY_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDPRIVATEKEY_FIELD_NUMBER: _ClassVar[int]
-    PUBLICKEY_FIELD_NUMBER: _ClassVar[int]
-    VERIFICATIONCODE_FIELD_NUMBER: _ClassVar[int]
-    DEPRECATEDAUTHHASHHASH_FIELD_NUMBER: _ClassVar[int]
-    DEPRECATEDENCRYPTEDCLIENTKEY_FIELD_NUMBER: _ClassVar[int]
-    DEPRECATEDENCRYPTEDPRIVATEKEY_FIELD_NUMBER: _ClassVar[int]
-    DEPRECATEDENCRYPTIONPARAMS_FIELD_NUMBER: _ClassVar[int]
-    authRequest: AuthRequest
-    userAuthRequest: UserAuthRequest
-    encryptedClientKey: bytes
-    encryptedPrivateKey: bytes
-    publicKey: bytes
-    verificationCode: str
-    deprecatedAuthHashHash: bytes
-    deprecatedEncryptedClientKey: bytes
-    deprecatedEncryptedPrivateKey: bytes
-    deprecatedEncryptionParams: bytes
-    def __init__(self, authRequest: _Optional[_Union[AuthRequest, _Mapping]] = ..., userAuthRequest: _Optional[_Union[UserAuthRequest, _Mapping]] = ..., encryptedClientKey: _Optional[bytes] = ..., encryptedPrivateKey: _Optional[bytes] = ..., publicKey: _Optional[bytes] = ..., verificationCode: _Optional[str] = ..., deprecatedAuthHashHash: _Optional[bytes] = ..., deprecatedEncryptedClientKey: _Optional[bytes] = ..., deprecatedEncryptedPrivateKey: _Optional[bytes] = ..., deprecatedEncryptionParams: _Optional[bytes] = ...) -> None: ...
-
-class ConvertUserToV3Request(_message.Message):
-    __slots__ = ("authRequest", "userAuthRequest", "encryptedClientKey", "encryptedPrivateKey", "publicKey")
-    AUTHREQUEST_FIELD_NUMBER: _ClassVar[int]
-    USERAUTHREQUEST_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDCLIENTKEY_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDPRIVATEKEY_FIELD_NUMBER: _ClassVar[int]
-    PUBLICKEY_FIELD_NUMBER: _ClassVar[int]
-    authRequest: AuthRequest
-    userAuthRequest: UserAuthRequest
-    encryptedClientKey: bytes
-    encryptedPrivateKey: bytes
-    publicKey: bytes
-    def __init__(self, authRequest: _Optional[_Union[AuthRequest, _Mapping]] = ..., userAuthRequest: _Optional[_Union[UserAuthRequest, _Mapping]] = ..., encryptedClientKey: _Optional[bytes] = ..., encryptedPrivateKey: _Optional[bytes] = ..., publicKey: _Optional[bytes] = ...) -> None: ...
-
-class RevisionResponse(_message.Message):
-    __slots__ = ("revision",)
-    REVISION_FIELD_NUMBER: _ClassVar[int]
-    revision: int
-    def __init__(self, revision: _Optional[int] = ...) -> None: ...
-
-class ChangeEmailRequest(_message.Message):
-    __slots__ = ("newEmail",)
-    NEWEMAIL_FIELD_NUMBER: _ClassVar[int]
-    newEmail: str
-    def __init__(self, newEmail: _Optional[str] = ...) -> None: ...
-
-class ChangeEmailResponse(_message.Message):
-    __slots__ = ("encryptedChangeEmailToken",)
-    ENCRYPTEDCHANGEEMAILTOKEN_FIELD_NUMBER: _ClassVar[int]
-    encryptedChangeEmailToken: bytes
-    def __init__(self, encryptedChangeEmailToken: _Optional[bytes] = ...) -> None: ...
-
-class EmailVerificationLinkResponse(_message.Message):
-    __slots__ = ("emailVerified",)
-    EMAILVERIFIED_FIELD_NUMBER: _ClassVar[int]
-    emailVerified: bool
-    def __init__(self, emailVerified: bool = ...) -> None: ...
-
-class SecurityData(_message.Message):
-    __slots__ = ("uid", "data")
-    UID_FIELD_NUMBER: _ClassVar[int]
-    DATA_FIELD_NUMBER: _ClassVar[int]
-    uid: bytes
-    data: bytes
-    def __init__(self, uid: _Optional[bytes] = ..., data: _Optional[bytes] = ...) -> None: ...
-
-class SecurityScoreData(_message.Message):
-    __slots__ = ("uid", "data", "revision")
-    UID_FIELD_NUMBER: _ClassVar[int]
-    DATA_FIELD_NUMBER: _ClassVar[int]
-    REVISION_FIELD_NUMBER: _ClassVar[int]
-    uid: bytes
-    data: bytes
-    revision: int
-    def __init__(self, uid: _Optional[bytes] = ..., data: _Optional[bytes] = ..., revision: _Optional[int] = ...) -> None: ...
-
-class SecurityDataRequest(_message.Message):
-    __slots__ = ("recordSecurityData", "masterPasswordSecurityData", "encryptionType", "recordSecurityScoreData")
-    RECORDSECURITYDATA_FIELD_NUMBER: _ClassVar[int]
-    MASTERPASSWORDSECURITYDATA_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTIONTYPE_FIELD_NUMBER: _ClassVar[int]
-    RECORDSECURITYSCOREDATA_FIELD_NUMBER: _ClassVar[int]
-    recordSecurityData: _containers.RepeatedCompositeFieldContainer[SecurityData]
-    masterPasswordSecurityData: _containers.RepeatedCompositeFieldContainer[SecurityData]
-    encryptionType: _enterprise_pb2.EncryptedKeyType
-    recordSecurityScoreData: _containers.RepeatedCompositeFieldContainer[SecurityScoreData]
-    def __init__(self, recordSecurityData: _Optional[_Iterable[_Union[SecurityData, _Mapping]]] = ..., masterPasswordSecurityData: _Optional[_Iterable[_Union[SecurityData, _Mapping]]] = ..., encryptionType: _Optional[_Union[_enterprise_pb2.EncryptedKeyType, str]] = ..., recordSecurityScoreData: _Optional[_Iterable[_Union[SecurityScoreData, _Mapping]]] = ...) -> None: ...
-
-class SecurityReportIncrementalData(_message.Message):
-    __slots__ = ("enterpriseUserId", "currentSecurityData", "currentSecurityDataRevision", "oldSecurityData", "oldSecurityDataRevision", "currentDataEncryptionType", "oldDataEncryptionType")
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    CURRENTSECURITYDATA_FIELD_NUMBER: _ClassVar[int]
-    CURRENTSECURITYDATAREVISION_FIELD_NUMBER: _ClassVar[int]
-    OLDSECURITYDATA_FIELD_NUMBER: _ClassVar[int]
-    OLDSECURITYDATAREVISION_FIELD_NUMBER: _ClassVar[int]
-    CURRENTDATAENCRYPTIONTYPE_FIELD_NUMBER: _ClassVar[int]
-    OLDDATAENCRYPTIONTYPE_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserId: int
-    currentSecurityData: bytes
-    currentSecurityDataRevision: int
-    oldSecurityData: bytes
-    oldSecurityDataRevision: int
-    currentDataEncryptionType: _enterprise_pb2.EncryptedKeyType
-    oldDataEncryptionType: _enterprise_pb2.EncryptedKeyType
-    def __init__(self, enterpriseUserId: _Optional[int] = ..., currentSecurityData: _Optional[bytes] = ..., currentSecurityDataRevision: _Optional[int] = ..., oldSecurityData: _Optional[bytes] = ..., oldSecurityDataRevision: _Optional[int] = ..., currentDataEncryptionType: _Optional[_Union[_enterprise_pb2.EncryptedKeyType, str]] = ..., oldDataEncryptionType: _Optional[_Union[_enterprise_pb2.EncryptedKeyType, str]] = ...) -> None: ...
-
-class SecurityReport(_message.Message):
-    __slots__ = ("enterpriseUserId", "encryptedReportData", "revision", "twoFactor", "lastLogin", "numberOfReusedPassword", "securityReportIncrementalData", "userId", "hasOldEncryption")
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDREPORTDATA_FIELD_NUMBER: _ClassVar[int]
-    REVISION_FIELD_NUMBER: _ClassVar[int]
-    TWOFACTOR_FIELD_NUMBER: _ClassVar[int]
-    LASTLOGIN_FIELD_NUMBER: _ClassVar[int]
-    NUMBEROFREUSEDPASSWORD_FIELD_NUMBER: _ClassVar[int]
-    SECURITYREPORTINCREMENTALDATA_FIELD_NUMBER: _ClassVar[int]
-    USERID_FIELD_NUMBER: _ClassVar[int]
-    HASOLDENCRYPTION_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserId: int
-    encryptedReportData: bytes
-    revision: int
-    twoFactor: str
-    lastLogin: int
-    numberOfReusedPassword: int
-    securityReportIncrementalData: _containers.RepeatedCompositeFieldContainer[SecurityReportIncrementalData]
-    userId: int
-    hasOldEncryption: bool
-    def __init__(self, enterpriseUserId: _Optional[int] = ..., encryptedReportData: _Optional[bytes] = ..., revision: _Optional[int] = ..., twoFactor: _Optional[str] = ..., lastLogin: _Optional[int] = ..., numberOfReusedPassword: _Optional[int] = ..., securityReportIncrementalData: _Optional[_Iterable[_Union[SecurityReportIncrementalData, _Mapping]]] = ..., userId: _Optional[int] = ..., hasOldEncryption: bool = ...) -> None: ...
-
-class SecurityReportSaveRequest(_message.Message):
-    __slots__ = ("securityReport",)
-    SECURITYREPORT_FIELD_NUMBER: _ClassVar[int]
-    securityReport: _containers.RepeatedCompositeFieldContainer[SecurityReport]
-    def __init__(self, securityReport: _Optional[_Iterable[_Union[SecurityReport, _Mapping]]] = ...) -> None: ...
-
-class SecurityReportRequest(_message.Message):
-    __slots__ = ("fromPage",)
-    FROMPAGE_FIELD_NUMBER: _ClassVar[int]
-    fromPage: int
-    def __init__(self, fromPage: _Optional[int] = ...) -> None: ...
-
-class SecurityReportResponse(_message.Message):
-    __slots__ = ("enterprisePrivateKey", "securityReport", "asOfRevision", "fromPage", "toPage", "complete", "enterpriseEccPrivateKey")
-    ENTERPRISEPRIVATEKEY_FIELD_NUMBER: _ClassVar[int]
-    SECURITYREPORT_FIELD_NUMBER: _ClassVar[int]
-    ASOFREVISION_FIELD_NUMBER: _ClassVar[int]
-    FROMPAGE_FIELD_NUMBER: _ClassVar[int]
-    TOPAGE_FIELD_NUMBER: _ClassVar[int]
-    COMPLETE_FIELD_NUMBER: _ClassVar[int]
-    ENTERPRISEECCPRIVATEKEY_FIELD_NUMBER: _ClassVar[int]
-    enterprisePrivateKey: bytes
-    securityReport: _containers.RepeatedCompositeFieldContainer[SecurityReport]
-    asOfRevision: int
-    fromPage: int
-    toPage: int
-    complete: bool
-    enterpriseEccPrivateKey: bytes
-    def __init__(self, enterprisePrivateKey: _Optional[bytes] = ..., securityReport: _Optional[_Iterable[_Union[SecurityReport, _Mapping]]] = ..., asOfRevision: _Optional[int] = ..., fromPage: _Optional[int] = ..., toPage: _Optional[int] = ..., complete: bool = ..., enterpriseEccPrivateKey: _Optional[bytes] = ...) -> None: ...
-
-class ReusedPasswordsRequest(_message.Message):
-    __slots__ = ("count",)
-    COUNT_FIELD_NUMBER: _ClassVar[int]
-    count: int
-    def __init__(self, count: _Optional[int] = ...) -> None: ...
-
-class SummaryConsoleReport(_message.Message):
-    __slots__ = ("reportType", "reportData")
-    REPORTTYPE_FIELD_NUMBER: _ClassVar[int]
-    REPORTDATA_FIELD_NUMBER: _ClassVar[int]
-    reportType: int
-    reportData: bytes
-    def __init__(self, reportType: _Optional[int] = ..., reportData: _Optional[bytes] = ...) -> None: ...
-
-class ChangeToKeyTypeOne(_message.Message):
-    __slots__ = ("objectType", "primaryUid", "secondaryUid", "key")
-    OBJECTTYPE_FIELD_NUMBER: _ClassVar[int]
-    PRIMARYUID_FIELD_NUMBER: _ClassVar[int]
-    SECONDARYUID_FIELD_NUMBER: _ClassVar[int]
-    KEY_FIELD_NUMBER: _ClassVar[int]
-    objectType: ObjectTypes
-    primaryUid: bytes
-    secondaryUid: bytes
-    key: bytes
-    def __init__(self, objectType: _Optional[_Union[ObjectTypes, str]] = ..., primaryUid: _Optional[bytes] = ..., secondaryUid: _Optional[bytes] = ..., key: _Optional[bytes] = ...) -> None: ...
-
-class ChangeToKeyTypeOneRequest(_message.Message):
-    __slots__ = ("changeToKeyTypeOne",)
-    CHANGETOKEYTYPEONE_FIELD_NUMBER: _ClassVar[int]
-    changeToKeyTypeOne: _containers.RepeatedCompositeFieldContainer[ChangeToKeyTypeOne]
-    def __init__(self, changeToKeyTypeOne: _Optional[_Iterable[_Union[ChangeToKeyTypeOne, _Mapping]]] = ...) -> None: ...
-
-class ChangeToKeyTypeOneStatus(_message.Message):
-    __slots__ = ("uid", "type", "status", "reason")
-    UID_FIELD_NUMBER: _ClassVar[int]
-    TYPE_FIELD_NUMBER: _ClassVar[int]
-    STATUS_FIELD_NUMBER: _ClassVar[int]
-    REASON_FIELD_NUMBER: _ClassVar[int]
-    uid: bytes
-    type: str
-    status: str
-    reason: str
-    def __init__(self, uid: _Optional[bytes] = ..., type: _Optional[str] = ..., status: _Optional[str] = ..., reason: _Optional[str] = ...) -> None: ...
-
-class ChangeToKeyTypeOneResponse(_message.Message):
-    __slots__ = ("changeToKeyTypeOneStatus",)
-    CHANGETOKEYTYPEONESTATUS_FIELD_NUMBER: _ClassVar[int]
-    changeToKeyTypeOneStatus: _containers.RepeatedCompositeFieldContainer[ChangeToKeyTypeOneStatus]
-    def __init__(self, changeToKeyTypeOneStatus: _Optional[_Iterable[_Union[ChangeToKeyTypeOneStatus, _Mapping]]] = ...) -> None: ...
-
-class GetChangeKeyTypesRequest(_message.Message):
-    __slots__ = ("onlyTheseObjects", "limit", "includeRecommended", "includeKeys", "includeAllowedKeyTypes")
-    ONLYTHESEOBJECTS_FIELD_NUMBER: _ClassVar[int]
-    LIMIT_FIELD_NUMBER: _ClassVar[int]
-    INCLUDERECOMMENDED_FIELD_NUMBER: _ClassVar[int]
-    INCLUDEKEYS_FIELD_NUMBER: _ClassVar[int]
-    INCLUDEALLOWEDKEYTYPES_FIELD_NUMBER: _ClassVar[int]
-    onlyTheseObjects: _containers.RepeatedScalarFieldContainer[EncryptedObjectType]
-    limit: int
-    includeRecommended: bool
-    includeKeys: bool
-    includeAllowedKeyTypes: bool
-    def __init__(self, onlyTheseObjects: _Optional[_Iterable[_Union[EncryptedObjectType, str]]] = ..., limit: _Optional[int] = ..., includeRecommended: bool = ..., includeKeys: bool = ..., includeAllowedKeyTypes: bool = ...) -> None: ...
-
-class GetChangeKeyTypesResponse(_message.Message):
-    __slots__ = ("keys", "allowedKeyTypes")
-    KEYS_FIELD_NUMBER: _ClassVar[int]
-    ALLOWEDKEYTYPES_FIELD_NUMBER: _ClassVar[int]
-    keys: _containers.RepeatedCompositeFieldContainer[ChangeKeyType]
-    allowedKeyTypes: _containers.RepeatedCompositeFieldContainer[AllowedKeyTypes]
-    def __init__(self, keys: _Optional[_Iterable[_Union[ChangeKeyType, _Mapping]]] = ..., allowedKeyTypes: _Optional[_Iterable[_Union[AllowedKeyTypes, _Mapping]]] = ...) -> None: ...
-
-class AllowedKeyTypes(_message.Message):
-    __slots__ = ("objectType", "allowedKeyTypes")
-    OBJECTTYPE_FIELD_NUMBER: _ClassVar[int]
-    ALLOWEDKEYTYPES_FIELD_NUMBER: _ClassVar[int]
-    objectType: EncryptedObjectType
-    allowedKeyTypes: _containers.RepeatedScalarFieldContainer[_enterprise_pb2.EncryptedKeyType]
-    def __init__(self, objectType: _Optional[_Union[EncryptedObjectType, str]] = ..., allowedKeyTypes: _Optional[_Iterable[_Union[_enterprise_pb2.EncryptedKeyType, str]]] = ...) -> None: ...
-
-class ChangeKeyTypes(_message.Message):
-    __slots__ = ("keys",)
-    KEYS_FIELD_NUMBER: _ClassVar[int]
-    keys: _containers.RepeatedCompositeFieldContainer[ChangeKeyType]
-    def __init__(self, keys: _Optional[_Iterable[_Union[ChangeKeyType, _Mapping]]] = ...) -> None: ...
-
-class ChangeKeyType(_message.Message):
-    __slots__ = ("objectType", "uid", "secondaryUid", "key", "keyType", "status")
-    OBJECTTYPE_FIELD_NUMBER: _ClassVar[int]
-    UID_FIELD_NUMBER: _ClassVar[int]
-    SECONDARYUID_FIELD_NUMBER: _ClassVar[int]
-    KEY_FIELD_NUMBER: _ClassVar[int]
-    KEYTYPE_FIELD_NUMBER: _ClassVar[int]
-    STATUS_FIELD_NUMBER: _ClassVar[int]
-    objectType: EncryptedObjectType
-    uid: bytes
-    secondaryUid: bytes
-    key: bytes
-    keyType: _enterprise_pb2.EncryptedKeyType
-    status: GenericStatus
-    def __init__(self, objectType: _Optional[_Union[EncryptedObjectType, str]] = ..., uid: _Optional[bytes] = ..., secondaryUid: _Optional[bytes] = ..., key: _Optional[bytes] = ..., keyType: _Optional[_Union[_enterprise_pb2.EncryptedKeyType, str]] = ..., status: _Optional[_Union[GenericStatus, str]] = ...) -> None: ...
-
-class SetKey(_message.Message):
-    __slots__ = ("id", "key")
-    ID_FIELD_NUMBER: _ClassVar[int]
-    KEY_FIELD_NUMBER: _ClassVar[int]
-    id: int
-    key: bytes
-    def __init__(self, id: _Optional[int] = ..., key: _Optional[bytes] = ...) -> None: ...
-
-class SetKeyRequest(_message.Message):
-    __slots__ = ("keys",)
-    KEYS_FIELD_NUMBER: _ClassVar[int]
-    keys: _containers.RepeatedCompositeFieldContainer[SetKey]
-    def __init__(self, keys: _Optional[_Iterable[_Union[SetKey, _Mapping]]] = ...) -> None: ...
-
-class CreateUserRequest(_message.Message):
-    __slots__ = ("username", "authVerifier", "encryptionParams", "rsaPublicKey", "rsaEncryptedPrivateKey", "eccPublicKey", "eccEncryptedPrivateKey", "encryptedDeviceToken", "encryptedClientKey", "clientVersion", "encryptedDeviceDataKey", "encryptedLoginToken", "messageSessionUid", "installReferrer", "mccMNC", "mfg", "model", "brand", "product", "device", "carrier", "verificationCode", "enterpriseRegistration", "encryptedVerificationToken", "enterpriseUsersDataKey")
-    USERNAME_FIELD_NUMBER: _ClassVar[int]
-    AUTHVERIFIER_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTIONPARAMS_FIELD_NUMBER: _ClassVar[int]
-    RSAPUBLICKEY_FIELD_NUMBER: _ClassVar[int]
-    RSAENCRYPTEDPRIVATEKEY_FIELD_NUMBER: _ClassVar[int]
-    ECCPUBLICKEY_FIELD_NUMBER: _ClassVar[int]
-    ECCENCRYPTEDPRIVATEKEY_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDCLIENTKEY_FIELD_NUMBER: _ClassVar[int]
-    CLIENTVERSION_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDDEVICEDATAKEY_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: _ClassVar[int]
-    MESSAGESESSIONUID_FIELD_NUMBER: _ClassVar[int]
-    INSTALLREFERRER_FIELD_NUMBER: _ClassVar[int]
-    MCCMNC_FIELD_NUMBER: _ClassVar[int]
-    MFG_FIELD_NUMBER: _ClassVar[int]
-    MODEL_FIELD_NUMBER: _ClassVar[int]
-    BRAND_FIELD_NUMBER: _ClassVar[int]
-    PRODUCT_FIELD_NUMBER: _ClassVar[int]
-    DEVICE_FIELD_NUMBER: _ClassVar[int]
-    CARRIER_FIELD_NUMBER: _ClassVar[int]
-    VERIFICATIONCODE_FIELD_NUMBER: _ClassVar[int]
-    ENTERPRISEREGISTRATION_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDVERIFICATIONTOKEN_FIELD_NUMBER: _ClassVar[int]
-    ENTERPRISEUSERSDATAKEY_FIELD_NUMBER: _ClassVar[int]
-    username: str
-    authVerifier: bytes
-    encryptionParams: bytes
-    rsaPublicKey: bytes
-    rsaEncryptedPrivateKey: bytes
-    eccPublicKey: bytes
-    eccEncryptedPrivateKey: bytes
-    encryptedDeviceToken: bytes
-    encryptedClientKey: bytes
-    clientVersion: str
-    encryptedDeviceDataKey: bytes
-    encryptedLoginToken: bytes
-    messageSessionUid: bytes
-    installReferrer: str
-    mccMNC: int
-    mfg: str
-    model: str
-    brand: str
-    product: str
-    device: str
-    carrier: str
-    verificationCode: str
-    enterpriseRegistration: _enterprise_pb2.EnterpriseRegistration
-    encryptedVerificationToken: bytes
-    enterpriseUsersDataKey: bytes
-    def __init__(self, username: _Optional[str] = ..., authVerifier: _Optional[bytes] = ..., encryptionParams: _Optional[bytes] = ..., rsaPublicKey: _Optional[bytes] = ..., rsaEncryptedPrivateKey: _Optional[bytes] = ..., eccPublicKey: _Optional[bytes] = ..., eccEncryptedPrivateKey: _Optional[bytes] = ..., encryptedDeviceToken: _Optional[bytes] = ..., encryptedClientKey: _Optional[bytes] = ..., clientVersion: _Optional[str] = ..., encryptedDeviceDataKey: _Optional[bytes] = ..., encryptedLoginToken: _Optional[bytes] = ..., messageSessionUid: _Optional[bytes] = ..., installReferrer: _Optional[str] = ..., mccMNC: _Optional[int] = ..., mfg: _Optional[str] = ..., model: _Optional[str] = ..., brand: _Optional[str] = ..., product: _Optional[str] = ..., device: _Optional[str] = ..., carrier: _Optional[str] = ..., verificationCode: _Optional[str] = ..., enterpriseRegistration: _Optional[_Union[_enterprise_pb2.EnterpriseRegistration, _Mapping]] = ..., encryptedVerificationToken: _Optional[bytes] = ..., enterpriseUsersDataKey: _Optional[bytes] = ...) -> None: ...
-
-class NodeEnforcementAddOrUpdateRequest(_message.Message):
-    __slots__ = ("nodeId", "enforcement", "value")
-    NODEID_FIELD_NUMBER: _ClassVar[int]
-    ENFORCEMENT_FIELD_NUMBER: _ClassVar[int]
-    VALUE_FIELD_NUMBER: _ClassVar[int]
-    nodeId: int
-    enforcement: str
-    value: str
-    def __init__(self, nodeId: _Optional[int] = ..., enforcement: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
-
-class NodeEnforcementRemoveRequest(_message.Message):
-    __slots__ = ("nodeId", "enforcement")
-    NODEID_FIELD_NUMBER: _ClassVar[int]
-    ENFORCEMENT_FIELD_NUMBER: _ClassVar[int]
-    nodeId: int
-    enforcement: str
-    def __init__(self, nodeId: _Optional[int] = ..., enforcement: _Optional[str] = ...) -> None: ...
-
-class ApiRequestByKey(_message.Message):
-    __slots__ = ("keyId", "payload", "username", "locale", "supportedLanguage", "type")
-    KEYID_FIELD_NUMBER: _ClassVar[int]
-    PAYLOAD_FIELD_NUMBER: _ClassVar[int]
-    USERNAME_FIELD_NUMBER: _ClassVar[int]
-    LOCALE_FIELD_NUMBER: _ClassVar[int]
-    SUPPORTEDLANGUAGE_FIELD_NUMBER: _ClassVar[int]
-    TYPE_FIELD_NUMBER: _ClassVar[int]
-    keyId: int
-    payload: bytes
-    username: str
-    locale: str
-    supportedLanguage: SupportedLanguage
-    type: int
-    def __init__(self, keyId: _Optional[int] = ..., payload: _Optional[bytes] = ..., username: _Optional[str] = ..., locale: _Optional[str] = ..., supportedLanguage: _Optional[_Union[SupportedLanguage, str]] = ..., type: _Optional[int] = ...) -> None: ...
-
-class ApiRequestByKAtoKAKey(_message.Message):
-    __slots__ = ("sourceRegion", "payload", "supportedLanguage", "destinationRegion")
-    SOURCEREGION_FIELD_NUMBER: _ClassVar[int]
-    PAYLOAD_FIELD_NUMBER: _ClassVar[int]
-    SUPPORTEDLANGUAGE_FIELD_NUMBER: _ClassVar[int]
-    DESTINATIONREGION_FIELD_NUMBER: _ClassVar[int]
-    sourceRegion: Region
-    payload: bytes
-    supportedLanguage: SupportedLanguage
-    destinationRegion: Region
-    def __init__(self, sourceRegion: _Optional[_Union[Region, str]] = ..., payload: _Optional[bytes] = ..., supportedLanguage: _Optional[_Union[SupportedLanguage, str]] = ..., destinationRegion: _Optional[_Union[Region, str]] = ...) -> None: ...
-
-class MemcacheRequest(_message.Message):
-    __slots__ = ("key", "userId")
-    KEY_FIELD_NUMBER: _ClassVar[int]
-    USERID_FIELD_NUMBER: _ClassVar[int]
-    key: str
-    userId: int
-    def __init__(self, key: _Optional[str] = ..., userId: _Optional[int] = ...) -> None: ...
-
-class MemcacheResponse(_message.Message):
-    __slots__ = ("key", "value")
-    KEY_FIELD_NUMBER: _ClassVar[int]
-    VALUE_FIELD_NUMBER: _ClassVar[int]
-    key: str
-    value: str
-    def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
-
-class MasterPasswordReentryRequest(_message.Message):
-    __slots__ = ("pbkdf2Password", "action")
-    PBKDF2PASSWORD_FIELD_NUMBER: _ClassVar[int]
-    ACTION_FIELD_NUMBER: _ClassVar[int]
-    pbkdf2Password: str
-    action: MasterPasswordReentryActionType
-    def __init__(self, pbkdf2Password: _Optional[str] = ..., action: _Optional[_Union[MasterPasswordReentryActionType, str]] = ...) -> None: ...
-
-class MasterPasswordReentryResponse(_message.Message):
-    __slots__ = ("status",)
-    STATUS_FIELD_NUMBER: _ClassVar[int]
-    status: MasterPasswordReentryStatus
-    def __init__(self, status: _Optional[_Union[MasterPasswordReentryStatus, str]] = ...) -> None: ...
-
-class DeviceRegistrationRequest(_message.Message):
-    __slots__ = ("clientVersion", "deviceName", "devicePublicKey")
-    CLIENTVERSION_FIELD_NUMBER: _ClassVar[int]
-    DEVICENAME_FIELD_NUMBER: _ClassVar[int]
-    DEVICEPUBLICKEY_FIELD_NUMBER: _ClassVar[int]
-    clientVersion: str
-    deviceName: str
-    devicePublicKey: bytes
-    def __init__(self, clientVersion: _Optional[str] = ..., deviceName: _Optional[str] = ..., devicePublicKey: _Optional[bytes] = ...) -> None: ...
-
-class DeviceVerificationRequest(_message.Message):
-    __slots__ = ("encryptedDeviceToken", "username", "verificationChannel", "messageSessionUid", "clientVersion")
-    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: _ClassVar[int]
-    USERNAME_FIELD_NUMBER: _ClassVar[int]
-    VERIFICATIONCHANNEL_FIELD_NUMBER: _ClassVar[int]
-    MESSAGESESSIONUID_FIELD_NUMBER: _ClassVar[int]
-    CLIENTVERSION_FIELD_NUMBER: _ClassVar[int]
-    encryptedDeviceToken: bytes
-    username: str
-    verificationChannel: str
-    messageSessionUid: bytes
-    clientVersion: str
-    def __init__(self, encryptedDeviceToken: _Optional[bytes] = ..., username: _Optional[str] = ..., verificationChannel: _Optional[str] = ..., messageSessionUid: _Optional[bytes] = ..., clientVersion: _Optional[str] = ...) -> None: ...
-
-class DeviceVerificationResponse(_message.Message):
-    __slots__ = ("encryptedDeviceToken", "username", "messageSessionUid", "clientVersion", "deviceStatus")
-    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: _ClassVar[int]
-    USERNAME_FIELD_NUMBER: _ClassVar[int]
-    MESSAGESESSIONUID_FIELD_NUMBER: _ClassVar[int]
-    CLIENTVERSION_FIELD_NUMBER: _ClassVar[int]
-    DEVICESTATUS_FIELD_NUMBER: _ClassVar[int]
-    encryptedDeviceToken: bytes
-    username: str
-    messageSessionUid: bytes
-    clientVersion: str
-    deviceStatus: DeviceStatus
-    def __init__(self, encryptedDeviceToken: _Optional[bytes] = ..., username: _Optional[str] = ..., messageSessionUid: _Optional[bytes] = ..., clientVersion: _Optional[str] = ..., deviceStatus: _Optional[_Union[DeviceStatus, str]] = ...) -> None: ...
-
-class DeviceApprovalRequest(_message.Message):
-    __slots__ = ("email", "twoFactorChannel", "clientVersion", "locale", "encryptedDeviceToken", "totpCode", "deviceIp", "deviceTokenExpireDays")
-    EMAIL_FIELD_NUMBER: _ClassVar[int]
-    TWOFACTORCHANNEL_FIELD_NUMBER: _ClassVar[int]
-    CLIENTVERSION_FIELD_NUMBER: _ClassVar[int]
-    LOCALE_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: _ClassVar[int]
-    TOTPCODE_FIELD_NUMBER: _ClassVar[int]
-    DEVICEIP_FIELD_NUMBER: _ClassVar[int]
-    DEVICETOKENEXPIREDAYS_FIELD_NUMBER: _ClassVar[int]
-    email: str
-    twoFactorChannel: str
-    clientVersion: str
-    locale: str
-    encryptedDeviceToken: bytes
-    totpCode: str
-    deviceIp: str
-    deviceTokenExpireDays: str
-    def __init__(self, email: _Optional[str] = ..., twoFactorChannel: _Optional[str] = ..., clientVersion: _Optional[str] = ..., locale: _Optional[str] = ..., encryptedDeviceToken: _Optional[bytes] = ..., totpCode: _Optional[str] = ..., deviceIp: _Optional[str] = ..., deviceTokenExpireDays: _Optional[str] = ...) -> None: ...
-
-class DeviceApprovalResponse(_message.Message):
-    __slots__ = ("encryptedTwoFactorToken",)
-    ENCRYPTEDTWOFACTORTOKEN_FIELD_NUMBER: _ClassVar[int]
-    encryptedTwoFactorToken: bytes
-    def __init__(self, encryptedTwoFactorToken: _Optional[bytes] = ...) -> None: ...
-
-class ApproveDeviceRequest(_message.Message):
-    __slots__ = ("encryptedDeviceToken", "encryptedDeviceDataKey", "denyApproval", "linkDevice")
-    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDDEVICEDATAKEY_FIELD_NUMBER: _ClassVar[int]
-    DENYAPPROVAL_FIELD_NUMBER: _ClassVar[int]
-    LINKDEVICE_FIELD_NUMBER: _ClassVar[int]
-    encryptedDeviceToken: bytes
-    encryptedDeviceDataKey: bytes
-    denyApproval: bool
-    linkDevice: bool
-    def __init__(self, encryptedDeviceToken: _Optional[bytes] = ..., encryptedDeviceDataKey: _Optional[bytes] = ..., denyApproval: bool = ..., linkDevice: bool = ...) -> None: ...
-
-class EnterpriseUserAliasRequest(_message.Message):
-    __slots__ = ("enterpriseUserId", "alias")
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    ALIAS_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserId: int
-    alias: str
-    def __init__(self, enterpriseUserId: _Optional[int] = ..., alias: _Optional[str] = ...) -> None: ...
-
-class EnterpriseUserAddAliasRequest(_message.Message):
-    __slots__ = ("enterpriseUserId", "alias", "primary")
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    ALIAS_FIELD_NUMBER: _ClassVar[int]
-    PRIMARY_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserId: int
-    alias: str
-    primary: bool
-    def __init__(self, enterpriseUserId: _Optional[int] = ..., alias: _Optional[str] = ..., primary: bool = ...) -> None: ...
-
-class EnterpriseUserAddAliasRequestV2(_message.Message):
-    __slots__ = ("enterpriseUserAddAliasRequest",)
-    ENTERPRISEUSERADDALIASREQUEST_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserAddAliasRequest: _containers.RepeatedCompositeFieldContainer[EnterpriseUserAddAliasRequest]
-    def __init__(self, enterpriseUserAddAliasRequest: _Optional[_Iterable[_Union[EnterpriseUserAddAliasRequest, _Mapping]]] = ...) -> None: ...
-
-class EnterpriseUserAddAliasStatus(_message.Message):
-    __slots__ = ("enterpriseUserId", "status")
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    STATUS_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserId: int
-    status: str
-    def __init__(self, enterpriseUserId: _Optional[int] = ..., status: _Optional[str] = ...) -> None: ...
-
-class EnterpriseUserAddAliasResponse(_message.Message):
-    __slots__ = ("status",)
-    STATUS_FIELD_NUMBER: _ClassVar[int]
-    status: _containers.RepeatedCompositeFieldContainer[EnterpriseUserAddAliasStatus]
-    def __init__(self, status: _Optional[_Iterable[_Union[EnterpriseUserAddAliasStatus, _Mapping]]] = ...) -> None: ...
-
-class Device(_message.Message):
-    __slots__ = ("encryptedDeviceToken",)
-    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: _ClassVar[int]
-    encryptedDeviceToken: bytes
-    def __init__(self, encryptedDeviceToken: _Optional[bytes] = ...) -> None: ...
-
-class RegisterDeviceDataKeyRequest(_message.Message):
-    __slots__ = ("encryptedDeviceToken", "encryptedDeviceDataKey")
-    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDDEVICEDATAKEY_FIELD_NUMBER: _ClassVar[int]
-    encryptedDeviceToken: bytes
-    encryptedDeviceDataKey: bytes
-    def __init__(self, encryptedDeviceToken: _Optional[bytes] = ..., encryptedDeviceDataKey: _Optional[bytes] = ...) -> None: ...
-
-class ValidateCreateUserVerificationCodeRequest(_message.Message):
-    __slots__ = ("username", "clientVersion", "verificationCode")
-    USERNAME_FIELD_NUMBER: _ClassVar[int]
-    CLIENTVERSION_FIELD_NUMBER: _ClassVar[int]
-    VERIFICATIONCODE_FIELD_NUMBER: _ClassVar[int]
-    username: str
-    clientVersion: str
-    verificationCode: str
-    def __init__(self, username: _Optional[str] = ..., clientVersion: _Optional[str] = ..., verificationCode: _Optional[str] = ...) -> None: ...
-
-class ValidateDeviceVerificationCodeRequest(_message.Message):
-    __slots__ = ("username", "clientVersion", "verificationCode", "messageSessionUid", "encryptedDeviceToken")
-    USERNAME_FIELD_NUMBER: _ClassVar[int]
-    CLIENTVERSION_FIELD_NUMBER: _ClassVar[int]
-    VERIFICATIONCODE_FIELD_NUMBER: _ClassVar[int]
-    MESSAGESESSIONUID_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: _ClassVar[int]
-    username: str
-    clientVersion: str
-    verificationCode: str
-    messageSessionUid: bytes
-    encryptedDeviceToken: bytes
-    def __init__(self, username: _Optional[str] = ..., clientVersion: _Optional[str] = ..., verificationCode: _Optional[str] = ..., messageSessionUid: _Optional[bytes] = ..., encryptedDeviceToken: _Optional[bytes] = ...) -> None: ...
-
-class SendSessionMessageRequest(_message.Message):
-    __slots__ = ("messageSessionUid", "command", "username")
-    MESSAGESESSIONUID_FIELD_NUMBER: _ClassVar[int]
-    COMMAND_FIELD_NUMBER: _ClassVar[int]
-    USERNAME_FIELD_NUMBER: _ClassVar[int]
-    messageSessionUid: bytes
-    command: str
-    username: str
-    def __init__(self, messageSessionUid: _Optional[bytes] = ..., command: _Optional[str] = ..., username: _Optional[str] = ...) -> None: ...
-
-class GlobalUserAccount(_message.Message):
-    __slots__ = ("username", "accountUid", "regionName")
-    USERNAME_FIELD_NUMBER: _ClassVar[int]
-    ACCOUNTUID_FIELD_NUMBER: _ClassVar[int]
-    REGIONNAME_FIELD_NUMBER: _ClassVar[int]
-    username: str
-    accountUid: bytes
-    regionName: str
-    def __init__(self, username: _Optional[str] = ..., accountUid: _Optional[bytes] = ..., regionName: _Optional[str] = ...) -> None: ...
-
-class AccountUsername(_message.Message):
-    __slots__ = ("username", "dateActive")
-    USERNAME_FIELD_NUMBER: _ClassVar[int]
-    DATEACTIVE_FIELD_NUMBER: _ClassVar[int]
-    username: str
-    dateActive: str
-    def __init__(self, username: _Optional[str] = ..., dateActive: _Optional[str] = ...) -> None: ...
-
-class SsoServiceProviderRequest(_message.Message):
-    __slots__ = ("name", "clientVersion", "locale")
-    NAME_FIELD_NUMBER: _ClassVar[int]
-    CLIENTVERSION_FIELD_NUMBER: _ClassVar[int]
-    LOCALE_FIELD_NUMBER: _ClassVar[int]
-    name: str
-    clientVersion: str
-    locale: str
-    def __init__(self, name: _Optional[str] = ..., clientVersion: _Optional[str] = ..., locale: _Optional[str] = ...) -> None: ...
-
-class SsoServiceProviderResponse(_message.Message):
-    __slots__ = ("name", "spUrl", "isCloud", "clientVersion")
-    NAME_FIELD_NUMBER: _ClassVar[int]
-    SPURL_FIELD_NUMBER: _ClassVar[int]
-    ISCLOUD_FIELD_NUMBER: _ClassVar[int]
-    CLIENTVERSION_FIELD_NUMBER: _ClassVar[int]
-    name: str
-    spUrl: str
-    isCloud: bool
-    clientVersion: str
-    def __init__(self, name: _Optional[str] = ..., spUrl: _Optional[str] = ..., isCloud: bool = ..., clientVersion: _Optional[str] = ...) -> None: ...
-
-class UserSettingRequest(_message.Message):
-    __slots__ = ("setting", "value")
-    SETTING_FIELD_NUMBER: _ClassVar[int]
-    VALUE_FIELD_NUMBER: _ClassVar[int]
-    setting: str
-    value: str
-    def __init__(self, setting: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
-
-class ThrottleState(_message.Message):
-    __slots__ = ("type", "key", "value", "state")
-    TYPE_FIELD_NUMBER: _ClassVar[int]
-    KEY_FIELD_NUMBER: _ClassVar[int]
-    VALUE_FIELD_NUMBER: _ClassVar[int]
-    STATE_FIELD_NUMBER: _ClassVar[int]
-    type: ThrottleType
-    key: str
-    value: str
-    state: bool
-    def __init__(self, type: _Optional[_Union[ThrottleType, str]] = ..., key: _Optional[str] = ..., value: _Optional[str] = ..., state: bool = ...) -> None: ...
-
-class ThrottleState2(_message.Message):
-    __slots__ = ("key", "keyDescription", "value", "valueDescription", "identifier", "locked", "includedInAllClear", "expireSeconds")
-    KEY_FIELD_NUMBER: _ClassVar[int]
-    KEYDESCRIPTION_FIELD_NUMBER: _ClassVar[int]
-    VALUE_FIELD_NUMBER: _ClassVar[int]
-    VALUEDESCRIPTION_FIELD_NUMBER: _ClassVar[int]
-    IDENTIFIER_FIELD_NUMBER: _ClassVar[int]
-    LOCKED_FIELD_NUMBER: _ClassVar[int]
-    INCLUDEDINALLCLEAR_FIELD_NUMBER: _ClassVar[int]
-    EXPIRESECONDS_FIELD_NUMBER: _ClassVar[int]
-    key: str
-    keyDescription: str
-    value: str
-    valueDescription: str
-    identifier: str
-    locked: bool
-    includedInAllClear: bool
-    expireSeconds: int
-    def __init__(self, key: _Optional[str] = ..., keyDescription: _Optional[str] = ..., value: _Optional[str] = ..., valueDescription: _Optional[str] = ..., identifier: _Optional[str] = ..., locked: bool = ..., includedInAllClear: bool = ..., expireSeconds: _Optional[int] = ...) -> None: ...
-
-class DeviceInformation(_message.Message):
-    __slots__ = ("deviceId", "deviceName", "clientVersion", "lastLogin", "deviceStatus")
-    DEVICEID_FIELD_NUMBER: _ClassVar[int]
-    DEVICENAME_FIELD_NUMBER: _ClassVar[int]
-    CLIENTVERSION_FIELD_NUMBER: _ClassVar[int]
-    LASTLOGIN_FIELD_NUMBER: _ClassVar[int]
-    DEVICESTATUS_FIELD_NUMBER: _ClassVar[int]
-    deviceId: int
-    deviceName: str
-    clientVersion: str
-    lastLogin: int
-    deviceStatus: DeviceStatus
-    def __init__(self, deviceId: _Optional[int] = ..., deviceName: _Optional[str] = ..., clientVersion: _Optional[str] = ..., lastLogin: _Optional[int] = ..., deviceStatus: _Optional[_Union[DeviceStatus, str]] = ...) -> None: ...
-
-class UserSetting(_message.Message):
-    __slots__ = ("name", "value")
-    NAME_FIELD_NUMBER: _ClassVar[int]
-    VALUE_FIELD_NUMBER: _ClassVar[int]
-    name: str
-    value: bool
-    def __init__(self, name: _Optional[str] = ..., value: bool = ...) -> None: ...
-
-class UserDataKeyRequest(_message.Message):
-    __slots__ = ("enterpriseUserId",)
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserId: _containers.RepeatedScalarFieldContainer[int]
-    def __init__(self, enterpriseUserId: _Optional[_Iterable[int]] = ...) -> None: ...
-
-class UserDataKeyByNodeRequest(_message.Message):
-    __slots__ = ("nodeIds",)
-    NODEIDS_FIELD_NUMBER: _ClassVar[int]
-    nodeIds: _containers.RepeatedScalarFieldContainer[int]
-    def __init__(self, nodeIds: _Optional[_Iterable[int]] = ...) -> None: ...
-
-class EnterpriseUserIdDataKeyPair(_message.Message):
-    __slots__ = ("enterpriseUserId", "encryptedDataKey", "keyType")
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDDATAKEY_FIELD_NUMBER: _ClassVar[int]
-    KEYTYPE_FIELD_NUMBER: _ClassVar[int]
-    enterpriseUserId: int
-    encryptedDataKey: bytes
-    keyType: _enterprise_pb2.EncryptedKeyType
-    def __init__(self, enterpriseUserId: _Optional[int] = ..., encryptedDataKey: _Optional[bytes] = ..., keyType: _Optional[_Union[_enterprise_pb2.EncryptedKeyType, str]] = ...) -> None: ...
-
-class UserDataKey(_message.Message):
-    __slots__ = ("roleId", "roleKey", "privateKey", "enterpriseUserIdDataKeyPairs")
-    ROLEID_FIELD_NUMBER: _ClassVar[int]
-    ROLEKEY_FIELD_NUMBER: _ClassVar[int]
-    PRIVATEKEY_FIELD_NUMBER: _ClassVar[int]
-    ENTERPRISEUSERIDDATAKEYPAIRS_FIELD_NUMBER: _ClassVar[int]
-    roleId: int
-    roleKey: bytes
-    privateKey: str
-    enterpriseUserIdDataKeyPairs: _containers.RepeatedCompositeFieldContainer[EnterpriseUserIdDataKeyPair]
-    def __init__(self, roleId: _Optional[int] = ..., roleKey: _Optional[bytes] = ..., privateKey: _Optional[str] = ..., enterpriseUserIdDataKeyPairs: _Optional[_Iterable[_Union[EnterpriseUserIdDataKeyPair, _Mapping]]] = ...) -> None: ...
-
-class UserDataKeyResponse(_message.Message):
-    __slots__ = ("userDataKeys", "accessDenied", "noEncryptedDataKey")
-    USERDATAKEYS_FIELD_NUMBER: _ClassVar[int]
-    ACCESSDENIED_FIELD_NUMBER: _ClassVar[int]
-    NOENCRYPTEDDATAKEY_FIELD_NUMBER: _ClassVar[int]
-    userDataKeys: _containers.RepeatedCompositeFieldContainer[UserDataKey]
-    accessDenied: _containers.RepeatedScalarFieldContainer[int]
-    noEncryptedDataKey: _containers.RepeatedScalarFieldContainer[int]
-    def __init__(self, userDataKeys: _Optional[_Iterable[_Union[UserDataKey, _Mapping]]] = ..., accessDenied: _Optional[_Iterable[int]] = ..., noEncryptedDataKey: _Optional[_Iterable[int]] = ...) -> None: ...
-
-class MasterPasswordRecoveryVerificationRequest(_message.Message):
-    __slots__ = ("encryptedLoginToken",)
-    ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: _ClassVar[int]
-    encryptedLoginToken: bytes
-    def __init__(self, encryptedLoginToken: _Optional[bytes] = ...) -> None: ...
-
-class GetSecurityQuestionV3Request(_message.Message):
-    __slots__ = ("encryptedLoginToken", "verificationCode")
-    ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: _ClassVar[int]
-    VERIFICATIONCODE_FIELD_NUMBER: _ClassVar[int]
-    encryptedLoginToken: bytes
-    verificationCode: str
-    def __init__(self, encryptedLoginToken: _Optional[bytes] = ..., verificationCode: _Optional[str] = ...) -> None: ...
-
-class GetSecurityQuestionV3Response(_message.Message):
-    __slots__ = ("securityQuestion", "backupKeyDate", "salt", "iterations")
-    SECURITYQUESTION_FIELD_NUMBER: _ClassVar[int]
-    BACKUPKEYDATE_FIELD_NUMBER: _ClassVar[int]
-    SALT_FIELD_NUMBER: _ClassVar[int]
-    ITERATIONS_FIELD_NUMBER: _ClassVar[int]
-    securityQuestion: str
-    backupKeyDate: int
-    salt: bytes
-    iterations: int
-    def __init__(self, securityQuestion: _Optional[str] = ..., backupKeyDate: _Optional[int] = ..., salt: _Optional[bytes] = ..., iterations: _Optional[int] = ...) -> None: ...
-
-class GetDataKeyBackupV3Request(_message.Message):
-    __slots__ = ("encryptedLoginToken", "verificationCode", "securityAnswerHash")
-    ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: _ClassVar[int]
-    VERIFICATIONCODE_FIELD_NUMBER: _ClassVar[int]
-    SECURITYANSWERHASH_FIELD_NUMBER: _ClassVar[int]
-    encryptedLoginToken: bytes
-    verificationCode: str
-    securityAnswerHash: bytes
-    def __init__(self, encryptedLoginToken: _Optional[bytes] = ..., verificationCode: _Optional[str] = ..., securityAnswerHash: _Optional[bytes] = ...) -> None: ...
-
-class PasswordRules(_message.Message):
-    __slots__ = ("ruleType", "match", "pattern", "description", "minimum", "value")
-    RULETYPE_FIELD_NUMBER: _ClassVar[int]
-    MATCH_FIELD_NUMBER: _ClassVar[int]
-    PATTERN_FIELD_NUMBER: _ClassVar[int]
-    DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
-    MINIMUM_FIELD_NUMBER: _ClassVar[int]
-    VALUE_FIELD_NUMBER: _ClassVar[int]
-    ruleType: str
-    match: bool
-    pattern: str
-    description: str
-    minimum: int
-    value: str
-    def __init__(self, ruleType: _Optional[str] = ..., match: bool = ..., pattern: _Optional[str] = ..., description: _Optional[str] = ..., minimum: _Optional[int] = ..., value: _Optional[str] = ...) -> None: ...
-
-class GetDataKeyBackupV3Response(_message.Message):
-    __slots__ = ("dataKeyBackup", "dataKeyBackupDate", "publicKey", "encryptedPrivateKey", "clientKey", "encryptedSessionToken", "passwordRules", "passwordRulesIntro", "minimumPbkdf2Iterations", "keyType")
-    DATAKEYBACKUP_FIELD_NUMBER: _ClassVar[int]
-    DATAKEYBACKUPDATE_FIELD_NUMBER: _ClassVar[int]
-    PUBLICKEY_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDPRIVATEKEY_FIELD_NUMBER: _ClassVar[int]
-    CLIENTKEY_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDSESSIONTOKEN_FIELD_NUMBER: _ClassVar[int]
-    PASSWORDRULES_FIELD_NUMBER: _ClassVar[int]
-    PASSWORDRULESINTRO_FIELD_NUMBER: _ClassVar[int]
-    MINIMUMPBKDF2ITERATIONS_FIELD_NUMBER: _ClassVar[int]
-    KEYTYPE_FIELD_NUMBER: _ClassVar[int]
-    dataKeyBackup: bytes
-    dataKeyBackupDate: int
-    publicKey: bytes
-    encryptedPrivateKey: bytes
-    clientKey: bytes
-    encryptedSessionToken: bytes
-    passwordRules: _containers.RepeatedCompositeFieldContainer[PasswordRules]
-    passwordRulesIntro: str
-    minimumPbkdf2Iterations: int
-    keyType: _enterprise_pb2.KeyType
-    def __init__(self, dataKeyBackup: _Optional[bytes] = ..., dataKeyBackupDate: _Optional[int] = ..., publicKey: _Optional[bytes] = ..., encryptedPrivateKey: _Optional[bytes] = ..., clientKey: _Optional[bytes] = ..., encryptedSessionToken: _Optional[bytes] = ..., passwordRules: _Optional[_Iterable[_Union[PasswordRules, _Mapping]]] = ..., passwordRulesIntro: _Optional[str] = ..., minimumPbkdf2Iterations: _Optional[int] = ..., keyType: _Optional[_Union[_enterprise_pb2.KeyType, str]] = ...) -> None: ...
-
-class GetPublicKeysRequest(_message.Message):
-    __slots__ = ("usernames",)
-    USERNAMES_FIELD_NUMBER: _ClassVar[int]
-    usernames: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, usernames: _Optional[_Iterable[str]] = ...) -> None: ...
-
-class PublicKeyResponse(_message.Message):
-    __slots__ = ("username", "publicKey", "publicEccKey", "message", "errorCode")
-    USERNAME_FIELD_NUMBER: _ClassVar[int]
-    PUBLICKEY_FIELD_NUMBER: _ClassVar[int]
-    PUBLICECCKEY_FIELD_NUMBER: _ClassVar[int]
-    MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    ERRORCODE_FIELD_NUMBER: _ClassVar[int]
-    username: str
-    publicKey: bytes
-    publicEccKey: bytes
-    message: str
-    errorCode: str
-    def __init__(self, username: _Optional[str] = ..., publicKey: _Optional[bytes] = ..., publicEccKey: _Optional[bytes] = ..., message: _Optional[str] = ..., errorCode: _Optional[str] = ...) -> None: ...
-
-class GetPublicKeysResponse(_message.Message):
-    __slots__ = ("keyResponses",)
-    KEYRESPONSES_FIELD_NUMBER: _ClassVar[int]
-    keyResponses: _containers.RepeatedCompositeFieldContainer[PublicKeyResponse]
-    def __init__(self, keyResponses: _Optional[_Iterable[_Union[PublicKeyResponse, _Mapping]]] = ...) -> None: ...
-
-class SetEccKeyPairRequest(_message.Message):
-    __slots__ = ("publicKey", "encryptedPrivateKey")
-    PUBLICKEY_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDPRIVATEKEY_FIELD_NUMBER: _ClassVar[int]
-    publicKey: bytes
-    encryptedPrivateKey: bytes
-    def __init__(self, publicKey: _Optional[bytes] = ..., encryptedPrivateKey: _Optional[bytes] = ...) -> None: ...
-
-class SetEccKeyPairsRequest(_message.Message):
-    __slots__ = ("teamKeys",)
-    TEAMKEYS_FIELD_NUMBER: _ClassVar[int]
-    teamKeys: _containers.RepeatedCompositeFieldContainer[TeamEccKeyPair]
-    def __init__(self, teamKeys: _Optional[_Iterable[_Union[TeamEccKeyPair, _Mapping]]] = ...) -> None: ...
-
-class SetEccKeyPairsResponse(_message.Message):
-    __slots__ = ("teamKeys",)
-    TEAMKEYS_FIELD_NUMBER: _ClassVar[int]
-    teamKeys: _containers.RepeatedCompositeFieldContainer[TeamEccKeyPairResponse]
-    def __init__(self, teamKeys: _Optional[_Iterable[_Union[TeamEccKeyPairResponse, _Mapping]]] = ...) -> None: ...
-
-class TeamEccKeyPair(_message.Message):
-    __slots__ = ("teamUid", "publicKey", "encryptedPrivateKey")
-    TEAMUID_FIELD_NUMBER: _ClassVar[int]
-    PUBLICKEY_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDPRIVATEKEY_FIELD_NUMBER: _ClassVar[int]
-    teamUid: bytes
-    publicKey: bytes
-    encryptedPrivateKey: bytes
-    def __init__(self, teamUid: _Optional[bytes] = ..., publicKey: _Optional[bytes] = ..., encryptedPrivateKey: _Optional[bytes] = ...) -> None: ...
-
-class TeamEccKeyPairResponse(_message.Message):
-    __slots__ = ("teamUid", "status")
-    TEAMUID_FIELD_NUMBER: _ClassVar[int]
-    STATUS_FIELD_NUMBER: _ClassVar[int]
-    teamUid: bytes
-    status: GenericStatus
-    def __init__(self, teamUid: _Optional[bytes] = ..., status: _Optional[_Union[GenericStatus, str]] = ...) -> None: ...
-
-class GetKsmPublicKeysRequest(_message.Message):
-    __slots__ = ("clientIds", "controllerUids")
-    CLIENTIDS_FIELD_NUMBER: _ClassVar[int]
-    CONTROLLERUIDS_FIELD_NUMBER: _ClassVar[int]
-    clientIds: _containers.RepeatedScalarFieldContainer[bytes]
-    controllerUids: _containers.RepeatedScalarFieldContainer[bytes]
-    def __init__(self, clientIds: _Optional[_Iterable[bytes]] = ..., controllerUids: _Optional[_Iterable[bytes]] = ...) -> None: ...
-
-class DevicePublicKeyResponse(_message.Message):
-    __slots__ = ("clientId", "publicKey", "controllerUid")
-    CLIENTID_FIELD_NUMBER: _ClassVar[int]
-    PUBLICKEY_FIELD_NUMBER: _ClassVar[int]
-    CONTROLLERUID_FIELD_NUMBER: _ClassVar[int]
-    clientId: bytes
-    publicKey: bytes
-    controllerUid: bytes
-    def __init__(self, clientId: _Optional[bytes] = ..., publicKey: _Optional[bytes] = ..., controllerUid: _Optional[bytes] = ...) -> None: ...
-
-class GetKsmPublicKeysResponse(_message.Message):
-    __slots__ = ("keyResponses",)
-    KEYRESPONSES_FIELD_NUMBER: _ClassVar[int]
-    keyResponses: _containers.RepeatedCompositeFieldContainer[DevicePublicKeyResponse]
-    def __init__(self, keyResponses: _Optional[_Iterable[_Union[DevicePublicKeyResponse, _Mapping]]] = ...) -> None: ...
-
-class AddAppSharesRequest(_message.Message):
-    __slots__ = ("appRecordUid", "shares")
-    APPRECORDUID_FIELD_NUMBER: _ClassVar[int]
-    SHARES_FIELD_NUMBER: _ClassVar[int]
-    appRecordUid: bytes
-    shares: _containers.RepeatedCompositeFieldContainer[AppShareAdd]
-    def __init__(self, appRecordUid: _Optional[bytes] = ..., shares: _Optional[_Iterable[_Union[AppShareAdd, _Mapping]]] = ...) -> None: ...
-
-class RemoveAppSharesRequest(_message.Message):
-    __slots__ = ("appRecordUid", "shares")
-    APPRECORDUID_FIELD_NUMBER: _ClassVar[int]
-    SHARES_FIELD_NUMBER: _ClassVar[int]
-    appRecordUid: bytes
-    shares: _containers.RepeatedScalarFieldContainer[bytes]
-    def __init__(self, appRecordUid: _Optional[bytes] = ..., shares: _Optional[_Iterable[bytes]] = ...) -> None: ...
-
-class AppShareAdd(_message.Message):
-    __slots__ = ("secretUid", "shareType", "encryptedSecretKey", "editable")
-    SECRETUID_FIELD_NUMBER: _ClassVar[int]
-    SHARETYPE_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDSECRETKEY_FIELD_NUMBER: _ClassVar[int]
-    EDITABLE_FIELD_NUMBER: _ClassVar[int]
-    secretUid: bytes
-    shareType: ApplicationShareType
-    encryptedSecretKey: bytes
-    editable: bool
-    def __init__(self, secretUid: _Optional[bytes] = ..., shareType: _Optional[_Union[ApplicationShareType, str]] = ..., encryptedSecretKey: _Optional[bytes] = ..., editable: bool = ...) -> None: ...
-
-class AppShare(_message.Message):
-    __slots__ = ("secretUid", "shareType", "editable", "createdOn", "data")
-    SECRETUID_FIELD_NUMBER: _ClassVar[int]
-    SHARETYPE_FIELD_NUMBER: _ClassVar[int]
-    EDITABLE_FIELD_NUMBER: _ClassVar[int]
-    CREATEDON_FIELD_NUMBER: _ClassVar[int]
-    DATA_FIELD_NUMBER: _ClassVar[int]
-    secretUid: bytes
-    shareType: ApplicationShareType
-    editable: bool
-    createdOn: int
-    data: bytes
-    def __init__(self, secretUid: _Optional[bytes] = ..., shareType: _Optional[_Union[ApplicationShareType, str]] = ..., editable: bool = ..., createdOn: _Optional[int] = ..., data: _Optional[bytes] = ...) -> None: ...
-
-class AddAppClientRequest(_message.Message):
-    __slots__ = ("appRecordUid", "encryptedAppKey", "clientId", "lockIp", "firstAccessExpireOn", "accessExpireOn", "id", "appClientType")
-    APPRECORDUID_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDAPPKEY_FIELD_NUMBER: _ClassVar[int]
-    CLIENTID_FIELD_NUMBER: _ClassVar[int]
-    LOCKIP_FIELD_NUMBER: _ClassVar[int]
-    FIRSTACCESSEXPIREON_FIELD_NUMBER: _ClassVar[int]
-    ACCESSEXPIREON_FIELD_NUMBER: _ClassVar[int]
-    ID_FIELD_NUMBER: _ClassVar[int]
-    APPCLIENTTYPE_FIELD_NUMBER: _ClassVar[int]
-    appRecordUid: bytes
-    encryptedAppKey: bytes
-    clientId: bytes
-    lockIp: bool
-    firstAccessExpireOn: int
-    accessExpireOn: int
-    id: str
-    appClientType: _enterprise_pb2.AppClientType
-    def __init__(self, appRecordUid: _Optional[bytes] = ..., encryptedAppKey: _Optional[bytes] = ..., clientId: _Optional[bytes] = ..., lockIp: bool = ..., firstAccessExpireOn: _Optional[int] = ..., accessExpireOn: _Optional[int] = ..., id: _Optional[str] = ..., appClientType: _Optional[_Union[_enterprise_pb2.AppClientType, str]] = ...) -> None: ...
-
-class RemoveAppClientsRequest(_message.Message):
-    __slots__ = ("appRecordUid", "clients")
-    APPRECORDUID_FIELD_NUMBER: _ClassVar[int]
-    CLIENTS_FIELD_NUMBER: _ClassVar[int]
-    appRecordUid: bytes
-    clients: _containers.RepeatedScalarFieldContainer[bytes]
-    def __init__(self, appRecordUid: _Optional[bytes] = ..., clients: _Optional[_Iterable[bytes]] = ...) -> None: ...
-
-class AddExternalShareRequest(_message.Message):
-    __slots__ = ("recordUid", "encryptedRecordKey", "clientId", "accessExpireOn", "id", "isSelfDestruct")
-    RECORDUID_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDRECORDKEY_FIELD_NUMBER: _ClassVar[int]
-    CLIENTID_FIELD_NUMBER: _ClassVar[int]
-    ACCESSEXPIREON_FIELD_NUMBER: _ClassVar[int]
-    ID_FIELD_NUMBER: _ClassVar[int]
-    ISSELFDESTRUCT_FIELD_NUMBER: _ClassVar[int]
-    recordUid: bytes
-    encryptedRecordKey: bytes
-    clientId: bytes
-    accessExpireOn: int
-    id: str
-    isSelfDestruct: bool
-    def __init__(self, recordUid: _Optional[bytes] = ..., encryptedRecordKey: _Optional[bytes] = ..., clientId: _Optional[bytes] = ..., accessExpireOn: _Optional[int] = ..., id: _Optional[str] = ..., isSelfDestruct: bool = ...) -> None: ...
-
-class AppClient(_message.Message):
-    __slots__ = ("id", "clientId", "createdOn", "firstAccess", "lastAccess", "publicKey", "lockIp", "ipAddress", "firstAccessExpireOn", "accessExpireOn", "appClientType")
-    ID_FIELD_NUMBER: _ClassVar[int]
-    CLIENTID_FIELD_NUMBER: _ClassVar[int]
-    CREATEDON_FIELD_NUMBER: _ClassVar[int]
-    FIRSTACCESS_FIELD_NUMBER: _ClassVar[int]
-    LASTACCESS_FIELD_NUMBER: _ClassVar[int]
-    PUBLICKEY_FIELD_NUMBER: _ClassVar[int]
-    LOCKIP_FIELD_NUMBER: _ClassVar[int]
-    IPADDRESS_FIELD_NUMBER: _ClassVar[int]
-    FIRSTACCESSEXPIREON_FIELD_NUMBER: _ClassVar[int]
-    ACCESSEXPIREON_FIELD_NUMBER: _ClassVar[int]
-    APPCLIENTTYPE_FIELD_NUMBER: _ClassVar[int]
-    id: str
-    clientId: bytes
-    createdOn: int
-    firstAccess: int
-    lastAccess: int
-    publicKey: bytes
-    lockIp: bool
-    ipAddress: str
-    firstAccessExpireOn: int
-    accessExpireOn: int
-    appClientType: _enterprise_pb2.AppClientType
-    def __init__(self, id: _Optional[str] = ..., clientId: _Optional[bytes] = ..., createdOn: _Optional[int] = ..., firstAccess: _Optional[int] = ..., lastAccess: _Optional[int] = ..., publicKey: _Optional[bytes] = ..., lockIp: bool = ..., ipAddress: _Optional[str] = ..., firstAccessExpireOn: _Optional[int] = ..., accessExpireOn: _Optional[int] = ..., appClientType: _Optional[_Union[_enterprise_pb2.AppClientType, str]] = ...) -> None: ...
-
-class GetAppInfoRequest(_message.Message):
-    __slots__ = ("appRecordUid",)
-    APPRECORDUID_FIELD_NUMBER: _ClassVar[int]
-    appRecordUid: _containers.RepeatedScalarFieldContainer[bytes]
-    def __init__(self, appRecordUid: _Optional[_Iterable[bytes]] = ...) -> None: ...
-
-class AppInfo(_message.Message):
-    __slots__ = ("appRecordUid", "shares", "clients", "isExternalShare")
-    APPRECORDUID_FIELD_NUMBER: _ClassVar[int]
-    SHARES_FIELD_NUMBER: _ClassVar[int]
-    CLIENTS_FIELD_NUMBER: _ClassVar[int]
-    ISEXTERNALSHARE_FIELD_NUMBER: _ClassVar[int]
-    appRecordUid: bytes
-    shares: _containers.RepeatedCompositeFieldContainer[AppShare]
-    clients: _containers.RepeatedCompositeFieldContainer[AppClient]
-    isExternalShare: bool
-    def __init__(self, appRecordUid: _Optional[bytes] = ..., shares: _Optional[_Iterable[_Union[AppShare, _Mapping]]] = ..., clients: _Optional[_Iterable[_Union[AppClient, _Mapping]]] = ..., isExternalShare: bool = ...) -> None: ...
-
-class GetAppInfoResponse(_message.Message):
-    __slots__ = ("appInfo",)
-    APPINFO_FIELD_NUMBER: _ClassVar[int]
-    appInfo: _containers.RepeatedCompositeFieldContainer[AppInfo]
-    def __init__(self, appInfo: _Optional[_Iterable[_Union[AppInfo, _Mapping]]] = ...) -> None: ...
-
-class ApplicationSummary(_message.Message):
-    __slots__ = ("appRecordUid", "lastAccess", "recordShares", "folderShares", "folderRecords", "clientCount", "expiredClientCount", "username", "appData")
-    APPRECORDUID_FIELD_NUMBER: _ClassVar[int]
-    LASTACCESS_FIELD_NUMBER: _ClassVar[int]
-    RECORDSHARES_FIELD_NUMBER: _ClassVar[int]
-    FOLDERSHARES_FIELD_NUMBER: _ClassVar[int]
-    FOLDERRECORDS_FIELD_NUMBER: _ClassVar[int]
-    CLIENTCOUNT_FIELD_NUMBER: _ClassVar[int]
-    EXPIREDCLIENTCOUNT_FIELD_NUMBER: _ClassVar[int]
-    USERNAME_FIELD_NUMBER: _ClassVar[int]
-    APPDATA_FIELD_NUMBER: _ClassVar[int]
-    appRecordUid: bytes
-    lastAccess: int
-    recordShares: int
-    folderShares: int
-    folderRecords: int
-    clientCount: int
-    expiredClientCount: int
-    username: str
-    appData: bytes
-    def __init__(self, appRecordUid: _Optional[bytes] = ..., lastAccess: _Optional[int] = ..., recordShares: _Optional[int] = ..., folderShares: _Optional[int] = ..., folderRecords: _Optional[int] = ..., clientCount: _Optional[int] = ..., expiredClientCount: _Optional[int] = ..., username: _Optional[str] = ..., appData: _Optional[bytes] = ...) -> None: ...
-
-class GetApplicationsSummaryResponse(_message.Message):
-    __slots__ = ("applicationSummary",)
-    APPLICATIONSUMMARY_FIELD_NUMBER: _ClassVar[int]
-    applicationSummary: _containers.RepeatedCompositeFieldContainer[ApplicationSummary]
-    def __init__(self, applicationSummary: _Optional[_Iterable[_Union[ApplicationSummary, _Mapping]]] = ...) -> None: ...
-
-class GetVerificationTokenRequest(_message.Message):
-    __slots__ = ("username",)
-    USERNAME_FIELD_NUMBER: _ClassVar[int]
-    username: str
-    def __init__(self, username: _Optional[str] = ...) -> None: ...
-
-class GetVerificationTokenResponse(_message.Message):
-    __slots__ = ("encryptedVerificationToken",)
-    ENCRYPTEDVERIFICATIONTOKEN_FIELD_NUMBER: _ClassVar[int]
-    encryptedVerificationToken: bytes
-    def __init__(self, encryptedVerificationToken: _Optional[bytes] = ...) -> None: ...
-
-class SendShareInviteRequest(_message.Message):
-    __slots__ = ("email",)
-    EMAIL_FIELD_NUMBER: _ClassVar[int]
-    email: str
-    def __init__(self, email: _Optional[str] = ...) -> None: ...
-
-class TimeLimitedAccessRequest(_message.Message):
-    __slots__ = ("accountUid", "teamUid", "recordUid", "sharedObjectUid", "timeLimitedAccessType", "expiration")
-    ACCOUNTUID_FIELD_NUMBER: _ClassVar[int]
-    TEAMUID_FIELD_NUMBER: _ClassVar[int]
-    RECORDUID_FIELD_NUMBER: _ClassVar[int]
-    SHAREDOBJECTUID_FIELD_NUMBER: _ClassVar[int]
-    TIMELIMITEDACCESSTYPE_FIELD_NUMBER: _ClassVar[int]
-    EXPIRATION_FIELD_NUMBER: _ClassVar[int]
-    accountUid: _containers.RepeatedScalarFieldContainer[bytes]
-    teamUid: _containers.RepeatedScalarFieldContainer[bytes]
-    recordUid: _containers.RepeatedScalarFieldContainer[bytes]
-    sharedObjectUid: bytes
-    timeLimitedAccessType: TimeLimitedAccessType
-    expiration: int
-    def __init__(self, accountUid: _Optional[_Iterable[bytes]] = ..., teamUid: _Optional[_Iterable[bytes]] = ..., recordUid: _Optional[_Iterable[bytes]] = ..., sharedObjectUid: _Optional[bytes] = ..., timeLimitedAccessType: _Optional[_Union[TimeLimitedAccessType, str]] = ..., expiration: _Optional[int] = ...) -> None: ...
-
-class TimeLimitedAccessStatus(_message.Message):
-    __slots__ = ("uid", "message")
-    UID_FIELD_NUMBER: _ClassVar[int]
-    MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    uid: bytes
-    message: str
-    def __init__(self, uid: _Optional[bytes] = ..., message: _Optional[str] = ...) -> None: ...
-
-class TimeLimitedAccessResponse(_message.Message):
-    __slots__ = ("revision", "userAccessStatus", "teamAccessStatus", "recordAccessStatus")
-    REVISION_FIELD_NUMBER: _ClassVar[int]
-    USERACCESSSTATUS_FIELD_NUMBER: _ClassVar[int]
-    TEAMACCESSSTATUS_FIELD_NUMBER: _ClassVar[int]
-    RECORDACCESSSTATUS_FIELD_NUMBER: _ClassVar[int]
-    revision: int
-    userAccessStatus: _containers.RepeatedCompositeFieldContainer[TimeLimitedAccessStatus]
-    teamAccessStatus: _containers.RepeatedCompositeFieldContainer[TimeLimitedAccessStatus]
-    recordAccessStatus: _containers.RepeatedCompositeFieldContainer[TimeLimitedAccessStatus]
-    def __init__(self, revision: _Optional[int] = ..., userAccessStatus: _Optional[_Iterable[_Union[TimeLimitedAccessStatus, _Mapping]]] = ..., teamAccessStatus: _Optional[_Iterable[_Union[TimeLimitedAccessStatus, _Mapping]]] = ..., recordAccessStatus: _Optional[_Iterable[_Union[TimeLimitedAccessStatus, _Mapping]]] = ...) -> None: ...
-
-class RequestDownloadRequest(_message.Message):
-    __slots__ = ("fileNames",)
-    FILENAMES_FIELD_NUMBER: _ClassVar[int]
-    fileNames: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, fileNames: _Optional[_Iterable[str]] = ...) -> None: ...
-
-class RequestDownloadResponse(_message.Message):
-    __slots__ = ("result", "message", "downloads")
-    RESULT_FIELD_NUMBER: _ClassVar[int]
-    MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    DOWNLOADS_FIELD_NUMBER: _ClassVar[int]
-    result: str
-    message: str
-    downloads: _containers.RepeatedCompositeFieldContainer[Download]
-    def __init__(self, result: _Optional[str] = ..., message: _Optional[str] = ..., downloads: _Optional[_Iterable[_Union[Download, _Mapping]]] = ...) -> None: ...
-
-class Download(_message.Message):
-    __slots__ = ("fileName", "url", "successStatusCode")
-    FILENAME_FIELD_NUMBER: _ClassVar[int]
-    URL_FIELD_NUMBER: _ClassVar[int]
-    SUCCESSSTATUSCODE_FIELD_NUMBER: _ClassVar[int]
-    fileName: str
-    url: str
-    successStatusCode: int
-    def __init__(self, fileName: _Optional[str] = ..., url: _Optional[str] = ..., successStatusCode: _Optional[int] = ...) -> None: ...
-
-class DeleteUserRequest(_message.Message):
-    __slots__ = ("reason",)
-    REASON_FIELD_NUMBER: _ClassVar[int]
-    reason: str
-    def __init__(self, reason: _Optional[str] = ...) -> None: ...
-
-class ChangeMasterPasswordRequest(_message.Message):
-    __slots__ = ("authVerifier", "encryptionParams", "fromServiceProvider", "iterationsChange")
-    AUTHVERIFIER_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTIONPARAMS_FIELD_NUMBER: _ClassVar[int]
-    FROMSERVICEPROVIDER_FIELD_NUMBER: _ClassVar[int]
-    ITERATIONSCHANGE_FIELD_NUMBER: _ClassVar[int]
-    authVerifier: bytes
-    encryptionParams: bytes
-    fromServiceProvider: bool
-    iterationsChange: bool
-    def __init__(self, authVerifier: _Optional[bytes] = ..., encryptionParams: _Optional[bytes] = ..., fromServiceProvider: bool = ..., iterationsChange: bool = ...) -> None: ...
-
-class ChangeMasterPasswordResponse(_message.Message):
-    __slots__ = ("encryptedSessionToken",)
-    ENCRYPTEDSESSIONTOKEN_FIELD_NUMBER: _ClassVar[int]
-    encryptedSessionToken: bytes
-    def __init__(self, encryptedSessionToken: _Optional[bytes] = ...) -> None: ...
-
-class AccountRecoverySetupRequest(_message.Message):
-    __slots__ = ("recoveryEncryptedDataKey", "recoveryAuthHash")
-    RECOVERYENCRYPTEDDATAKEY_FIELD_NUMBER: _ClassVar[int]
-    RECOVERYAUTHHASH_FIELD_NUMBER: _ClassVar[int]
-    recoveryEncryptedDataKey: bytes
-    recoveryAuthHash: bytes
-    def __init__(self, recoveryEncryptedDataKey: _Optional[bytes] = ..., recoveryAuthHash: _Optional[bytes] = ...) -> None: ...
-
-class AccountRecoveryVerifyCodeResponse(_message.Message):
-    __slots__ = ("backupKeyType", "backupKeyDate", "securityQuestion", "salt", "iterations")
-    BACKUPKEYTYPE_FIELD_NUMBER: _ClassVar[int]
-    BACKUPKEYDATE_FIELD_NUMBER: _ClassVar[int]
-    SECURITYQUESTION_FIELD_NUMBER: _ClassVar[int]
-    SALT_FIELD_NUMBER: _ClassVar[int]
-    ITERATIONS_FIELD_NUMBER: _ClassVar[int]
-    backupKeyType: BackupKeyType
-    backupKeyDate: int
-    securityQuestion: str
-    salt: bytes
-    iterations: int
-    def __init__(self, backupKeyType: _Optional[_Union[BackupKeyType, str]] = ..., backupKeyDate: _Optional[int] = ..., securityQuestion: _Optional[str] = ..., salt: _Optional[bytes] = ..., iterations: _Optional[int] = ...) -> None: ...
-
-class EmergencyAccessLoginRequest(_message.Message):
-    __slots__ = ("owner",)
-    OWNER_FIELD_NUMBER: _ClassVar[int]
-    owner: str
-    def __init__(self, owner: _Optional[str] = ...) -> None: ...
-
-class EmergencyAccessLoginResponse(_message.Message):
-    __slots__ = ("sessionToken", "dataKey", "rsaPrivateKey", "eccPrivateKey")
-    SESSIONTOKEN_FIELD_NUMBER: _ClassVar[int]
-    DATAKEY_FIELD_NUMBER: _ClassVar[int]
-    RSAPRIVATEKEY_FIELD_NUMBER: _ClassVar[int]
-    ECCPRIVATEKEY_FIELD_NUMBER: _ClassVar[int]
-    sessionToken: bytes
-    dataKey: _enterprise_pb2.TypedKey
-    rsaPrivateKey: _enterprise_pb2.TypedKey
-    eccPrivateKey: _enterprise_pb2.TypedKey
-    def __init__(self, sessionToken: _Optional[bytes] = ..., dataKey: _Optional[_Union[_enterprise_pb2.TypedKey, _Mapping]] = ..., rsaPrivateKey: _Optional[_Union[_enterprise_pb2.TypedKey, _Mapping]] = ..., eccPrivateKey: _Optional[_Union[_enterprise_pb2.TypedKey, _Mapping]] = ...) -> None: ...
-
-class UserTeamKey(_message.Message):
-    __slots__ = ("teamUid", "username", "enterpriseUserId", "encryptedTeamKeyRSA", "encryptedTeamKeyEC", "status")
-    TEAMUID_FIELD_NUMBER: _ClassVar[int]
-    USERNAME_FIELD_NUMBER: _ClassVar[int]
-    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDTEAMKEYRSA_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDTEAMKEYEC_FIELD_NUMBER: _ClassVar[int]
-    STATUS_FIELD_NUMBER: _ClassVar[int]
-    teamUid: bytes
-    username: str
-    enterpriseUserId: int
-    encryptedTeamKeyRSA: bytes
-    encryptedTeamKeyEC: bytes
-    status: GenericStatus
-    def __init__(self, teamUid: _Optional[bytes] = ..., username: _Optional[str] = ..., enterpriseUserId: _Optional[int] = ..., encryptedTeamKeyRSA: _Optional[bytes] = ..., encryptedTeamKeyEC: _Optional[bytes] = ..., status: _Optional[_Union[GenericStatus, str]] = ...) -> None: ...
-
-class GenericRequestResponse(_message.Message):
-    __slots__ = ("request",)
-    REQUEST_FIELD_NUMBER: _ClassVar[int]
-    request: _containers.RepeatedScalarFieldContainer[bytes]
-    def __init__(self, request: _Optional[_Iterable[bytes]] = ...) -> None: ...
-
-class PasskeyRegistrationRequest(_message.Message):
-    __slots__ = ("authenticatorAttachment",)
-    AUTHENTICATORATTACHMENT_FIELD_NUMBER: _ClassVar[int]
-    authenticatorAttachment: AuthenticatorAttachment
-    def __init__(self, authenticatorAttachment: _Optional[_Union[AuthenticatorAttachment, str]] = ...) -> None: ...
-
-class PasskeyRegistrationResponse(_message.Message):
-    __slots__ = ("challengeToken", "pkCreationOptions")
-    CHALLENGETOKEN_FIELD_NUMBER: _ClassVar[int]
-    PKCREATIONOPTIONS_FIELD_NUMBER: _ClassVar[int]
-    challengeToken: bytes
-    pkCreationOptions: str
-    def __init__(self, challengeToken: _Optional[bytes] = ..., pkCreationOptions: _Optional[str] = ...) -> None: ...
-
-class PasskeyRegistrationFinalization(_message.Message):
-    __slots__ = ("challengeToken", "authenticatorResponse", "friendlyName")
-    CHALLENGETOKEN_FIELD_NUMBER: _ClassVar[int]
-    AUTHENTICATORRESPONSE_FIELD_NUMBER: _ClassVar[int]
-    FRIENDLYNAME_FIELD_NUMBER: _ClassVar[int]
-    challengeToken: bytes
-    authenticatorResponse: str
-    friendlyName: str
-    def __init__(self, challengeToken: _Optional[bytes] = ..., authenticatorResponse: _Optional[str] = ..., friendlyName: _Optional[str] = ...) -> None: ...
-
-class PasskeyAuthenticationRequest(_message.Message):
-    __slots__ = ("authenticatorAttachment", "passkeyPurpose", "encryptedLoginToken")
-    AUTHENTICATORATTACHMENT_FIELD_NUMBER: _ClassVar[int]
-    PASSKEYPURPOSE_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: _ClassVar[int]
-    authenticatorAttachment: AuthenticatorAttachment
-    passkeyPurpose: PasskeyPurpose
-    encryptedLoginToken: bytes
-    def __init__(self, authenticatorAttachment: _Optional[_Union[AuthenticatorAttachment, str]] = ..., passkeyPurpose: _Optional[_Union[PasskeyPurpose, str]] = ..., encryptedLoginToken: _Optional[bytes] = ...) -> None: ...
-
-class PasskeyAuthenticationResponse(_message.Message):
-    __slots__ = ("pkRequestOptions", "challengeToken", "encryptedLoginToken")
-    PKREQUESTOPTIONS_FIELD_NUMBER: _ClassVar[int]
-    CHALLENGETOKEN_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: _ClassVar[int]
-    pkRequestOptions: str
-    challengeToken: bytes
-    encryptedLoginToken: bytes
-    def __init__(self, pkRequestOptions: _Optional[str] = ..., challengeToken: _Optional[bytes] = ..., encryptedLoginToken: _Optional[bytes] = ...) -> None: ...
-
-class PasskeyValidationRequest(_message.Message):
-    __slots__ = ("challengeToken", "assertionResponse", "passkeyPurpose", "encryptedLoginToken")
-    CHALLENGETOKEN_FIELD_NUMBER: _ClassVar[int]
-    ASSERTIONRESPONSE_FIELD_NUMBER: _ClassVar[int]
-    PASSKEYPURPOSE_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: _ClassVar[int]
-    challengeToken: bytes
-    assertionResponse: bytes
-    passkeyPurpose: PasskeyPurpose
-    encryptedLoginToken: bytes
-    def __init__(self, challengeToken: _Optional[bytes] = ..., assertionResponse: _Optional[bytes] = ..., passkeyPurpose: _Optional[_Union[PasskeyPurpose, str]] = ..., encryptedLoginToken: _Optional[bytes] = ...) -> None: ...
-
-class PasskeyValidationResponse(_message.Message):
-    __slots__ = ("isValid", "encryptedLoginToken")
-    ISVALID_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: _ClassVar[int]
-    isValid: bool
-    encryptedLoginToken: bytes
-    def __init__(self, isValid: bool = ..., encryptedLoginToken: _Optional[bytes] = ...) -> None: ...
-
-class UpdatePasskeyRequest(_message.Message):
-    __slots__ = ("userId", "credentialId", "friendlyName")
-    USERID_FIELD_NUMBER: _ClassVar[int]
-    CREDENTIALID_FIELD_NUMBER: _ClassVar[int]
-    FRIENDLYNAME_FIELD_NUMBER: _ClassVar[int]
-    userId: int
-    credentialId: bytes
-    friendlyName: str
-    def __init__(self, userId: _Optional[int] = ..., credentialId: _Optional[bytes] = ..., friendlyName: _Optional[str] = ...) -> None: ...
-
-class PasskeyListRequest(_message.Message):
-    __slots__ = ("includeDisabled",)
-    INCLUDEDISABLED_FIELD_NUMBER: _ClassVar[int]
-    includeDisabled: bool
-    def __init__(self, includeDisabled: bool = ...) -> None: ...
-
-class PasskeyInfo(_message.Message):
-    __slots__ = ("userId", "credentialId", "friendlyName", "AAGUID", "createdAtMillis", "lastUsedMillis", "disabledAtMillis")
-    USERID_FIELD_NUMBER: _ClassVar[int]
-    CREDENTIALID_FIELD_NUMBER: _ClassVar[int]
-    FRIENDLYNAME_FIELD_NUMBER: _ClassVar[int]
-    AAGUID_FIELD_NUMBER: _ClassVar[int]
-    CREATEDATMILLIS_FIELD_NUMBER: _ClassVar[int]
-    LASTUSEDMILLIS_FIELD_NUMBER: _ClassVar[int]
-    DISABLEDATMILLIS_FIELD_NUMBER: _ClassVar[int]
-    userId: int
-    credentialId: bytes
-    friendlyName: str
-    AAGUID: str
-    createdAtMillis: int
-    lastUsedMillis: int
-    disabledAtMillis: int
-    def __init__(self, userId: _Optional[int] = ..., credentialId: _Optional[bytes] = ..., friendlyName: _Optional[str] = ..., AAGUID: _Optional[str] = ..., createdAtMillis: _Optional[int] = ..., lastUsedMillis: _Optional[int] = ..., disabledAtMillis: _Optional[int] = ...) -> None: ...
-
-class PasskeyListResponse(_message.Message):
-    __slots__ = ("passkeyInfo",)
-    PASSKEYINFO_FIELD_NUMBER: _ClassVar[int]
-    passkeyInfo: _containers.RepeatedCompositeFieldContainer[PasskeyInfo]
-    def __init__(self, passkeyInfo: _Optional[_Iterable[_Union[PasskeyInfo, _Mapping]]] = ...) -> None: ...
+"""
+@generated by mypy-protobuf.  Do not edit manually!
+isort:skip_file
+"""
+
+import builtins
+import collections.abc
+import enterprise_pb2
+import google.protobuf.descriptor
+import google.protobuf.internal.containers
+import google.protobuf.internal.enum_type_wrapper
+import google.protobuf.message
+import sys
+import typing
+
+if sys.version_info >= (3, 10):
+    import typing as typing_extensions
+else:
+    import typing_extensions
+
+DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
+
+class _SupportedLanguage:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _SupportedLanguageEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_SupportedLanguage.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    ENGLISH: _SupportedLanguage.ValueType  # 0
+    ARABIC: _SupportedLanguage.ValueType  # 1
+    BRITISH: _SupportedLanguage.ValueType  # 2
+    CHINESE: _SupportedLanguage.ValueType  # 3
+    CHINESE_HONG_KONG: _SupportedLanguage.ValueType  # 4
+    CHINESE_TAIWAN: _SupportedLanguage.ValueType  # 5
+    DUTCH: _SupportedLanguage.ValueType  # 6
+    FRENCH: _SupportedLanguage.ValueType  # 7
+    GERMAN: _SupportedLanguage.ValueType  # 8
+    GREEK: _SupportedLanguage.ValueType  # 9
+    HEBREW: _SupportedLanguage.ValueType  # 10
+    ITALIAN: _SupportedLanguage.ValueType  # 11
+    JAPANESE: _SupportedLanguage.ValueType  # 12
+    KOREAN: _SupportedLanguage.ValueType  # 13
+    POLISH: _SupportedLanguage.ValueType  # 14
+    PORTUGUESE: _SupportedLanguage.ValueType  # 15
+    PORTUGUESE_BRAZIL: _SupportedLanguage.ValueType  # 16
+    ROMANIAN: _SupportedLanguage.ValueType  # 17
+    RUSSIAN: _SupportedLanguage.ValueType  # 18
+    SLOVAK: _SupportedLanguage.ValueType  # 19
+    SPANISH: _SupportedLanguage.ValueType  # 20
+    FINNISH: _SupportedLanguage.ValueType  # 21
+    SWEDISH: _SupportedLanguage.ValueType  # 22
+
+class SupportedLanguage(_SupportedLanguage, metaclass=_SupportedLanguageEnumTypeWrapper): ...
+
+ENGLISH: SupportedLanguage.ValueType  # 0
+ARABIC: SupportedLanguage.ValueType  # 1
+BRITISH: SupportedLanguage.ValueType  # 2
+CHINESE: SupportedLanguage.ValueType  # 3
+CHINESE_HONG_KONG: SupportedLanguage.ValueType  # 4
+CHINESE_TAIWAN: SupportedLanguage.ValueType  # 5
+DUTCH: SupportedLanguage.ValueType  # 6
+FRENCH: SupportedLanguage.ValueType  # 7
+GERMAN: SupportedLanguage.ValueType  # 8
+GREEK: SupportedLanguage.ValueType  # 9
+HEBREW: SupportedLanguage.ValueType  # 10
+ITALIAN: SupportedLanguage.ValueType  # 11
+JAPANESE: SupportedLanguage.ValueType  # 12
+KOREAN: SupportedLanguage.ValueType  # 13
+POLISH: SupportedLanguage.ValueType  # 14
+PORTUGUESE: SupportedLanguage.ValueType  # 15
+PORTUGUESE_BRAZIL: SupportedLanguage.ValueType  # 16
+ROMANIAN: SupportedLanguage.ValueType  # 17
+RUSSIAN: SupportedLanguage.ValueType  # 18
+SLOVAK: SupportedLanguage.ValueType  # 19
+SPANISH: SupportedLanguage.ValueType  # 20
+FINNISH: SupportedLanguage.ValueType  # 21
+SWEDISH: SupportedLanguage.ValueType  # 22
+global___SupportedLanguage = SupportedLanguage
+
+class _LoginType:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _LoginTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_LoginType.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    NORMAL: _LoginType.ValueType  # 0
+    SSO: _LoginType.ValueType  # 1
+    BIO: _LoginType.ValueType  # 2
+    ALTERNATE: _LoginType.ValueType  # 3
+    OFFLINE: _LoginType.ValueType  # 4
+    FORGOT_PASSWORD: _LoginType.ValueType  # 5
+    PASSKEY_BIO: _LoginType.ValueType  # 6
+
+class LoginType(_LoginType, metaclass=_LoginTypeEnumTypeWrapper): ...
+
+NORMAL: LoginType.ValueType  # 0
+SSO: LoginType.ValueType  # 1
+BIO: LoginType.ValueType  # 2
+ALTERNATE: LoginType.ValueType  # 3
+OFFLINE: LoginType.ValueType  # 4
+FORGOT_PASSWORD: LoginType.ValueType  # 5
+PASSKEY_BIO: LoginType.ValueType  # 6
+global___LoginType = LoginType
+
+class _DeviceStatus:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _DeviceStatusEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_DeviceStatus.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    DEVICE_NEEDS_APPROVAL: _DeviceStatus.ValueType  # 0
+    DEVICE_OK: _DeviceStatus.ValueType  # 1
+    DEVICE_DISABLED_BY_USER: _DeviceStatus.ValueType  # 2
+    DEVICE_LOCKED_BY_ADMIN: _DeviceStatus.ValueType  # 3
+
+class DeviceStatus(_DeviceStatus, metaclass=_DeviceStatusEnumTypeWrapper): ...
+
+DEVICE_NEEDS_APPROVAL: DeviceStatus.ValueType  # 0
+DEVICE_OK: DeviceStatus.ValueType  # 1
+DEVICE_DISABLED_BY_USER: DeviceStatus.ValueType  # 2
+DEVICE_LOCKED_BY_ADMIN: DeviceStatus.ValueType  # 3
+global___DeviceStatus = DeviceStatus
+
+class _LicenseStatus:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _LicenseStatusEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_LicenseStatus.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    OTHER: _LicenseStatus.ValueType  # 0
+    """trial for bw"""
+    ACTIVE: _LicenseStatus.ValueType  # 1
+    EXPIRED: _LicenseStatus.ValueType  # 2
+    DISABLED: _LicenseStatus.ValueType  # 3
+
+class LicenseStatus(_LicenseStatus, metaclass=_LicenseStatusEnumTypeWrapper): ...
+
+OTHER: LicenseStatus.ValueType  # 0
+"""trial for bw"""
+ACTIVE: LicenseStatus.ValueType  # 1
+EXPIRED: LicenseStatus.ValueType  # 2
+DISABLED: LicenseStatus.ValueType  # 3
+global___LicenseStatus = LicenseStatus
+
+class _AccountType:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _AccountTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_AccountType.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    CONSUMER: _AccountType.ValueType  # 0
+    FAMILY: _AccountType.ValueType  # 1
+    ENTERPRISE: _AccountType.ValueType  # 2
+
+class AccountType(_AccountType, metaclass=_AccountTypeEnumTypeWrapper): ...
+
+CONSUMER: AccountType.ValueType  # 0
+FAMILY: AccountType.ValueType  # 1
+ENTERPRISE: AccountType.ValueType  # 2
+global___AccountType = AccountType
+
+class _SessionTokenType:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _SessionTokenTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_SessionTokenType.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    NO_RESTRICTION: _SessionTokenType.ValueType  # 0
+    """can do everything"""
+    ACCOUNT_RECOVERY: _SessionTokenType.ValueType  # 1
+    """can only change password"""
+    SHARE_ACCOUNT: _SessionTokenType.ValueType  # 2
+    """must first agree to share their account"""
+    PURCHASE: _SessionTokenType.ValueType  # 3
+    """can only get sku's for purchase"""
+    RESTRICT: _SessionTokenType.ValueType  # 4
+    """This is for a session token where the account is expired, but can still log in"""
+    ACCEPT_INVITE: _SessionTokenType.ValueType  # 5
+    """can only accept the enterprise invite"""
+    SUPPORT_SERVER: _SessionTokenType.ValueType  # 6
+    """from BI (Token object is created manually in Chat Server after decrypting BI's json token)"""
+    ENTERPRISE_CREATION: _SessionTokenType.ValueType  # 7
+    """user has tried to log into the console but no enterprise exists"""
+    EXPIRED_BUT_ALLOWED_TO_SYNC: _SessionTokenType.ValueType  # 8
+    """for webapp"""
+    ACCEPT_FAMILY_INVITE: _SessionTokenType.ValueType  # 9
+    """can only accept the family invite"""
+    ENTERPRISE_CREATION_PURCHASED: _SessionTokenType.ValueType  # 10
+    """user has purchased enterprise license but no enterprise created yet"""
+    EMERGENCY_ACCESS: _SessionTokenType.ValueType  # 11
+
+class SessionTokenType(_SessionTokenType, metaclass=_SessionTokenTypeEnumTypeWrapper): ...
+
+NO_RESTRICTION: SessionTokenType.ValueType  # 0
+"""can do everything"""
+ACCOUNT_RECOVERY: SessionTokenType.ValueType  # 1
+"""can only change password"""
+SHARE_ACCOUNT: SessionTokenType.ValueType  # 2
+"""must first agree to share their account"""
+PURCHASE: SessionTokenType.ValueType  # 3
+"""can only get sku's for purchase"""
+RESTRICT: SessionTokenType.ValueType  # 4
+"""This is for a session token where the account is expired, but can still log in"""
+ACCEPT_INVITE: SessionTokenType.ValueType  # 5
+"""can only accept the enterprise invite"""
+SUPPORT_SERVER: SessionTokenType.ValueType  # 6
+"""from BI (Token object is created manually in Chat Server after decrypting BI's json token)"""
+ENTERPRISE_CREATION: SessionTokenType.ValueType  # 7
+"""user has tried to log into the console but no enterprise exists"""
+EXPIRED_BUT_ALLOWED_TO_SYNC: SessionTokenType.ValueType  # 8
+"""for webapp"""
+ACCEPT_FAMILY_INVITE: SessionTokenType.ValueType  # 9
+"""can only accept the family invite"""
+ENTERPRISE_CREATION_PURCHASED: SessionTokenType.ValueType  # 10
+"""user has purchased enterprise license but no enterprise created yet"""
+EMERGENCY_ACCESS: SessionTokenType.ValueType  # 11
+global___SessionTokenType = SessionTokenType
+
+class _Version:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _VersionEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_Version.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    invalid_version: _Version.ValueType  # 0
+    """protobuf enum has to start with 0."""
+    default_version: _Version.ValueType  # 1
+    second_version: _Version.ValueType  # 2
+
+class Version(_Version, metaclass=_VersionEnumTypeWrapper): ...
+
+invalid_version: Version.ValueType  # 0
+"""protobuf enum has to start with 0."""
+default_version: Version.ValueType  # 1
+second_version: Version.ValueType  # 2
+global___Version = Version
+
+class _MasterPasswordReentryActionType:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _MasterPasswordReentryActionTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_MasterPasswordReentryActionType.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    UNMASK: _MasterPasswordReentryActionType.ValueType  # 0
+    COPY: _MasterPasswordReentryActionType.ValueType  # 1
+
+class MasterPasswordReentryActionType(_MasterPasswordReentryActionType, metaclass=_MasterPasswordReentryActionTypeEnumTypeWrapper): ...
+
+UNMASK: MasterPasswordReentryActionType.ValueType  # 0
+COPY: MasterPasswordReentryActionType.ValueType  # 1
+global___MasterPasswordReentryActionType = MasterPasswordReentryActionType
+
+class _LoginMethod:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _LoginMethodEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_LoginMethod.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    INVALID_LOGINMETHOD: _LoginMethod.ValueType  # 0
+    EXISTING_ACCOUNT: _LoginMethod.ValueType  # 1
+    SSO_DOMAIN: _LoginMethod.ValueType  # 2
+    AFTER_SSO: _LoginMethod.ValueType  # 3
+    NEW_ACCOUNT: _LoginMethod.ValueType  # 4
+
+class LoginMethod(_LoginMethod, metaclass=_LoginMethodEnumTypeWrapper):
+    """loginMethod is one of ( existing_account, sso_domain, after_sso )"""
+
+INVALID_LOGINMETHOD: LoginMethod.ValueType  # 0
+EXISTING_ACCOUNT: LoginMethod.ValueType  # 1
+SSO_DOMAIN: LoginMethod.ValueType  # 2
+AFTER_SSO: LoginMethod.ValueType  # 3
+NEW_ACCOUNT: LoginMethod.ValueType  # 4
+global___LoginMethod = LoginMethod
+
+class _LoginState:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _LoginStateEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_LoginState.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    INVALID_LOGINSTATE: _LoginState.ValueType  # 0
+    """something is wrong, should never be in this state"""
+    LOGGED_OUT: _LoginState.ValueType  # 1
+    """the client has been logged out"""
+    DEVICE_APPROVAL_REQUIRED: _LoginState.ValueType  # 2
+    """device needs to be approved to use for this user"""
+    DEVICE_LOCKED: _LoginState.ValueType  # 3
+    """the device is locked for all accounts"""
+    ACCOUNT_LOCKED: _LoginState.ValueType  # 4
+    """the account is locked"""
+    DEVICE_ACCOUNT_LOCKED: _LoginState.ValueType  # 5
+    """the account on this device is locked"""
+    UPGRADE: _LoginState.ValueType  # 6
+    """client version is disallowed"""
+    LICENSE_EXPIRED: _LoginState.ValueType  # 7
+    """enterprise account cannot log in"""
+    REGION_REDIRECT: _LoginState.ValueType  # 8
+    """account is in a different region, device should know that already"""
+    REDIRECT_CLOUD_SSO: _LoginState.ValueType  # 9
+    REDIRECT_ONSITE_SSO: _LoginState.ValueType  # 10
+    REQUIRES_2FA: _LoginState.ValueType  # 12
+    """2fa needs satisfying"""
+    REQUIRES_AUTH_HASH: _LoginState.ValueType  # 13
+    """the device is 2fa's and now we need the auth hash"""
+    REQUIRES_USERNAME: _LoginState.ValueType  # 14
+    """no username is supplied and we need one to continue"""
+    AFTER_CLOUD_SSO_LOGIN: _LoginState.ValueType  # 15
+    """returned from saml/sso/finish_login"""
+    REQUIRES_ACCOUNT_CREATION: _LoginState.ValueType  # 16
+    """for a cloud sso user that doesn't yet exist"""
+    REQUIRES_DEVICE_ENCRYPTED_DATA_KEY: _LoginState.ValueType  # 17
+    """device needs approval with a dedk"""
+    LOGIN_TOKEN_EXPIRED: _LoginState.ValueType  # 18
+    """a login token is not valid forever, if you get this, start over"""
+    PASSKEY_INITIATE_CHALLENGE: _LoginState.ValueType  # 19
+    """Request the challenge and other options from the KA RelyingParty"""
+    PASSKEY_AUTH_REQUIRED: _LoginState.ValueType  # 20
+    """Set by KA to inform the client that we require the authentcation assertion data"""
+    PASSKEY_VERIFY_AUTHENTICATION: _LoginState.ValueType  # 21
+    """Verify the authenticaion assertion provided by the client side authenticator"""
+    AFTER_PASSKEY_LOGIN: _LoginState.ValueType  # 22
+    """Utilized by Start Login after the passkey verification has passed"""
+    LOGGED_IN: _LoginState.ValueType  # 99
+
+class LoginState(_LoginState, metaclass=_LoginStateEnumTypeWrapper): ...
+
+INVALID_LOGINSTATE: LoginState.ValueType  # 0
+"""something is wrong, should never be in this state"""
+LOGGED_OUT: LoginState.ValueType  # 1
+"""the client has been logged out"""
+DEVICE_APPROVAL_REQUIRED: LoginState.ValueType  # 2
+"""device needs to be approved to use for this user"""
+DEVICE_LOCKED: LoginState.ValueType  # 3
+"""the device is locked for all accounts"""
+ACCOUNT_LOCKED: LoginState.ValueType  # 4
+"""the account is locked"""
+DEVICE_ACCOUNT_LOCKED: LoginState.ValueType  # 5
+"""the account on this device is locked"""
+UPGRADE: LoginState.ValueType  # 6
+"""client version is disallowed"""
+LICENSE_EXPIRED: LoginState.ValueType  # 7
+"""enterprise account cannot log in"""
+REGION_REDIRECT: LoginState.ValueType  # 8
+"""account is in a different region, device should know that already"""
+REDIRECT_CLOUD_SSO: LoginState.ValueType  # 9
+REDIRECT_ONSITE_SSO: LoginState.ValueType  # 10
+REQUIRES_2FA: LoginState.ValueType  # 12
+"""2fa needs satisfying"""
+REQUIRES_AUTH_HASH: LoginState.ValueType  # 13
+"""the device is 2fa's and now we need the auth hash"""
+REQUIRES_USERNAME: LoginState.ValueType  # 14
+"""no username is supplied and we need one to continue"""
+AFTER_CLOUD_SSO_LOGIN: LoginState.ValueType  # 15
+"""returned from saml/sso/finish_login"""
+REQUIRES_ACCOUNT_CREATION: LoginState.ValueType  # 16
+"""for a cloud sso user that doesn't yet exist"""
+REQUIRES_DEVICE_ENCRYPTED_DATA_KEY: LoginState.ValueType  # 17
+"""device needs approval with a dedk"""
+LOGIN_TOKEN_EXPIRED: LoginState.ValueType  # 18
+"""a login token is not valid forever, if you get this, start over"""
+PASSKEY_INITIATE_CHALLENGE: LoginState.ValueType  # 19
+"""Request the challenge and other options from the KA RelyingParty"""
+PASSKEY_AUTH_REQUIRED: LoginState.ValueType  # 20
+"""Set by KA to inform the client that we require the authentcation assertion data"""
+PASSKEY_VERIFY_AUTHENTICATION: LoginState.ValueType  # 21
+"""Verify the authenticaion assertion provided by the client side authenticator"""
+AFTER_PASSKEY_LOGIN: LoginState.ValueType  # 22
+"""Utilized by Start Login after the passkey verification has passed"""
+LOGGED_IN: LoginState.ValueType  # 99
+global___LoginState = LoginState
+
+class _EncryptedDataKeyType:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _EncryptedDataKeyTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_EncryptedDataKeyType.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    NO_KEY: _EncryptedDataKeyType.ValueType  # 0
+    BY_DEVICE_PUBLIC_KEY: _EncryptedDataKeyType.ValueType  # 1
+    BY_PASSWORD: _EncryptedDataKeyType.ValueType  # 2
+    BY_ALTERNATE: _EncryptedDataKeyType.ValueType  # 3
+    BY_BIO: _EncryptedDataKeyType.ValueType  # 4
+
+class EncryptedDataKeyType(_EncryptedDataKeyType, metaclass=_EncryptedDataKeyTypeEnumTypeWrapper): ...
+
+NO_KEY: EncryptedDataKeyType.ValueType  # 0
+BY_DEVICE_PUBLIC_KEY: EncryptedDataKeyType.ValueType  # 1
+BY_PASSWORD: EncryptedDataKeyType.ValueType  # 2
+BY_ALTERNATE: EncryptedDataKeyType.ValueType  # 3
+BY_BIO: EncryptedDataKeyType.ValueType  # 4
+global___EncryptedDataKeyType = EncryptedDataKeyType
+
+class _PasswordMethod:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _PasswordMethodEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_PasswordMethod.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    ENTERED: _PasswordMethod.ValueType  # 0
+    BIOMETRICS: _PasswordMethod.ValueType  # 1
+
+class PasswordMethod(_PasswordMethod, metaclass=_PasswordMethodEnumTypeWrapper): ...
+
+ENTERED: PasswordMethod.ValueType  # 0
+BIOMETRICS: PasswordMethod.ValueType  # 1
+global___PasswordMethod = PasswordMethod
+
+class _TwoFactorPushType:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _TwoFactorPushTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_TwoFactorPushType.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    TWO_FA_PUSH_NONE: _TwoFactorPushType.ValueType  # 0
+    TWO_FA_PUSH_SMS: _TwoFactorPushType.ValueType  # 1
+    TWO_FA_PUSH_KEEPER: _TwoFactorPushType.ValueType  # 2
+    TWO_FA_PUSH_DUO_PUSH: _TwoFactorPushType.ValueType  # 3
+    TWO_FA_PUSH_DUO_TEXT: _TwoFactorPushType.ValueType  # 4
+    TWO_FA_PUSH_DUO_CALL: _TwoFactorPushType.ValueType  # 5
+    TWO_FA_PUSH_DNA: _TwoFactorPushType.ValueType  # 6
+
+class TwoFactorPushType(_TwoFactorPushType, metaclass=_TwoFactorPushTypeEnumTypeWrapper):
+    """v3 and forward"""
+
+TWO_FA_PUSH_NONE: TwoFactorPushType.ValueType  # 0
+TWO_FA_PUSH_SMS: TwoFactorPushType.ValueType  # 1
+TWO_FA_PUSH_KEEPER: TwoFactorPushType.ValueType  # 2
+TWO_FA_PUSH_DUO_PUSH: TwoFactorPushType.ValueType  # 3
+TWO_FA_PUSH_DUO_TEXT: TwoFactorPushType.ValueType  # 4
+TWO_FA_PUSH_DUO_CALL: TwoFactorPushType.ValueType  # 5
+TWO_FA_PUSH_DNA: TwoFactorPushType.ValueType  # 6
+global___TwoFactorPushType = TwoFactorPushType
+
+class _TwoFactorValueType:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _TwoFactorValueTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_TwoFactorValueType.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    TWO_FA_CODE_NONE: _TwoFactorValueType.ValueType  # 0
+    TWO_FA_CODE_TOTP: _TwoFactorValueType.ValueType  # 1
+    """Google authenticator etc."""
+    TWO_FA_CODE_SMS: _TwoFactorValueType.ValueType  # 2
+    TWO_FA_CODE_DUO: _TwoFactorValueType.ValueType  # 3
+    TWO_FA_CODE_RSA: _TwoFactorValueType.ValueType  # 4
+    TWO_FA_RESP_U2F: _TwoFactorValueType.ValueType  # 5
+    TWO_FA_RESP_WEBAUTHN: _TwoFactorValueType.ValueType  # 6
+    TWO_FA_CODE_DNA: _TwoFactorValueType.ValueType  # 7
+
+class TwoFactorValueType(_TwoFactorValueType, metaclass=_TwoFactorValueTypeEnumTypeWrapper): ...
+
+TWO_FA_CODE_NONE: TwoFactorValueType.ValueType  # 0
+TWO_FA_CODE_TOTP: TwoFactorValueType.ValueType  # 1
+"""Google authenticator etc."""
+TWO_FA_CODE_SMS: TwoFactorValueType.ValueType  # 2
+TWO_FA_CODE_DUO: TwoFactorValueType.ValueType  # 3
+TWO_FA_CODE_RSA: TwoFactorValueType.ValueType  # 4
+TWO_FA_RESP_U2F: TwoFactorValueType.ValueType  # 5
+TWO_FA_RESP_WEBAUTHN: TwoFactorValueType.ValueType  # 6
+TWO_FA_CODE_DNA: TwoFactorValueType.ValueType  # 7
+global___TwoFactorValueType = TwoFactorValueType
+
+class _TwoFactorChannelType:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _TwoFactorChannelTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_TwoFactorChannelType.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    TWO_FA_CT_NONE: _TwoFactorChannelType.ValueType  # 0
+    TWO_FA_CT_TOTP: _TwoFactorChannelType.ValueType  # 1
+    TWO_FA_CT_SMS: _TwoFactorChannelType.ValueType  # 2
+    TWO_FA_CT_DUO: _TwoFactorChannelType.ValueType  # 3
+    TWO_FA_CT_RSA: _TwoFactorChannelType.ValueType  # 4
+    TWO_FA_CT_BACKUP: _TwoFactorChannelType.ValueType  # 5
+    TWO_FA_CT_U2F: _TwoFactorChannelType.ValueType  # 6
+    TWO_FA_CT_WEBAUTHN: _TwoFactorChannelType.ValueType  # 7
+    TWO_FA_CT_KEEPER: _TwoFactorChannelType.ValueType  # 8
+    TWO_FA_CT_DNA: _TwoFactorChannelType.ValueType  # 9
+
+class TwoFactorChannelType(_TwoFactorChannelType, metaclass=_TwoFactorChannelTypeEnumTypeWrapper): ...
+
+TWO_FA_CT_NONE: TwoFactorChannelType.ValueType  # 0
+TWO_FA_CT_TOTP: TwoFactorChannelType.ValueType  # 1
+TWO_FA_CT_SMS: TwoFactorChannelType.ValueType  # 2
+TWO_FA_CT_DUO: TwoFactorChannelType.ValueType  # 3
+TWO_FA_CT_RSA: TwoFactorChannelType.ValueType  # 4
+TWO_FA_CT_BACKUP: TwoFactorChannelType.ValueType  # 5
+TWO_FA_CT_U2F: TwoFactorChannelType.ValueType  # 6
+TWO_FA_CT_WEBAUTHN: TwoFactorChannelType.ValueType  # 7
+TWO_FA_CT_KEEPER: TwoFactorChannelType.ValueType  # 8
+TWO_FA_CT_DNA: TwoFactorChannelType.ValueType  # 9
+global___TwoFactorChannelType = TwoFactorChannelType
+
+class _TwoFactorExpiration:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _TwoFactorExpirationEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_TwoFactorExpiration.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    TWO_FA_EXP_IMMEDIATELY: _TwoFactorExpiration.ValueType  # 0
+    TWO_FA_EXP_5_MINUTES: _TwoFactorExpiration.ValueType  # 1
+    TWO_FA_EXP_12_HOURS: _TwoFactorExpiration.ValueType  # 2
+    TWO_FA_EXP_24_HOURS: _TwoFactorExpiration.ValueType  # 3
+    TWO_FA_EXP_30_DAYS: _TwoFactorExpiration.ValueType  # 4
+    TWO_FA_EXP_NEVER: _TwoFactorExpiration.ValueType  # 5
+
+class TwoFactorExpiration(_TwoFactorExpiration, metaclass=_TwoFactorExpirationEnumTypeWrapper): ...
+
+TWO_FA_EXP_IMMEDIATELY: TwoFactorExpiration.ValueType  # 0
+TWO_FA_EXP_5_MINUTES: TwoFactorExpiration.ValueType  # 1
+TWO_FA_EXP_12_HOURS: TwoFactorExpiration.ValueType  # 2
+TWO_FA_EXP_24_HOURS: TwoFactorExpiration.ValueType  # 3
+TWO_FA_EXP_30_DAYS: TwoFactorExpiration.ValueType  # 4
+TWO_FA_EXP_NEVER: TwoFactorExpiration.ValueType  # 5
+global___TwoFactorExpiration = TwoFactorExpiration
+
+class _LicenseType:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _LicenseTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_LicenseType.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    VAULT: _LicenseType.ValueType  # 0
+    CHAT: _LicenseType.ValueType  # 1
+    STORAGE: _LicenseType.ValueType  # 2
+    BREACHWATCH: _LicenseType.ValueType  # 3
+
+class LicenseType(_LicenseType, metaclass=_LicenseTypeEnumTypeWrapper): ...
+
+VAULT: LicenseType.ValueType  # 0
+CHAT: LicenseType.ValueType  # 1
+STORAGE: LicenseType.ValueType  # 2
+BREACHWATCH: LicenseType.ValueType  # 3
+global___LicenseType = LicenseType
+
+class _ObjectTypes:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _ObjectTypesEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_ObjectTypes.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    RECORD: _ObjectTypes.ValueType  # 0
+    SHARED_FOLDER_USER: _ObjectTypes.ValueType  # 1
+    SHARED_FOLDER_TEAM: _ObjectTypes.ValueType  # 2
+    USER_FOLDER: _ObjectTypes.ValueType  # 3
+    TEAM_USER: _ObjectTypes.ValueType  # 4
+
+class ObjectTypes(_ObjectTypes, metaclass=_ObjectTypesEnumTypeWrapper): ...
+
+RECORD: ObjectTypes.ValueType  # 0
+SHARED_FOLDER_USER: ObjectTypes.ValueType  # 1
+SHARED_FOLDER_TEAM: ObjectTypes.ValueType  # 2
+USER_FOLDER: ObjectTypes.ValueType  # 3
+TEAM_USER: ObjectTypes.ValueType  # 4
+global___ObjectTypes = ObjectTypes
+
+class _EncryptedObjectType:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _EncryptedObjectTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_EncryptedObjectType.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    EOT_UNSPECIFIED: _EncryptedObjectType.ValueType  # 0
+    EOT_RECORD_KEY: _EncryptedObjectType.ValueType  # 1
+    """ Keys in record_ref and record_owner_key_history.  uid is record UID."""
+    EOT_SHARED_FOLDER_USER_KEY: _EncryptedObjectType.ValueType  # 2
+    """ Keys in shared_folder_user.  uid is shared folder UID."""
+    EOT_SHARED_FOLDER_TEAM_KEY: _EncryptedObjectType.ValueType  # 3
+    """ Keys in shared_folder_team.  uid is shared folder UID; secondaryUid is
+     team UID.
+    """
+    EOT_TEAM_USER_KEY: _EncryptedObjectType.ValueType  # 4
+    """ Keys in team_user.  uid is team UID."""
+    EOT_USER_FOLDER_KEY: _EncryptedObjectType.ValueType  # 5
+    """ Keys in user_folder.  uid is the folder UID."""
+    EOT_SECURITY_DATA: _EncryptedObjectType.ValueType  # 6
+    """ Data in security_data.  uid is the record UID."""
+    EOT_SECURITY_DATA_MASTER_PASSWORD: _EncryptedObjectType.ValueType  # 7
+    """ Ignored/broken."""
+    EOT_EMERGENCY_ACCESS_KEY: _EncryptedObjectType.ValueType  # 8
+    EOT_V2_RECORD_KEY: _EncryptedObjectType.ValueType  # 9
+    """ Keys in record_ref and record_owner_key_history for v2 records.  uid is
+     record UID.
+    """
+
+class EncryptedObjectType(_EncryptedObjectType, metaclass=_EncryptedObjectTypeEnumTypeWrapper):
+    """ See get_change_key_types and change_key_types.  Replaces ObjectType."""
+
+EOT_UNSPECIFIED: EncryptedObjectType.ValueType  # 0
+EOT_RECORD_KEY: EncryptedObjectType.ValueType  # 1
+""" Keys in record_ref and record_owner_key_history.  uid is record UID."""
+EOT_SHARED_FOLDER_USER_KEY: EncryptedObjectType.ValueType  # 2
+""" Keys in shared_folder_user.  uid is shared folder UID."""
+EOT_SHARED_FOLDER_TEAM_KEY: EncryptedObjectType.ValueType  # 3
+""" Keys in shared_folder_team.  uid is shared folder UID; secondaryUid is
+ team UID.
+"""
+EOT_TEAM_USER_KEY: EncryptedObjectType.ValueType  # 4
+""" Keys in team_user.  uid is team UID."""
+EOT_USER_FOLDER_KEY: EncryptedObjectType.ValueType  # 5
+""" Keys in user_folder.  uid is the folder UID."""
+EOT_SECURITY_DATA: EncryptedObjectType.ValueType  # 6
+""" Data in security_data.  uid is the record UID."""
+EOT_SECURITY_DATA_MASTER_PASSWORD: EncryptedObjectType.ValueType  # 7
+""" Ignored/broken."""
+EOT_EMERGENCY_ACCESS_KEY: EncryptedObjectType.ValueType  # 8
+EOT_V2_RECORD_KEY: EncryptedObjectType.ValueType  # 9
+""" Keys in record_ref and record_owner_key_history for v2 records.  uid is
+ record UID.
+"""
+global___EncryptedObjectType = EncryptedObjectType
+
+class _MasterPasswordReentryStatus:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _MasterPasswordReentryStatusEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_MasterPasswordReentryStatus.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    MP_UNKNOWN: _MasterPasswordReentryStatus.ValueType  # 0
+    MP_SUCCESS: _MasterPasswordReentryStatus.ValueType  # 1
+    MP_FAILURE: _MasterPasswordReentryStatus.ValueType  # 2
+
+class MasterPasswordReentryStatus(_MasterPasswordReentryStatus, metaclass=_MasterPasswordReentryStatusEnumTypeWrapper): ...
+
+MP_UNKNOWN: MasterPasswordReentryStatus.ValueType  # 0
+MP_SUCCESS: MasterPasswordReentryStatus.ValueType  # 1
+MP_FAILURE: MasterPasswordReentryStatus.ValueType  # 2
+global___MasterPasswordReentryStatus = MasterPasswordReentryStatus
+
+class _AlternateAuthenticationType:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _AlternateAuthenticationTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_AlternateAuthenticationType.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    ALTERNATE_MASTER_PASSWORD: _AlternateAuthenticationType.ValueType  # 0
+    BIOMETRIC: _AlternateAuthenticationType.ValueType  # 1
+    ACCOUNT_RECOVER: _AlternateAuthenticationType.ValueType  # 2
+
+class AlternateAuthenticationType(_AlternateAuthenticationType, metaclass=_AlternateAuthenticationTypeEnumTypeWrapper): ...
+
+ALTERNATE_MASTER_PASSWORD: AlternateAuthenticationType.ValueType  # 0
+BIOMETRIC: AlternateAuthenticationType.ValueType  # 1
+ACCOUNT_RECOVER: AlternateAuthenticationType.ValueType  # 2
+global___AlternateAuthenticationType = AlternateAuthenticationType
+
+class _ThrottleType:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _ThrottleTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_ThrottleType.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    PASSWORD_RETRY_THROTTLE: _ThrottleType.ValueType  # 0
+    PASSWORD_RETRY_LEGACY_THROTTLE: _ThrottleType.ValueType  # 1
+    TWO_FA_THROTTLE: _ThrottleType.ValueType  # 2
+    TWO_FA_LEGACY_THROTTLE: _ThrottleType.ValueType  # 3
+    QA_RETRY_THROTTLE: _ThrottleType.ValueType  # 4
+    ACCOUNT_RECOVER_THROTTLE: _ThrottleType.ValueType  # 5
+    VALIDATE_DEVICE_VERIFICATION_CODE_THROTTLE: _ThrottleType.ValueType  # 6
+    VALIDATE_CREATE_USER_VERIFICATION_CODE_THROTTLE: _ThrottleType.ValueType  # 7
+
+class ThrottleType(_ThrottleType, metaclass=_ThrottleTypeEnumTypeWrapper): ...
+
+PASSWORD_RETRY_THROTTLE: ThrottleType.ValueType  # 0
+PASSWORD_RETRY_LEGACY_THROTTLE: ThrottleType.ValueType  # 1
+TWO_FA_THROTTLE: ThrottleType.ValueType  # 2
+TWO_FA_LEGACY_THROTTLE: ThrottleType.ValueType  # 3
+QA_RETRY_THROTTLE: ThrottleType.ValueType  # 4
+ACCOUNT_RECOVER_THROTTLE: ThrottleType.ValueType  # 5
+VALIDATE_DEVICE_VERIFICATION_CODE_THROTTLE: ThrottleType.ValueType  # 6
+VALIDATE_CREATE_USER_VERIFICATION_CODE_THROTTLE: ThrottleType.ValueType  # 7
+global___ThrottleType = ThrottleType
+
+class _Region:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _RegionEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_Region.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    UNKNOWN: _Region.ValueType  # 0
+    """Our region numbers start at 1"""
+    eu: _Region.ValueType  # 1
+    """Europe"""
+    us: _Region.ValueType  # 2
+    """North America"""
+    usgov: _Region.ValueType  # 3
+    """US Government"""
+    au: _Region.ValueType  # 4
+    """Australia"""
+    jp: _Region.ValueType  # 5
+    """Japan"""
+    ca: _Region.ValueType  # 6
+    """Canada"""
+
+class Region(_Region, metaclass=_RegionEnumTypeWrapper):
+    """*
+    The names and IDs in this class correspond to the Kinfo database entries and to the Region class in Keeperpap.
+    """
+
+UNKNOWN: Region.ValueType  # 0
+"""Our region numbers start at 1"""
+eu: Region.ValueType  # 1
+"""Europe"""
+us: Region.ValueType  # 2
+"""North America"""
+usgov: Region.ValueType  # 3
+"""US Government"""
+au: Region.ValueType  # 4
+"""Australia"""
+jp: Region.ValueType  # 5
+"""Japan"""
+ca: Region.ValueType  # 6
+"""Canada"""
+global___Region = Region
+
+class _ApplicationShareType:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _ApplicationShareTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_ApplicationShareType.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    SHARE_TYPE_RECORD: _ApplicationShareType.ValueType  # 0
+    SHARE_TYPE_FOLDER: _ApplicationShareType.ValueType  # 1
+
+class ApplicationShareType(_ApplicationShareType, metaclass=_ApplicationShareTypeEnumTypeWrapper): ...
+
+SHARE_TYPE_RECORD: ApplicationShareType.ValueType  # 0
+SHARE_TYPE_FOLDER: ApplicationShareType.ValueType  # 1
+global___ApplicationShareType = ApplicationShareType
+
+class _TimeLimitedAccessType:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _TimeLimitedAccessTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_TimeLimitedAccessType.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    INVALID_TIME_LIMITED_ACCESS_TYPE: _TimeLimitedAccessType.ValueType  # 0
+    USER_ACCESS_TO_RECORD: _TimeLimitedAccessType.ValueType  # 1
+    USER_OR_TEAM_ACCESS_TO_SHAREDFOLDER: _TimeLimitedAccessType.ValueType  # 2
+    RECORD_ACCESS_TO_SHAREDFOLDER: _TimeLimitedAccessType.ValueType  # 3
+
+class TimeLimitedAccessType(_TimeLimitedAccessType, metaclass=_TimeLimitedAccessTypeEnumTypeWrapper): ...
+
+INVALID_TIME_LIMITED_ACCESS_TYPE: TimeLimitedAccessType.ValueType  # 0
+USER_ACCESS_TO_RECORD: TimeLimitedAccessType.ValueType  # 1
+USER_OR_TEAM_ACCESS_TO_SHAREDFOLDER: TimeLimitedAccessType.ValueType  # 2
+RECORD_ACCESS_TO_SHAREDFOLDER: TimeLimitedAccessType.ValueType  # 3
+global___TimeLimitedAccessType = TimeLimitedAccessType
+
+class _BackupKeyType:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _BackupKeyTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_BackupKeyType.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    BKT_SEC_ANSWER: _BackupKeyType.ValueType  # 0
+    BKT_PASSPHRASE_HASH: _BackupKeyType.ValueType  # 1
+
+class BackupKeyType(_BackupKeyType, metaclass=_BackupKeyTypeEnumTypeWrapper): ...
+
+BKT_SEC_ANSWER: BackupKeyType.ValueType  # 0
+BKT_PASSPHRASE_HASH: BackupKeyType.ValueType  # 1
+global___BackupKeyType = BackupKeyType
+
+class _GenericStatus:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _GenericStatusEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_GenericStatus.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    SUCCESS: _GenericStatus.ValueType  # 0
+    INVALID_OBJECT: _GenericStatus.ValueType  # 1
+    ALREADY_EXISTS: _GenericStatus.ValueType  # 2
+    ACCESS_DENIED: _GenericStatus.ValueType  # 3
+
+class GenericStatus(_GenericStatus, metaclass=_GenericStatusEnumTypeWrapper): ...
+
+SUCCESS: GenericStatus.ValueType  # 0
+INVALID_OBJECT: GenericStatus.ValueType  # 1
+ALREADY_EXISTS: GenericStatus.ValueType  # 2
+ACCESS_DENIED: GenericStatus.ValueType  # 3
+global___GenericStatus = GenericStatus
+
+class _AuthenticatorAttachment:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _AuthenticatorAttachmentEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_AuthenticatorAttachment.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    CROSS_PLATFORM: _AuthenticatorAttachment.ValueType  # 0
+    PLATFORM: _AuthenticatorAttachment.ValueType  # 1
+    ALL_SUPPORTED: _AuthenticatorAttachment.ValueType  # 2
+
+class AuthenticatorAttachment(_AuthenticatorAttachment, metaclass=_AuthenticatorAttachmentEnumTypeWrapper): ...
+
+CROSS_PLATFORM: AuthenticatorAttachment.ValueType  # 0
+PLATFORM: AuthenticatorAttachment.ValueType  # 1
+ALL_SUPPORTED: AuthenticatorAttachment.ValueType  # 2
+global___AuthenticatorAttachment = AuthenticatorAttachment
+
+class _PasskeyPurpose:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _PasskeyPurposeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_PasskeyPurpose.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    PK_LOGIN: _PasskeyPurpose.ValueType  # 0
+    PK_REAUTH: _PasskeyPurpose.ValueType  # 1
+
+class PasskeyPurpose(_PasskeyPurpose, metaclass=_PasskeyPurposeEnumTypeWrapper): ...
+
+PK_LOGIN: PasskeyPurpose.ValueType  # 0
+PK_REAUTH: PasskeyPurpose.ValueType  # 1
+global___PasskeyPurpose = PasskeyPurpose
+
+class _ClientFormFactor:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _ClientFormFactorEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_ClientFormFactor.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    FF_EMPTY: _ClientFormFactor.ValueType  # 0
+    FF_PHONE: _ClientFormFactor.ValueType  # 1
+    FF_TABLET: _ClientFormFactor.ValueType  # 2
+    FF_WATCH: _ClientFormFactor.ValueType  # 3
+
+class ClientFormFactor(_ClientFormFactor, metaclass=_ClientFormFactorEnumTypeWrapper): ...
+
+FF_EMPTY: ClientFormFactor.ValueType  # 0
+FF_PHONE: ClientFormFactor.ValueType  # 1
+FF_TABLET: ClientFormFactor.ValueType  # 2
+FF_WATCH: ClientFormFactor.ValueType  # 3
+global___ClientFormFactor = ClientFormFactor
+
+@typing.final
+class ApiRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENCRYPTEDTRANSMISSIONKEY_FIELD_NUMBER: builtins.int
+    PUBLICKEYID_FIELD_NUMBER: builtins.int
+    LOCALE_FIELD_NUMBER: builtins.int
+    ENCRYPTEDPAYLOAD_FIELD_NUMBER: builtins.int
+    ENCRYPTIONTYPE_FIELD_NUMBER: builtins.int
+    RECAPTCHA_FIELD_NUMBER: builtins.int
+    SUBENVIRONMENT_FIELD_NUMBER: builtins.int
+    encryptedTransmissionKey: builtins.bytes
+    publicKeyId: builtins.int
+    locale: builtins.str
+    encryptedPayload: builtins.bytes
+    encryptionType: builtins.int
+    recaptcha: builtins.str
+    subEnvironment: builtins.str
+    """possible values are 'beta', 'v2', etc."""
+    def __init__(
+        self,
+        *,
+        encryptedTransmissionKey: builtins.bytes = ...,
+        publicKeyId: builtins.int = ...,
+        locale: builtins.str = ...,
+        encryptedPayload: builtins.bytes = ...,
+        encryptionType: builtins.int = ...,
+        recaptcha: builtins.str = ...,
+        subEnvironment: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["encryptedPayload", b"encryptedPayload", "encryptedTransmissionKey", b"encryptedTransmissionKey", "encryptionType", b"encryptionType", "locale", b"locale", "publicKeyId", b"publicKeyId", "recaptcha", b"recaptcha", "subEnvironment", b"subEnvironment"]) -> None: ...
+
+global___ApiRequest = ApiRequest
+
+@typing.final
+class ApiRequestPayload(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    PAYLOAD_FIELD_NUMBER: builtins.int
+    ENCRYPTEDSESSIONTOKEN_FIELD_NUMBER: builtins.int
+    TIMETOKEN_FIELD_NUMBER: builtins.int
+    APIVERSION_FIELD_NUMBER: builtins.int
+    payload: builtins.bytes
+    encryptedSessionToken: builtins.bytes
+    timeToken: builtins.bytes
+    apiVersion: builtins.int
+    def __init__(
+        self,
+        *,
+        payload: builtins.bytes = ...,
+        encryptedSessionToken: builtins.bytes = ...,
+        timeToken: builtins.bytes = ...,
+        apiVersion: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["apiVersion", b"apiVersion", "encryptedSessionToken", b"encryptedSessionToken", "payload", b"payload", "timeToken", b"timeToken"]) -> None: ...
+
+global___ApiRequestPayload = ApiRequestPayload
+
+@typing.final
+class Transform(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    KEY_FIELD_NUMBER: builtins.int
+    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: builtins.int
+    key: builtins.bytes
+    encryptedDeviceToken: builtins.bytes
+    def __init__(
+        self,
+        *,
+        key: builtins.bytes = ...,
+        encryptedDeviceToken: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["encryptedDeviceToken", b"encryptedDeviceToken", "key", b"key"]) -> None: ...
+
+global___Transform = Transform
+
+@typing.final
+class DeviceRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CLIENTVERSION_FIELD_NUMBER: builtins.int
+    DEVICENAME_FIELD_NUMBER: builtins.int
+    DEVICEPLATFORM_FIELD_NUMBER: builtins.int
+    CLIENTFORMFACTOR_FIELD_NUMBER: builtins.int
+    USERNAME_FIELD_NUMBER: builtins.int
+    clientVersion: builtins.str
+    deviceName: builtins.str
+    devicePlatform: builtins.str
+    clientFormFactor: global___ClientFormFactor.ValueType
+    username: builtins.str
+    def __init__(
+        self,
+        *,
+        clientVersion: builtins.str = ...,
+        deviceName: builtins.str = ...,
+        devicePlatform: builtins.str = ...,
+        clientFormFactor: global___ClientFormFactor.ValueType = ...,
+        username: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["clientFormFactor", b"clientFormFactor", "clientVersion", b"clientVersion", "deviceName", b"deviceName", "devicePlatform", b"devicePlatform", "username", b"username"]) -> None: ...
+
+global___DeviceRequest = DeviceRequest
+
+@typing.final
+class AuthRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CLIENTVERSION_FIELD_NUMBER: builtins.int
+    USERNAME_FIELD_NUMBER: builtins.int
+    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: builtins.int
+    clientVersion: builtins.str
+    username: builtins.str
+    encryptedDeviceToken: builtins.bytes
+    def __init__(
+        self,
+        *,
+        clientVersion: builtins.str = ...,
+        username: builtins.str = ...,
+        encryptedDeviceToken: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["clientVersion", b"clientVersion", "encryptedDeviceToken", b"encryptedDeviceToken", "username", b"username"]) -> None: ...
+
+global___AuthRequest = AuthRequest
+
+@typing.final
+class NewUserMinimumParams(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    MINIMUMITERATIONS_FIELD_NUMBER: builtins.int
+    PASSWORDMATCHREGEX_FIELD_NUMBER: builtins.int
+    PASSWORDMATCHDESCRIPTION_FIELD_NUMBER: builtins.int
+    ISENTERPRISEDOMAIN_FIELD_NUMBER: builtins.int
+    ENTERPRISEECCPUBLICKEY_FIELD_NUMBER: builtins.int
+    FORBIDKEYTYPE2_FIELD_NUMBER: builtins.int
+    minimumIterations: builtins.int
+    isEnterpriseDomain: builtins.bool
+    enterpriseEccPublicKey: builtins.bytes
+    forbidKeyType2: builtins.bool
+    @property
+    def passwordMatchRegex(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    @property
+    def passwordMatchDescription(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    def __init__(
+        self,
+        *,
+        minimumIterations: builtins.int = ...,
+        passwordMatchRegex: collections.abc.Iterable[builtins.str] | None = ...,
+        passwordMatchDescription: collections.abc.Iterable[builtins.str] | None = ...,
+        isEnterpriseDomain: builtins.bool = ...,
+        enterpriseEccPublicKey: builtins.bytes = ...,
+        forbidKeyType2: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enterpriseEccPublicKey", b"enterpriseEccPublicKey", "forbidKeyType2", b"forbidKeyType2", "isEnterpriseDomain", b"isEnterpriseDomain", "minimumIterations", b"minimumIterations", "passwordMatchDescription", b"passwordMatchDescription", "passwordMatchRegex", b"passwordMatchRegex"]) -> None: ...
+
+global___NewUserMinimumParams = NewUserMinimumParams
+
+@typing.final
+class PreLoginRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    AUTHREQUEST_FIELD_NUMBER: builtins.int
+    LOGINTYPE_FIELD_NUMBER: builtins.int
+    TWOFACTORTOKEN_FIELD_NUMBER: builtins.int
+    loginType: global___LoginType.ValueType
+    twoFactorToken: builtins.bytes
+    """optional - if supplied, it will be validated if it needs refreshing"""
+    @property
+    def authRequest(self) -> global___AuthRequest: ...
+    def __init__(
+        self,
+        *,
+        authRequest: global___AuthRequest | None = ...,
+        loginType: global___LoginType.ValueType = ...,
+        twoFactorToken: builtins.bytes = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["authRequest", b"authRequest"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["authRequest", b"authRequest", "loginType", b"loginType", "twoFactorToken", b"twoFactorToken"]) -> None: ...
+
+global___PreLoginRequest = PreLoginRequest
+
+@typing.final
+class LoginRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    AUTHREQUEST_FIELD_NUMBER: builtins.int
+    LOGINTYPE_FIELD_NUMBER: builtins.int
+    AUTHENTICATIONHASHPRIME_FIELD_NUMBER: builtins.int
+    ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: builtins.int
+    AUTHRESPONSE_FIELD_NUMBER: builtins.int
+    MCENTERPRISEID_FIELD_NUMBER: builtins.int
+    PUSH_TOKEN_FIELD_NUMBER: builtins.int
+    PLATFORM_FIELD_NUMBER: builtins.int
+    loginType: global___LoginType.ValueType
+    authenticationHashPrime: builtins.bytes
+    encryptedLoginToken: builtins.bytes
+    authResponse: builtins.bytes
+    mcEnterpriseId: builtins.int
+    """input.getInt("enterprise_id")"""
+    push_token: builtins.str
+    """needed to receive DNA notifications per login Command wiki page"""
+    platform: builtins.str
+    """needed to receive DNA notifications per login Command wiki page"""
+    @property
+    def authRequest(self) -> global___AuthRequest: ...
+    def __init__(
+        self,
+        *,
+        authRequest: global___AuthRequest | None = ...,
+        loginType: global___LoginType.ValueType = ...,
+        authenticationHashPrime: builtins.bytes = ...,
+        encryptedLoginToken: builtins.bytes = ...,
+        authResponse: builtins.bytes = ...,
+        mcEnterpriseId: builtins.int = ...,
+        push_token: builtins.str = ...,
+        platform: builtins.str = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["authRequest", b"authRequest"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["authRequest", b"authRequest", "authResponse", b"authResponse", "authenticationHashPrime", b"authenticationHashPrime", "encryptedLoginToken", b"encryptedLoginToken", "loginType", b"loginType", "mcEnterpriseId", b"mcEnterpriseId", "platform", b"platform", "push_token", b"push_token"]) -> None: ...
+
+global___LoginRequest = LoginRequest
+
+@typing.final
+class DeviceResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: builtins.int
+    STATUS_FIELD_NUMBER: builtins.int
+    encryptedDeviceToken: builtins.bytes
+    status: global___DeviceStatus.ValueType
+    def __init__(
+        self,
+        *,
+        encryptedDeviceToken: builtins.bytes = ...,
+        status: global___DeviceStatus.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["encryptedDeviceToken", b"encryptedDeviceToken", "status", b"status"]) -> None: ...
+
+global___DeviceResponse = DeviceResponse
+
+@typing.final
+class Salt(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ITERATIONS_FIELD_NUMBER: builtins.int
+    SALT_FIELD_NUMBER: builtins.int
+    ALGORITHM_FIELD_NUMBER: builtins.int
+    UID_FIELD_NUMBER: builtins.int
+    NAME_FIELD_NUMBER: builtins.int
+    iterations: builtins.int
+    salt: builtins.bytes
+    algorithm: builtins.int
+    uid: builtins.bytes
+    name: builtins.str
+    def __init__(
+        self,
+        *,
+        iterations: builtins.int = ...,
+        salt: builtins.bytes = ...,
+        algorithm: builtins.int = ...,
+        uid: builtins.bytes = ...,
+        name: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["algorithm", b"algorithm", "iterations", b"iterations", "name", b"name", "salt", b"salt", "uid", b"uid"]) -> None: ...
+
+global___Salt = Salt
+
+@typing.final
+class TwoFactorChannel(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TYPE_FIELD_NUMBER: builtins.int
+    type: builtins.int
+    def __init__(
+        self,
+        *,
+        type: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["type", b"type"]) -> None: ...
+
+global___TwoFactorChannel = TwoFactorChannel
+
+@typing.final
+class StartLoginRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: builtins.int
+    USERNAME_FIELD_NUMBER: builtins.int
+    CLIENTVERSION_FIELD_NUMBER: builtins.int
+    MESSAGESESSIONUID_FIELD_NUMBER: builtins.int
+    ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: builtins.int
+    LOGINTYPE_FIELD_NUMBER: builtins.int
+    MCENTERPRISEID_FIELD_NUMBER: builtins.int
+    LOGINMETHOD_FIELD_NUMBER: builtins.int
+    FORCENEWLOGIN_FIELD_NUMBER: builtins.int
+    CLONECODE_FIELD_NUMBER: builtins.int
+    V2TWOFACTORTOKEN_FIELD_NUMBER: builtins.int
+    ACCOUNTUID_FIELD_NUMBER: builtins.int
+    FROMSESSIONTOKEN_FIELD_NUMBER: builtins.int
+    encryptedDeviceToken: builtins.bytes
+    username: builtins.str
+    clientVersion: builtins.str
+    messageSessionUid: builtins.bytes
+    encryptedLoginToken: builtins.bytes
+    loginType: global___LoginType.ValueType
+    mcEnterpriseId: builtins.int
+    loginMethod: global___LoginMethod.ValueType
+    forceNewLogin: builtins.bool
+    cloneCode: builtins.bytes
+    v2TwoFactorToken: builtins.str
+    accountUid: builtins.bytes
+    """for thick clients, if supplied and accountUid != user's accountUid return error reset_cache_invalid_account_uid"""
+    fromSessionToken: builtins.bytes
+    """for account switching from user to username above - NOTE: this session token must be valid at the time of the call"""
+    def __init__(
+        self,
+        *,
+        encryptedDeviceToken: builtins.bytes = ...,
+        username: builtins.str = ...,
+        clientVersion: builtins.str = ...,
+        messageSessionUid: builtins.bytes = ...,
+        encryptedLoginToken: builtins.bytes = ...,
+        loginType: global___LoginType.ValueType = ...,
+        mcEnterpriseId: builtins.int = ...,
+        loginMethod: global___LoginMethod.ValueType = ...,
+        forceNewLogin: builtins.bool = ...,
+        cloneCode: builtins.bytes = ...,
+        v2TwoFactorToken: builtins.str = ...,
+        accountUid: builtins.bytes = ...,
+        fromSessionToken: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["accountUid", b"accountUid", "clientVersion", b"clientVersion", "cloneCode", b"cloneCode", "encryptedDeviceToken", b"encryptedDeviceToken", "encryptedLoginToken", b"encryptedLoginToken", "forceNewLogin", b"forceNewLogin", "fromSessionToken", b"fromSessionToken", "loginMethod", b"loginMethod", "loginType", b"loginType", "mcEnterpriseId", b"mcEnterpriseId", "messageSessionUid", b"messageSessionUid", "username", b"username", "v2TwoFactorToken", b"v2TwoFactorToken"]) -> None: ...
+
+global___StartLoginRequest = StartLoginRequest
+
+@typing.final
+class LoginResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    LOGINSTATE_FIELD_NUMBER: builtins.int
+    ACCOUNTUID_FIELD_NUMBER: builtins.int
+    PRIMARYUSERNAME_FIELD_NUMBER: builtins.int
+    ENCRYPTEDDATAKEY_FIELD_NUMBER: builtins.int
+    ENCRYPTEDDATAKEYTYPE_FIELD_NUMBER: builtins.int
+    ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: builtins.int
+    ENCRYPTEDSESSIONTOKEN_FIELD_NUMBER: builtins.int
+    SESSIONTOKENTYPE_FIELD_NUMBER: builtins.int
+    MESSAGE_FIELD_NUMBER: builtins.int
+    URL_FIELD_NUMBER: builtins.int
+    CHANNELS_FIELD_NUMBER: builtins.int
+    SALT_FIELD_NUMBER: builtins.int
+    CLONECODE_FIELD_NUMBER: builtins.int
+    STATESPECIFICVALUE_FIELD_NUMBER: builtins.int
+    SSOCLIENTVERSION_FIELD_NUMBER: builtins.int
+    SESSIONTOKENTYPEMODIFIER_FIELD_NUMBER: builtins.int
+    loginState: global___LoginState.ValueType
+    accountUid: builtins.bytes
+    primaryUsername: builtins.str
+    encryptedDataKey: builtins.bytes
+    encryptedDataKeyType: global___EncryptedDataKeyType.ValueType
+    encryptedLoginToken: builtins.bytes
+    encryptedSessionToken: builtins.bytes
+    sessionTokenType: global___SessionTokenType.ValueType
+    message: builtins.str
+    url: builtins.str
+    cloneCode: builtins.bytes
+    stateSpecificValue: builtins.str
+    ssoClientVersion: builtins.str
+    sessionTokenTypeModifier: builtins.str
+    @property
+    def channels(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___TwoFactorChannelInfo]: ...
+    @property
+    def salt(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Salt]: ...
+    def __init__(
+        self,
+        *,
+        loginState: global___LoginState.ValueType = ...,
+        accountUid: builtins.bytes = ...,
+        primaryUsername: builtins.str = ...,
+        encryptedDataKey: builtins.bytes = ...,
+        encryptedDataKeyType: global___EncryptedDataKeyType.ValueType = ...,
+        encryptedLoginToken: builtins.bytes = ...,
+        encryptedSessionToken: builtins.bytes = ...,
+        sessionTokenType: global___SessionTokenType.ValueType = ...,
+        message: builtins.str = ...,
+        url: builtins.str = ...,
+        channels: collections.abc.Iterable[global___TwoFactorChannelInfo] | None = ...,
+        salt: collections.abc.Iterable[global___Salt] | None = ...,
+        cloneCode: builtins.bytes = ...,
+        stateSpecificValue: builtins.str = ...,
+        ssoClientVersion: builtins.str = ...,
+        sessionTokenTypeModifier: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["accountUid", b"accountUid", "channels", b"channels", "cloneCode", b"cloneCode", "encryptedDataKey", b"encryptedDataKey", "encryptedDataKeyType", b"encryptedDataKeyType", "encryptedLoginToken", b"encryptedLoginToken", "encryptedSessionToken", b"encryptedSessionToken", "loginState", b"loginState", "message", b"message", "primaryUsername", b"primaryUsername", "salt", b"salt", "sessionTokenType", b"sessionTokenType", "sessionTokenTypeModifier", b"sessionTokenTypeModifier", "ssoClientVersion", b"ssoClientVersion", "stateSpecificValue", b"stateSpecificValue", "url", b"url"]) -> None: ...
+
+global___LoginResponse = LoginResponse
+
+@typing.final
+class SwitchListElement(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    USERNAME_FIELD_NUMBER: builtins.int
+    FULLNAME_FIELD_NUMBER: builtins.int
+    AUTHREQUIRED_FIELD_NUMBER: builtins.int
+    ISLINKED_FIELD_NUMBER: builtins.int
+    username: builtins.str
+    fullName: builtins.str
+    authRequired: builtins.bool
+    isLinked: builtins.bool
+    def __init__(
+        self,
+        *,
+        username: builtins.str = ...,
+        fullName: builtins.str = ...,
+        authRequired: builtins.bool = ...,
+        isLinked: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["authRequired", b"authRequired", "fullName", b"fullName", "isLinked", b"isLinked", "username", b"username"]) -> None: ...
+
+global___SwitchListElement = SwitchListElement
+
+@typing.final
+class SwitchListResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ELEMENTS_FIELD_NUMBER: builtins.int
+    @property
+    def elements(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___SwitchListElement]: ...
+    def __init__(
+        self,
+        *,
+        elements: collections.abc.Iterable[global___SwitchListElement] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["elements", b"elements"]) -> None: ...
+
+global___SwitchListResponse = SwitchListResponse
+
+@typing.final
+class SsoUserInfo(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    COMPANYNAME_FIELD_NUMBER: builtins.int
+    SAMLREQUEST_FIELD_NUMBER: builtins.int
+    SAMLREQUESTTYPE_FIELD_NUMBER: builtins.int
+    SSODOMAINNAME_FIELD_NUMBER: builtins.int
+    LOGINURL_FIELD_NUMBER: builtins.int
+    LOGOUTURL_FIELD_NUMBER: builtins.int
+    companyName: builtins.str
+    samlRequest: builtins.str
+    samlRequestType: builtins.str
+    ssoDomainName: builtins.str
+    loginUrl: builtins.str
+    logoutUrl: builtins.str
+    def __init__(
+        self,
+        *,
+        companyName: builtins.str = ...,
+        samlRequest: builtins.str = ...,
+        samlRequestType: builtins.str = ...,
+        ssoDomainName: builtins.str = ...,
+        loginUrl: builtins.str = ...,
+        logoutUrl: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["companyName", b"companyName", "loginUrl", b"loginUrl", "logoutUrl", b"logoutUrl", "samlRequest", b"samlRequest", "samlRequestType", b"samlRequestType", "ssoDomainName", b"ssoDomainName"]) -> None: ...
+
+global___SsoUserInfo = SsoUserInfo
+
+@typing.final
+class PreLoginResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    DEVICESTATUS_FIELD_NUMBER: builtins.int
+    SALT_FIELD_NUMBER: builtins.int
+    OBSOLETE_FIELD_FIELD_NUMBER: builtins.int
+    SSOUSERINFO_FIELD_NUMBER: builtins.int
+    deviceStatus: global___DeviceStatus.ValueType
+    @property
+    def salt(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Salt]: ...
+    @property
+    def OBSOLETE_FIELD(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___TwoFactorChannel]:
+        """DO NOT RE-USE. placeholder for backwards compatability"""
+
+    @property
+    def ssoUserInfo(self) -> global___SsoUserInfo: ...
+    def __init__(
+        self,
+        *,
+        deviceStatus: global___DeviceStatus.ValueType = ...,
+        salt: collections.abc.Iterable[global___Salt] | None = ...,
+        OBSOLETE_FIELD: collections.abc.Iterable[global___TwoFactorChannel] | None = ...,
+        ssoUserInfo: global___SsoUserInfo | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["ssoUserInfo", b"ssoUserInfo"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["OBSOLETE_FIELD", b"OBSOLETE_FIELD", "deviceStatus", b"deviceStatus", "salt", b"salt", "ssoUserInfo", b"ssoUserInfo"]) -> None: ...
+
+global___PreLoginResponse = PreLoginResponse
+
+@typing.final
+class LoginAsUserRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    USERNAME_FIELD_NUMBER: builtins.int
+    username: builtins.str
+    def __init__(
+        self,
+        *,
+        username: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["username", b"username"]) -> None: ...
+
+global___LoginAsUserRequest = LoginAsUserRequest
+
+@typing.final
+class LoginAsUserResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENCRYPTEDSESSIONTOKEN_FIELD_NUMBER: builtins.int
+    ENCRYPTEDSHAREDACCOUNTKEY_FIELD_NUMBER: builtins.int
+    encryptedSessionToken: builtins.bytes
+    encryptedSharedAccountKey: builtins.bytes
+    def __init__(
+        self,
+        *,
+        encryptedSessionToken: builtins.bytes = ...,
+        encryptedSharedAccountKey: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["encryptedSessionToken", b"encryptedSessionToken", "encryptedSharedAccountKey", b"encryptedSharedAccountKey"]) -> None: ...
+
+global___LoginAsUserResponse = LoginAsUserResponse
+
+@typing.final
+class ValidateAuthHashRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    PASSWORDMETHOD_FIELD_NUMBER: builtins.int
+    AUTHRESPONSE_FIELD_NUMBER: builtins.int
+    ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: builtins.int
+    passwordMethod: global___PasswordMethod.ValueType
+    authResponse: builtins.bytes
+    encryptedLoginToken: builtins.bytes
+    def __init__(
+        self,
+        *,
+        passwordMethod: global___PasswordMethod.ValueType = ...,
+        authResponse: builtins.bytes = ...,
+        encryptedLoginToken: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["authResponse", b"authResponse", "encryptedLoginToken", b"encryptedLoginToken", "passwordMethod", b"passwordMethod"]) -> None: ...
+
+global___ValidateAuthHashRequest = ValidateAuthHashRequest
+
+@typing.final
+class TwoFactorChannelInfo(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CHANNELTYPE_FIELD_NUMBER: builtins.int
+    CHANNEL_UID_FIELD_NUMBER: builtins.int
+    CHANNELNAME_FIELD_NUMBER: builtins.int
+    CHALLENGE_FIELD_NUMBER: builtins.int
+    CAPABILITIES_FIELD_NUMBER: builtins.int
+    PHONENUMBER_FIELD_NUMBER: builtins.int
+    MAXEXPIRATION_FIELD_NUMBER: builtins.int
+    CREATEDON_FIELD_NUMBER: builtins.int
+    LASTFREQUENCY_FIELD_NUMBER: builtins.int
+    channelType: global___TwoFactorChannelType.ValueType
+    channel_uid: builtins.bytes
+    channelName: builtins.str
+    challenge: builtins.str
+    """for security keys"""
+    phoneNumber: builtins.str
+    """for SMS and DUO"""
+    maxExpiration: global___TwoFactorExpiration.ValueType
+    """maximum allowed expiration"""
+    createdOn: builtins.int
+    lastFrequency: global___TwoFactorExpiration.ValueType
+    """for login and 2fa list response"""
+    @property
+    def capabilities(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """for DUO"""
+
+    def __init__(
+        self,
+        *,
+        channelType: global___TwoFactorChannelType.ValueType = ...,
+        channel_uid: builtins.bytes = ...,
+        channelName: builtins.str = ...,
+        challenge: builtins.str = ...,
+        capabilities: collections.abc.Iterable[builtins.str] | None = ...,
+        phoneNumber: builtins.str = ...,
+        maxExpiration: global___TwoFactorExpiration.ValueType = ...,
+        createdOn: builtins.int = ...,
+        lastFrequency: global___TwoFactorExpiration.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["capabilities", b"capabilities", "challenge", b"challenge", "channelName", b"channelName", "channelType", b"channelType", "channel_uid", b"channel_uid", "createdOn", b"createdOn", "lastFrequency", b"lastFrequency", "maxExpiration", b"maxExpiration", "phoneNumber", b"phoneNumber"]) -> None: ...
+
+global___TwoFactorChannelInfo = TwoFactorChannelInfo
+
+@typing.final
+class TwoFactorDuoStatus(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CAPABILITIES_FIELD_NUMBER: builtins.int
+    PHONENUMBER_FIELD_NUMBER: builtins.int
+    ENROLL_URL_FIELD_NUMBER: builtins.int
+    MESSAGE_FIELD_NUMBER: builtins.int
+    phoneNumber: builtins.str
+    enroll_url: builtins.str
+    message: builtins.str
+    @property
+    def capabilities(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    def __init__(
+        self,
+        *,
+        capabilities: collections.abc.Iterable[builtins.str] | None = ...,
+        phoneNumber: builtins.str = ...,
+        enroll_url: builtins.str = ...,
+        message: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["capabilities", b"capabilities", "enroll_url", b"enroll_url", "message", b"message", "phoneNumber", b"phoneNumber"]) -> None: ...
+
+global___TwoFactorDuoStatus = TwoFactorDuoStatus
+
+@typing.final
+class TwoFactorAddRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CHANNELTYPE_FIELD_NUMBER: builtins.int
+    CHANNEL_UID_FIELD_NUMBER: builtins.int
+    CHANNELNAME_FIELD_NUMBER: builtins.int
+    PHONENUMBER_FIELD_NUMBER: builtins.int
+    DUOPUSHTYPE_FIELD_NUMBER: builtins.int
+    channelType: global___TwoFactorChannelType.ValueType
+    channel_uid: builtins.bytes
+    channelName: builtins.str
+    phoneNumber: builtins.str
+    duoPushType: global___TwoFactorPushType.ValueType
+    def __init__(
+        self,
+        *,
+        channelType: global___TwoFactorChannelType.ValueType = ...,
+        channel_uid: builtins.bytes = ...,
+        channelName: builtins.str = ...,
+        phoneNumber: builtins.str = ...,
+        duoPushType: global___TwoFactorPushType.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["channelName", b"channelName", "channelType", b"channelType", "channel_uid", b"channel_uid", "duoPushType", b"duoPushType", "phoneNumber", b"phoneNumber"]) -> None: ...
+
+global___TwoFactorAddRequest = TwoFactorAddRequest
+
+@typing.final
+class TwoFactorRenameRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CHANNEL_UID_FIELD_NUMBER: builtins.int
+    CHANNELNAME_FIELD_NUMBER: builtins.int
+    channel_uid: builtins.bytes
+    channelName: builtins.str
+    def __init__(
+        self,
+        *,
+        channel_uid: builtins.bytes = ...,
+        channelName: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["channelName", b"channelName", "channel_uid", b"channel_uid"]) -> None: ...
+
+global___TwoFactorRenameRequest = TwoFactorRenameRequest
+
+@typing.final
+class TwoFactorAddResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CHALLENGE_FIELD_NUMBER: builtins.int
+    BACKUPKEYS_FIELD_NUMBER: builtins.int
+    challenge: builtins.str
+    """for totp and security keys"""
+    @property
+    def backupKeys(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """for backup keys"""
+
+    def __init__(
+        self,
+        *,
+        challenge: builtins.str = ...,
+        backupKeys: collections.abc.Iterable[builtins.str] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["backupKeys", b"backupKeys", "challenge", b"challenge"]) -> None: ...
+
+global___TwoFactorAddResponse = TwoFactorAddResponse
+
+@typing.final
+class TwoFactorDeleteRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CHANNEL_UID_FIELD_NUMBER: builtins.int
+    channel_uid: builtins.bytes
+    def __init__(
+        self,
+        *,
+        channel_uid: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["channel_uid", b"channel_uid"]) -> None: ...
+
+global___TwoFactorDeleteRequest = TwoFactorDeleteRequest
+
+@typing.final
+class TwoFactorListResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CHANNELS_FIELD_NUMBER: builtins.int
+    EXPIREON_FIELD_NUMBER: builtins.int
+    expireOn: builtins.int
+    @property
+    def channels(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___TwoFactorChannelInfo]: ...
+    def __init__(
+        self,
+        *,
+        channels: collections.abc.Iterable[global___TwoFactorChannelInfo] | None = ...,
+        expireOn: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["channels", b"channels", "expireOn", b"expireOn"]) -> None: ...
+
+global___TwoFactorListResponse = TwoFactorListResponse
+
+@typing.final
+class TwoFactorUpdateExpirationRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    EXPIREIN_FIELD_NUMBER: builtins.int
+    expireIn: global___TwoFactorExpiration.ValueType
+    def __init__(
+        self,
+        *,
+        expireIn: global___TwoFactorExpiration.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["expireIn", b"expireIn"]) -> None: ...
+
+global___TwoFactorUpdateExpirationRequest = TwoFactorUpdateExpirationRequest
+
+@typing.final
+class TwoFactorValidateRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: builtins.int
+    VALUETYPE_FIELD_NUMBER: builtins.int
+    VALUE_FIELD_NUMBER: builtins.int
+    CHANNEL_UID_FIELD_NUMBER: builtins.int
+    EXPIREIN_FIELD_NUMBER: builtins.int
+    encryptedLoginToken: builtins.bytes
+    valueType: global___TwoFactorValueType.ValueType
+    value: builtins.str
+    channel_uid: builtins.bytes
+    expireIn: global___TwoFactorExpiration.ValueType
+    def __init__(
+        self,
+        *,
+        encryptedLoginToken: builtins.bytes = ...,
+        valueType: global___TwoFactorValueType.ValueType = ...,
+        value: builtins.str = ...,
+        channel_uid: builtins.bytes = ...,
+        expireIn: global___TwoFactorExpiration.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["channel_uid", b"channel_uid", "encryptedLoginToken", b"encryptedLoginToken", "expireIn", b"expireIn", "value", b"value", "valueType", b"valueType"]) -> None: ...
+
+global___TwoFactorValidateRequest = TwoFactorValidateRequest
+
+@typing.final
+class TwoFactorValidateResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: builtins.int
+    encryptedLoginToken: builtins.bytes
+    def __init__(
+        self,
+        *,
+        encryptedLoginToken: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["encryptedLoginToken", b"encryptedLoginToken"]) -> None: ...
+
+global___TwoFactorValidateResponse = TwoFactorValidateResponse
+
+@typing.final
+class TwoFactorSendPushRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: builtins.int
+    PUSHTYPE_FIELD_NUMBER: builtins.int
+    CHANNEL_UID_FIELD_NUMBER: builtins.int
+    EXPIREIN_FIELD_NUMBER: builtins.int
+    encryptedLoginToken: builtins.bytes
+    pushType: global___TwoFactorPushType.ValueType
+    channel_uid: builtins.bytes
+    expireIn: global___TwoFactorExpiration.ValueType
+    """for TWO_FA_PUSH_KEEPER and TWO_FA_PUSH_DUO_PUSH"""
+    def __init__(
+        self,
+        *,
+        encryptedLoginToken: builtins.bytes = ...,
+        pushType: global___TwoFactorPushType.ValueType = ...,
+        channel_uid: builtins.bytes = ...,
+        expireIn: global___TwoFactorExpiration.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["channel_uid", b"channel_uid", "encryptedLoginToken", b"encryptedLoginToken", "expireIn", b"expireIn", "pushType", b"pushType"]) -> None: ...
+
+global___TwoFactorSendPushRequest = TwoFactorSendPushRequest
+
+@typing.final
+class License(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CREATED_FIELD_NUMBER: builtins.int
+    EXPIRATION_FIELD_NUMBER: builtins.int
+    LICENSESTATUS_FIELD_NUMBER: builtins.int
+    PAID_FIELD_NUMBER: builtins.int
+    MESSAGE_FIELD_NUMBER: builtins.int
+    created: builtins.int
+    expiration: builtins.int
+    licenseStatus: global___LicenseStatus.ValueType
+    paid: builtins.bool
+    message: builtins.str
+    def __init__(
+        self,
+        *,
+        created: builtins.int = ...,
+        expiration: builtins.int = ...,
+        licenseStatus: global___LicenseStatus.ValueType = ...,
+        paid: builtins.bool = ...,
+        message: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["created", b"created", "expiration", b"expiration", "licenseStatus", b"licenseStatus", "message", b"message", "paid", b"paid"]) -> None: ...
+
+global___License = License
+
+@typing.final
+class OwnerlessRecord(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORDUID_FIELD_NUMBER: builtins.int
+    RECORDKEY_FIELD_NUMBER: builtins.int
+    STATUS_FIELD_NUMBER: builtins.int
+    recordUid: builtins.bytes
+    """used in get request, set request, set response"""
+    recordKey: builtins.bytes
+    """used in set request"""
+    status: builtins.int
+    """used in set response"""
+    def __init__(
+        self,
+        *,
+        recordUid: builtins.bytes = ...,
+        recordKey: builtins.bytes = ...,
+        status: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["recordKey", b"recordKey", "recordUid", b"recordUid", "status", b"status"]) -> None: ...
+
+global___OwnerlessRecord = OwnerlessRecord
+
+@typing.final
+class OwnerlessRecords(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    OWNERLESSRECORD_FIELD_NUMBER: builtins.int
+    @property
+    def ownerlessRecord(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___OwnerlessRecord]: ...
+    def __init__(
+        self,
+        *,
+        ownerlessRecord: collections.abc.Iterable[global___OwnerlessRecord] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["ownerlessRecord", b"ownerlessRecord"]) -> None: ...
+
+global___OwnerlessRecords = OwnerlessRecords
+
+@typing.final
+class UserAuthRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    UID_FIELD_NUMBER: builtins.int
+    SALT_FIELD_NUMBER: builtins.int
+    ITERATIONS_FIELD_NUMBER: builtins.int
+    ENCRYPTEDCLIENTKEY_FIELD_NUMBER: builtins.int
+    AUTHHASH_FIELD_NUMBER: builtins.int
+    ENCRYPTEDDATAKEY_FIELD_NUMBER: builtins.int
+    LOGINTYPE_FIELD_NUMBER: builtins.int
+    NAME_FIELD_NUMBER: builtins.int
+    ALGORITHM_FIELD_NUMBER: builtins.int
+    uid: builtins.bytes
+    salt: builtins.bytes
+    iterations: builtins.int
+    encryptedClientKey: builtins.bytes
+    authHash: builtins.bytes
+    encryptedDataKey: builtins.bytes
+    loginType: global___LoginType.ValueType
+    name: builtins.str
+    algorithm: builtins.int
+    def __init__(
+        self,
+        *,
+        uid: builtins.bytes = ...,
+        salt: builtins.bytes = ...,
+        iterations: builtins.int = ...,
+        encryptedClientKey: builtins.bytes = ...,
+        authHash: builtins.bytes = ...,
+        encryptedDataKey: builtins.bytes = ...,
+        loginType: global___LoginType.ValueType = ...,
+        name: builtins.str = ...,
+        algorithm: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["algorithm", b"algorithm", "authHash", b"authHash", "encryptedClientKey", b"encryptedClientKey", "encryptedDataKey", b"encryptedDataKey", "iterations", b"iterations", "loginType", b"loginType", "name", b"name", "salt", b"salt", "uid", b"uid"]) -> None: ...
+
+global___UserAuthRequest = UserAuthRequest
+
+@typing.final
+class UidRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    UID_FIELD_NUMBER: builtins.int
+    @property
+    def uid(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]: ...
+    def __init__(
+        self,
+        *,
+        uid: collections.abc.Iterable[builtins.bytes] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["uid", b"uid"]) -> None: ...
+
+global___UidRequest = UidRequest
+
+@typing.final
+class DeviceUpdateRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: builtins.int
+    CLIENTVERSION_FIELD_NUMBER: builtins.int
+    DEVICENAME_FIELD_NUMBER: builtins.int
+    DEVICEPUBLICKEY_FIELD_NUMBER: builtins.int
+    DEVICESTATUS_FIELD_NUMBER: builtins.int
+    DEVICEPLATFORM_FIELD_NUMBER: builtins.int
+    CLIENTFORMFACTOR_FIELD_NUMBER: builtins.int
+    encryptedDeviceToken: builtins.bytes
+    clientVersion: builtins.str
+    deviceName: builtins.str
+    devicePublicKey: builtins.bytes
+    deviceStatus: global___DeviceStatus.ValueType
+    devicePlatform: builtins.str
+    clientFormFactor: global___ClientFormFactor.ValueType
+    def __init__(
+        self,
+        *,
+        encryptedDeviceToken: builtins.bytes = ...,
+        clientVersion: builtins.str = ...,
+        deviceName: builtins.str = ...,
+        devicePublicKey: builtins.bytes = ...,
+        deviceStatus: global___DeviceStatus.ValueType = ...,
+        devicePlatform: builtins.str = ...,
+        clientFormFactor: global___ClientFormFactor.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["clientFormFactor", b"clientFormFactor", "clientVersion", b"clientVersion", "deviceName", b"deviceName", "devicePlatform", b"devicePlatform", "devicePublicKey", b"devicePublicKey", "deviceStatus", b"deviceStatus", "encryptedDeviceToken", b"encryptedDeviceToken"]) -> None: ...
+
+global___DeviceUpdateRequest = DeviceUpdateRequest
+
+@typing.final
+class DeviceUpdateResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: builtins.int
+    CLIENTVERSION_FIELD_NUMBER: builtins.int
+    DEVICENAME_FIELD_NUMBER: builtins.int
+    DEVICEPUBLICKEY_FIELD_NUMBER: builtins.int
+    DEVICESTATUS_FIELD_NUMBER: builtins.int
+    DEVICEPLATFORM_FIELD_NUMBER: builtins.int
+    CLIENTFORMFACTOR_FIELD_NUMBER: builtins.int
+    encryptedDeviceToken: builtins.bytes
+    clientVersion: builtins.str
+    deviceName: builtins.str
+    devicePublicKey: builtins.bytes
+    deviceStatus: global___DeviceStatus.ValueType
+    devicePlatform: builtins.str
+    clientFormFactor: global___ClientFormFactor.ValueType
+    def __init__(
+        self,
+        *,
+        encryptedDeviceToken: builtins.bytes = ...,
+        clientVersion: builtins.str = ...,
+        deviceName: builtins.str = ...,
+        devicePublicKey: builtins.bytes = ...,
+        deviceStatus: global___DeviceStatus.ValueType = ...,
+        devicePlatform: builtins.str = ...,
+        clientFormFactor: global___ClientFormFactor.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["clientFormFactor", b"clientFormFactor", "clientVersion", b"clientVersion", "deviceName", b"deviceName", "devicePlatform", b"devicePlatform", "devicePublicKey", b"devicePublicKey", "deviceStatus", b"deviceStatus", "encryptedDeviceToken", b"encryptedDeviceToken"]) -> None: ...
+
+global___DeviceUpdateResponse = DeviceUpdateResponse
+
+@typing.final
+class RegisterDeviceInRegionRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: builtins.int
+    CLIENTVERSION_FIELD_NUMBER: builtins.int
+    DEVICENAME_FIELD_NUMBER: builtins.int
+    DEVICEPUBLICKEY_FIELD_NUMBER: builtins.int
+    DEVICEPLATFORM_FIELD_NUMBER: builtins.int
+    CLIENTFORMFACTOR_FIELD_NUMBER: builtins.int
+    encryptedDeviceToken: builtins.bytes
+    clientVersion: builtins.str
+    deviceName: builtins.str
+    devicePublicKey: builtins.bytes
+    devicePlatform: builtins.str
+    clientFormFactor: global___ClientFormFactor.ValueType
+    def __init__(
+        self,
+        *,
+        encryptedDeviceToken: builtins.bytes = ...,
+        clientVersion: builtins.str = ...,
+        deviceName: builtins.str = ...,
+        devicePublicKey: builtins.bytes = ...,
+        devicePlatform: builtins.str = ...,
+        clientFormFactor: global___ClientFormFactor.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["clientFormFactor", b"clientFormFactor", "clientVersion", b"clientVersion", "deviceName", b"deviceName", "devicePlatform", b"devicePlatform", "devicePublicKey", b"devicePublicKey", "encryptedDeviceToken", b"encryptedDeviceToken"]) -> None: ...
+
+global___RegisterDeviceInRegionRequest = RegisterDeviceInRegionRequest
+
+@typing.final
+class RegistrationRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    AUTHREQUEST_FIELD_NUMBER: builtins.int
+    USERAUTHREQUEST_FIELD_NUMBER: builtins.int
+    ENCRYPTEDCLIENTKEY_FIELD_NUMBER: builtins.int
+    ENCRYPTEDPRIVATEKEY_FIELD_NUMBER: builtins.int
+    PUBLICKEY_FIELD_NUMBER: builtins.int
+    VERIFICATIONCODE_FIELD_NUMBER: builtins.int
+    DEPRECATEDAUTHHASHHASH_FIELD_NUMBER: builtins.int
+    DEPRECATEDENCRYPTEDCLIENTKEY_FIELD_NUMBER: builtins.int
+    DEPRECATEDENCRYPTEDPRIVATEKEY_FIELD_NUMBER: builtins.int
+    DEPRECATEDENCRYPTIONPARAMS_FIELD_NUMBER: builtins.int
+    encryptedClientKey: builtins.bytes
+    """encrypted with the data key"""
+    encryptedPrivateKey: builtins.bytes
+    """encrypted with the data key"""
+    publicKey: builtins.bytes
+    verificationCode: builtins.str
+    deprecatedAuthHashHash: builtins.bytes
+    """these will be ignored once the v2 clients are obsolete"""
+    deprecatedEncryptedClientKey: builtins.bytes
+    deprecatedEncryptedPrivateKey: builtins.bytes
+    deprecatedEncryptionParams: builtins.bytes
+    @property
+    def authRequest(self) -> global___AuthRequest: ...
+    @property
+    def userAuthRequest(self) -> global___UserAuthRequest: ...
+    def __init__(
+        self,
+        *,
+        authRequest: global___AuthRequest | None = ...,
+        userAuthRequest: global___UserAuthRequest | None = ...,
+        encryptedClientKey: builtins.bytes = ...,
+        encryptedPrivateKey: builtins.bytes = ...,
+        publicKey: builtins.bytes = ...,
+        verificationCode: builtins.str = ...,
+        deprecatedAuthHashHash: builtins.bytes = ...,
+        deprecatedEncryptedClientKey: builtins.bytes = ...,
+        deprecatedEncryptedPrivateKey: builtins.bytes = ...,
+        deprecatedEncryptionParams: builtins.bytes = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["authRequest", b"authRequest", "userAuthRequest", b"userAuthRequest"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["authRequest", b"authRequest", "deprecatedAuthHashHash", b"deprecatedAuthHashHash", "deprecatedEncryptedClientKey", b"deprecatedEncryptedClientKey", "deprecatedEncryptedPrivateKey", b"deprecatedEncryptedPrivateKey", "deprecatedEncryptionParams", b"deprecatedEncryptionParams", "encryptedClientKey", b"encryptedClientKey", "encryptedPrivateKey", b"encryptedPrivateKey", "publicKey", b"publicKey", "userAuthRequest", b"userAuthRequest", "verificationCode", b"verificationCode"]) -> None: ...
+
+global___RegistrationRequest = RegistrationRequest
+
+@typing.final
+class ConvertUserToV3Request(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    AUTHREQUEST_FIELD_NUMBER: builtins.int
+    USERAUTHREQUEST_FIELD_NUMBER: builtins.int
+    ENCRYPTEDCLIENTKEY_FIELD_NUMBER: builtins.int
+    ENCRYPTEDPRIVATEKEY_FIELD_NUMBER: builtins.int
+    PUBLICKEY_FIELD_NUMBER: builtins.int
+    encryptedClientKey: builtins.bytes
+    """gcm encrypted with the data key"""
+    encryptedPrivateKey: builtins.bytes
+    """gcm encrypted with the data key"""
+    publicKey: builtins.bytes
+    """TODO add alternate passwords"""
+    @property
+    def authRequest(self) -> global___AuthRequest: ...
+    @property
+    def userAuthRequest(self) -> global___UserAuthRequest: ...
+    def __init__(
+        self,
+        *,
+        authRequest: global___AuthRequest | None = ...,
+        userAuthRequest: global___UserAuthRequest | None = ...,
+        encryptedClientKey: builtins.bytes = ...,
+        encryptedPrivateKey: builtins.bytes = ...,
+        publicKey: builtins.bytes = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["authRequest", b"authRequest", "userAuthRequest", b"userAuthRequest"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["authRequest", b"authRequest", "encryptedClientKey", b"encryptedClientKey", "encryptedPrivateKey", b"encryptedPrivateKey", "publicKey", b"publicKey", "userAuthRequest", b"userAuthRequest"]) -> None: ...
+
+global___ConvertUserToV3Request = ConvertUserToV3Request
+
+@typing.final
+class RevisionResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    REVISION_FIELD_NUMBER: builtins.int
+    revision: builtins.int
+    def __init__(
+        self,
+        *,
+        revision: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["revision", b"revision"]) -> None: ...
+
+global___RevisionResponse = RevisionResponse
+
+@typing.final
+class ChangeEmailRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    NEWEMAIL_FIELD_NUMBER: builtins.int
+    newEmail: builtins.str
+    def __init__(
+        self,
+        *,
+        newEmail: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["newEmail", b"newEmail"]) -> None: ...
+
+global___ChangeEmailRequest = ChangeEmailRequest
+
+@typing.final
+class ChangeEmailResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENCRYPTEDCHANGEEMAILTOKEN_FIELD_NUMBER: builtins.int
+    encryptedChangeEmailToken: builtins.bytes
+    def __init__(
+        self,
+        *,
+        encryptedChangeEmailToken: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["encryptedChangeEmailToken", b"encryptedChangeEmailToken"]) -> None: ...
+
+global___ChangeEmailResponse = ChangeEmailResponse
+
+@typing.final
+class EmailVerificationLinkResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    EMAILVERIFIED_FIELD_NUMBER: builtins.int
+    emailVerified: builtins.bool
+    def __init__(
+        self,
+        *,
+        emailVerified: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["emailVerified", b"emailVerified"]) -> None: ...
+
+global___EmailVerificationLinkResponse = EmailVerificationLinkResponse
+
+@typing.final
+class SecurityData(google.protobuf.message.Message):
+    """used in SecurityDataRequest"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    UID_FIELD_NUMBER: builtins.int
+    DATA_FIELD_NUMBER: builtins.int
+    uid: builtins.bytes
+    data: builtins.bytes
+    def __init__(
+        self,
+        *,
+        uid: builtins.bytes = ...,
+        data: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["data", b"data", "uid", b"uid"]) -> None: ...
+
+global___SecurityData = SecurityData
+
+@typing.final
+class SecurityScoreData(google.protobuf.message.Message):
+    """used in SecurityDataRequest"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    UID_FIELD_NUMBER: builtins.int
+    DATA_FIELD_NUMBER: builtins.int
+    REVISION_FIELD_NUMBER: builtins.int
+    uid: builtins.bytes
+    data: builtins.bytes
+    revision: builtins.int
+    def __init__(
+        self,
+        *,
+        uid: builtins.bytes = ...,
+        data: builtins.bytes = ...,
+        revision: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["data", b"data", "revision", b"revision", "uid", b"uid"]) -> None: ...
+
+global___SecurityScoreData = SecurityScoreData
+
+@typing.final
+class SecurityDataRequest(google.protobuf.message.Message):
+    """to update a records security data"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORDSECURITYDATA_FIELD_NUMBER: builtins.int
+    MASTERPASSWORDSECURITYDATA_FIELD_NUMBER: builtins.int
+    ENCRYPTIONTYPE_FIELD_NUMBER: builtins.int
+    RECORDSECURITYSCOREDATA_FIELD_NUMBER: builtins.int
+    encryptionType: enterprise_pb2.EncryptedKeyType.ValueType
+    @property
+    def recordSecurityData(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___SecurityData]: ...
+    @property
+    def masterPasswordSecurityData(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___SecurityData]: ...
+    @property
+    def recordSecurityScoreData(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___SecurityScoreData]: ...
+    def __init__(
+        self,
+        *,
+        recordSecurityData: collections.abc.Iterable[global___SecurityData] | None = ...,
+        masterPasswordSecurityData: collections.abc.Iterable[global___SecurityData] | None = ...,
+        encryptionType: enterprise_pb2.EncryptedKeyType.ValueType = ...,
+        recordSecurityScoreData: collections.abc.Iterable[global___SecurityScoreData] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["encryptionType", b"encryptionType", "masterPasswordSecurityData", b"masterPasswordSecurityData", "recordSecurityData", b"recordSecurityData", "recordSecurityScoreData", b"recordSecurityScoreData"]) -> None: ...
+
+global___SecurityDataRequest = SecurityDataRequest
+
+@typing.final
+class SecurityReportIncrementalData(google.protobuf.message.Message):
+    """if mp or not, by user, include reused passwords
+    used in SecurityReportResponse
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    CURRENTSECURITYDATA_FIELD_NUMBER: builtins.int
+    CURRENTSECURITYDATAREVISION_FIELD_NUMBER: builtins.int
+    OLDSECURITYDATA_FIELD_NUMBER: builtins.int
+    OLDSECURITYDATAREVISION_FIELD_NUMBER: builtins.int
+    CURRENTDATAENCRYPTIONTYPE_FIELD_NUMBER: builtins.int
+    OLDDATAENCRYPTIONTYPE_FIELD_NUMBER: builtins.int
+    RECORDUID_FIELD_NUMBER: builtins.int
+    enterpriseUserId: builtins.int
+    currentSecurityData: builtins.bytes
+    currentSecurityDataRevision: builtins.int
+    oldSecurityData: builtins.bytes
+    oldSecurityDataRevision: builtins.int
+    currentDataEncryptionType: enterprise_pb2.EncryptedKeyType.ValueType
+    oldDataEncryptionType: enterprise_pb2.EncryptedKeyType.ValueType
+    recordUid: builtins.bytes
+    def __init__(
+        self,
+        *,
+        enterpriseUserId: builtins.int = ...,
+        currentSecurityData: builtins.bytes = ...,
+        currentSecurityDataRevision: builtins.int = ...,
+        oldSecurityData: builtins.bytes = ...,
+        oldSecurityDataRevision: builtins.int = ...,
+        currentDataEncryptionType: enterprise_pb2.EncryptedKeyType.ValueType = ...,
+        oldDataEncryptionType: enterprise_pb2.EncryptedKeyType.ValueType = ...,
+        recordUid: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["currentDataEncryptionType", b"currentDataEncryptionType", "currentSecurityData", b"currentSecurityData", "currentSecurityDataRevision", b"currentSecurityDataRevision", "enterpriseUserId", b"enterpriseUserId", "oldDataEncryptionType", b"oldDataEncryptionType", "oldSecurityData", b"oldSecurityData", "oldSecurityDataRevision", b"oldSecurityDataRevision", "recordUid", b"recordUid"]) -> None: ...
+
+global___SecurityReportIncrementalData = SecurityReportIncrementalData
+
+@typing.final
+class SecurityReport(google.protobuf.message.Message):
+    """used for both get and save"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    ENCRYPTEDREPORTDATA_FIELD_NUMBER: builtins.int
+    REVISION_FIELD_NUMBER: builtins.int
+    TWOFACTOR_FIELD_NUMBER: builtins.int
+    LASTLOGIN_FIELD_NUMBER: builtins.int
+    NUMBEROFREUSEDPASSWORD_FIELD_NUMBER: builtins.int
+    SECURITYREPORTINCREMENTALDATA_FIELD_NUMBER: builtins.int
+    USERID_FIELD_NUMBER: builtins.int
+    HASOLDENCRYPTION_FIELD_NUMBER: builtins.int
+    enterpriseUserId: builtins.int
+    encryptedReportData: builtins.bytes
+    revision: builtins.int
+    """for save this was returned in get, for get this is the saved revision"""
+    twoFactor: builtins.str
+    """for get not save"""
+    lastLogin: builtins.int
+    """for get not save"""
+    numberOfReusedPassword: builtins.int
+    userId: builtins.int
+    hasOldEncryption: builtins.bool
+    """specifically, RSA encrypted keys"""
+    @property
+    def securityReportIncrementalData(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___SecurityReportIncrementalData]: ...
+    def __init__(
+        self,
+        *,
+        enterpriseUserId: builtins.int = ...,
+        encryptedReportData: builtins.bytes = ...,
+        revision: builtins.int = ...,
+        twoFactor: builtins.str = ...,
+        lastLogin: builtins.int = ...,
+        numberOfReusedPassword: builtins.int = ...,
+        securityReportIncrementalData: collections.abc.Iterable[global___SecurityReportIncrementalData] | None = ...,
+        userId: builtins.int = ...,
+        hasOldEncryption: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["encryptedReportData", b"encryptedReportData", "enterpriseUserId", b"enterpriseUserId", "hasOldEncryption", b"hasOldEncryption", "lastLogin", b"lastLogin", "numberOfReusedPassword", b"numberOfReusedPassword", "revision", b"revision", "securityReportIncrementalData", b"securityReportIncrementalData", "twoFactor", b"twoFactor", "userId", b"userId"]) -> None: ...
+
+global___SecurityReport = SecurityReport
+
+@typing.final
+class SecurityReportSaveRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SECURITYREPORT_FIELD_NUMBER: builtins.int
+    CONTINUATIONTOKEN_FIELD_NUMBER: builtins.int
+    continuationToken: builtins.bytes
+    """IncrementalSecurityDataContToken encrypted by SESSION_TOKEN_VALIDATION"""
+    @property
+    def securityReport(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___SecurityReport]: ...
+    def __init__(
+        self,
+        *,
+        securityReport: collections.abc.Iterable[global___SecurityReport] | None = ...,
+        continuationToken: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["continuationToken", b"continuationToken", "securityReport", b"securityReport"]) -> None: ...
+
+global___SecurityReportSaveRequest = SecurityReportSaveRequest
+
+@typing.final
+class SecurityReportRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    FROMPAGE_FIELD_NUMBER: builtins.int
+    fromPage: builtins.int
+    def __init__(
+        self,
+        *,
+        fromPage: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["fromPage", b"fromPage"]) -> None: ...
+
+global___SecurityReportRequest = SecurityReportRequest
+
+@typing.final
+class SecurityReportResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEPRIVATEKEY_FIELD_NUMBER: builtins.int
+    SECURITYREPORT_FIELD_NUMBER: builtins.int
+    ASOFREVISION_FIELD_NUMBER: builtins.int
+    FROMPAGE_FIELD_NUMBER: builtins.int
+    TOPAGE_FIELD_NUMBER: builtins.int
+    COMPLETE_FIELD_NUMBER: builtins.int
+    ENTERPRISEECCPRIVATEKEY_FIELD_NUMBER: builtins.int
+    HASINCREMENTALDATA_FIELD_NUMBER: builtins.int
+    enterprisePrivateKey: builtins.bytes
+    asOfRevision: builtins.int
+    """the revision the data was retrieved for"""
+    fromPage: builtins.int
+    toPage: builtins.int
+    complete: builtins.bool
+    enterpriseEccPrivateKey: builtins.bytes
+    hasIncrementalData: builtins.bool
+    """if yes, get_incremental_security_data needs to be called"""
+    @property
+    def securityReport(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___SecurityReport]: ...
+    def __init__(
+        self,
+        *,
+        enterprisePrivateKey: builtins.bytes = ...,
+        securityReport: collections.abc.Iterable[global___SecurityReport] | None = ...,
+        asOfRevision: builtins.int = ...,
+        fromPage: builtins.int = ...,
+        toPage: builtins.int = ...,
+        complete: builtins.bool = ...,
+        enterpriseEccPrivateKey: builtins.bytes = ...,
+        hasIncrementalData: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["asOfRevision", b"asOfRevision", "complete", b"complete", "enterpriseEccPrivateKey", b"enterpriseEccPrivateKey", "enterprisePrivateKey", b"enterprisePrivateKey", "fromPage", b"fromPage", "hasIncrementalData", b"hasIncrementalData", "securityReport", b"securityReport", "toPage", b"toPage"]) -> None: ...
+
+global___SecurityReportResponse = SecurityReportResponse
+
+@typing.final
+class IncrementalSecurityDataRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CONTINUATIONTOKEN_FIELD_NUMBER: builtins.int
+    continuationToken: builtins.bytes
+    """IncrementalSecurityDataContToken encrypted by SESSION_TOKEN_VALIDATION"""
+    def __init__(
+        self,
+        *,
+        continuationToken: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["continuationToken", b"continuationToken"]) -> None: ...
+
+global___IncrementalSecurityDataRequest = IncrementalSecurityDataRequest
+
+@typing.final
+class IncrementalSecurityDataResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SECURITYREPORTINCREMENTALDATA_FIELD_NUMBER: builtins.int
+    CONTINUATIONTOKEN_FIELD_NUMBER: builtins.int
+    continuationToken: builtins.bytes
+    """IncrementalSecurityDataContToken encrypted by SESSION_TOKEN_VALIDATION"""
+    @property
+    def securityReportIncrementalData(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___SecurityReportIncrementalData]: ...
+    def __init__(
+        self,
+        *,
+        securityReportIncrementalData: collections.abc.Iterable[global___SecurityReportIncrementalData] | None = ...,
+        continuationToken: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["continuationToken", b"continuationToken", "securityReportIncrementalData", b"securityReportIncrementalData"]) -> None: ...
+
+global___IncrementalSecurityDataResponse = IncrementalSecurityDataResponse
+
+@typing.final
+class ReusedPasswordsRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    COUNT_FIELD_NUMBER: builtins.int
+    count: builtins.int
+    def __init__(
+        self,
+        *,
+        count: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["count", b"count"]) -> None: ...
+
+global___ReusedPasswordsRequest = ReusedPasswordsRequest
+
+@typing.final
+class SummaryConsoleReport(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    REPORTTYPE_FIELD_NUMBER: builtins.int
+    REPORTDATA_FIELD_NUMBER: builtins.int
+    reportType: builtins.int
+    reportData: builtins.bytes
+    def __init__(
+        self,
+        *,
+        reportType: builtins.int = ...,
+        reportData: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["reportData", b"reportData", "reportType", b"reportType"]) -> None: ...
+
+global___SummaryConsoleReport = SummaryConsoleReport
+
+@typing.final
+class ChangeToKeyTypeOne(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    OBJECTTYPE_FIELD_NUMBER: builtins.int
+    PRIMARYUID_FIELD_NUMBER: builtins.int
+    SECONDARYUID_FIELD_NUMBER: builtins.int
+    KEY_FIELD_NUMBER: builtins.int
+    objectType: global___ObjectTypes.ValueType
+    primaryUid: builtins.bytes
+    secondaryUid: builtins.bytes
+    key: builtins.bytes
+    def __init__(
+        self,
+        *,
+        objectType: global___ObjectTypes.ValueType = ...,
+        primaryUid: builtins.bytes = ...,
+        secondaryUid: builtins.bytes = ...,
+        key: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["key", b"key", "objectType", b"objectType", "primaryUid", b"primaryUid", "secondaryUid", b"secondaryUid"]) -> None: ...
+
+global___ChangeToKeyTypeOne = ChangeToKeyTypeOne
+
+@typing.final
+class ChangeToKeyTypeOneRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CHANGETOKEYTYPEONE_FIELD_NUMBER: builtins.int
+    @property
+    def changeToKeyTypeOne(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ChangeToKeyTypeOne]: ...
+    def __init__(
+        self,
+        *,
+        changeToKeyTypeOne: collections.abc.Iterable[global___ChangeToKeyTypeOne] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["changeToKeyTypeOne", b"changeToKeyTypeOne"]) -> None: ...
+
+global___ChangeToKeyTypeOneRequest = ChangeToKeyTypeOneRequest
+
+@typing.final
+class ChangeToKeyTypeOneStatus(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    UID_FIELD_NUMBER: builtins.int
+    TYPE_FIELD_NUMBER: builtins.int
+    STATUS_FIELD_NUMBER: builtins.int
+    REASON_FIELD_NUMBER: builtins.int
+    uid: builtins.bytes
+    type: builtins.str
+    status: builtins.str
+    reason: builtins.str
+    def __init__(
+        self,
+        *,
+        uid: builtins.bytes = ...,
+        type: builtins.str = ...,
+        status: builtins.str = ...,
+        reason: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["reason", b"reason", "status", b"status", "type", b"type", "uid", b"uid"]) -> None: ...
+
+global___ChangeToKeyTypeOneStatus = ChangeToKeyTypeOneStatus
+
+@typing.final
+class ChangeToKeyTypeOneResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CHANGETOKEYTYPEONESTATUS_FIELD_NUMBER: builtins.int
+    @property
+    def changeToKeyTypeOneStatus(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ChangeToKeyTypeOneStatus]: ...
+    def __init__(
+        self,
+        *,
+        changeToKeyTypeOneStatus: collections.abc.Iterable[global___ChangeToKeyTypeOneStatus] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["changeToKeyTypeOneStatus", b"changeToKeyTypeOneStatus"]) -> None: ...
+
+global___ChangeToKeyTypeOneResponse = ChangeToKeyTypeOneResponse
+
+@typing.final
+class GetChangeKeyTypesRequest(google.protobuf.message.Message):
+    """ See get_change_key_types"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ONLYTHESEOBJECTS_FIELD_NUMBER: builtins.int
+    LIMIT_FIELD_NUMBER: builtins.int
+    INCLUDERECOMMENDED_FIELD_NUMBER: builtins.int
+    INCLUDEKEYS_FIELD_NUMBER: builtins.int
+    INCLUDEALLOWEDKEYTYPES_FIELD_NUMBER: builtins.int
+    limit: builtins.int
+    includeRecommended: builtins.bool
+    includeKeys: builtins.bool
+    includeAllowedKeyTypes: builtins.bool
+    @property
+    def onlyTheseObjects(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[global___EncryptedObjectType.ValueType]: ...
+    def __init__(
+        self,
+        *,
+        onlyTheseObjects: collections.abc.Iterable[global___EncryptedObjectType.ValueType] | None = ...,
+        limit: builtins.int = ...,
+        includeRecommended: builtins.bool = ...,
+        includeKeys: builtins.bool = ...,
+        includeAllowedKeyTypes: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["includeAllowedKeyTypes", b"includeAllowedKeyTypes", "includeKeys", b"includeKeys", "includeRecommended", b"includeRecommended", "limit", b"limit", "onlyTheseObjects", b"onlyTheseObjects"]) -> None: ...
+
+global___GetChangeKeyTypesRequest = GetChangeKeyTypesRequest
+
+@typing.final
+class GetChangeKeyTypesResponse(google.protobuf.message.Message):
+    """ See get_change_key_types"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    KEYS_FIELD_NUMBER: builtins.int
+    ALLOWEDKEYTYPES_FIELD_NUMBER: builtins.int
+    @property
+    def keys(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ChangeKeyType]: ...
+    @property
+    def allowedKeyTypes(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___AllowedKeyTypes]: ...
+    def __init__(
+        self,
+        *,
+        keys: collections.abc.Iterable[global___ChangeKeyType] | None = ...,
+        allowedKeyTypes: collections.abc.Iterable[global___AllowedKeyTypes] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["allowedKeyTypes", b"allowedKeyTypes", "keys", b"keys"]) -> None: ...
+
+global___GetChangeKeyTypesResponse = GetChangeKeyTypesResponse
+
+@typing.final
+class AllowedKeyTypes(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    OBJECTTYPE_FIELD_NUMBER: builtins.int
+    ALLOWEDKEYTYPES_FIELD_NUMBER: builtins.int
+    objectType: global___EncryptedObjectType.ValueType
+    @property
+    def allowedKeyTypes(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[enterprise_pb2.EncryptedKeyType.ValueType]: ...
+    def __init__(
+        self,
+        *,
+        objectType: global___EncryptedObjectType.ValueType = ...,
+        allowedKeyTypes: collections.abc.Iterable[enterprise_pb2.EncryptedKeyType.ValueType] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["allowedKeyTypes", b"allowedKeyTypes", "objectType", b"objectType"]) -> None: ...
+
+global___AllowedKeyTypes = AllowedKeyTypes
+
+@typing.final
+class ChangeKeyTypes(google.protobuf.message.Message):
+    """ This is the request and response for change_key_types; replaces
+     ChangeToKeyTypeOneRequest and ChangeToKeyTypeOneResponse.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    KEYS_FIELD_NUMBER: builtins.int
+    @property
+    def keys(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ChangeKeyType]: ...
+    def __init__(
+        self,
+        *,
+        keys: collections.abc.Iterable[global___ChangeKeyType] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["keys", b"keys"]) -> None: ...
+
+global___ChangeKeyTypes = ChangeKeyTypes
+
+@typing.final
+class ChangeKeyType(google.protobuf.message.Message):
+    """ See get_change_key_types and change_key_types.  Replaces ChangeToKeyTypeOne
+     and ChangeToKeyTypeOneStatus.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    OBJECTTYPE_FIELD_NUMBER: builtins.int
+    UID_FIELD_NUMBER: builtins.int
+    SECONDARYUID_FIELD_NUMBER: builtins.int
+    KEY_FIELD_NUMBER: builtins.int
+    KEYTYPE_FIELD_NUMBER: builtins.int
+    STATUS_FIELD_NUMBER: builtins.int
+    objectType: global___EncryptedObjectType.ValueType
+    uid: builtins.bytes
+    """ see EncryptedObjectType comments for what this is"""
+    secondaryUid: builtins.bytes
+    key: builtins.bytes
+    keyType: enterprise_pb2.EncryptedKeyType.ValueType
+    status: global___GenericStatus.ValueType
+    """ ignored in requests"""
+    def __init__(
+        self,
+        *,
+        objectType: global___EncryptedObjectType.ValueType = ...,
+        uid: builtins.bytes = ...,
+        secondaryUid: builtins.bytes = ...,
+        key: builtins.bytes = ...,
+        keyType: enterprise_pb2.EncryptedKeyType.ValueType = ...,
+        status: global___GenericStatus.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["key", b"key", "keyType", b"keyType", "objectType", b"objectType", "secondaryUid", b"secondaryUid", "status", b"status", "uid", b"uid"]) -> None: ...
+
+global___ChangeKeyType = ChangeKeyType
+
+@typing.final
+class SetKey(google.protobuf.message.Message):
+    """for setting keys where the id is a long value"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ID_FIELD_NUMBER: builtins.int
+    KEY_FIELD_NUMBER: builtins.int
+    id: builtins.int
+    """role_id"""
+    key: builtins.bytes
+    """role key GCM encrypted with the tree key"""
+    def __init__(
+        self,
+        *,
+        id: builtins.int = ...,
+        key: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["id", b"id", "key", b"key"]) -> None: ...
+
+global___SetKey = SetKey
+
+@typing.final
+class SetKeyRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    KEYS_FIELD_NUMBER: builtins.int
+    @property
+    def keys(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___SetKey]: ...
+    def __init__(
+        self,
+        *,
+        keys: collections.abc.Iterable[global___SetKey] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["keys", b"keys"]) -> None: ...
+
+global___SetKeyRequest = SetKeyRequest
+
+@typing.final
+class CreateUserRequest(google.protobuf.message.Message):
+    """same input as the register command"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    USERNAME_FIELD_NUMBER: builtins.int
+    AUTHVERIFIER_FIELD_NUMBER: builtins.int
+    ENCRYPTIONPARAMS_FIELD_NUMBER: builtins.int
+    RSAPUBLICKEY_FIELD_NUMBER: builtins.int
+    RSAENCRYPTEDPRIVATEKEY_FIELD_NUMBER: builtins.int
+    ECCPUBLICKEY_FIELD_NUMBER: builtins.int
+    ECCENCRYPTEDPRIVATEKEY_FIELD_NUMBER: builtins.int
+    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: builtins.int
+    ENCRYPTEDCLIENTKEY_FIELD_NUMBER: builtins.int
+    CLIENTVERSION_FIELD_NUMBER: builtins.int
+    ENCRYPTEDDEVICEDATAKEY_FIELD_NUMBER: builtins.int
+    ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: builtins.int
+    MESSAGESESSIONUID_FIELD_NUMBER: builtins.int
+    INSTALLREFERRER_FIELD_NUMBER: builtins.int
+    MCCMNC_FIELD_NUMBER: builtins.int
+    MFG_FIELD_NUMBER: builtins.int
+    MODEL_FIELD_NUMBER: builtins.int
+    BRAND_FIELD_NUMBER: builtins.int
+    PRODUCT_FIELD_NUMBER: builtins.int
+    DEVICE_FIELD_NUMBER: builtins.int
+    CARRIER_FIELD_NUMBER: builtins.int
+    VERIFICATIONCODE_FIELD_NUMBER: builtins.int
+    ENTERPRISEREGISTRATION_FIELD_NUMBER: builtins.int
+    ENCRYPTEDVERIFICATIONTOKEN_FIELD_NUMBER: builtins.int
+    ENTERPRISEUSERSDATAKEY_FIELD_NUMBER: builtins.int
+    username: builtins.str
+    """must be valid email"""
+    authVerifier: builtins.bytes
+    """new Field("auth_verifier", new AuthVerifierFieldValidator(), true); size=(70, 70)?"""
+    encryptionParams: builtins.bytes
+    """new Field("encryption_params", new EncryptionParamsFieldValidator(), true); size=(134, 134)?"""
+    rsaPublicKey: builtins.bytes
+    """new Field("public_key", new PublicKeyFieldValidator(), true); size=(10, 2000)?"""
+    rsaEncryptedPrivateKey: builtins.bytes
+    """new Field("encrypted_private_key", new DataKeyEncPrivateKeyFieldValidator(), true); size=(10, 2000)?"""
+    eccPublicKey: builtins.bytes
+    """65 bytes, on curve"""
+    eccEncryptedPrivateKey: builtins.bytes
+    """60 bytes"""
+    encryptedDeviceToken: builtins.bytes
+    """65 bytes"""
+    encryptedClientKey: builtins.bytes
+    """switch to gcm? old clients can't be used 60 bytes, otherwise 64 bytes; new Field("client_key", new DataKeyEncDataKeyFieldValidator(), false);"""
+    clientVersion: builtins.str
+    encryptedDeviceDataKey: builtins.bytes
+    """have to check"""
+    encryptedLoginToken: builtins.bytes
+    """this is from cloud sso"""
+    messageSessionUid: builtins.bytes
+    installReferrer: builtins.str
+    """new Field("install_referrer", new StringFieldValidator(0, 1024), false); size=(0, 1024)?"""
+    mccMNC: builtins.int
+    """input.optString("mcc_mnc") in verifyDevice(); carrier_sim_codes.mcc_mnc int(6)"""
+    mfg: builtins.str
+    """input.optString("mfg") in verifyDevice(); appstore_device_history.mfg char(64)"""
+    model: builtins.str
+    """input.optString("model") in verifyDevice(); appstore_device_history.model char(64)"""
+    brand: builtins.str
+    """input.optString("brand") in verifyDevice(); appstore_device_history.brand char(64)"""
+    product: builtins.str
+    """input.optString("product") in verifyDevice(); appstore_device_history.product char(64)"""
+    device: builtins.str
+    """input.optString("device"); used in PromotionMatcher; appstore_device_history.device char(64)?"""
+    carrier: builtins.str
+    """input.optString("carrier"); used in PromotionMatcher; appstore_device_history.carrier char(64)?"""
+    verificationCode: builtins.str
+    encryptedVerificationToken: builtins.bytes
+    enterpriseUsersDataKey: builtins.bytes
+    """user's data key encrypted with enterprise ecc public key"""
+    @property
+    def enterpriseRegistration(self) -> enterprise_pb2.EnterpriseRegistration:
+        """optinal for creating an account when creating an enterprise"""
+
+    def __init__(
+        self,
+        *,
+        username: builtins.str = ...,
+        authVerifier: builtins.bytes = ...,
+        encryptionParams: builtins.bytes = ...,
+        rsaPublicKey: builtins.bytes = ...,
+        rsaEncryptedPrivateKey: builtins.bytes = ...,
+        eccPublicKey: builtins.bytes = ...,
+        eccEncryptedPrivateKey: builtins.bytes = ...,
+        encryptedDeviceToken: builtins.bytes = ...,
+        encryptedClientKey: builtins.bytes = ...,
+        clientVersion: builtins.str = ...,
+        encryptedDeviceDataKey: builtins.bytes = ...,
+        encryptedLoginToken: builtins.bytes = ...,
+        messageSessionUid: builtins.bytes = ...,
+        installReferrer: builtins.str = ...,
+        mccMNC: builtins.int = ...,
+        mfg: builtins.str = ...,
+        model: builtins.str = ...,
+        brand: builtins.str = ...,
+        product: builtins.str = ...,
+        device: builtins.str = ...,
+        carrier: builtins.str = ...,
+        verificationCode: builtins.str = ...,
+        enterpriseRegistration: enterprise_pb2.EnterpriseRegistration | None = ...,
+        encryptedVerificationToken: builtins.bytes = ...,
+        enterpriseUsersDataKey: builtins.bytes = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["enterpriseRegistration", b"enterpriseRegistration"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["authVerifier", b"authVerifier", "brand", b"brand", "carrier", b"carrier", "clientVersion", b"clientVersion", "device", b"device", "eccEncryptedPrivateKey", b"eccEncryptedPrivateKey", "eccPublicKey", b"eccPublicKey", "encryptedClientKey", b"encryptedClientKey", "encryptedDeviceDataKey", b"encryptedDeviceDataKey", "encryptedDeviceToken", b"encryptedDeviceToken", "encryptedLoginToken", b"encryptedLoginToken", "encryptedVerificationToken", b"encryptedVerificationToken", "encryptionParams", b"encryptionParams", "enterpriseRegistration", b"enterpriseRegistration", "enterpriseUsersDataKey", b"enterpriseUsersDataKey", "installReferrer", b"installReferrer", "mccMNC", b"mccMNC", "messageSessionUid", b"messageSessionUid", "mfg", b"mfg", "model", b"model", "product", b"product", "rsaEncryptedPrivateKey", b"rsaEncryptedPrivateKey", "rsaPublicKey", b"rsaPublicKey", "username", b"username", "verificationCode", b"verificationCode"]) -> None: ...
+
+global___CreateUserRequest = CreateUserRequest
+
+@typing.final
+class NodeEnforcementAddOrUpdateRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    NODEID_FIELD_NUMBER: builtins.int
+    ENFORCEMENT_FIELD_NUMBER: builtins.int
+    VALUE_FIELD_NUMBER: builtins.int
+    nodeId: builtins.int
+    enforcement: builtins.str
+    value: builtins.str
+    def __init__(
+        self,
+        *,
+        nodeId: builtins.int = ...,
+        enforcement: builtins.str = ...,
+        value: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enforcement", b"enforcement", "nodeId", b"nodeId", "value", b"value"]) -> None: ...
+
+global___NodeEnforcementAddOrUpdateRequest = NodeEnforcementAddOrUpdateRequest
+
+@typing.final
+class NodeEnforcementRemoveRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    NODEID_FIELD_NUMBER: builtins.int
+    ENFORCEMENT_FIELD_NUMBER: builtins.int
+    nodeId: builtins.int
+    enforcement: builtins.str
+    def __init__(
+        self,
+        *,
+        nodeId: builtins.int = ...,
+        enforcement: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enforcement", b"enforcement", "nodeId", b"nodeId"]) -> None: ...
+
+global___NodeEnforcementRemoveRequest = NodeEnforcementRemoveRequest
+
+@typing.final
+class ApiRequestByKey(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    KEYID_FIELD_NUMBER: builtins.int
+    PAYLOAD_FIELD_NUMBER: builtins.int
+    USERNAME_FIELD_NUMBER: builtins.int
+    LOCALE_FIELD_NUMBER: builtins.int
+    SUPPORTEDLANGUAGE_FIELD_NUMBER: builtins.int
+    TYPE_FIELD_NUMBER: builtins.int
+    keyId: builtins.int
+    payload: builtins.bytes
+    username: builtins.str
+    locale: builtins.str
+    supportedLanguage: global___SupportedLanguage.ValueType
+    type: builtins.int
+    def __init__(
+        self,
+        *,
+        keyId: builtins.int = ...,
+        payload: builtins.bytes = ...,
+        username: builtins.str = ...,
+        locale: builtins.str = ...,
+        supportedLanguage: global___SupportedLanguage.ValueType = ...,
+        type: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["keyId", b"keyId", "locale", b"locale", "payload", b"payload", "supportedLanguage", b"supportedLanguage", "type", b"type", "username", b"username"]) -> None: ...
+
+global___ApiRequestByKey = ApiRequestByKey
+
+@typing.final
+class ApiRequestByKAtoKAKey(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SOURCEREGION_FIELD_NUMBER: builtins.int
+    PAYLOAD_FIELD_NUMBER: builtins.int
+    SUPPORTEDLANGUAGE_FIELD_NUMBER: builtins.int
+    DESTINATIONREGION_FIELD_NUMBER: builtins.int
+    sourceRegion: global___Region.ValueType
+    payload: builtins.bytes
+    supportedLanguage: global___SupportedLanguage.ValueType
+    destinationRegion: global___Region.ValueType
+    def __init__(
+        self,
+        *,
+        sourceRegion: global___Region.ValueType = ...,
+        payload: builtins.bytes = ...,
+        supportedLanguage: global___SupportedLanguage.ValueType = ...,
+        destinationRegion: global___Region.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["destinationRegion", b"destinationRegion", "payload", b"payload", "sourceRegion", b"sourceRegion", "supportedLanguage", b"supportedLanguage"]) -> None: ...
+
+global___ApiRequestByKAtoKAKey = ApiRequestByKAtoKAKey
+
+@typing.final
+class MemcacheRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    KEY_FIELD_NUMBER: builtins.int
+    USERID_FIELD_NUMBER: builtins.int
+    key: builtins.str
+    userId: builtins.int
+    def __init__(
+        self,
+        *,
+        key: builtins.str = ...,
+        userId: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["key", b"key", "userId", b"userId"]) -> None: ...
+
+global___MemcacheRequest = MemcacheRequest
+
+@typing.final
+class MemcacheResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    KEY_FIELD_NUMBER: builtins.int
+    VALUE_FIELD_NUMBER: builtins.int
+    key: builtins.str
+    value: builtins.str
+    def __init__(
+        self,
+        *,
+        key: builtins.str = ...,
+        value: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["key", b"key", "value", b"value"]) -> None: ...
+
+global___MemcacheResponse = MemcacheResponse
+
+@typing.final
+class MasterPasswordReentryRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    PBKDF2PASSWORD_FIELD_NUMBER: builtins.int
+    ACTION_FIELD_NUMBER: builtins.int
+    pbkdf2Password: builtins.str
+    action: global___MasterPasswordReentryActionType.ValueType
+    def __init__(
+        self,
+        *,
+        pbkdf2Password: builtins.str = ...,
+        action: global___MasterPasswordReentryActionType.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["action", b"action", "pbkdf2Password", b"pbkdf2Password"]) -> None: ...
+
+global___MasterPasswordReentryRequest = MasterPasswordReentryRequest
+
+@typing.final
+class MasterPasswordReentryResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    STATUS_FIELD_NUMBER: builtins.int
+    status: global___MasterPasswordReentryStatus.ValueType
+    def __init__(
+        self,
+        *,
+        status: global___MasterPasswordReentryStatus.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["status", b"status"]) -> None: ...
+
+global___MasterPasswordReentryResponse = MasterPasswordReentryResponse
+
+@typing.final
+class DeviceRegistrationRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CLIENTVERSION_FIELD_NUMBER: builtins.int
+    DEVICENAME_FIELD_NUMBER: builtins.int
+    DEVICEPUBLICKEY_FIELD_NUMBER: builtins.int
+    DEVICEPLATFORM_FIELD_NUMBER: builtins.int
+    CLIENTFORMFACTOR_FIELD_NUMBER: builtins.int
+    clientVersion: builtins.str
+    deviceName: builtins.str
+    devicePublicKey: builtins.bytes
+    devicePlatform: builtins.str
+    clientFormFactor: global___ClientFormFactor.ValueType
+    def __init__(
+        self,
+        *,
+        clientVersion: builtins.str = ...,
+        deviceName: builtins.str = ...,
+        devicePublicKey: builtins.bytes = ...,
+        devicePlatform: builtins.str = ...,
+        clientFormFactor: global___ClientFormFactor.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["clientFormFactor", b"clientFormFactor", "clientVersion", b"clientVersion", "deviceName", b"deviceName", "devicePlatform", b"devicePlatform", "devicePublicKey", b"devicePublicKey"]) -> None: ...
+
+global___DeviceRegistrationRequest = DeviceRegistrationRequest
+
+@typing.final
+class DeviceVerificationRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: builtins.int
+    USERNAME_FIELD_NUMBER: builtins.int
+    VERIFICATIONCHANNEL_FIELD_NUMBER: builtins.int
+    MESSAGESESSIONUID_FIELD_NUMBER: builtins.int
+    CLIENTVERSION_FIELD_NUMBER: builtins.int
+    encryptedDeviceToken: builtins.bytes
+    username: builtins.str
+    verificationChannel: builtins.str
+    """email for now, could be "sms" if we allow username as cell number in the future."""
+    messageSessionUid: builtins.bytes
+    clientVersion: builtins.str
+    def __init__(
+        self,
+        *,
+        encryptedDeviceToken: builtins.bytes = ...,
+        username: builtins.str = ...,
+        verificationChannel: builtins.str = ...,
+        messageSessionUid: builtins.bytes = ...,
+        clientVersion: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["clientVersion", b"clientVersion", "encryptedDeviceToken", b"encryptedDeviceToken", "messageSessionUid", b"messageSessionUid", "username", b"username", "verificationChannel", b"verificationChannel"]) -> None: ...
+
+global___DeviceVerificationRequest = DeviceVerificationRequest
+
+@typing.final
+class DeviceVerificationResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: builtins.int
+    USERNAME_FIELD_NUMBER: builtins.int
+    MESSAGESESSIONUID_FIELD_NUMBER: builtins.int
+    CLIENTVERSION_FIELD_NUMBER: builtins.int
+    DEVICESTATUS_FIELD_NUMBER: builtins.int
+    encryptedDeviceToken: builtins.bytes
+    username: builtins.str
+    messageSessionUid: builtins.bytes
+    clientVersion: builtins.str
+    deviceStatus: global___DeviceStatus.ValueType
+    def __init__(
+        self,
+        *,
+        encryptedDeviceToken: builtins.bytes = ...,
+        username: builtins.str = ...,
+        messageSessionUid: builtins.bytes = ...,
+        clientVersion: builtins.str = ...,
+        deviceStatus: global___DeviceStatus.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["clientVersion", b"clientVersion", "deviceStatus", b"deviceStatus", "encryptedDeviceToken", b"encryptedDeviceToken", "messageSessionUid", b"messageSessionUid", "username", b"username"]) -> None: ...
+
+global___DeviceVerificationResponse = DeviceVerificationResponse
+
+@typing.final
+class DeviceApprovalRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    EMAIL_FIELD_NUMBER: builtins.int
+    TWOFACTORCHANNEL_FIELD_NUMBER: builtins.int
+    CLIENTVERSION_FIELD_NUMBER: builtins.int
+    LOCALE_FIELD_NUMBER: builtins.int
+    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: builtins.int
+    TOTPCODE_FIELD_NUMBER: builtins.int
+    DEVICEIP_FIELD_NUMBER: builtins.int
+    DEVICETOKENEXPIREDAYS_FIELD_NUMBER: builtins.int
+    email: builtins.str
+    twoFactorChannel: builtins.str
+    """TwoFactorChannel, only "sms", "duo", "on_device" or "on_approved_device"; default to email verification"""
+    clientVersion: builtins.str
+    locale: builtins.str
+    encryptedDeviceToken: builtins.bytes
+    totpCode: builtins.str
+    deviceIp: builtins.str
+    """This is the ip address of the original device that needs to be approved, which will be included in the TwoFactorToken."""
+    deviceTokenExpireDays: builtins.str
+    """equivalent to the device_token_expire_days that is used in the Login command"""
+    def __init__(
+        self,
+        *,
+        email: builtins.str = ...,
+        twoFactorChannel: builtins.str = ...,
+        clientVersion: builtins.str = ...,
+        locale: builtins.str = ...,
+        encryptedDeviceToken: builtins.bytes = ...,
+        totpCode: builtins.str = ...,
+        deviceIp: builtins.str = ...,
+        deviceTokenExpireDays: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["clientVersion", b"clientVersion", "deviceIp", b"deviceIp", "deviceTokenExpireDays", b"deviceTokenExpireDays", "email", b"email", "encryptedDeviceToken", b"encryptedDeviceToken", "locale", b"locale", "totpCode", b"totpCode", "twoFactorChannel", b"twoFactorChannel"]) -> None: ...
+
+global___DeviceApprovalRequest = DeviceApprovalRequest
+
+@typing.final
+class DeviceApprovalResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENCRYPTEDTWOFACTORTOKEN_FIELD_NUMBER: builtins.int
+    encryptedTwoFactorToken: builtins.bytes
+    def __init__(
+        self,
+        *,
+        encryptedTwoFactorToken: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["encryptedTwoFactorToken", b"encryptedTwoFactorToken"]) -> None: ...
+
+global___DeviceApprovalResponse = DeviceApprovalResponse
+
+@typing.final
+class ApproveDeviceRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: builtins.int
+    ENCRYPTEDDEVICEDATAKEY_FIELD_NUMBER: builtins.int
+    DENYAPPROVAL_FIELD_NUMBER: builtins.int
+    LINKDEVICE_FIELD_NUMBER: builtins.int
+    encryptedDeviceToken: builtins.bytes
+    encryptedDeviceDataKey: builtins.bytes
+    """required for cloud sso and link"""
+    denyApproval: builtins.bool
+    linkDevice: builtins.bool
+    def __init__(
+        self,
+        *,
+        encryptedDeviceToken: builtins.bytes = ...,
+        encryptedDeviceDataKey: builtins.bytes = ...,
+        denyApproval: builtins.bool = ...,
+        linkDevice: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["denyApproval", b"denyApproval", "encryptedDeviceDataKey", b"encryptedDeviceDataKey", "encryptedDeviceToken", b"encryptedDeviceToken", "linkDevice", b"linkDevice"]) -> None: ...
+
+global___ApproveDeviceRequest = ApproveDeviceRequest
+
+@typing.final
+class EnterpriseUserAliasRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    ALIAS_FIELD_NUMBER: builtins.int
+    enterpriseUserId: builtins.int
+    alias: builtins.str
+    def __init__(
+        self,
+        *,
+        enterpriseUserId: builtins.int = ...,
+        alias: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["alias", b"alias", "enterpriseUserId", b"enterpriseUserId"]) -> None: ...
+
+global___EnterpriseUserAliasRequest = EnterpriseUserAliasRequest
+
+@typing.final
+class EnterpriseUserAddAliasRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    ALIAS_FIELD_NUMBER: builtins.int
+    PRIMARY_FIELD_NUMBER: builtins.int
+    enterpriseUserId: builtins.int
+    alias: builtins.str
+    primary: builtins.bool
+    def __init__(
+        self,
+        *,
+        enterpriseUserId: builtins.int = ...,
+        alias: builtins.str = ...,
+        primary: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["alias", b"alias", "enterpriseUserId", b"enterpriseUserId", "primary", b"primary"]) -> None: ...
+
+global___EnterpriseUserAddAliasRequest = EnterpriseUserAddAliasRequest
+
+@typing.final
+class EnterpriseUserAddAliasRequestV2(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERADDALIASREQUEST_FIELD_NUMBER: builtins.int
+    @property
+    def enterpriseUserAddAliasRequest(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___EnterpriseUserAddAliasRequest]: ...
+    def __init__(
+        self,
+        *,
+        enterpriseUserAddAliasRequest: collections.abc.Iterable[global___EnterpriseUserAddAliasRequest] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enterpriseUserAddAliasRequest", b"enterpriseUserAddAliasRequest"]) -> None: ...
+
+global___EnterpriseUserAddAliasRequestV2 = EnterpriseUserAddAliasRequestV2
+
+@typing.final
+class EnterpriseUserAddAliasStatus(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    STATUS_FIELD_NUMBER: builtins.int
+    enterpriseUserId: builtins.int
+    status: builtins.str
+    def __init__(
+        self,
+        *,
+        enterpriseUserId: builtins.int = ...,
+        status: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enterpriseUserId", b"enterpriseUserId", "status", b"status"]) -> None: ...
+
+global___EnterpriseUserAddAliasStatus = EnterpriseUserAddAliasStatus
+
+@typing.final
+class EnterpriseUserAddAliasResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    STATUS_FIELD_NUMBER: builtins.int
+    @property
+    def status(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___EnterpriseUserAddAliasStatus]: ...
+    def __init__(
+        self,
+        *,
+        status: collections.abc.Iterable[global___EnterpriseUserAddAliasStatus] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["status", b"status"]) -> None: ...
+
+global___EnterpriseUserAddAliasResponse = EnterpriseUserAddAliasResponse
+
+@typing.final
+class Device(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: builtins.int
+    encryptedDeviceToken: builtins.bytes
+    def __init__(
+        self,
+        *,
+        encryptedDeviceToken: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["encryptedDeviceToken", b"encryptedDeviceToken"]) -> None: ...
+
+global___Device = Device
+
+@typing.final
+class RegisterDeviceDataKeyRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: builtins.int
+    ENCRYPTEDDEVICEDATAKEY_FIELD_NUMBER: builtins.int
+    encryptedDeviceToken: builtins.bytes
+    encryptedDeviceDataKey: builtins.bytes
+    def __init__(
+        self,
+        *,
+        encryptedDeviceToken: builtins.bytes = ...,
+        encryptedDeviceDataKey: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["encryptedDeviceDataKey", b"encryptedDeviceDataKey", "encryptedDeviceToken", b"encryptedDeviceToken"]) -> None: ...
+
+global___RegisterDeviceDataKeyRequest = RegisterDeviceDataKeyRequest
+
+@typing.final
+class ValidateCreateUserVerificationCodeRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    USERNAME_FIELD_NUMBER: builtins.int
+    CLIENTVERSION_FIELD_NUMBER: builtins.int
+    VERIFICATIONCODE_FIELD_NUMBER: builtins.int
+    username: builtins.str
+    clientVersion: builtins.str
+    verificationCode: builtins.str
+    def __init__(
+        self,
+        *,
+        username: builtins.str = ...,
+        clientVersion: builtins.str = ...,
+        verificationCode: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["clientVersion", b"clientVersion", "username", b"username", "verificationCode", b"verificationCode"]) -> None: ...
+
+global___ValidateCreateUserVerificationCodeRequest = ValidateCreateUserVerificationCodeRequest
+
+@typing.final
+class ValidateDeviceVerificationCodeRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    USERNAME_FIELD_NUMBER: builtins.int
+    CLIENTVERSION_FIELD_NUMBER: builtins.int
+    VERIFICATIONCODE_FIELD_NUMBER: builtins.int
+    MESSAGESESSIONUID_FIELD_NUMBER: builtins.int
+    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: builtins.int
+    username: builtins.str
+    clientVersion: builtins.str
+    verificationCode: builtins.str
+    messageSessionUid: builtins.bytes
+    encryptedDeviceToken: builtins.bytes
+    def __init__(
+        self,
+        *,
+        username: builtins.str = ...,
+        clientVersion: builtins.str = ...,
+        verificationCode: builtins.str = ...,
+        messageSessionUid: builtins.bytes = ...,
+        encryptedDeviceToken: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["clientVersion", b"clientVersion", "encryptedDeviceToken", b"encryptedDeviceToken", "messageSessionUid", b"messageSessionUid", "username", b"username", "verificationCode", b"verificationCode"]) -> None: ...
+
+global___ValidateDeviceVerificationCodeRequest = ValidateDeviceVerificationCodeRequest
+
+@typing.final
+class SendSessionMessageRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    MESSAGESESSIONUID_FIELD_NUMBER: builtins.int
+    COMMAND_FIELD_NUMBER: builtins.int
+    USERNAME_FIELD_NUMBER: builtins.int
+    messageSessionUid: builtins.bytes
+    command: builtins.str
+    username: builtins.str
+    def __init__(
+        self,
+        *,
+        messageSessionUid: builtins.bytes = ...,
+        command: builtins.str = ...,
+        username: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["command", b"command", "messageSessionUid", b"messageSessionUid", "username", b"username"]) -> None: ...
+
+global___SendSessionMessageRequest = SendSessionMessageRequest
+
+@typing.final
+class GlobalUserAccount(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    USERNAME_FIELD_NUMBER: builtins.int
+    ACCOUNTUID_FIELD_NUMBER: builtins.int
+    REGIONNAME_FIELD_NUMBER: builtins.int
+    username: builtins.str
+    accountUid: builtins.bytes
+    regionName: builtins.str
+    def __init__(
+        self,
+        *,
+        username: builtins.str = ...,
+        accountUid: builtins.bytes = ...,
+        regionName: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["accountUid", b"accountUid", "regionName", b"regionName", "username", b"username"]) -> None: ...
+
+global___GlobalUserAccount = GlobalUserAccount
+
+@typing.final
+class AccountUsername(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    USERNAME_FIELD_NUMBER: builtins.int
+    DATEACTIVE_FIELD_NUMBER: builtins.int
+    username: builtins.str
+    dateActive: builtins.str
+    def __init__(
+        self,
+        *,
+        username: builtins.str = ...,
+        dateActive: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["dateActive", b"dateActive", "username", b"username"]) -> None: ...
+
+global___AccountUsername = AccountUsername
+
+@typing.final
+class SsoServiceProviderRequest(google.protobuf.message.Message):
+    """*
+    This is the input to the get_sso_service_provider command.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    NAME_FIELD_NUMBER: builtins.int
+    CLIENTVERSION_FIELD_NUMBER: builtins.int
+    LOCALE_FIELD_NUMBER: builtins.int
+    name: builtins.str
+    """the name entered by the user"""
+    clientVersion: builtins.str
+    locale: builtins.str
+    """such as "en_US" """
+    def __init__(
+        self,
+        *,
+        name: builtins.str = ...,
+        clientVersion: builtins.str = ...,
+        locale: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["clientVersion", b"clientVersion", "locale", b"locale", "name", b"name"]) -> None: ...
+
+global___SsoServiceProviderRequest = SsoServiceProviderRequest
+
+@typing.final
+class SsoServiceProviderResponse(google.protobuf.message.Message):
+    """*
+    This is the response from the get_sso_service_provider command.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    NAME_FIELD_NUMBER: builtins.int
+    SPURL_FIELD_NUMBER: builtins.int
+    ISCLOUD_FIELD_NUMBER: builtins.int
+    CLIENTVERSION_FIELD_NUMBER: builtins.int
+    name: builtins.str
+    """the official name"""
+    spUrl: builtins.str
+    isCloud: builtins.bool
+    clientVersion: builtins.str
+    def __init__(
+        self,
+        *,
+        name: builtins.str = ...,
+        spUrl: builtins.str = ...,
+        isCloud: builtins.bool = ...,
+        clientVersion: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["clientVersion", b"clientVersion", "isCloud", b"isCloud", "name", b"name", "spUrl", b"spUrl"]) -> None: ...
+
+global___SsoServiceProviderResponse = SsoServiceProviderResponse
+
+@typing.final
+class UserSettingRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SETTING_FIELD_NUMBER: builtins.int
+    VALUE_FIELD_NUMBER: builtins.int
+    setting: builtins.str
+    value: builtins.str
+    def __init__(
+        self,
+        *,
+        setting: builtins.str = ...,
+        value: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["setting", b"setting", "value", b"value"]) -> None: ...
+
+global___UserSettingRequest = UserSettingRequest
+
+@typing.final
+class ThrottleState(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TYPE_FIELD_NUMBER: builtins.int
+    KEY_FIELD_NUMBER: builtins.int
+    VALUE_FIELD_NUMBER: builtins.int
+    STATE_FIELD_NUMBER: builtins.int
+    type: global___ThrottleType.ValueType
+    key: builtins.str
+    value: builtins.str
+    state: builtins.bool
+    def __init__(
+        self,
+        *,
+        type: global___ThrottleType.ValueType = ...,
+        key: builtins.str = ...,
+        value: builtins.str = ...,
+        state: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["key", b"key", "state", b"state", "type", b"type", "value", b"value"]) -> None: ...
+
+global___ThrottleState = ThrottleState
+
+@typing.final
+class ThrottleState2(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    KEY_FIELD_NUMBER: builtins.int
+    KEYDESCRIPTION_FIELD_NUMBER: builtins.int
+    VALUE_FIELD_NUMBER: builtins.int
+    VALUEDESCRIPTION_FIELD_NUMBER: builtins.int
+    IDENTIFIER_FIELD_NUMBER: builtins.int
+    LOCKED_FIELD_NUMBER: builtins.int
+    INCLUDEDINALLCLEAR_FIELD_NUMBER: builtins.int
+    EXPIRESECONDS_FIELD_NUMBER: builtins.int
+    key: builtins.str
+    keyDescription: builtins.str
+    value: builtins.str
+    valueDescription: builtins.str
+    identifier: builtins.str
+    locked: builtins.bool
+    includedInAllClear: builtins.bool
+    expireSeconds: builtins.int
+    def __init__(
+        self,
+        *,
+        key: builtins.str = ...,
+        keyDescription: builtins.str = ...,
+        value: builtins.str = ...,
+        valueDescription: builtins.str = ...,
+        identifier: builtins.str = ...,
+        locked: builtins.bool = ...,
+        includedInAllClear: builtins.bool = ...,
+        expireSeconds: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["expireSeconds", b"expireSeconds", "identifier", b"identifier", "includedInAllClear", b"includedInAllClear", "key", b"key", "keyDescription", b"keyDescription", "locked", b"locked", "value", b"value", "valueDescription", b"valueDescription"]) -> None: ...
+
+global___ThrottleState2 = ThrottleState2
+
+@typing.final
+class DeviceInformation(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    DEVICEID_FIELD_NUMBER: builtins.int
+    DEVICENAME_FIELD_NUMBER: builtins.int
+    CLIENTVERSION_FIELD_NUMBER: builtins.int
+    LASTLOGIN_FIELD_NUMBER: builtins.int
+    DEVICESTATUS_FIELD_NUMBER: builtins.int
+    deviceId: builtins.int
+    deviceName: builtins.str
+    clientVersion: builtins.str
+    lastLogin: builtins.int
+    """for get not save"""
+    deviceStatus: global___DeviceStatus.ValueType
+    def __init__(
+        self,
+        *,
+        deviceId: builtins.int = ...,
+        deviceName: builtins.str = ...,
+        clientVersion: builtins.str = ...,
+        lastLogin: builtins.int = ...,
+        deviceStatus: global___DeviceStatus.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["clientVersion", b"clientVersion", "deviceId", b"deviceId", "deviceName", b"deviceName", "deviceStatus", b"deviceStatus", "lastLogin", b"lastLogin"]) -> None: ...
+
+global___DeviceInformation = DeviceInformation
+
+@typing.final
+class UserSetting(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    NAME_FIELD_NUMBER: builtins.int
+    VALUE_FIELD_NUMBER: builtins.int
+    name: builtins.str
+    value: builtins.bool
+    def __init__(
+        self,
+        *,
+        name: builtins.str = ...,
+        value: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["name", b"name", "value", b"value"]) -> None: ...
+
+global___UserSetting = UserSetting
+
+@typing.final
+class UserDataKeyRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    @property
+    def enterpriseUserId(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]: ...
+    def __init__(
+        self,
+        *,
+        enterpriseUserId: collections.abc.Iterable[builtins.int] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enterpriseUserId", b"enterpriseUserId"]) -> None: ...
+
+global___UserDataKeyRequest = UserDataKeyRequest
+
+@typing.final
+class UserDataKeyByNodeRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    NODEIDS_FIELD_NUMBER: builtins.int
+    @property
+    def nodeIds(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]: ...
+    def __init__(
+        self,
+        *,
+        nodeIds: collections.abc.Iterable[builtins.int] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["nodeIds", b"nodeIds"]) -> None: ...
+
+global___UserDataKeyByNodeRequest = UserDataKeyByNodeRequest
+
+@typing.final
+class EnterpriseUserIdDataKeyPair(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    ENCRYPTEDDATAKEY_FIELD_NUMBER: builtins.int
+    KEYTYPE_FIELD_NUMBER: builtins.int
+    enterpriseUserId: builtins.int
+    encryptedDataKey: builtins.bytes
+    keyType: enterprise_pb2.EncryptedKeyType.ValueType
+    def __init__(
+        self,
+        *,
+        enterpriseUserId: builtins.int = ...,
+        encryptedDataKey: builtins.bytes = ...,
+        keyType: enterprise_pb2.EncryptedKeyType.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["encryptedDataKey", b"encryptedDataKey", "enterpriseUserId", b"enterpriseUserId", "keyType", b"keyType"]) -> None: ...
+
+global___EnterpriseUserIdDataKeyPair = EnterpriseUserIdDataKeyPair
+
+@typing.final
+class UserDataKey(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ROLEID_FIELD_NUMBER: builtins.int
+    ROLEKEY_FIELD_NUMBER: builtins.int
+    PRIVATEKEY_FIELD_NUMBER: builtins.int
+    ENTERPRISEUSERIDDATAKEYPAIRS_FIELD_NUMBER: builtins.int
+    roleId: builtins.int
+    roleKey: builtins.bytes
+    privateKey: builtins.str
+    @property
+    def enterpriseUserIdDataKeyPairs(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___EnterpriseUserIdDataKeyPair]: ...
+    def __init__(
+        self,
+        *,
+        roleId: builtins.int = ...,
+        roleKey: builtins.bytes = ...,
+        privateKey: builtins.str = ...,
+        enterpriseUserIdDataKeyPairs: collections.abc.Iterable[global___EnterpriseUserIdDataKeyPair] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["enterpriseUserIdDataKeyPairs", b"enterpriseUserIdDataKeyPairs", "privateKey", b"privateKey", "roleId", b"roleId", "roleKey", b"roleKey"]) -> None: ...
+
+global___UserDataKey = UserDataKey
+
+@typing.final
+class UserDataKeyResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    USERDATAKEYS_FIELD_NUMBER: builtins.int
+    ACCESSDENIED_FIELD_NUMBER: builtins.int
+    NOENCRYPTEDDATAKEY_FIELD_NUMBER: builtins.int
+    @property
+    def userDataKeys(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___UserDataKey]: ...
+    @property
+    def accessDenied(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]: ...
+    @property
+    def noEncryptedDataKey(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]: ...
+    def __init__(
+        self,
+        *,
+        userDataKeys: collections.abc.Iterable[global___UserDataKey] | None = ...,
+        accessDenied: collections.abc.Iterable[builtins.int] | None = ...,
+        noEncryptedDataKey: collections.abc.Iterable[builtins.int] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["accessDenied", b"accessDenied", "noEncryptedDataKey", b"noEncryptedDataKey", "userDataKeys", b"userDataKeys"]) -> None: ...
+
+global___UserDataKeyResponse = UserDataKeyResponse
+
+@typing.final
+class MasterPasswordRecoveryVerificationRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: builtins.int
+    encryptedLoginToken: builtins.bytes
+    def __init__(
+        self,
+        *,
+        encryptedLoginToken: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["encryptedLoginToken", b"encryptedLoginToken"]) -> None: ...
+
+global___MasterPasswordRecoveryVerificationRequest = MasterPasswordRecoveryVerificationRequest
+
+@typing.final
+class GetSecurityQuestionV3Request(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: builtins.int
+    VERIFICATIONCODE_FIELD_NUMBER: builtins.int
+    encryptedLoginToken: builtins.bytes
+    verificationCode: builtins.str
+    def __init__(
+        self,
+        *,
+        encryptedLoginToken: builtins.bytes = ...,
+        verificationCode: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["encryptedLoginToken", b"encryptedLoginToken", "verificationCode", b"verificationCode"]) -> None: ...
+
+global___GetSecurityQuestionV3Request = GetSecurityQuestionV3Request
+
+@typing.final
+class GetSecurityQuestionV3Response(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SECURITYQUESTION_FIELD_NUMBER: builtins.int
+    BACKUPKEYDATE_FIELD_NUMBER: builtins.int
+    SALT_FIELD_NUMBER: builtins.int
+    ITERATIONS_FIELD_NUMBER: builtins.int
+    securityQuestion: builtins.str
+    backupKeyDate: builtins.int
+    salt: builtins.bytes
+    iterations: builtins.int
+    def __init__(
+        self,
+        *,
+        securityQuestion: builtins.str = ...,
+        backupKeyDate: builtins.int = ...,
+        salt: builtins.bytes = ...,
+        iterations: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["backupKeyDate", b"backupKeyDate", "iterations", b"iterations", "salt", b"salt", "securityQuestion", b"securityQuestion"]) -> None: ...
+
+global___GetSecurityQuestionV3Response = GetSecurityQuestionV3Response
+
+@typing.final
+class GetDataKeyBackupV3Request(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: builtins.int
+    VERIFICATIONCODE_FIELD_NUMBER: builtins.int
+    SECURITYANSWERHASH_FIELD_NUMBER: builtins.int
+    encryptedLoginToken: builtins.bytes
+    verificationCode: builtins.str
+    securityAnswerHash: builtins.bytes
+    def __init__(
+        self,
+        *,
+        encryptedLoginToken: builtins.bytes = ...,
+        verificationCode: builtins.str = ...,
+        securityAnswerHash: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["encryptedLoginToken", b"encryptedLoginToken", "securityAnswerHash", b"securityAnswerHash", "verificationCode", b"verificationCode"]) -> None: ...
+
+global___GetDataKeyBackupV3Request = GetDataKeyBackupV3Request
+
+@typing.final
+class PasswordRules(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RULETYPE_FIELD_NUMBER: builtins.int
+    MATCH_FIELD_NUMBER: builtins.int
+    PATTERN_FIELD_NUMBER: builtins.int
+    DESCRIPTION_FIELD_NUMBER: builtins.int
+    MINIMUM_FIELD_NUMBER: builtins.int
+    VALUE_FIELD_NUMBER: builtins.int
+    ruleType: builtins.str
+    match: builtins.bool
+    pattern: builtins.str
+    description: builtins.str
+    minimum: builtins.int
+    value: builtins.str
+    def __init__(
+        self,
+        *,
+        ruleType: builtins.str = ...,
+        match: builtins.bool = ...,
+        pattern: builtins.str = ...,
+        description: builtins.str = ...,
+        minimum: builtins.int = ...,
+        value: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["description", b"description", "match", b"match", "minimum", b"minimum", "pattern", b"pattern", "ruleType", b"ruleType", "value", b"value"]) -> None: ...
+
+global___PasswordRules = PasswordRules
+
+@typing.final
+class GetDataKeyBackupV3Response(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    DATAKEYBACKUP_FIELD_NUMBER: builtins.int
+    DATAKEYBACKUPDATE_FIELD_NUMBER: builtins.int
+    PUBLICKEY_FIELD_NUMBER: builtins.int
+    ENCRYPTEDPRIVATEKEY_FIELD_NUMBER: builtins.int
+    CLIENTKEY_FIELD_NUMBER: builtins.int
+    ENCRYPTEDSESSIONTOKEN_FIELD_NUMBER: builtins.int
+    PASSWORDRULES_FIELD_NUMBER: builtins.int
+    PASSWORDRULESINTRO_FIELD_NUMBER: builtins.int
+    MINIMUMPBKDF2ITERATIONS_FIELD_NUMBER: builtins.int
+    KEYTYPE_FIELD_NUMBER: builtins.int
+    dataKeyBackup: builtins.bytes
+    dataKeyBackupDate: builtins.int
+    publicKey: builtins.bytes
+    encryptedPrivateKey: builtins.bytes
+    clientKey: builtins.bytes
+    encryptedSessionToken: builtins.bytes
+    passwordRulesIntro: builtins.str
+    minimumPbkdf2Iterations: builtins.int
+    """when EnforcementType.MINIMUM_PBKDF2_ITERATIONS exists"""
+    keyType: enterprise_pb2.KeyType.ValueType
+    """describes publicKey/encryptedPrivateKey pair"""
+    @property
+    def passwordRules(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___PasswordRules]: ...
+    def __init__(
+        self,
+        *,
+        dataKeyBackup: builtins.bytes = ...,
+        dataKeyBackupDate: builtins.int = ...,
+        publicKey: builtins.bytes = ...,
+        encryptedPrivateKey: builtins.bytes = ...,
+        clientKey: builtins.bytes = ...,
+        encryptedSessionToken: builtins.bytes = ...,
+        passwordRules: collections.abc.Iterable[global___PasswordRules] | None = ...,
+        passwordRulesIntro: builtins.str = ...,
+        minimumPbkdf2Iterations: builtins.int = ...,
+        keyType: enterprise_pb2.KeyType.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["clientKey", b"clientKey", "dataKeyBackup", b"dataKeyBackup", "dataKeyBackupDate", b"dataKeyBackupDate", "encryptedPrivateKey", b"encryptedPrivateKey", "encryptedSessionToken", b"encryptedSessionToken", "keyType", b"keyType", "minimumPbkdf2Iterations", b"minimumPbkdf2Iterations", "passwordRules", b"passwordRules", "passwordRulesIntro", b"passwordRulesIntro", "publicKey", b"publicKey"]) -> None: ...
+
+global___GetDataKeyBackupV3Response = GetDataKeyBackupV3Response
+
+@typing.final
+class GetPublicKeysRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    USERNAMES_FIELD_NUMBER: builtins.int
+    @property
+    def usernames(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    def __init__(
+        self,
+        *,
+        usernames: collections.abc.Iterable[builtins.str] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["usernames", b"usernames"]) -> None: ...
+
+global___GetPublicKeysRequest = GetPublicKeysRequest
+
+@typing.final
+class PublicKeyResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    USERNAME_FIELD_NUMBER: builtins.int
+    PUBLICKEY_FIELD_NUMBER: builtins.int
+    PUBLICECCKEY_FIELD_NUMBER: builtins.int
+    MESSAGE_FIELD_NUMBER: builtins.int
+    ERRORCODE_FIELD_NUMBER: builtins.int
+    username: builtins.str
+    publicKey: builtins.bytes
+    publicEccKey: builtins.bytes
+    message: builtins.str
+    errorCode: builtins.str
+    def __init__(
+        self,
+        *,
+        username: builtins.str = ...,
+        publicKey: builtins.bytes = ...,
+        publicEccKey: builtins.bytes = ...,
+        message: builtins.str = ...,
+        errorCode: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["errorCode", b"errorCode", "message", b"message", "publicEccKey", b"publicEccKey", "publicKey", b"publicKey", "username", b"username"]) -> None: ...
+
+global___PublicKeyResponse = PublicKeyResponse
+
+@typing.final
+class GetPublicKeysResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    KEYRESPONSES_FIELD_NUMBER: builtins.int
+    @property
+    def keyResponses(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___PublicKeyResponse]: ...
+    def __init__(
+        self,
+        *,
+        keyResponses: collections.abc.Iterable[global___PublicKeyResponse] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["keyResponses", b"keyResponses"]) -> None: ...
+
+global___GetPublicKeysResponse = GetPublicKeysResponse
+
+@typing.final
+class SetEccKeyPairRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    PUBLICKEY_FIELD_NUMBER: builtins.int
+    ENCRYPTEDPRIVATEKEY_FIELD_NUMBER: builtins.int
+    publicKey: builtins.bytes
+    encryptedPrivateKey: builtins.bytes
+    def __init__(
+        self,
+        *,
+        publicKey: builtins.bytes = ...,
+        encryptedPrivateKey: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["encryptedPrivateKey", b"encryptedPrivateKey", "publicKey", b"publicKey"]) -> None: ...
+
+global___SetEccKeyPairRequest = SetEccKeyPairRequest
+
+@typing.final
+class SetEccKeyPairsRequest(google.protobuf.message.Message):
+    """ used for teams & roles"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TEAMKEYS_FIELD_NUMBER: builtins.int
+    @property
+    def teamKeys(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___TeamEccKeyPair]:
+        """repeated RoleEccKeyPair roleKeys = 2;"""
+
+    def __init__(
+        self,
+        *,
+        teamKeys: collections.abc.Iterable[global___TeamEccKeyPair] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["teamKeys", b"teamKeys"]) -> None: ...
+
+global___SetEccKeyPairsRequest = SetEccKeyPairsRequest
+
+@typing.final
+class SetEccKeyPairsResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TEAMKEYS_FIELD_NUMBER: builtins.int
+    @property
+    def teamKeys(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___TeamEccKeyPairResponse]:
+        """repeated RoleEccKeyPairResponse roleKeys = 2;"""
+
+    def __init__(
+        self,
+        *,
+        teamKeys: collections.abc.Iterable[global___TeamEccKeyPairResponse] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["teamKeys", b"teamKeys"]) -> None: ...
+
+global___SetEccKeyPairsResponse = SetEccKeyPairsResponse
+
+@typing.final
+class TeamEccKeyPair(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TEAMUID_FIELD_NUMBER: builtins.int
+    PUBLICKEY_FIELD_NUMBER: builtins.int
+    ENCRYPTEDPRIVATEKEY_FIELD_NUMBER: builtins.int
+    teamUid: builtins.bytes
+    publicKey: builtins.bytes
+    encryptedPrivateKey: builtins.bytes
+    def __init__(
+        self,
+        *,
+        teamUid: builtins.bytes = ...,
+        publicKey: builtins.bytes = ...,
+        encryptedPrivateKey: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["encryptedPrivateKey", b"encryptedPrivateKey", "publicKey", b"publicKey", "teamUid", b"teamUid"]) -> None: ...
+
+global___TeamEccKeyPair = TeamEccKeyPair
+
+@typing.final
+class TeamEccKeyPairResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TEAMUID_FIELD_NUMBER: builtins.int
+    STATUS_FIELD_NUMBER: builtins.int
+    teamUid: builtins.bytes
+    status: global___GenericStatus.ValueType
+    def __init__(
+        self,
+        *,
+        teamUid: builtins.bytes = ...,
+        status: global___GenericStatus.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["status", b"status", "teamUid", b"teamUid"]) -> None: ...
+
+global___TeamEccKeyPairResponse = TeamEccKeyPairResponse
+
+@typing.final
+class GetKsmPublicKeysRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CLIENTIDS_FIELD_NUMBER: builtins.int
+    CONTROLLERUIDS_FIELD_NUMBER: builtins.int
+    @property
+    def clientIds(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]: ...
+    @property
+    def controllerUids(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]: ...
+    def __init__(
+        self,
+        *,
+        clientIds: collections.abc.Iterable[builtins.bytes] | None = ...,
+        controllerUids: collections.abc.Iterable[builtins.bytes] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["clientIds", b"clientIds", "controllerUids", b"controllerUids"]) -> None: ...
+
+global___GetKsmPublicKeysRequest = GetKsmPublicKeysRequest
+
+@typing.final
+class DevicePublicKeyResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CLIENTID_FIELD_NUMBER: builtins.int
+    PUBLICKEY_FIELD_NUMBER: builtins.int
+    CONTROLLERUID_FIELD_NUMBER: builtins.int
+    clientId: builtins.bytes
+    publicKey: builtins.bytes
+    controllerUid: builtins.bytes
+    def __init__(
+        self,
+        *,
+        clientId: builtins.bytes = ...,
+        publicKey: builtins.bytes = ...,
+        controllerUid: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["clientId", b"clientId", "controllerUid", b"controllerUid", "publicKey", b"publicKey"]) -> None: ...
+
+global___DevicePublicKeyResponse = DevicePublicKeyResponse
+
+@typing.final
+class GetKsmPublicKeysResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    KEYRESPONSES_FIELD_NUMBER: builtins.int
+    @property
+    def keyResponses(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___DevicePublicKeyResponse]: ...
+    def __init__(
+        self,
+        *,
+        keyResponses: collections.abc.Iterable[global___DevicePublicKeyResponse] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["keyResponses", b"keyResponses"]) -> None: ...
+
+global___GetKsmPublicKeysResponse = GetKsmPublicKeysResponse
+
+@typing.final
+class AddAppSharesRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    APPRECORDUID_FIELD_NUMBER: builtins.int
+    SHARES_FIELD_NUMBER: builtins.int
+    appRecordUid: builtins.bytes
+    @property
+    def shares(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___AppShareAdd]: ...
+    def __init__(
+        self,
+        *,
+        appRecordUid: builtins.bytes = ...,
+        shares: collections.abc.Iterable[global___AppShareAdd] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["appRecordUid", b"appRecordUid", "shares", b"shares"]) -> None: ...
+
+global___AddAppSharesRequest = AddAppSharesRequest
+
+@typing.final
+class RemoveAppSharesRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    APPRECORDUID_FIELD_NUMBER: builtins.int
+    SHARES_FIELD_NUMBER: builtins.int
+    appRecordUid: builtins.bytes
+    @property
+    def shares(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]: ...
+    def __init__(
+        self,
+        *,
+        appRecordUid: builtins.bytes = ...,
+        shares: collections.abc.Iterable[builtins.bytes] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["appRecordUid", b"appRecordUid", "shares", b"shares"]) -> None: ...
+
+global___RemoveAppSharesRequest = RemoveAppSharesRequest
+
+@typing.final
+class AppShareAdd(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SECRETUID_FIELD_NUMBER: builtins.int
+    SHARETYPE_FIELD_NUMBER: builtins.int
+    ENCRYPTEDSECRETKEY_FIELD_NUMBER: builtins.int
+    EDITABLE_FIELD_NUMBER: builtins.int
+    secretUid: builtins.bytes
+    shareType: global___ApplicationShareType.ValueType
+    encryptedSecretKey: builtins.bytes
+    editable: builtins.bool
+    def __init__(
+        self,
+        *,
+        secretUid: builtins.bytes = ...,
+        shareType: global___ApplicationShareType.ValueType = ...,
+        encryptedSecretKey: builtins.bytes = ...,
+        editable: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["editable", b"editable", "encryptedSecretKey", b"encryptedSecretKey", "secretUid", b"secretUid", "shareType", b"shareType"]) -> None: ...
+
+global___AppShareAdd = AppShareAdd
+
+@typing.final
+class AppShare(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SECRETUID_FIELD_NUMBER: builtins.int
+    SHARETYPE_FIELD_NUMBER: builtins.int
+    EDITABLE_FIELD_NUMBER: builtins.int
+    CREATEDON_FIELD_NUMBER: builtins.int
+    DATA_FIELD_NUMBER: builtins.int
+    secretUid: builtins.bytes
+    shareType: global___ApplicationShareType.ValueType
+    editable: builtins.bool
+    createdOn: builtins.int
+    data: builtins.bytes
+    def __init__(
+        self,
+        *,
+        secretUid: builtins.bytes = ...,
+        shareType: global___ApplicationShareType.ValueType = ...,
+        editable: builtins.bool = ...,
+        createdOn: builtins.int = ...,
+        data: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["createdOn", b"createdOn", "data", b"data", "editable", b"editable", "secretUid", b"secretUid", "shareType", b"shareType"]) -> None: ...
+
+global___AppShare = AppShare
+
+@typing.final
+class AddAppClientRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    APPRECORDUID_FIELD_NUMBER: builtins.int
+    ENCRYPTEDAPPKEY_FIELD_NUMBER: builtins.int
+    CLIENTID_FIELD_NUMBER: builtins.int
+    LOCKIP_FIELD_NUMBER: builtins.int
+    FIRSTACCESSEXPIREON_FIELD_NUMBER: builtins.int
+    ACCESSEXPIREON_FIELD_NUMBER: builtins.int
+    ID_FIELD_NUMBER: builtins.int
+    APPCLIENTTYPE_FIELD_NUMBER: builtins.int
+    appRecordUid: builtins.bytes
+    encryptedAppKey: builtins.bytes
+    clientId: builtins.bytes
+    lockIp: builtins.bool
+    firstAccessExpireOn: builtins.int
+    accessExpireOn: builtins.int
+    id: builtins.str
+    """optional, defaults to obfuscated device id"""
+    appClientType: enterprise_pb2.AppClientType.ValueType
+    def __init__(
+        self,
+        *,
+        appRecordUid: builtins.bytes = ...,
+        encryptedAppKey: builtins.bytes = ...,
+        clientId: builtins.bytes = ...,
+        lockIp: builtins.bool = ...,
+        firstAccessExpireOn: builtins.int = ...,
+        accessExpireOn: builtins.int = ...,
+        id: builtins.str = ...,
+        appClientType: enterprise_pb2.AppClientType.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["accessExpireOn", b"accessExpireOn", "appClientType", b"appClientType", "appRecordUid", b"appRecordUid", "clientId", b"clientId", "encryptedAppKey", b"encryptedAppKey", "firstAccessExpireOn", b"firstAccessExpireOn", "id", b"id", "lockIp", b"lockIp"]) -> None: ...
+
+global___AddAppClientRequest = AddAppClientRequest
+
+@typing.final
+class RemoveAppClientsRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    APPRECORDUID_FIELD_NUMBER: builtins.int
+    CLIENTS_FIELD_NUMBER: builtins.int
+    appRecordUid: builtins.bytes
+    @property
+    def clients(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]: ...
+    def __init__(
+        self,
+        *,
+        appRecordUid: builtins.bytes = ...,
+        clients: collections.abc.Iterable[builtins.bytes] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["appRecordUid", b"appRecordUid", "clients", b"clients"]) -> None: ...
+
+global___RemoveAppClientsRequest = RemoveAppClientsRequest
+
+@typing.final
+class AddExternalShareRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECORDUID_FIELD_NUMBER: builtins.int
+    ENCRYPTEDRECORDKEY_FIELD_NUMBER: builtins.int
+    CLIENTID_FIELD_NUMBER: builtins.int
+    ACCESSEXPIREON_FIELD_NUMBER: builtins.int
+    ID_FIELD_NUMBER: builtins.int
+    ISSELFDESTRUCT_FIELD_NUMBER: builtins.int
+    ISEDITABLE_FIELD_NUMBER: builtins.int
+    recordUid: builtins.bytes
+    encryptedRecordKey: builtins.bytes
+    clientId: builtins.bytes
+    accessExpireOn: builtins.int
+    id: builtins.str
+    """optional, defaults to obfuscated device id"""
+    isSelfDestruct: builtins.bool
+    isEditable: builtins.bool
+    def __init__(
+        self,
+        *,
+        recordUid: builtins.bytes = ...,
+        encryptedRecordKey: builtins.bytes = ...,
+        clientId: builtins.bytes = ...,
+        accessExpireOn: builtins.int = ...,
+        id: builtins.str = ...,
+        isSelfDestruct: builtins.bool = ...,
+        isEditable: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["accessExpireOn", b"accessExpireOn", "clientId", b"clientId", "encryptedRecordKey", b"encryptedRecordKey", "id", b"id", "isEditable", b"isEditable", "isSelfDestruct", b"isSelfDestruct", "recordUid", b"recordUid"]) -> None: ...
+
+global___AddExternalShareRequest = AddExternalShareRequest
+
+@typing.final
+class AppClient(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ID_FIELD_NUMBER: builtins.int
+    CLIENTID_FIELD_NUMBER: builtins.int
+    CREATEDON_FIELD_NUMBER: builtins.int
+    FIRSTACCESS_FIELD_NUMBER: builtins.int
+    LASTACCESS_FIELD_NUMBER: builtins.int
+    PUBLICKEY_FIELD_NUMBER: builtins.int
+    LOCKIP_FIELD_NUMBER: builtins.int
+    IPADDRESS_FIELD_NUMBER: builtins.int
+    FIRSTACCESSEXPIREON_FIELD_NUMBER: builtins.int
+    ACCESSEXPIREON_FIELD_NUMBER: builtins.int
+    APPCLIENTTYPE_FIELD_NUMBER: builtins.int
+    CANEDIT_FIELD_NUMBER: builtins.int
+    id: builtins.str
+    clientId: builtins.bytes
+    createdOn: builtins.int
+    firstAccess: builtins.int
+    lastAccess: builtins.int
+    publicKey: builtins.bytes
+    lockIp: builtins.bool
+    ipAddress: builtins.str
+    firstAccessExpireOn: builtins.int
+    accessExpireOn: builtins.int
+    appClientType: enterprise_pb2.AppClientType.ValueType
+    canEdit: builtins.bool
+    def __init__(
+        self,
+        *,
+        id: builtins.str = ...,
+        clientId: builtins.bytes = ...,
+        createdOn: builtins.int = ...,
+        firstAccess: builtins.int = ...,
+        lastAccess: builtins.int = ...,
+        publicKey: builtins.bytes = ...,
+        lockIp: builtins.bool = ...,
+        ipAddress: builtins.str = ...,
+        firstAccessExpireOn: builtins.int = ...,
+        accessExpireOn: builtins.int = ...,
+        appClientType: enterprise_pb2.AppClientType.ValueType = ...,
+        canEdit: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["accessExpireOn", b"accessExpireOn", "appClientType", b"appClientType", "canEdit", b"canEdit", "clientId", b"clientId", "createdOn", b"createdOn", "firstAccess", b"firstAccess", "firstAccessExpireOn", b"firstAccessExpireOn", "id", b"id", "ipAddress", b"ipAddress", "lastAccess", b"lastAccess", "lockIp", b"lockIp", "publicKey", b"publicKey"]) -> None: ...
+
+global___AppClient = AppClient
+
+@typing.final
+class GetAppInfoRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    APPRECORDUID_FIELD_NUMBER: builtins.int
+    @property
+    def appRecordUid(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]: ...
+    def __init__(
+        self,
+        *,
+        appRecordUid: collections.abc.Iterable[builtins.bytes] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["appRecordUid", b"appRecordUid"]) -> None: ...
+
+global___GetAppInfoRequest = GetAppInfoRequest
+
+@typing.final
+class AppInfo(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    APPRECORDUID_FIELD_NUMBER: builtins.int
+    SHARES_FIELD_NUMBER: builtins.int
+    CLIENTS_FIELD_NUMBER: builtins.int
+    ISEXTERNALSHARE_FIELD_NUMBER: builtins.int
+    appRecordUid: builtins.bytes
+    isExternalShare: builtins.bool
+    @property
+    def shares(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___AppShare]: ...
+    @property
+    def clients(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___AppClient]: ...
+    def __init__(
+        self,
+        *,
+        appRecordUid: builtins.bytes = ...,
+        shares: collections.abc.Iterable[global___AppShare] | None = ...,
+        clients: collections.abc.Iterable[global___AppClient] | None = ...,
+        isExternalShare: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["appRecordUid", b"appRecordUid", "clients", b"clients", "isExternalShare", b"isExternalShare", "shares", b"shares"]) -> None: ...
+
+global___AppInfo = AppInfo
+
+@typing.final
+class GetAppInfoResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    APPINFO_FIELD_NUMBER: builtins.int
+    @property
+    def appInfo(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___AppInfo]: ...
+    def __init__(
+        self,
+        *,
+        appInfo: collections.abc.Iterable[global___AppInfo] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["appInfo", b"appInfo"]) -> None: ...
+
+global___GetAppInfoResponse = GetAppInfoResponse
+
+@typing.final
+class ApplicationSummary(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    APPRECORDUID_FIELD_NUMBER: builtins.int
+    LASTACCESS_FIELD_NUMBER: builtins.int
+    RECORDSHARES_FIELD_NUMBER: builtins.int
+    FOLDERSHARES_FIELD_NUMBER: builtins.int
+    FOLDERRECORDS_FIELD_NUMBER: builtins.int
+    CLIENTCOUNT_FIELD_NUMBER: builtins.int
+    EXPIREDCLIENTCOUNT_FIELD_NUMBER: builtins.int
+    USERNAME_FIELD_NUMBER: builtins.int
+    APPDATA_FIELD_NUMBER: builtins.int
+    appRecordUid: builtins.bytes
+    lastAccess: builtins.int
+    """last access time across all clients"""
+    recordShares: builtins.int
+    """number of records shared to the application"""
+    folderShares: builtins.int
+    """number of folders shared to the application"""
+    folderRecords: builtins.int
+    """number of records in the folders shared to the application"""
+    clientCount: builtins.int
+    """total number of clients"""
+    expiredClientCount: builtins.int
+    """number of clients that no longert can have access"""
+    username: builtins.str
+    """username of app owner"""
+    appData: builtins.bytes
+    """audit app data"""
+    def __init__(
+        self,
+        *,
+        appRecordUid: builtins.bytes = ...,
+        lastAccess: builtins.int = ...,
+        recordShares: builtins.int = ...,
+        folderShares: builtins.int = ...,
+        folderRecords: builtins.int = ...,
+        clientCount: builtins.int = ...,
+        expiredClientCount: builtins.int = ...,
+        username: builtins.str = ...,
+        appData: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["appData", b"appData", "appRecordUid", b"appRecordUid", "clientCount", b"clientCount", "expiredClientCount", b"expiredClientCount", "folderRecords", b"folderRecords", "folderShares", b"folderShares", "lastAccess", b"lastAccess", "recordShares", b"recordShares", "username", b"username"]) -> None: ...
+
+global___ApplicationSummary = ApplicationSummary
+
+@typing.final
+class GetApplicationsSummaryResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    APPLICATIONSUMMARY_FIELD_NUMBER: builtins.int
+    @property
+    def applicationSummary(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ApplicationSummary]: ...
+    def __init__(
+        self,
+        *,
+        applicationSummary: collections.abc.Iterable[global___ApplicationSummary] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["applicationSummary", b"applicationSummary"]) -> None: ...
+
+global___GetApplicationsSummaryResponse = GetApplicationsSummaryResponse
+
+@typing.final
+class GetVerificationTokenRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    USERNAME_FIELD_NUMBER: builtins.int
+    username: builtins.str
+    def __init__(
+        self,
+        *,
+        username: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["username", b"username"]) -> None: ...
+
+global___GetVerificationTokenRequest = GetVerificationTokenRequest
+
+@typing.final
+class GetVerificationTokenResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENCRYPTEDVERIFICATIONTOKEN_FIELD_NUMBER: builtins.int
+    encryptedVerificationToken: builtins.bytes
+    def __init__(
+        self,
+        *,
+        encryptedVerificationToken: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["encryptedVerificationToken", b"encryptedVerificationToken"]) -> None: ...
+
+global___GetVerificationTokenResponse = GetVerificationTokenResponse
+
+@typing.final
+class SendShareInviteRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    EMAIL_FIELD_NUMBER: builtins.int
+    email: builtins.str
+    def __init__(
+        self,
+        *,
+        email: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["email", b"email"]) -> None: ...
+
+global___SendShareInviteRequest = SendShareInviteRequest
+
+@typing.final
+class TimeLimitedAccessRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ACCOUNTUID_FIELD_NUMBER: builtins.int
+    TEAMUID_FIELD_NUMBER: builtins.int
+    RECORDUID_FIELD_NUMBER: builtins.int
+    SHAREDOBJECTUID_FIELD_NUMBER: builtins.int
+    TIMELIMITEDACCESSTYPE_FIELD_NUMBER: builtins.int
+    EXPIRATION_FIELD_NUMBER: builtins.int
+    sharedObjectUid: builtins.bytes
+    """recordUid or sharedFolderUid of which the timer will be set or deleted"""
+    timeLimitedAccessType: global___TimeLimitedAccessType.ValueType
+    expiration: builtins.int
+    """delete timer when expiration==0"""
+    @property
+    def accountUid(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]:
+        """list of users that have access to a record or shared folder"""
+
+    @property
+    def teamUid(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]:
+        """list of teams that have access to a shared folder"""
+
+    @property
+    def recordUid(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]:
+        """list of records that have access to a shared folder (aka that are shared via a shared folder)"""
+
+    def __init__(
+        self,
+        *,
+        accountUid: collections.abc.Iterable[builtins.bytes] | None = ...,
+        teamUid: collections.abc.Iterable[builtins.bytes] | None = ...,
+        recordUid: collections.abc.Iterable[builtins.bytes] | None = ...,
+        sharedObjectUid: builtins.bytes = ...,
+        timeLimitedAccessType: global___TimeLimitedAccessType.ValueType = ...,
+        expiration: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["accountUid", b"accountUid", "expiration", b"expiration", "recordUid", b"recordUid", "sharedObjectUid", b"sharedObjectUid", "teamUid", b"teamUid", "timeLimitedAccessType", b"timeLimitedAccessType"]) -> None: ...
+
+global___TimeLimitedAccessRequest = TimeLimitedAccessRequest
+
+@typing.final
+class TimeLimitedAccessStatus(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    UID_FIELD_NUMBER: builtins.int
+    MESSAGE_FIELD_NUMBER: builtins.int
+    uid: builtins.bytes
+    """accountUid or teamUid or recordUid"""
+    message: builtins.str
+    def __init__(
+        self,
+        *,
+        uid: builtins.bytes = ...,
+        message: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["message", b"message", "uid", b"uid"]) -> None: ...
+
+global___TimeLimitedAccessStatus = TimeLimitedAccessStatus
+
+@typing.final
+class TimeLimitedAccessResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    REVISION_FIELD_NUMBER: builtins.int
+    USERACCESSSTATUS_FIELD_NUMBER: builtins.int
+    TEAMACCESSSTATUS_FIELD_NUMBER: builtins.int
+    RECORDACCESSSTATUS_FIELD_NUMBER: builtins.int
+    revision: builtins.int
+    @property
+    def userAccessStatus(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___TimeLimitedAccessStatus]:
+        """uid is accountUid"""
+
+    @property
+    def teamAccessStatus(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___TimeLimitedAccessStatus]:
+        """uid is teamUid"""
+
+    @property
+    def recordAccessStatus(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___TimeLimitedAccessStatus]:
+        """uid is recordUid"""
+
+    def __init__(
+        self,
+        *,
+        revision: builtins.int = ...,
+        userAccessStatus: collections.abc.Iterable[global___TimeLimitedAccessStatus] | None = ...,
+        teamAccessStatus: collections.abc.Iterable[global___TimeLimitedAccessStatus] | None = ...,
+        recordAccessStatus: collections.abc.Iterable[global___TimeLimitedAccessStatus] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["recordAccessStatus", b"recordAccessStatus", "revision", b"revision", "teamAccessStatus", b"teamAccessStatus", "userAccessStatus", b"userAccessStatus"]) -> None: ...
+
+global___TimeLimitedAccessResponse = TimeLimitedAccessResponse
+
+@typing.final
+class RequestDownloadRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    FILENAMES_FIELD_NUMBER: builtins.int
+    @property
+    def fileNames(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    def __init__(
+        self,
+        *,
+        fileNames: collections.abc.Iterable[builtins.str] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["fileNames", b"fileNames"]) -> None: ...
+
+global___RequestDownloadRequest = RequestDownloadRequest
+
+@typing.final
+class RequestDownloadResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RESULT_FIELD_NUMBER: builtins.int
+    MESSAGE_FIELD_NUMBER: builtins.int
+    DOWNLOADS_FIELD_NUMBER: builtins.int
+    result: builtins.str
+    message: builtins.str
+    @property
+    def downloads(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Download]: ...
+    def __init__(
+        self,
+        *,
+        result: builtins.str = ...,
+        message: builtins.str = ...,
+        downloads: collections.abc.Iterable[global___Download] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["downloads", b"downloads", "message", b"message", "result", b"result"]) -> None: ...
+
+global___RequestDownloadResponse = RequestDownloadResponse
+
+@typing.final
+class Download(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    FILENAME_FIELD_NUMBER: builtins.int
+    URL_FIELD_NUMBER: builtins.int
+    SUCCESSSTATUSCODE_FIELD_NUMBER: builtins.int
+    fileName: builtins.str
+    url: builtins.str
+    successStatusCode: builtins.int
+    def __init__(
+        self,
+        *,
+        fileName: builtins.str = ...,
+        url: builtins.str = ...,
+        successStatusCode: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["fileName", b"fileName", "successStatusCode", b"successStatusCode", "url", b"url"]) -> None: ...
+
+global___Download = Download
+
+@typing.final
+class DeleteUserRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    REASON_FIELD_NUMBER: builtins.int
+    reason: builtins.str
+    """reason to delete"""
+    def __init__(
+        self,
+        *,
+        reason: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["reason", b"reason"]) -> None: ...
+
+global___DeleteUserRequest = DeleteUserRequest
+
+@typing.final
+class ChangeMasterPasswordRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    AUTHVERIFIER_FIELD_NUMBER: builtins.int
+    ENCRYPTIONPARAMS_FIELD_NUMBER: builtins.int
+    FROMSERVICEPROVIDER_FIELD_NUMBER: builtins.int
+    ITERATIONSCHANGE_FIELD_NUMBER: builtins.int
+    authVerifier: builtins.bytes
+    encryptionParams: builtins.bytes
+    fromServiceProvider: builtins.bool
+    iterationsChange: builtins.bool
+    def __init__(
+        self,
+        *,
+        authVerifier: builtins.bytes = ...,
+        encryptionParams: builtins.bytes = ...,
+        fromServiceProvider: builtins.bool = ...,
+        iterationsChange: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["authVerifier", b"authVerifier", "encryptionParams", b"encryptionParams", "fromServiceProvider", b"fromServiceProvider", "iterationsChange", b"iterationsChange"]) -> None: ...
+
+global___ChangeMasterPasswordRequest = ChangeMasterPasswordRequest
+
+@typing.final
+class ChangeMasterPasswordResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ENCRYPTEDSESSIONTOKEN_FIELD_NUMBER: builtins.int
+    encryptedSessionToken: builtins.bytes
+    def __init__(
+        self,
+        *,
+        encryptedSessionToken: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["encryptedSessionToken", b"encryptedSessionToken"]) -> None: ...
+
+global___ChangeMasterPasswordResponse = ChangeMasterPasswordResponse
+
+@typing.final
+class AccountRecoverySetupRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RECOVERYENCRYPTEDDATAKEY_FIELD_NUMBER: builtins.int
+    RECOVERYAUTHHASH_FIELD_NUMBER: builtins.int
+    recoveryEncryptedDataKey: builtins.bytes
+    recoveryAuthHash: builtins.bytes
+    def __init__(
+        self,
+        *,
+        recoveryEncryptedDataKey: builtins.bytes = ...,
+        recoveryAuthHash: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["recoveryAuthHash", b"recoveryAuthHash", "recoveryEncryptedDataKey", b"recoveryEncryptedDataKey"]) -> None: ...
+
+global___AccountRecoverySetupRequest = AccountRecoverySetupRequest
+
+@typing.final
+class AccountRecoveryVerifyCodeResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    BACKUPKEYTYPE_FIELD_NUMBER: builtins.int
+    BACKUPKEYDATE_FIELD_NUMBER: builtins.int
+    SECURITYQUESTION_FIELD_NUMBER: builtins.int
+    SALT_FIELD_NUMBER: builtins.int
+    ITERATIONS_FIELD_NUMBER: builtins.int
+    backupKeyType: global___BackupKeyType.ValueType
+    backupKeyDate: builtins.int
+    securityQuestion: builtins.str
+    salt: builtins.bytes
+    iterations: builtins.int
+    def __init__(
+        self,
+        *,
+        backupKeyType: global___BackupKeyType.ValueType = ...,
+        backupKeyDate: builtins.int = ...,
+        securityQuestion: builtins.str = ...,
+        salt: builtins.bytes = ...,
+        iterations: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["backupKeyDate", b"backupKeyDate", "backupKeyType", b"backupKeyType", "iterations", b"iterations", "salt", b"salt", "securityQuestion", b"securityQuestion"]) -> None: ...
+
+global___AccountRecoveryVerifyCodeResponse = AccountRecoveryVerifyCodeResponse
+
+@typing.final
+class EmergencyAccessLoginRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    OWNER_FIELD_NUMBER: builtins.int
+    owner: builtins.str
+    def __init__(
+        self,
+        *,
+        owner: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["owner", b"owner"]) -> None: ...
+
+global___EmergencyAccessLoginRequest = EmergencyAccessLoginRequest
+
+@typing.final
+class EmergencyAccessLoginResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SESSIONTOKEN_FIELD_NUMBER: builtins.int
+    DATAKEY_FIELD_NUMBER: builtins.int
+    RSAPRIVATEKEY_FIELD_NUMBER: builtins.int
+    ECCPRIVATEKEY_FIELD_NUMBER: builtins.int
+    sessionToken: builtins.bytes
+    @property
+    def dataKey(self) -> enterprise_pb2.TypedKey: ...
+    @property
+    def rsaPrivateKey(self) -> enterprise_pb2.TypedKey:
+        """ may be empty"""
+
+    @property
+    def eccPrivateKey(self) -> enterprise_pb2.TypedKey:
+        """ may be empty"""
+
+    def __init__(
+        self,
+        *,
+        sessionToken: builtins.bytes = ...,
+        dataKey: enterprise_pb2.TypedKey | None = ...,
+        rsaPrivateKey: enterprise_pb2.TypedKey | None = ...,
+        eccPrivateKey: enterprise_pb2.TypedKey | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["dataKey", b"dataKey", "eccPrivateKey", b"eccPrivateKey", "rsaPrivateKey", b"rsaPrivateKey"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["dataKey", b"dataKey", "eccPrivateKey", b"eccPrivateKey", "rsaPrivateKey", b"rsaPrivateKey", "sessionToken", b"sessionToken"]) -> None: ...
+
+global___EmergencyAccessLoginResponse = EmergencyAccessLoginResponse
+
+@typing.final
+class UserTeamKey(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TEAMUID_FIELD_NUMBER: builtins.int
+    USERNAME_FIELD_NUMBER: builtins.int
+    ENTERPRISEUSERID_FIELD_NUMBER: builtins.int
+    ENCRYPTEDTEAMKEYRSA_FIELD_NUMBER: builtins.int
+    ENCRYPTEDTEAMKEYEC_FIELD_NUMBER: builtins.int
+    STATUS_FIELD_NUMBER: builtins.int
+    teamUid: builtins.bytes
+    username: builtins.str
+    """this is if the client has a username not an enterpriseUserId"""
+    enterpriseUserId: builtins.int
+    """note: this is because new sync down is sending enterpriseUserIds not usernames for queued team members"""
+    encryptedTeamKeyRSA: builtins.bytes
+    """team key shared to the user via user's RSA public key"""
+    encryptedTeamKeyEC: builtins.bytes
+    """team key shared to the user via user's EC public key"""
+    status: global___GenericStatus.ValueType
+    """used in the response to state success or failure, blank means success"""
+    def __init__(
+        self,
+        *,
+        teamUid: builtins.bytes = ...,
+        username: builtins.str = ...,
+        enterpriseUserId: builtins.int = ...,
+        encryptedTeamKeyRSA: builtins.bytes = ...,
+        encryptedTeamKeyEC: builtins.bytes = ...,
+        status: global___GenericStatus.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["encryptedTeamKeyEC", b"encryptedTeamKeyEC", "encryptedTeamKeyRSA", b"encryptedTeamKeyRSA", "enterpriseUserId", b"enterpriseUserId", "status", b"status", "teamUid", b"teamUid", "username", b"username"]) -> None: ...
+
+global___UserTeamKey = UserTeamKey
+
+@typing.final
+class GenericRequestResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    REQUEST_FIELD_NUMBER: builtins.int
+    @property
+    def request(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]:
+        """this is just a repeated list of whatever request message the api called for as a bytestring"""
+
+    def __init__(
+        self,
+        *,
+        request: collections.abc.Iterable[builtins.bytes] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["request", b"request"]) -> None: ...
+
+global___GenericRequestResponse = GenericRequestResponse
+
+@typing.final
+class PasskeyRegistrationRequest(google.protobuf.message.Message):
+    """Used to register a biometric backed passkey for user login"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    AUTHENTICATORATTACHMENT_FIELD_NUMBER: builtins.int
+    authenticatorAttachment: global___AuthenticatorAttachment.ValueType
+    def __init__(
+        self,
+        *,
+        authenticatorAttachment: global___AuthenticatorAttachment.ValueType = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["authenticatorAttachment", b"authenticatorAttachment"]) -> None: ...
+
+global___PasskeyRegistrationRequest = PasskeyRegistrationRequest
+
+@typing.final
+class PasskeyRegistrationResponse(google.protobuf.message.Message):
+    """Reply from the KA RelyingParty containing the creation options for the client side authenticator"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CHALLENGETOKEN_FIELD_NUMBER: builtins.int
+    PKCREATIONOPTIONS_FIELD_NUMBER: builtins.int
+    challengeToken: builtins.bytes
+    pkCreationOptions: builtins.str
+    def __init__(
+        self,
+        *,
+        challengeToken: builtins.bytes = ...,
+        pkCreationOptions: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["challengeToken", b"challengeToken", "pkCreationOptions", b"pkCreationOptions"]) -> None: ...
+
+global___PasskeyRegistrationResponse = PasskeyRegistrationResponse
+
+@typing.final
+class PasskeyRegistrationFinalization(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CHALLENGETOKEN_FIELD_NUMBER: builtins.int
+    AUTHENTICATORRESPONSE_FIELD_NUMBER: builtins.int
+    FRIENDLYNAME_FIELD_NUMBER: builtins.int
+    challengeToken: builtins.bytes
+    authenticatorResponse: builtins.str
+    friendlyName: builtins.str
+    def __init__(
+        self,
+        *,
+        challengeToken: builtins.bytes = ...,
+        authenticatorResponse: builtins.str = ...,
+        friendlyName: builtins.str | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["_friendlyName", b"_friendlyName", "friendlyName", b"friendlyName"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["_friendlyName", b"_friendlyName", "authenticatorResponse", b"authenticatorResponse", "challengeToken", b"challengeToken", "friendlyName", b"friendlyName"]) -> None: ...
+    def WhichOneof(self, oneof_group: typing.Literal["_friendlyName", b"_friendlyName"]) -> typing.Literal["friendlyName"] | None: ...
+
+global___PasskeyRegistrationFinalization = PasskeyRegistrationFinalization
+
+@typing.final
+class PasskeyAuthenticationRequest(google.protobuf.message.Message):
+    """This instructs the KA Relying Party to initiate the authentication ceremony"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    AUTHENTICATORATTACHMENT_FIELD_NUMBER: builtins.int
+    PASSKEYPURPOSE_FIELD_NUMBER: builtins.int
+    CLIENTVERSION_FIELD_NUMBER: builtins.int
+    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: builtins.int
+    USERNAME_FIELD_NUMBER: builtins.int
+    ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: builtins.int
+    authenticatorAttachment: global___AuthenticatorAttachment.ValueType
+    passkeyPurpose: global___PasskeyPurpose.ValueType
+    clientVersion: builtins.str
+    encryptedDeviceToken: builtins.bytes
+    username: builtins.str
+    encryptedLoginToken: builtins.bytes
+    def __init__(
+        self,
+        *,
+        authenticatorAttachment: global___AuthenticatorAttachment.ValueType = ...,
+        passkeyPurpose: global___PasskeyPurpose.ValueType = ...,
+        clientVersion: builtins.str = ...,
+        encryptedDeviceToken: builtins.bytes = ...,
+        username: builtins.str | None = ...,
+        encryptedLoginToken: builtins.bytes | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["_encryptedLoginToken", b"_encryptedLoginToken", "_username", b"_username", "encryptedLoginToken", b"encryptedLoginToken", "username", b"username"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["_encryptedLoginToken", b"_encryptedLoginToken", "_username", b"_username", "authenticatorAttachment", b"authenticatorAttachment", "clientVersion", b"clientVersion", "encryptedDeviceToken", b"encryptedDeviceToken", "encryptedLoginToken", b"encryptedLoginToken", "passkeyPurpose", b"passkeyPurpose", "username", b"username"]) -> None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_encryptedLoginToken", b"_encryptedLoginToken"]) -> typing.Literal["encryptedLoginToken"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_username", b"_username"]) -> typing.Literal["username"] | None: ...
+
+global___PasskeyAuthenticationRequest = PasskeyAuthenticationRequest
+
+@typing.final
+class PasskeyAuthenticationResponse(google.protobuf.message.Message):
+    """The response contains the Request options needed by the client for passkey authentication"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    PKREQUESTOPTIONS_FIELD_NUMBER: builtins.int
+    CHALLENGETOKEN_FIELD_NUMBER: builtins.int
+    ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: builtins.int
+    pkRequestOptions: builtins.str
+    challengeToken: builtins.bytes
+    encryptedLoginToken: builtins.bytes
+    def __init__(
+        self,
+        *,
+        pkRequestOptions: builtins.str = ...,
+        challengeToken: builtins.bytes = ...,
+        encryptedLoginToken: builtins.bytes | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["_encryptedLoginToken", b"_encryptedLoginToken", "encryptedLoginToken", b"encryptedLoginToken"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["_encryptedLoginToken", b"_encryptedLoginToken", "challengeToken", b"challengeToken", "encryptedLoginToken", b"encryptedLoginToken", "pkRequestOptions", b"pkRequestOptions"]) -> None: ...
+    def WhichOneof(self, oneof_group: typing.Literal["_encryptedLoginToken", b"_encryptedLoginToken"]) -> typing.Literal["encryptedLoginToken"] | None: ...
+
+global___PasskeyAuthenticationResponse = PasskeyAuthenticationResponse
+
+@typing.final
+class PasskeyValidationRequest(google.protobuf.message.Message):
+    """When the client successfully resolves the passkey authentication request it returns 
+    the AuthenticatorAssertionResponse to the servers RelyingParty for validation
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CHALLENGETOKEN_FIELD_NUMBER: builtins.int
+    ASSERTIONRESPONSE_FIELD_NUMBER: builtins.int
+    PASSKEYPURPOSE_FIELD_NUMBER: builtins.int
+    ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: builtins.int
+    challengeToken: builtins.bytes
+    assertionResponse: builtins.bytes
+    passkeyPurpose: global___PasskeyPurpose.ValueType
+    encryptedLoginToken: builtins.bytes
+    def __init__(
+        self,
+        *,
+        challengeToken: builtins.bytes = ...,
+        assertionResponse: builtins.bytes = ...,
+        passkeyPurpose: global___PasskeyPurpose.ValueType = ...,
+        encryptedLoginToken: builtins.bytes | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["_encryptedLoginToken", b"_encryptedLoginToken", "encryptedLoginToken", b"encryptedLoginToken"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["_encryptedLoginToken", b"_encryptedLoginToken", "assertionResponse", b"assertionResponse", "challengeToken", b"challengeToken", "encryptedLoginToken", b"encryptedLoginToken", "passkeyPurpose", b"passkeyPurpose"]) -> None: ...
+    def WhichOneof(self, oneof_group: typing.Literal["_encryptedLoginToken", b"_encryptedLoginToken"]) -> typing.Literal["encryptedLoginToken"] | None: ...
+
+global___PasskeyValidationRequest = PasskeyValidationRequest
+
+@typing.final
+class PasskeyValidationResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ISVALID_FIELD_NUMBER: builtins.int
+    ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: builtins.int
+    isValid: builtins.bool
+    encryptedLoginToken: builtins.bytes
+    def __init__(
+        self,
+        *,
+        isValid: builtins.bool = ...,
+        encryptedLoginToken: builtins.bytes = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["encryptedLoginToken", b"encryptedLoginToken", "isValid", b"isValid"]) -> None: ...
+
+global___PasskeyValidationResponse = PasskeyValidationResponse
+
+@typing.final
+class UpdatePasskeyRequest(google.protobuf.message.Message):
+    """Utilized by clients when disabling a passkey or updating the user friendly name"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    USERID_FIELD_NUMBER: builtins.int
+    CREDENTIALID_FIELD_NUMBER: builtins.int
+    FRIENDLYNAME_FIELD_NUMBER: builtins.int
+    userId: builtins.int
+    credentialId: builtins.bytes
+    friendlyName: builtins.str
+    def __init__(
+        self,
+        *,
+        userId: builtins.int = ...,
+        credentialId: builtins.bytes = ...,
+        friendlyName: builtins.str | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["_friendlyName", b"_friendlyName", "friendlyName", b"friendlyName"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["_friendlyName", b"_friendlyName", "credentialId", b"credentialId", "friendlyName", b"friendlyName", "userId", b"userId"]) -> None: ...
+    def WhichOneof(self, oneof_group: typing.Literal["_friendlyName", b"_friendlyName"]) -> typing.Literal["friendlyName"] | None: ...
+
+global___UpdatePasskeyRequest = UpdatePasskeyRequest
+
+@typing.final
+class PasskeyListRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INCLUDEDISABLED_FIELD_NUMBER: builtins.int
+    includeDisabled: builtins.bool
+    def __init__(
+        self,
+        *,
+        includeDisabled: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["includeDisabled", b"includeDisabled"]) -> None: ...
+
+global___PasskeyListRequest = PasskeyListRequest
+
+@typing.final
+class PasskeyInfo(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    USERID_FIELD_NUMBER: builtins.int
+    CREDENTIALID_FIELD_NUMBER: builtins.int
+    FRIENDLYNAME_FIELD_NUMBER: builtins.int
+    AAGUID_FIELD_NUMBER: builtins.int
+    CREATEDATMILLIS_FIELD_NUMBER: builtins.int
+    LASTUSEDMILLIS_FIELD_NUMBER: builtins.int
+    DISABLEDATMILLIS_FIELD_NUMBER: builtins.int
+    userId: builtins.int
+    credentialId: builtins.bytes
+    friendlyName: builtins.str
+    AAGUID: builtins.str
+    createdAtMillis: builtins.int
+    lastUsedMillis: builtins.int
+    disabledAtMillis: builtins.int
+    def __init__(
+        self,
+        *,
+        userId: builtins.int = ...,
+        credentialId: builtins.bytes = ...,
+        friendlyName: builtins.str = ...,
+        AAGUID: builtins.str = ...,
+        createdAtMillis: builtins.int = ...,
+        lastUsedMillis: builtins.int = ...,
+        disabledAtMillis: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["AAGUID", b"AAGUID", "createdAtMillis", b"createdAtMillis", "credentialId", b"credentialId", "disabledAtMillis", b"disabledAtMillis", "friendlyName", b"friendlyName", "lastUsedMillis", b"lastUsedMillis", "userId", b"userId"]) -> None: ...
+
+global___PasskeyInfo = PasskeyInfo
+
+@typing.final
+class PasskeyListResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    PASSKEYINFO_FIELD_NUMBER: builtins.int
+    @property
+    def passkeyInfo(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___PasskeyInfo]: ...
+    def __init__(
+        self,
+        *,
+        passkeyInfo: collections.abc.Iterable[global___PasskeyInfo] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["passkeyInfo", b"passkeyInfo"]) -> None: ...
+
+global___PasskeyListResponse = PasskeyListResponse
+
+@typing.final
+class TranslationInfo(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TRANSLATIONKEY_FIELD_NUMBER: builtins.int
+    TRANSLATIONVALUE_FIELD_NUMBER: builtins.int
+    translationKey: builtins.str
+    translationValue: builtins.str
+    def __init__(
+        self,
+        *,
+        translationKey: builtins.str = ...,
+        translationValue: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["translationKey", b"translationKey", "translationValue", b"translationValue"]) -> None: ...
+
+global___TranslationInfo = TranslationInfo
+
+@typing.final
+class TranslationRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TRANSLATIONKEY_FIELD_NUMBER: builtins.int
+    @property
+    def translationKey(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    def __init__(
+        self,
+        *,
+        translationKey: collections.abc.Iterable[builtins.str] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["translationKey", b"translationKey"]) -> None: ...
+
+global___TranslationRequest = TranslationRequest
+
+@typing.final
+class TranslationResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TRANSLATIONINFO_FIELD_NUMBER: builtins.int
+    @property
+    def translationInfo(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___TranslationInfo]: ...
+    def __init__(
+        self,
+        *,
+        translationInfo: collections.abc.Iterable[global___TranslationInfo] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["translationInfo", b"translationInfo"]) -> None: ...
+
+global___TranslationResponse = TranslationResponse

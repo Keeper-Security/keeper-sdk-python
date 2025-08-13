@@ -12,9 +12,9 @@ def print_client_device_info(client_devices: list[ksm.ClientDevice]) -> None:
                                     f'  Device Name: {client_device.name}\n' \
                                     f'  Short ID: {client_device.short_id}\n' \
                                     f'  Created On: {client_device.created_on}\n' \
-                                    f'  Expires On: {client_device.expires_on}\n' \
-                                    f'  First Access: {client_device.first_access}\n' \
-                                    f'  Last Access: {client_device.last_access}\n' \
+                                    f'  Expires On: {client_device.expires_on or "Never"}\n' \
+                                    f'  First Access: {client_device.first_access or "Never"}\n' \
+                                    f'  Last Access: {client_device.last_access or "Never"}\n' \
                                     f'  IP Lock: {client_device.ip_lock}\n' \
                                     f'  IP Address: {client_device.ip_address or "--"}'
         logger.info(client_devices_str)

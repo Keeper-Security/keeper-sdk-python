@@ -5,7 +5,6 @@ import hashlib
 import hmac
 import re
 from datetime import timedelta
-from token import OP
 from typing import Iterator, List, Optional
 from urllib import parse
 from urllib.parse import urlunparse
