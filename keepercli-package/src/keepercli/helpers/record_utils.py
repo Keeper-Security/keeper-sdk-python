@@ -101,8 +101,7 @@ def process_external_share(context: KeeperParams, expiration_period: timedelta,
         request.id = name
     
     request.isSelfDestruct = is_self_destruct
-    # TODO: uncomment when proto is updated
-    # request.isEditable = is_editable
+    request.isEditable = is_editable
 
     vault.keeper_auth.execute_auth_rest(
         rest_endpoint=EXTERNAL_SHARE_ADD_URL, 
