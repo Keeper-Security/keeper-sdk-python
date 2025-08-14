@@ -9,7 +9,7 @@
 # Copyright 2025 Keeper Security Inc.
 # Contact: commander@keepersecurity.com
 #
-# Example showing how to create a new Secrets Manager application
+# Example showing how to list and filter records in the vault
 # using the Keeper SDK architecture.
 #
 
@@ -17,8 +17,9 @@ import argparse
 import json
 import os
 import sys
+from typing import Optional
 
-from keepersdk.vault import ksm_management, vault_online
+from keepercli.commands.vault_record import RecordListCommand
 from keepercli.params import KeeperParams
 from keepercli.login import LoginFlow
 
@@ -48,43 +49,44 @@ def login_to_keeper_with_config(filename: str) -> KeeperParams:
         raise Exception('Failed to authenticate with Keeper')
     return context
 
-def create_secrets_manager_app(
-    vault: vault_online.VaultOnline,
-    app_name: str,
-    force_add: bool = False
+def list_records(
+    context: KeeperParams,
+    show_details: bool = False,
+    criteria: Optional[str] = None,
+    record_type: Optional[str] = None
 ):
     """
-    Create a new Secrets Manager application in the Keeper vault.
+    List and display records from the Keeper vault with optional filtering.
     
-    This function creates a new Secrets Manager application that can be used
-    to programmatically access vault records through the Secrets Manager API.
-    The application will be configured with appropriate permissions and credentials.
+    This function uses the Keeper CLI `RecordListCommand` to retrieve and display
+    records based on the provided criteria and filters.
     """
     try:
-        result = ksm_management.create_secrets_manager_app(
-            vault=vault, 
-            name=app_name, 
-            force_add=force_add
-        )
-        
-        if result:
-            print(f'Successfully created Secrets Manager application: {app_name}, UID: {result}')
-            return result
-        else:
-            print(f'Failed to create Secrets Manager application: {app_name}')
-            return None
+        list_command = RecordListCommand()
+
+        kwargs = {
+            'verbose': show_details,
+            'format': 'table',
+            'search_text': criteria,
+        }
+        if record_type:
+            kwargs['record_type'] = record_type
+
+        list_command.execute(context=context, **kwargs)
+        return True
         
     except Exception as e:
-        print(f'Error creating Secrets Manager application {app_name}: {str(e)}')
-        return None
+        print(f'Error listing records: {str(e)}')
+        return False
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description='Create a Secrets Manager application using Keeper SDK',
+        description='List all records in the vault using Keeper SDK',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
 Example:
-  python create_secrets_manager_app.py
+  python list_records.py
         '''
     )
     
@@ -100,15 +102,18 @@ Example:
         print(f'Config file {args.config} not found')
         sys.exit(1)
 
-    app_name = "Secrets Manager App 1"
-    force = True
+    show_details = True
+    criteria = None
+    record_type = None
 
     try:
-        vault = login_to_keeper_with_config(args.config).vault
-        result = create_secrets_manager_app(vault, app_name, force)
-        
-        if result is None:
-            sys.exit(1)
+        context = login_to_keeper_with_config(args.config)
+        list_records(
+            context, 
+            show_details=show_details,
+            criteria=criteria,
+            record_type=record_type,
+        )
         
     except Exception as e:
         print(f'Error: {str(e)}')

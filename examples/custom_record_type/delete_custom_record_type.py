@@ -6,7 +6,7 @@
 #              |_|
 #
 # Keeper SDK for Python
-# Copyright 2023 Keeper Security Inc.
+# Copyright 2025 Keeper Security Inc.
 # Contact: commander@keepersecurity.com
 #
 # Example showing how to delete a custom record type
@@ -16,54 +16,47 @@
 import argparse
 import json
 import os
-import sqlite3
 import sys
 
-from keepersdk.authentication import login_auth, configuration, endpoint
-from keepersdk.vault import sqlite_storage, vault_online, record_type_management
+from keepersdk.vault import record_type_management, vault_online
+from keepercli.params import KeeperParams
+from keepercli.login import LoginFlow
 
-
-def login_to_keeper_with_config(filename):
+def login_to_keeper_with_config(filename: str) -> KeeperParams:
+    """
+    Login to Keeper with a configuration file.
+    
+    This function logs in to Keeper using the provided configuration file.
+    It reads the configuration file, extracts the username,
+    and returns a Authenticated KeeperParams Context object.
+    """
     if not os.path.exists(filename):
         raise FileNotFoundError(f'Config file {filename} not found')
-    
     with open(filename, 'r') as f:
         config_data = json.load(f)
-    
     username = config_data.get('user', config_data.get('username'))
     password = config_data.get('password', '')
-    
     if not username:
         raise ValueError('Username not found in config file')
-    
-    config = configuration.JsonConfigurationStorage()
-    keeper_endpoint = endpoint.KeeperEndpoint(config)
-    login_auth_instance = login_auth.LoginAuth(keeper_endpoint)
-    
-    login_auth_instance.login(username=username)
-    
+    context = KeeperParams(config_filename=filename, config=config_data)
+    if username:
+        context.username = username
     if password:
-        login_auth_instance.login_step.verify_password(password)
-    
-    if isinstance(login_auth_instance.login_step, login_auth.LoginStepConnected):
-        keeper_auth = login_auth_instance.login_step.take_keeper_auth()
-        
-        db_path = config_data.get('db_path', 'keeper.sqlite')
-        conn = sqlite3.Connection(f'file:{db_path}', uri=True)
-        vault_storage = sqlite_storage.SqliteVaultStorage(
-            lambda: conn, 
-            vault_owner=bytes(keeper_auth.auth_context.username, 'utf-8')
-        )
-        
-        vault = vault_online.VaultOnline(keeper_auth, vault_storage)
-        vault.sync_down(force=True)
-        
-        return vault
-    else:
+        context.password = password
+    logged_in = LoginFlow.login(context, username=username, password=password or None, resume_session=bool(username))
+    if not logged_in:
         raise Exception('Failed to authenticate with Keeper')
+    return context
 
-
-def delete_custom_record_type(vault, record_type_id, force=False):
+def delete_custom_record_type(
+    vault: vault_online.VaultOnline,
+    record_type_id: int,
+    force: bool = False
+):
+    """
+    Delete a custom record type from the Keeper vault. 
+    This function removes a custom record type by its ID.
+    """
     try:
         if not force:
             response = input(f'Are you sure you want to delete custom record type ID {record_type_id}? (y/N): ')
@@ -75,7 +68,6 @@ def delete_custom_record_type(vault, record_type_id, force=False):
         
         if result:
             print(f'Successfully deleted custom record type ID: {record_type_id}')
-            print(f'Result: {result}')
             return True
         else:
             print(f'Failed to delete custom record type ID: {record_type_id}')
@@ -108,14 +100,13 @@ Example:
         print(f'Config file {args.config} not found')
         sys.exit(1)
 
-    record_type_id = 24310
+    record_type_id = 24375
     force = True
 
     print(f"Note: This example will attempt to delete record type ID {record_type_id}")
-    print("Make sure this ID exists in your vault or update the hard-coded value")
 
     try:
-        vault = login_to_keeper_with_config(args.config)
+        vault = login_to_keeper_with_config(args.config).vault
         success = delete_custom_record_type(vault, record_type_id, force)
         
         if not success:

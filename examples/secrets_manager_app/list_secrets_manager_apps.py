@@ -6,7 +6,7 @@
 #              |_|
 #
 # Keeper SDK for Python
-# Copyright 2023 Keeper Security Inc.
+# Copyright 2025 Keeper Security Inc.
 # Contact: commander@keepersecurity.com
 #
 # Example showing how to list Secrets Manager applications
@@ -15,90 +15,83 @@
 
 import argparse
 import json
+import logging
 import os
-import sqlite3
 import sys
 
-from keepersdk.authentication import login_auth, configuration, endpoint
-from keepersdk.vault import sqlite_storage, vault_online, ksm_management
+from keepersdk.vault import ksm_management, vault_online
+from keepercli.params import KeeperParams
+from keepercli.login import LoginFlow
 
+logging.basicConfig(level=logging.INFO, format='%(message)s')
+logger = logging.getLogger(__name__)
 
-def login_to_keeper_with_config(filename):
+def login_to_keeper_with_config(filename: str) -> KeeperParams:
+    """
+    Login to Keeper with a configuration file.
+    
+    This function logs in to Keeper using the provided configuration file.
+    It reads the configuration file, extracts the username,
+    and returns a Authenticated KeeperParams Context object.
+    """
     if not os.path.exists(filename):
         raise FileNotFoundError(f'Config file {filename} not found')
-    
     with open(filename, 'r') as f:
         config_data = json.load(f)
-    
     username = config_data.get('user', config_data.get('username'))
     password = config_data.get('password', '')
-    
     if not username:
         raise ValueError('Username not found in config file')
-    
-    config = configuration.JsonConfigurationStorage()
-    keeper_endpoint = endpoint.KeeperEndpoint(config)
-    login_auth_instance = login_auth.LoginAuth(keeper_endpoint)
-    
-    login_auth_instance.login(username=username)
-    
+    context = KeeperParams(config_filename=filename, config=config_data)
+    if username:
+        context.username = username
     if password:
-        login_auth_instance.login_step.verify_password(password)
-    
-    if isinstance(login_auth_instance.login_step, login_auth.LoginStepConnected):
-        keeper_auth = login_auth_instance.login_step.take_keeper_auth()
-        
-        db_path = config_data.get('db_path', 'keeper.sqlite')
-        conn = sqlite3.Connection(f'file:{db_path}', uri=True)
-        vault_storage = sqlite_storage.SqliteVaultStorage(
-            lambda: conn, 
-            vault_owner=bytes(keeper_auth.auth_context.username, 'utf-8')
-        )
-        
-        vault = vault_online.VaultOnline(keeper_auth, vault_storage)
-        vault.sync_down(force=True)
-        
-        return vault
-    else:
+        context.password = password
+    logged_in = LoginFlow.login(context, username=username, password=password or None, resume_session=bool(username))
+    if not logged_in:
         raise Exception('Failed to authenticate with Keeper')
+    return context
 
+def print_apps_table(apps):
+    """Print applications in a table-like format with key attributes."""
+    if not apps:
+        logger.info('No Secrets Manager applications found.')
+        return
+    
+    logger.info(f"\n{'App name':<20} {'App UID':<25} {'Records':<8} {'Folders':<8} {'Devices':<8} {'Last Access'}")
+    logger.info("-" * 95)
+    
+    for app in apps:
+        app_name = str(app.name)[:19] if hasattr(app, 'name') else 'Unknown'
+        app_uid = str(app.uid)[:24] if hasattr(app, 'uid') else 'Unknown'
+        records = str(app.records) if hasattr(app, 'records') else '0'
+        folders = str(app.folders) if hasattr(app, 'folders') else '0'
+        devices = str(app.count) if hasattr(app, 'count') else '0'
+        last_access = str(app.last_access) if hasattr(app, 'last_access') else 'Never'
+        
+        logger.info(f"{app_name:<20} {app_uid:<25} {records:<8} {folders:<8} {devices:<8} {last_access}")
 
-def list_secrets_manager_apps(vault, show_details=False):
+def list_secrets_manager_apps(vault: vault_online.VaultOnline):
+    """
+    List all Secrets Manager applications in the Keeper vault.
+    
+    This function retrieves and displays all Secrets Manager applications
+    associated with the current vault.
+    """
     try:
-        apps = ksm_management.list_secrets_manager_apps(vault=vault)
+        apps = ksm_management.list_secrets_manager_apps(vault)
         
         if not apps:
-            print('No Secrets Manager applications found.')
-            return
+            logger.info('No Secrets Manager applications found.')
+            return None
         
-        print(f'Found {len(apps)} Secrets Manager application(s):')
-        print('-' * 80)
-        
-        for app in apps:
-            if isinstance(app, dict):
-                app_name = app.get('name', 'Unknown')
-                app_id = app.get('id', app.get('app_uid', 'Unknown'))
-                created_on = app.get('created_on', 'Unknown')
-                
-                print(f'Name: {app_name}')
-                print(f'ID: {app_id}')
-                if show_details:
-                    print(f'Created On: {created_on}')
-                    # Print other available details
-                    for key, value in app.items():
-                        if key not in ['name', 'id', 'app_uid', 'created_on']:
-                            print(f'{key.replace("_", " ").title()}: {value}')
-            else:
-                print(f'Application: {app}')
-            
-            print('-' * 80)
+        print_apps_table(apps)
         
         return apps
         
     except Exception as e:
-        print(f'Error listing Secrets Manager applications: {str(e)}')
+        logger.error(f'Error listing Secrets Manager applications: {str(e)}')
         return None
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -119,15 +112,13 @@ Example:
     args = parser.parse_args()
 
     if not os.path.exists(args.config):
-        print(f'Config file {args.config} not found')
+        logger.error(f'Config file {args.config} not found')
         sys.exit(1)
 
-    show_details = True
-
     try:
-        vault = login_to_keeper_with_config(args.config)
-        list_secrets_manager_apps(vault, show_details)
+        vault = login_to_keeper_with_config(args.config).vault
+        list_secrets_manager_apps(vault)
         
     except Exception as e:
-        print(f'Error: {str(e)}')
+        logger.error(f'Error: {str(e)}')
         sys.exit(1)

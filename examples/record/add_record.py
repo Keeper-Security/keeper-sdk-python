@@ -9,7 +9,7 @@
 # Copyright 2025 Keeper Security Inc.
 # Contact: commander@keepersecurity.com
 #
-# Example showing how to create a new Secrets Manager application
+# Example showing how to add a new record to the vault
 # using the Keeper SDK architecture.
 #
 
@@ -17,8 +17,9 @@ import argparse
 import json
 import os
 import sys
+from typing import Optional
 
-from keepersdk.vault import ksm_management, vault_online
+from keepersdk.vault import vault_record, record_management, vault_online
 from keepercli.params import KeeperParams
 from keepercli.login import LoginFlow
 
@@ -48,43 +49,57 @@ def login_to_keeper_with_config(filename: str) -> KeeperParams:
         raise Exception('Failed to authenticate with Keeper')
     return context
 
-def create_secrets_manager_app(
-    vault: vault_online.VaultOnline,
-    app_name: str,
-    force_add: bool = False
+def add_record(
+    vault: vault_online.VaultOnline, 
+    title: str, 
+    login: str, 
+    password: str, 
+    url: Optional[str] = None, 
+    notes: Optional[str] = None, 
+    folder_uid: Optional[str] = None
 ):
     """
-    Create a new Secrets Manager application in the Keeper vault.
+    Add a new password record to the Keeper vault.
     
-    This function creates a new Secrets Manager application that can be used
-    to programmatically access vault records through the Secrets Manager API.
-    The application will be configured with appropriate permissions and credentials.
+    This function creates a new password record with the specified credentials
+    and adds it to the vault. The record can optionally be placed in a specific
+    folder and include additional metadata like URL and notes.
     """
     try:
-        result = ksm_management.create_secrets_manager_app(
-            vault=vault, 
-            name=app_name, 
-            force_add=force_add
-        )
+        record = vault_record.PasswordRecord()
+        record.title = title
+        record.login = login
+        record.password = password
         
-        if result:
-            print(f'Successfully created Secrets Manager application: {app_name}, UID: {result}')
-            return result
-        else:
-            print(f'Failed to create Secrets Manager application: {app_name}')
-            return None
+        if url:
+            record.link = url
+        if notes:
+            record.notes = notes
+        
+        result = record_management.add_record_to_folder(vault, record, folder_uid)
+        
+        print(f'Successfully added record: {title}')
+        print(f'Record UID: {result}')
+        print(f'Login: {login}')
+        print(f'URL: {url or "N/A"}')
+        print(f'Notes: {notes or "N/A"}')
+        if folder_uid:
+            print(f'Folder UID: {folder_uid}')
+        
+        return result
         
     except Exception as e:
-        print(f'Error creating Secrets Manager application {app_name}: {str(e)}')
+        print(f'Error adding record {title}: {str(e)}')
         return None
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description='Create a Secrets Manager application using Keeper SDK',
+        description='Add a new record to the vault using Keeper SDK',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
 Example:
-  python create_secrets_manager_app.py
+  python add_record.py
         '''
     )
     
@@ -100,15 +115,16 @@ Example:
         print(f'Config file {args.config} not found')
         sys.exit(1)
 
-    app_name = "Secrets Manager App 1"
-    force = True
+    title = "Test Record 1"
+    login = "example@example.com"
+    password = "ExamplePassword123!"
+    url = "https://example.com"
+    notes = "This is an example record created by the Keeper SDK"
+    folder_uid = None
 
     try:
         vault = login_to_keeper_with_config(args.config).vault
-        result = create_secrets_manager_app(vault, app_name, force)
-        
-        if result is None:
-            sys.exit(1)
+        add_record(vault, title, login, password, url, notes, folder_uid)
         
     except Exception as e:
         print(f'Error: {str(e)}')

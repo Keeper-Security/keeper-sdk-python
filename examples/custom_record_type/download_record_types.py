@@ -9,7 +9,7 @@
 # Copyright 2025 Keeper Security Inc.
 # Contact: commander@keepersecurity.com
 #
-# Example showing how to create a new Secrets Manager application
+# Example showing how to download custom record types to a JSON file
 # using the Keeper SDK architecture.
 #
 
@@ -18,7 +18,7 @@ import json
 import os
 import sys
 
-from keepersdk.vault import ksm_management, vault_online
+from keepercli.commands.record_type import DownloadRecordTypesCommand
 from keepercli.params import KeeperParams
 from keepercli.login import LoginFlow
 
@@ -47,44 +47,39 @@ def login_to_keeper_with_config(filename: str) -> KeeperParams:
     if not logged_in:
         raise Exception('Failed to authenticate with Keeper')
     return context
-
-def create_secrets_manager_app(
-    vault: vault_online.VaultOnline,
-    app_name: str,
-    force_add: bool = False
-):
-    """
-    Create a new Secrets Manager application in the Keeper vault.
     
-    This function creates a new Secrets Manager application that can be used
-    to programmatically access vault records through the Secrets Manager API.
-    The application will be configured with appropriate permissions and credentials.
+def download_record_types(context: KeeperParams, **kwargs):
+    """
+    Download custom record types to a JSON file.
+    
+    This function downloads all custom record types from the vault and saves them
+    to a JSON file using the CLI command infrastructure.
     """
     try:
-        result = ksm_management.create_secrets_manager_app(
-            vault=vault, 
-            name=app_name, 
-            force_add=force_add
-        )
+        download_command = DownloadRecordTypesCommand()
         
-        if result:
-            print(f'Successfully created Secrets Manager application: {app_name}, UID: {result}')
-            return result
-        else:
-            print(f'Failed to create Secrets Manager application: {app_name}')
-            return None
+        if not kwargs["source"]:
+            kwargs["source"] = "keeper"
+
+        if not kwargs["name"]:
+            kwargs["name"] = "record_types.json"
+
+        download_command.execute(context=context, **kwargs)
+        
+        print(f'Successfully downloaded record types to: {kwargs["name"]}')
+        return True
         
     except Exception as e:
-        print(f'Error creating Secrets Manager application {app_name}: {str(e)}')
-        return None
+        print(f'Error downloading record types: {str(e)}')
+        return False
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description='Create a Secrets Manager application using Keeper SDK',
+        description='Download custom record types to a JSON file using Keeper CLI',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
 Example:
-  python create_secrets_manager_app.py
+  python download_record_types.py
         '''
     )
     
@@ -100,14 +95,17 @@ Example:
         print(f'Config file {args.config} not found')
         sys.exit(1)
 
-    app_name = "Secrets Manager App 1"
-    force = True
-
     try:
-        vault = login_to_keeper_with_config(args.config).vault
-        result = create_secrets_manager_app(vault, app_name, force)
+        context = login_to_keeper_with_config(args.config)
+
+        kwargs = {
+            'source': 'keeper',
+            'name': 'record_types.json'
+        }
+
+        success = download_record_types(context, **kwargs)
         
-        if result is None:
+        if not success:
             sys.exit(1)
         
     except Exception as e:

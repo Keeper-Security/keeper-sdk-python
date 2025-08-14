@@ -9,7 +9,7 @@
 # Copyright 2025 Keeper Security Inc.
 # Contact: commander@keepersecurity.com
 #
-# Example showing how to create a new Secrets Manager application
+# Example showing how to share a Secrets Manager application with another user
 # using the Keeper SDK architecture.
 #
 
@@ -18,7 +18,7 @@ import json
 import os
 import sys
 
-from keepersdk.vault import ksm_management, vault_online
+from keepercli.commands.secrets_manager import SecretsManagerAppCommand
 from keepercli.params import KeeperParams
 from keepercli.login import LoginFlow
 
@@ -48,43 +48,48 @@ def login_to_keeper_with_config(filename: str) -> KeeperParams:
         raise Exception('Failed to authenticate with Keeper')
     return context
 
-def create_secrets_manager_app(
-    vault: vault_online.VaultOnline,
-    app_name: str,
-    force_add: bool = False
+def share_secrets_manager_app(
+    context: KeeperParams,
+    app_id: str,
+    user_email: str,
+    is_admin: bool = False
 ):
     """
-    Create a new Secrets Manager application in the Keeper vault.
+    Share a Secrets Manager application with a user; optionally grant admin permissions.
     
-    This function creates a new Secrets Manager application that can be used
-    to programmatically access vault records through the Secrets Manager API.
-    The application will be configured with appropriate permissions and credentials.
+    This function shares a Secrets Manager application with another user. It first retrieves
+    the application details, then shares it with the specified user. If the user is granted
+    admin permissions, the application will be shared with full access.
     """
     try:
-        result = ksm_management.create_secrets_manager_app(
-            vault=vault, 
-            name=app_name, 
-            force_add=force_add
-        )
+        sm_app_command = SecretsManagerAppCommand()
+        kwargs = {
+            'command': 'share',
+            'app': app_id,
+            'email': user_email
+        }
         
-        if result:
-            print(f'Successfully created Secrets Manager application: {app_name}, UID: {result}')
-            return result
-        else:
-            print(f'Failed to create Secrets Manager application: {app_name}')
-            return None
+        if is_admin:
+            kwargs['admin'] = True
+            
+        sm_app_command.execute(context=context, **kwargs)
+        
+        print(f'Successfully shared with user: {user_email}')
+        context.vault.sync_down()
+        
+        return True
         
     except Exception as e:
-        print(f'Error creating Secrets Manager application {app_name}: {str(e)}')
-        return None
+        print(f'Error sharing Secrets Manager application: {str(e)}')
+        return False
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description='Create a Secrets Manager application using Keeper SDK',
+        description='Share a Secrets Manager application with another user using Keeper SDK',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
 Example:
-  python create_secrets_manager_app.py
+  python share_secrets_manager_app.py
         '''
     )
     
@@ -100,14 +105,22 @@ Example:
         print(f'Config file {args.config} not found')
         sys.exit(1)
 
-    app_name = "Secrets Manager App 1"
-    force = True
+    app_id = "RlO6y-idGBqu1Ax2yUYXKw"
+    user_email = "example@example.com"
+    is_admin = False
+
+    print(f"Note: This example will attempt to share app ID '{app_id}'")
 
     try:
-        vault = login_to_keeper_with_config(args.config).vault
-        result = create_secrets_manager_app(vault, app_name, force)
+        context = login_to_keeper_with_config(args.config)
+        success = share_secrets_manager_app(
+            context=context,
+            app_id=app_id,
+            user_email=user_email,
+            is_admin=is_admin
+        )
         
-        if result is None:
+        if not success:
             sys.exit(1)
         
     except Exception as e:

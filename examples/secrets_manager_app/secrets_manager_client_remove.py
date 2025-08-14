@@ -9,16 +9,18 @@
 # Copyright 2025 Keeper Security Inc.
 # Contact: commander@keepersecurity.com
 #
-# Example showing how to create a new Secrets Manager application
-# using the Keeper SDK architecture.
+# Example showing how to remove a client from a Secrets Manager application
+# using the SecretsManagerClientCommand from the CLI package.
 #
 
 import argparse
 import json
 import os
 import sys
+from typing import List
 
-from keepersdk.vault import ksm_management, vault_online
+from keepersdk.vault import ksm_management
+from keepercli.commands.secrets_manager import SecretsManagerClientCommand
 from keepercli.params import KeeperParams
 from keepercli.login import LoginFlow
 
@@ -48,43 +50,54 @@ def login_to_keeper_with_config(filename: str) -> KeeperParams:
         raise Exception('Failed to authenticate with Keeper')
     return context
 
-def create_secrets_manager_app(
-    vault: vault_online.VaultOnline,
-    app_name: str,
-    force_add: bool = False
+
+def remove_client_from_app(
+    context: KeeperParams,
+    app_id: str,
+    client_names_or_ids: List[str],
+    force: bool = False
 ):
     """
-    Create a new Secrets Manager application in the Keeper vault.
+    Remove client(s) from a Secrets Manager application.
     
-    This function creates a new Secrets Manager application that can be used
-    to programmatically access vault records through the Secrets Manager API.
-    The application will be configured with appropriate permissions and credentials.
+    This function removes one or more clients from a Secrets Manager application
+    using the CLI command infrastructure. It provides confirmation prompts
+    unless force is True.
     """
     try:
-        result = ksm_management.create_secrets_manager_app(
-            vault=vault, 
-            name=app_name, 
-            force_add=force_add
-        )
+        client_command = SecretsManagerClientCommand()
         
-        if result:
-            print(f'Successfully created Secrets Manager application: {app_name}, UID: {result}')
-            return result
+        if len(client_names_or_ids) == 1 and client_names_or_ids[0] in ['*', 'all']:
+            print(f'Removing ALL clients from application "{app_id}"...')
         else:
-            print(f'Failed to create Secrets Manager application: {app_name}')
-            return None
+            clients_text = ', '.join(client_names_or_ids)
+            print(f'Removing client(s) from application "{app_id}": {clients_text}')
+        
+        if force:
+            print('- Force mode: Skipping confirmation prompts')
+        
+        kwargs = {
+            'command': 'remove',
+            'app': app_id,
+            'client_names_or_ids': client_names_or_ids,
+            'force': force
+        }
+        
+        client_command.execute(context=context, **kwargs)
+        print(f'Successfully removed client(s) from application: {app_id}')
+        context.vault.sync_down()
+        return True
         
     except Exception as e:
-        print(f'Error creating Secrets Manager application {app_name}: {str(e)}')
-        return None
-
+        print(f'Error removing client from Secrets Manager application: {str(e)}')
+        return False
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description='Create a Secrets Manager application using Keeper SDK',
+        description='Remove a client from a Secrets Manager application using Keeper SDK',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
 Example:
-  python create_secrets_manager_app.py
+  python secrets_manager_client_remove.py
         '''
     )
     
@@ -100,14 +113,22 @@ Example:
         print(f'Config file {args.config} not found')
         sys.exit(1)
 
-    app_name = "Secrets Manager App 1"
+    app_id = "RlO6y-idGBqu1Ax2yUYXKw"
+    client_names_or_ids = ["DemoClient"]
     force = True
 
+    print(f"Note: This example will attempt to remove clients from app ID '{app_id}'")
+
     try:
-        vault = login_to_keeper_with_config(args.config).vault
-        result = create_secrets_manager_app(vault, app_name, force)
+        context = login_to_keeper_with_config(args.config)
+        success = remove_client_from_app(
+            context=context,
+            app_id=app_id,
+            client_names_or_ids=client_names_or_ids,
+            force=force
+        )
         
-        if result is None:
+        if not success:
             sys.exit(1)
         
     except Exception as e:

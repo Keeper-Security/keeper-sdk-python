@@ -5,20 +5,22 @@
 # |_|\_\___\___| .__/\___|_|
 #              |_|
 #
-# Keeper SDK for Python
+# Keeper CLI for Python
 # Copyright 2025 Keeper Security Inc.
 # Contact: commander@keepersecurity.com
 #
-# Example showing how to create a new Secrets Manager application
-# using the Keeper SDK architecture.
+# Example showing how to get record type information
+# using the Keeper CLI architecture.
 #
 
 import argparse
 import json
+
 import os
+
 import sys
 
-from keepersdk.vault import ksm_management, vault_online
+from keepercli.commands.record_type import RecordTypeInfoCommand
 from keepercli.params import KeeperParams
 from keepercli.login import LoginFlow
 
@@ -48,43 +50,29 @@ def login_to_keeper_with_config(filename: str) -> KeeperParams:
         raise Exception('Failed to authenticate with Keeper')
     return context
 
-def create_secrets_manager_app(
-    vault: vault_online.VaultOnline,
-    app_name: str,
-    force_add: bool = False
-):
+def execute_record_type_info(context: KeeperParams, **kwargs):
     """
-    Create a new Secrets Manager application in the Keeper vault.
+    Execute record type information command.
     
-    This function creates a new Secrets Manager application that can be used
-    to programmatically access vault records through the Secrets Manager API.
-    The application will be configured with appropriate permissions and credentials.
+    This function retrieves and displays information about record types
+    using the Keeper CLI command infrastructure.
     """
+    record_type_info_command = RecordTypeInfoCommand()
+    
     try:
-        result = ksm_management.create_secrets_manager_app(
-            vault=vault, 
-            name=app_name, 
-            force_add=force_add
-        )
-        
-        if result:
-            print(f'Successfully created Secrets Manager application: {app_name}, UID: {result}')
-            return result
-        else:
-            print(f'Failed to create Secrets Manager application: {app_name}')
-            return None
-        
+        record_type_info_command.execute(context=context, **kwargs)
+        return True
     except Exception as e:
-        print(f'Error creating Secrets Manager application {app_name}: {str(e)}')
-        return None
+        print(f'Error: {str(e)}')
+        return False
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description='Create a Secrets Manager application using Keeper SDK',
+        description='Get record type information using Keeper SDK',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
 Example:
-  python create_secrets_manager_app.py
+  python custom_record_type_info.py
         '''
     )
     
@@ -100,16 +88,15 @@ Example:
         print(f'Config file {args.config} not found')
         sys.exit(1)
 
-    app_name = "Secrets Manager App 1"
-    force = True
-
     try:
-        vault = login_to_keeper_with_config(args.config).vault
-        result = create_secrets_manager_app(vault, app_name, force)
-        
-        if result is None:
-            sys.exit(1)
-        
+        context = login_to_keeper_with_config(args.config)
     except Exception as e:
         print(f'Error: {str(e)}')
         sys.exit(1)
+
+    kwargs = {
+        'record_name': '*'
+    }
+
+    success = execute_record_type_info(context, **kwargs)
+    sys.exit(0 if success else 1)

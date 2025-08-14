@@ -9,16 +9,18 @@
 # Copyright 2025 Keeper Security Inc.
 # Contact: commander@keepersecurity.com
 #
-# Example showing how to create a new Secrets Manager application
+# Example showing how to unshare a Secrets Manager application from a user
 # using the Keeper SDK architecture.
 #
 
 import argparse
 import json
+
 import os
+
 import sys
 
-from keepersdk.vault import ksm_management, vault_online
+from keepercli.commands.secrets_manager import SecretsManagerAppCommand
 from keepercli.params import KeeperParams
 from keepercli.login import LoginFlow
 
@@ -48,43 +50,41 @@ def login_to_keeper_with_config(filename: str) -> KeeperParams:
         raise Exception('Failed to authenticate with Keeper')
     return context
 
-def create_secrets_manager_app(
-    vault: vault_online.VaultOnline,
-    app_name: str,
-    force_add: bool = False
+def unshare_secrets_manager_app(
+    context: KeeperParams,
+    app_id: str,
+    user_email: str
 ):
-    """
-    Create a new Secrets Manager application in the Keeper vault.
+    """Unshare a Secrets Manager application from a specific user.
     
-    This function creates a new Secrets Manager application that can be used
-    to programmatically access vault records through the Secrets Manager API.
-    The application will be configured with appropriate permissions and credentials.
+    This function unshares a Secrets Manager application from a specific user. It first retrieves
+    the application details, then unshares it from the specified user.
     """
     try:
-        result = ksm_management.create_secrets_manager_app(
-            vault=vault, 
-            name=app_name, 
-            force_add=force_add
-        )
+        sm_app_command = SecretsManagerAppCommand()
+        kwargs = {
+            'command': 'unshare',
+            'app': app_id,
+            'email': user_email
+        }
+            
+        sm_app_command.execute(context=context, **kwargs)
         
-        if result:
-            print(f'Successfully created Secrets Manager application: {app_name}, UID: {result}')
-            return result
-        else:
-            print(f'Failed to create Secrets Manager application: {app_name}')
-            return None
+        print(f'Successfully unshared from user: {user_email}')
+
+        return True
         
     except Exception as e:
-        print(f'Error creating Secrets Manager application {app_name}: {str(e)}')
-        return None
+        print(f'Error unsharing Secrets Manager application: {str(e)}')
+        return False
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description='Create a Secrets Manager application using Keeper SDK',
+        description='Unshare a Secrets Manager application from a user using Keeper SDK',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
 Example:
-  python create_secrets_manager_app.py
+  python unshare_secrets_manager_app.py
         '''
     )
     
@@ -100,14 +100,20 @@ Example:
         print(f'Config file {args.config} not found')
         sys.exit(1)
 
-    app_name = "Secrets Manager App 1"
-    force = True
+    app_id = "RlO6y-idGBqu1Ax2yUYXKw"
+    user_email = "example@example.com"
+
+    print(f"Note: This example will attempt to unshare app ID '{app_id}'")
 
     try:
-        vault = login_to_keeper_with_config(args.config).vault
-        result = create_secrets_manager_app(vault, app_name, force)
+        context = login_to_keeper_with_config(args.config)
+        success = unshare_secrets_manager_app(
+            context=context,
+            app_id=app_id,
+            user_email=user_email
+        )
         
-        if result is None:
+        if not success:
             sys.exit(1)
         
     except Exception as e:
