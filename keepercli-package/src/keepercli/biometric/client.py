@@ -146,7 +146,7 @@ class BiometricClient:
                                if purpose == 'vault' else APIRequest_pb2.PasskeyPurpose.PK_LOGIN)
 
             if context.auth.auth_context.device_token:
-                rq.encryptedDeviceToken = utils.base64_url_decode(context.auth.auth_context.device_token)
+                rq.encryptedDeviceToken = context.auth.auth_context.device_token
 
             rs = context.vault.keeper_auth.execute_auth_rest(rest_endpoint=API_ENDPOINTS['generate_authentication'], request=rq, response_type=APIRequest_pb2.PasskeyAuthenticationResponse)
 

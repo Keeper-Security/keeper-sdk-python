@@ -25,7 +25,7 @@ class BiometricListCommand(BiometricArgparseCommand):
     # def get_parser(self):
     #     return self.parser
 
-    def execute(self, context: KeeperParams):
+    def execute(self, context: KeeperParams, **kwargs):
         """List registered biometric methods"""
         def _list():
             passkeys = self.client.get_available_credentials(vault=context.vault)

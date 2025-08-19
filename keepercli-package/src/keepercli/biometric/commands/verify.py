@@ -101,7 +101,6 @@ class BiometricVerifyCommand(BiometricArgparseCommand):
     def _send_verification_request(self, vault: vault_online.VaultOnline, auth_options, assertion_object, purpose):
         """Send verification request to Keeper API"""
         from keepersdk.proto import APIRequest_pb2
-        from ... import api
 
         rq = APIRequest_pb2.PasskeyValidationRequest()
         rq.challengeToken = auth_options['challenge_token']
@@ -164,16 +163,16 @@ class BiometricVerifyCommand(BiometricArgparseCommand):
 
         print("=" * 50)
 
-    # def biometric_authenticate(self, context: KeeperParams, **kwargs):
-    #     """Perform biometric authentication for login"""
-    #     try:
-    #         purpose = kwargs.get('purpose', 'login')
+    def biometric_authenticate(self, context: KeeperParams, **kwargs):
+        """Perform biometric authentication for login"""
+        try:
+            purpose = kwargs.get('purpose', 'login')
 
-    #         auth_options = self.client.generate_authentication_options(context, purpose)
-    #         assertion_response = self.client.perform_authentication(auth_options)
-    #         verification_result = self._verify_authentication_response(context.vault, auth_options, assertion_response, purpose)
+            auth_options = self.client.generate_authentication_options(context, purpose)
+            assertion_response = self.client.perform_authentication(auth_options)
+            verification_result = self._verify_authentication_response(context.vault, auth_options, assertion_response, purpose)
 
-    #         return verification_result
+            return verification_result
 
-    #     except Exception as e:
-    #         raise Exception(str(e)) 
+        except Exception as e:
+            raise Exception(str(e)) 
