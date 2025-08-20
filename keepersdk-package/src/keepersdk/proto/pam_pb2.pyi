@@ -351,14 +351,6 @@ class PAMRecordingsResponse(_message.Message):
     recordings: _containers.RepeatedCompositeFieldContainer[PAMRecording]
     def __init__(self, recordings: _Optional[_Iterable[_Union[PAMRecording, _Mapping]]] = ...) -> None: ...
 
-class PAMLink(_message.Message):
-    __slots__ = ("head", "tail")
-    HEAD_FIELD_NUMBER: _ClassVar[int]
-    TAIL_FIELD_NUMBER: _ClassVar[int]
-    head: bytes
-    tail: bytes
-    def __init__(self, head: _Optional[bytes] = ..., tail: _Optional[bytes] = ...) -> None: ...
-
 class PAMData(_message.Message):
     __slots__ = ("vertex", "content")
     VERTEX_FIELD_NUMBER: _ClassVar[int]
@@ -366,3 +358,29 @@ class PAMData(_message.Message):
     vertex: bytes
     content: bytes
     def __init__(self, vertex: _Optional[bytes] = ..., content: _Optional[bytes] = ...) -> None: ...
+
+class UidList(_message.Message):
+    __slots__ = ("uids",)
+    UIDS_FIELD_NUMBER: _ClassVar[int]
+    uids: _containers.RepeatedScalarFieldContainer[bytes]
+    def __init__(self, uids: _Optional[_Iterable[bytes]] = ...) -> None: ...
+
+class PAMResourceConfig(_message.Message):
+    __slots__ = ("recordUid", "networkUid", "adminUid", "meta", "connectionSettings", "connectUsers", "domainUid", "jitSettings")
+    RECORDUID_FIELD_NUMBER: _ClassVar[int]
+    NETWORKUID_FIELD_NUMBER: _ClassVar[int]
+    ADMINUID_FIELD_NUMBER: _ClassVar[int]
+    META_FIELD_NUMBER: _ClassVar[int]
+    CONNECTIONSETTINGS_FIELD_NUMBER: _ClassVar[int]
+    CONNECTUSERS_FIELD_NUMBER: _ClassVar[int]
+    DOMAINUID_FIELD_NUMBER: _ClassVar[int]
+    JITSETTINGS_FIELD_NUMBER: _ClassVar[int]
+    recordUid: bytes
+    networkUid: bytes
+    adminUid: bytes
+    meta: bytes
+    connectionSettings: bytes
+    connectUsers: UidList
+    domainUid: bytes
+    jitSettings: bytes
+    def __init__(self, recordUid: _Optional[bytes] = ..., networkUid: _Optional[bytes] = ..., adminUid: _Optional[bytes] = ..., meta: _Optional[bytes] = ..., connectionSettings: _Optional[bytes] = ..., connectUsers: _Optional[_Union[UidList, _Mapping]] = ..., domainUid: _Optional[bytes] = ..., jitSettings: _Optional[bytes] = ...) -> None: ...

@@ -30,6 +30,8 @@ class SupportedLanguage(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     RUSSIAN: _ClassVar[SupportedLanguage]
     SLOVAK: _ClassVar[SupportedLanguage]
     SPANISH: _ClassVar[SupportedLanguage]
+    FINNISH: _ClassVar[SupportedLanguage]
+    SWEDISH: _ClassVar[SupportedLanguage]
 
 class LoginType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -118,6 +120,7 @@ class LoginState(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     PASSKEY_INITIATE_CHALLENGE: _ClassVar[LoginState]
     PASSKEY_AUTH_REQUIRED: _ClassVar[LoginState]
     PASSKEY_VERIFY_AUTHENTICATION: _ClassVar[LoginState]
+    AFTER_PASSKEY_LOGIN: _ClassVar[LoginState]
     LOGGED_IN: _ClassVar[LoginState]
 
 class EncryptedDataKeyType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
@@ -271,6 +274,13 @@ class PasskeyPurpose(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
     PK_LOGIN: _ClassVar[PasskeyPurpose]
     PK_REAUTH: _ClassVar[PasskeyPurpose]
+
+class ClientFormFactor(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    FF_EMPTY: _ClassVar[ClientFormFactor]
+    FF_PHONE: _ClassVar[ClientFormFactor]
+    FF_TABLET: _ClassVar[ClientFormFactor]
+    FF_WATCH: _ClassVar[ClientFormFactor]
 ENGLISH: SupportedLanguage
 ARABIC: SupportedLanguage
 BRITISH: SupportedLanguage
@@ -292,6 +302,8 @@ ROMANIAN: SupportedLanguage
 RUSSIAN: SupportedLanguage
 SLOVAK: SupportedLanguage
 SPANISH: SupportedLanguage
+FINNISH: SupportedLanguage
+SWEDISH: SupportedLanguage
 NORMAL: LoginType
 SSO: LoginType
 BIO: LoginType
@@ -353,6 +365,7 @@ LOGIN_TOKEN_EXPIRED: LoginState
 PASSKEY_INITIATE_CHALLENGE: LoginState
 PASSKEY_AUTH_REQUIRED: LoginState
 PASSKEY_VERIFY_AUTHENTICATION: LoginState
+AFTER_PASSKEY_LOGIN: LoginState
 LOGGED_IN: LoginState
 NO_KEY: EncryptedDataKeyType
 BY_DEVICE_PUBLIC_KEY: EncryptedDataKeyType
@@ -449,6 +462,10 @@ PLATFORM: AuthenticatorAttachment
 ALL_SUPPORTED: AuthenticatorAttachment
 PK_LOGIN: PasskeyPurpose
 PK_REAUTH: PasskeyPurpose
+FF_EMPTY: ClientFormFactor
+FF_PHONE: ClientFormFactor
+FF_TABLET: ClientFormFactor
+FF_WATCH: ClientFormFactor
 
 class ApiRequest(_message.Message):
     __slots__ = ("encryptedTransmissionKey", "publicKeyId", "locale", "encryptedPayload", "encryptionType", "recaptcha", "subEnvironment")
@@ -489,12 +506,18 @@ class Transform(_message.Message):
     def __init__(self, key: _Optional[bytes] = ..., encryptedDeviceToken: _Optional[bytes] = ...) -> None: ...
 
 class DeviceRequest(_message.Message):
-    __slots__ = ("clientVersion", "deviceName")
+    __slots__ = ("clientVersion", "deviceName", "devicePlatform", "clientFormFactor", "username")
     CLIENTVERSION_FIELD_NUMBER: _ClassVar[int]
     DEVICENAME_FIELD_NUMBER: _ClassVar[int]
+    DEVICEPLATFORM_FIELD_NUMBER: _ClassVar[int]
+    CLIENTFORMFACTOR_FIELD_NUMBER: _ClassVar[int]
+    USERNAME_FIELD_NUMBER: _ClassVar[int]
     clientVersion: str
     deviceName: str
-    def __init__(self, clientVersion: _Optional[str] = ..., deviceName: _Optional[str] = ...) -> None: ...
+    devicePlatform: str
+    clientFormFactor: ClientFormFactor
+    username: str
+    def __init__(self, clientVersion: _Optional[str] = ..., deviceName: _Optional[str] = ..., devicePlatform: _Optional[str] = ..., clientFormFactor: _Optional[_Union[ClientFormFactor, str]] = ..., username: _Optional[str] = ...) -> None: ...
 
 class AuthRequest(_message.Message):
     __slots__ = ("clientVersion", "username", "encryptedDeviceToken")
@@ -581,7 +604,7 @@ class TwoFactorChannel(_message.Message):
     def __init__(self, type: _Optional[int] = ...) -> None: ...
 
 class StartLoginRequest(_message.Message):
-    __slots__ = ("encryptedDeviceToken", "username", "clientVersion", "messageSessionUid", "encryptedLoginToken", "loginType", "mcEnterpriseId", "loginMethod", "forceNewLogin", "cloneCode", "v2TwoFactorToken", "accountUid")
+    __slots__ = ("encryptedDeviceToken", "username", "clientVersion", "messageSessionUid", "encryptedLoginToken", "loginType", "mcEnterpriseId", "loginMethod", "forceNewLogin", "cloneCode", "v2TwoFactorToken", "accountUid", "fromSessionToken")
     ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: _ClassVar[int]
     USERNAME_FIELD_NUMBER: _ClassVar[int]
     CLIENTVERSION_FIELD_NUMBER: _ClassVar[int]
@@ -594,6 +617,7 @@ class StartLoginRequest(_message.Message):
     CLONECODE_FIELD_NUMBER: _ClassVar[int]
     V2TWOFACTORTOKEN_FIELD_NUMBER: _ClassVar[int]
     ACCOUNTUID_FIELD_NUMBER: _ClassVar[int]
+    FROMSESSIONTOKEN_FIELD_NUMBER: _ClassVar[int]
     encryptedDeviceToken: bytes
     username: str
     clientVersion: str
@@ -606,7 +630,8 @@ class StartLoginRequest(_message.Message):
     cloneCode: bytes
     v2TwoFactorToken: str
     accountUid: bytes
-    def __init__(self, encryptedDeviceToken: _Optional[bytes] = ..., username: _Optional[str] = ..., clientVersion: _Optional[str] = ..., messageSessionUid: _Optional[bytes] = ..., encryptedLoginToken: _Optional[bytes] = ..., loginType: _Optional[_Union[LoginType, str]] = ..., mcEnterpriseId: _Optional[int] = ..., loginMethod: _Optional[_Union[LoginMethod, str]] = ..., forceNewLogin: bool = ..., cloneCode: _Optional[bytes] = ..., v2TwoFactorToken: _Optional[str] = ..., accountUid: _Optional[bytes] = ...) -> None: ...
+    fromSessionToken: bytes
+    def __init__(self, encryptedDeviceToken: _Optional[bytes] = ..., username: _Optional[str] = ..., clientVersion: _Optional[str] = ..., messageSessionUid: _Optional[bytes] = ..., encryptedLoginToken: _Optional[bytes] = ..., loginType: _Optional[_Union[LoginType, str]] = ..., mcEnterpriseId: _Optional[int] = ..., loginMethod: _Optional[_Union[LoginMethod, str]] = ..., forceNewLogin: bool = ..., cloneCode: _Optional[bytes] = ..., v2TwoFactorToken: _Optional[str] = ..., accountUid: _Optional[bytes] = ..., fromSessionToken: _Optional[bytes] = ...) -> None: ...
 
 class LoginResponse(_message.Message):
     __slots__ = ("loginState", "accountUid", "primaryUsername", "encryptedDataKey", "encryptedDataKeyType", "encryptedLoginToken", "encryptedSessionToken", "sessionTokenType", "message", "url", "channels", "salt", "cloneCode", "stateSpecificValue", "ssoClientVersion", "sessionTokenTypeModifier")
@@ -643,6 +668,24 @@ class LoginResponse(_message.Message):
     ssoClientVersion: str
     sessionTokenTypeModifier: str
     def __init__(self, loginState: _Optional[_Union[LoginState, str]] = ..., accountUid: _Optional[bytes] = ..., primaryUsername: _Optional[str] = ..., encryptedDataKey: _Optional[bytes] = ..., encryptedDataKeyType: _Optional[_Union[EncryptedDataKeyType, str]] = ..., encryptedLoginToken: _Optional[bytes] = ..., encryptedSessionToken: _Optional[bytes] = ..., sessionTokenType: _Optional[_Union[SessionTokenType, str]] = ..., message: _Optional[str] = ..., url: _Optional[str] = ..., channels: _Optional[_Iterable[_Union[TwoFactorChannelInfo, _Mapping]]] = ..., salt: _Optional[_Iterable[_Union[Salt, _Mapping]]] = ..., cloneCode: _Optional[bytes] = ..., stateSpecificValue: _Optional[str] = ..., ssoClientVersion: _Optional[str] = ..., sessionTokenTypeModifier: _Optional[str] = ...) -> None: ...
+
+class SwitchListElement(_message.Message):
+    __slots__ = ("username", "fullName", "authRequired", "isLinked")
+    USERNAME_FIELD_NUMBER: _ClassVar[int]
+    FULLNAME_FIELD_NUMBER: _ClassVar[int]
+    AUTHREQUIRED_FIELD_NUMBER: _ClassVar[int]
+    ISLINKED_FIELD_NUMBER: _ClassVar[int]
+    username: str
+    fullName: str
+    authRequired: bool
+    isLinked: bool
+    def __init__(self, username: _Optional[str] = ..., fullName: _Optional[str] = ..., authRequired: bool = ..., isLinked: bool = ...) -> None: ...
+
+class SwitchListResponse(_message.Message):
+    __slots__ = ("elements",)
+    ELEMENTS_FIELD_NUMBER: _ClassVar[int]
+    elements: _containers.RepeatedCompositeFieldContainer[SwitchListElement]
+    def __init__(self, elements: _Optional[_Iterable[_Union[SwitchListElement, _Mapping]]] = ...) -> None: ...
 
 class SsoUserInfo(_message.Message):
     __slots__ = ("companyName", "samlRequest", "samlRequestType", "ssoDomainName", "loginUrl", "logoutUrl")
@@ -871,30 +914,56 @@ class UidRequest(_message.Message):
     def __init__(self, uid: _Optional[_Iterable[bytes]] = ...) -> None: ...
 
 class DeviceUpdateRequest(_message.Message):
-    __slots__ = ("encryptedDeviceToken", "clientVersion", "deviceName", "devicePublicKey", "deviceStatus")
+    __slots__ = ("encryptedDeviceToken", "clientVersion", "deviceName", "devicePublicKey", "deviceStatus", "devicePlatform", "clientFormFactor")
     ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: _ClassVar[int]
     CLIENTVERSION_FIELD_NUMBER: _ClassVar[int]
     DEVICENAME_FIELD_NUMBER: _ClassVar[int]
     DEVICEPUBLICKEY_FIELD_NUMBER: _ClassVar[int]
     DEVICESTATUS_FIELD_NUMBER: _ClassVar[int]
+    DEVICEPLATFORM_FIELD_NUMBER: _ClassVar[int]
+    CLIENTFORMFACTOR_FIELD_NUMBER: _ClassVar[int]
     encryptedDeviceToken: bytes
     clientVersion: str
     deviceName: str
     devicePublicKey: bytes
     deviceStatus: DeviceStatus
-    def __init__(self, encryptedDeviceToken: _Optional[bytes] = ..., clientVersion: _Optional[str] = ..., deviceName: _Optional[str] = ..., devicePublicKey: _Optional[bytes] = ..., deviceStatus: _Optional[_Union[DeviceStatus, str]] = ...) -> None: ...
+    devicePlatform: str
+    clientFormFactor: ClientFormFactor
+    def __init__(self, encryptedDeviceToken: _Optional[bytes] = ..., clientVersion: _Optional[str] = ..., deviceName: _Optional[str] = ..., devicePublicKey: _Optional[bytes] = ..., deviceStatus: _Optional[_Union[DeviceStatus, str]] = ..., devicePlatform: _Optional[str] = ..., clientFormFactor: _Optional[_Union[ClientFormFactor, str]] = ...) -> None: ...
 
-class RegisterDeviceInRegionRequest(_message.Message):
-    __slots__ = ("encryptedDeviceToken", "clientVersion", "deviceName", "devicePublicKey")
+class DeviceUpdateResponse(_message.Message):
+    __slots__ = ("encryptedDeviceToken", "clientVersion", "deviceName", "devicePublicKey", "deviceStatus", "devicePlatform", "clientFormFactor")
     ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: _ClassVar[int]
     CLIENTVERSION_FIELD_NUMBER: _ClassVar[int]
     DEVICENAME_FIELD_NUMBER: _ClassVar[int]
     DEVICEPUBLICKEY_FIELD_NUMBER: _ClassVar[int]
+    DEVICESTATUS_FIELD_NUMBER: _ClassVar[int]
+    DEVICEPLATFORM_FIELD_NUMBER: _ClassVar[int]
+    CLIENTFORMFACTOR_FIELD_NUMBER: _ClassVar[int]
     encryptedDeviceToken: bytes
     clientVersion: str
     deviceName: str
     devicePublicKey: bytes
-    def __init__(self, encryptedDeviceToken: _Optional[bytes] = ..., clientVersion: _Optional[str] = ..., deviceName: _Optional[str] = ..., devicePublicKey: _Optional[bytes] = ...) -> None: ...
+    deviceStatus: DeviceStatus
+    devicePlatform: str
+    clientFormFactor: ClientFormFactor
+    def __init__(self, encryptedDeviceToken: _Optional[bytes] = ..., clientVersion: _Optional[str] = ..., deviceName: _Optional[str] = ..., devicePublicKey: _Optional[bytes] = ..., deviceStatus: _Optional[_Union[DeviceStatus, str]] = ..., devicePlatform: _Optional[str] = ..., clientFormFactor: _Optional[_Union[ClientFormFactor, str]] = ...) -> None: ...
+
+class RegisterDeviceInRegionRequest(_message.Message):
+    __slots__ = ("encryptedDeviceToken", "clientVersion", "deviceName", "devicePublicKey", "devicePlatform", "clientFormFactor")
+    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: _ClassVar[int]
+    CLIENTVERSION_FIELD_NUMBER: _ClassVar[int]
+    DEVICENAME_FIELD_NUMBER: _ClassVar[int]
+    DEVICEPUBLICKEY_FIELD_NUMBER: _ClassVar[int]
+    DEVICEPLATFORM_FIELD_NUMBER: _ClassVar[int]
+    CLIENTFORMFACTOR_FIELD_NUMBER: _ClassVar[int]
+    encryptedDeviceToken: bytes
+    clientVersion: str
+    deviceName: str
+    devicePublicKey: bytes
+    devicePlatform: str
+    clientFormFactor: ClientFormFactor
+    def __init__(self, encryptedDeviceToken: _Optional[bytes] = ..., clientVersion: _Optional[str] = ..., deviceName: _Optional[str] = ..., devicePublicKey: _Optional[bytes] = ..., devicePlatform: _Optional[str] = ..., clientFormFactor: _Optional[_Union[ClientFormFactor, str]] = ...) -> None: ...
 
 class RegistrationRequest(_message.Message):
     __slots__ = ("authRequest", "userAuthRequest", "encryptedClientKey", "encryptedPrivateKey", "publicKey", "verificationCode", "deprecatedAuthHashHash", "deprecatedEncryptedClientKey", "deprecatedEncryptedPrivateKey", "deprecatedEncryptionParams")
@@ -989,7 +1058,7 @@ class SecurityDataRequest(_message.Message):
     def __init__(self, recordSecurityData: _Optional[_Iterable[_Union[SecurityData, _Mapping]]] = ..., masterPasswordSecurityData: _Optional[_Iterable[_Union[SecurityData, _Mapping]]] = ..., encryptionType: _Optional[_Union[_enterprise_pb2.EncryptedKeyType, str]] = ..., recordSecurityScoreData: _Optional[_Iterable[_Union[SecurityScoreData, _Mapping]]] = ...) -> None: ...
 
 class SecurityReportIncrementalData(_message.Message):
-    __slots__ = ("enterpriseUserId", "currentSecurityData", "currentSecurityDataRevision", "oldSecurityData", "oldSecurityDataRevision", "currentDataEncryptionType", "oldDataEncryptionType")
+    __slots__ = ("enterpriseUserId", "currentSecurityData", "currentSecurityDataRevision", "oldSecurityData", "oldSecurityDataRevision", "currentDataEncryptionType", "oldDataEncryptionType", "recordUid")
     ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
     CURRENTSECURITYDATA_FIELD_NUMBER: _ClassVar[int]
     CURRENTSECURITYDATAREVISION_FIELD_NUMBER: _ClassVar[int]
@@ -997,6 +1066,7 @@ class SecurityReportIncrementalData(_message.Message):
     OLDSECURITYDATAREVISION_FIELD_NUMBER: _ClassVar[int]
     CURRENTDATAENCRYPTIONTYPE_FIELD_NUMBER: _ClassVar[int]
     OLDDATAENCRYPTIONTYPE_FIELD_NUMBER: _ClassVar[int]
+    RECORDUID_FIELD_NUMBER: _ClassVar[int]
     enterpriseUserId: int
     currentSecurityData: bytes
     currentSecurityDataRevision: int
@@ -1004,7 +1074,8 @@ class SecurityReportIncrementalData(_message.Message):
     oldSecurityDataRevision: int
     currentDataEncryptionType: _enterprise_pb2.EncryptedKeyType
     oldDataEncryptionType: _enterprise_pb2.EncryptedKeyType
-    def __init__(self, enterpriseUserId: _Optional[int] = ..., currentSecurityData: _Optional[bytes] = ..., currentSecurityDataRevision: _Optional[int] = ..., oldSecurityData: _Optional[bytes] = ..., oldSecurityDataRevision: _Optional[int] = ..., currentDataEncryptionType: _Optional[_Union[_enterprise_pb2.EncryptedKeyType, str]] = ..., oldDataEncryptionType: _Optional[_Union[_enterprise_pb2.EncryptedKeyType, str]] = ...) -> None: ...
+    recordUid: bytes
+    def __init__(self, enterpriseUserId: _Optional[int] = ..., currentSecurityData: _Optional[bytes] = ..., currentSecurityDataRevision: _Optional[int] = ..., oldSecurityData: _Optional[bytes] = ..., oldSecurityDataRevision: _Optional[int] = ..., currentDataEncryptionType: _Optional[_Union[_enterprise_pb2.EncryptedKeyType, str]] = ..., oldDataEncryptionType: _Optional[_Union[_enterprise_pb2.EncryptedKeyType, str]] = ..., recordUid: _Optional[bytes] = ...) -> None: ...
 
 class SecurityReport(_message.Message):
     __slots__ = ("enterpriseUserId", "encryptedReportData", "revision", "twoFactor", "lastLogin", "numberOfReusedPassword", "securityReportIncrementalData", "userId", "hasOldEncryption")
@@ -1029,10 +1100,12 @@ class SecurityReport(_message.Message):
     def __init__(self, enterpriseUserId: _Optional[int] = ..., encryptedReportData: _Optional[bytes] = ..., revision: _Optional[int] = ..., twoFactor: _Optional[str] = ..., lastLogin: _Optional[int] = ..., numberOfReusedPassword: _Optional[int] = ..., securityReportIncrementalData: _Optional[_Iterable[_Union[SecurityReportIncrementalData, _Mapping]]] = ..., userId: _Optional[int] = ..., hasOldEncryption: bool = ...) -> None: ...
 
 class SecurityReportSaveRequest(_message.Message):
-    __slots__ = ("securityReport",)
+    __slots__ = ("securityReport", "continuationToken")
     SECURITYREPORT_FIELD_NUMBER: _ClassVar[int]
+    CONTINUATIONTOKEN_FIELD_NUMBER: _ClassVar[int]
     securityReport: _containers.RepeatedCompositeFieldContainer[SecurityReport]
-    def __init__(self, securityReport: _Optional[_Iterable[_Union[SecurityReport, _Mapping]]] = ...) -> None: ...
+    continuationToken: bytes
+    def __init__(self, securityReport: _Optional[_Iterable[_Union[SecurityReport, _Mapping]]] = ..., continuationToken: _Optional[bytes] = ...) -> None: ...
 
 class SecurityReportRequest(_message.Message):
     __slots__ = ("fromPage",)
@@ -1041,7 +1114,7 @@ class SecurityReportRequest(_message.Message):
     def __init__(self, fromPage: _Optional[int] = ...) -> None: ...
 
 class SecurityReportResponse(_message.Message):
-    __slots__ = ("enterprisePrivateKey", "securityReport", "asOfRevision", "fromPage", "toPage", "complete", "enterpriseEccPrivateKey")
+    __slots__ = ("enterprisePrivateKey", "securityReport", "asOfRevision", "fromPage", "toPage", "complete", "enterpriseEccPrivateKey", "hasIncrementalData")
     ENTERPRISEPRIVATEKEY_FIELD_NUMBER: _ClassVar[int]
     SECURITYREPORT_FIELD_NUMBER: _ClassVar[int]
     ASOFREVISION_FIELD_NUMBER: _ClassVar[int]
@@ -1049,6 +1122,7 @@ class SecurityReportResponse(_message.Message):
     TOPAGE_FIELD_NUMBER: _ClassVar[int]
     COMPLETE_FIELD_NUMBER: _ClassVar[int]
     ENTERPRISEECCPRIVATEKEY_FIELD_NUMBER: _ClassVar[int]
+    HASINCREMENTALDATA_FIELD_NUMBER: _ClassVar[int]
     enterprisePrivateKey: bytes
     securityReport: _containers.RepeatedCompositeFieldContainer[SecurityReport]
     asOfRevision: int
@@ -1056,7 +1130,22 @@ class SecurityReportResponse(_message.Message):
     toPage: int
     complete: bool
     enterpriseEccPrivateKey: bytes
-    def __init__(self, enterprisePrivateKey: _Optional[bytes] = ..., securityReport: _Optional[_Iterable[_Union[SecurityReport, _Mapping]]] = ..., asOfRevision: _Optional[int] = ..., fromPage: _Optional[int] = ..., toPage: _Optional[int] = ..., complete: bool = ..., enterpriseEccPrivateKey: _Optional[bytes] = ...) -> None: ...
+    hasIncrementalData: bool
+    def __init__(self, enterprisePrivateKey: _Optional[bytes] = ..., securityReport: _Optional[_Iterable[_Union[SecurityReport, _Mapping]]] = ..., asOfRevision: _Optional[int] = ..., fromPage: _Optional[int] = ..., toPage: _Optional[int] = ..., complete: bool = ..., enterpriseEccPrivateKey: _Optional[bytes] = ..., hasIncrementalData: bool = ...) -> None: ...
+
+class IncrementalSecurityDataRequest(_message.Message):
+    __slots__ = ("continuationToken",)
+    CONTINUATIONTOKEN_FIELD_NUMBER: _ClassVar[int]
+    continuationToken: bytes
+    def __init__(self, continuationToken: _Optional[bytes] = ...) -> None: ...
+
+class IncrementalSecurityDataResponse(_message.Message):
+    __slots__ = ("securityReportIncrementalData", "continuationToken")
+    SECURITYREPORTINCREMENTALDATA_FIELD_NUMBER: _ClassVar[int]
+    CONTINUATIONTOKEN_FIELD_NUMBER: _ClassVar[int]
+    securityReportIncrementalData: _containers.RepeatedCompositeFieldContainer[SecurityReportIncrementalData]
+    continuationToken: bytes
+    def __init__(self, securityReportIncrementalData: _Optional[_Iterable[_Union[SecurityReportIncrementalData, _Mapping]]] = ..., continuationToken: _Optional[bytes] = ...) -> None: ...
 
 class ReusedPasswordsRequest(_message.Message):
     __slots__ = ("count",)
@@ -1305,14 +1394,18 @@ class MasterPasswordReentryResponse(_message.Message):
     def __init__(self, status: _Optional[_Union[MasterPasswordReentryStatus, str]] = ...) -> None: ...
 
 class DeviceRegistrationRequest(_message.Message):
-    __slots__ = ("clientVersion", "deviceName", "devicePublicKey")
+    __slots__ = ("clientVersion", "deviceName", "devicePublicKey", "devicePlatform", "clientFormFactor")
     CLIENTVERSION_FIELD_NUMBER: _ClassVar[int]
     DEVICENAME_FIELD_NUMBER: _ClassVar[int]
     DEVICEPUBLICKEY_FIELD_NUMBER: _ClassVar[int]
+    DEVICEPLATFORM_FIELD_NUMBER: _ClassVar[int]
+    CLIENTFORMFACTOR_FIELD_NUMBER: _ClassVar[int]
     clientVersion: str
     deviceName: str
     devicePublicKey: bytes
-    def __init__(self, clientVersion: _Optional[str] = ..., deviceName: _Optional[str] = ..., devicePublicKey: _Optional[bytes] = ...) -> None: ...
+    devicePlatform: str
+    clientFormFactor: ClientFormFactor
+    def __init__(self, clientVersion: _Optional[str] = ..., deviceName: _Optional[str] = ..., devicePublicKey: _Optional[bytes] = ..., devicePlatform: _Optional[str] = ..., clientFormFactor: _Optional[_Union[ClientFormFactor, str]] = ...) -> None: ...
 
 class DeviceVerificationRequest(_message.Message):
     __slots__ = ("encryptedDeviceToken", "username", "verificationChannel", "messageSessionUid", "clientVersion")
@@ -1847,23 +1940,25 @@ class RemoveAppClientsRequest(_message.Message):
     def __init__(self, appRecordUid: _Optional[bytes] = ..., clients: _Optional[_Iterable[bytes]] = ...) -> None: ...
 
 class AddExternalShareRequest(_message.Message):
-    __slots__ = ("recordUid", "encryptedRecordKey", "clientId", "accessExpireOn", "id", "isSelfDestruct")
+    __slots__ = ("recordUid", "encryptedRecordKey", "clientId", "accessExpireOn", "id", "isSelfDestruct", "isEditable")
     RECORDUID_FIELD_NUMBER: _ClassVar[int]
     ENCRYPTEDRECORDKEY_FIELD_NUMBER: _ClassVar[int]
     CLIENTID_FIELD_NUMBER: _ClassVar[int]
     ACCESSEXPIREON_FIELD_NUMBER: _ClassVar[int]
     ID_FIELD_NUMBER: _ClassVar[int]
     ISSELFDESTRUCT_FIELD_NUMBER: _ClassVar[int]
+    ISEDITABLE_FIELD_NUMBER: _ClassVar[int]
     recordUid: bytes
     encryptedRecordKey: bytes
     clientId: bytes
     accessExpireOn: int
     id: str
     isSelfDestruct: bool
-    def __init__(self, recordUid: _Optional[bytes] = ..., encryptedRecordKey: _Optional[bytes] = ..., clientId: _Optional[bytes] = ..., accessExpireOn: _Optional[int] = ..., id: _Optional[str] = ..., isSelfDestruct: bool = ...) -> None: ...
+    isEditable: bool
+    def __init__(self, recordUid: _Optional[bytes] = ..., encryptedRecordKey: _Optional[bytes] = ..., clientId: _Optional[bytes] = ..., accessExpireOn: _Optional[int] = ..., id: _Optional[str] = ..., isSelfDestruct: bool = ..., isEditable: bool = ...) -> None: ...
 
 class AppClient(_message.Message):
-    __slots__ = ("id", "clientId", "createdOn", "firstAccess", "lastAccess", "publicKey", "lockIp", "ipAddress", "firstAccessExpireOn", "accessExpireOn", "appClientType")
+    __slots__ = ("id", "clientId", "createdOn", "firstAccess", "lastAccess", "publicKey", "lockIp", "ipAddress", "firstAccessExpireOn", "accessExpireOn", "appClientType", "canEdit")
     ID_FIELD_NUMBER: _ClassVar[int]
     CLIENTID_FIELD_NUMBER: _ClassVar[int]
     CREATEDON_FIELD_NUMBER: _ClassVar[int]
@@ -1875,6 +1970,7 @@ class AppClient(_message.Message):
     FIRSTACCESSEXPIREON_FIELD_NUMBER: _ClassVar[int]
     ACCESSEXPIREON_FIELD_NUMBER: _ClassVar[int]
     APPCLIENTTYPE_FIELD_NUMBER: _ClassVar[int]
+    CANEDIT_FIELD_NUMBER: _ClassVar[int]
     id: str
     clientId: bytes
     createdOn: int
@@ -1886,7 +1982,8 @@ class AppClient(_message.Message):
     firstAccessExpireOn: int
     accessExpireOn: int
     appClientType: _enterprise_pb2.AppClientType
-    def __init__(self, id: _Optional[str] = ..., clientId: _Optional[bytes] = ..., createdOn: _Optional[int] = ..., firstAccess: _Optional[int] = ..., lastAccess: _Optional[int] = ..., publicKey: _Optional[bytes] = ..., lockIp: bool = ..., ipAddress: _Optional[str] = ..., firstAccessExpireOn: _Optional[int] = ..., accessExpireOn: _Optional[int] = ..., appClientType: _Optional[_Union[_enterprise_pb2.AppClientType, str]] = ...) -> None: ...
+    canEdit: bool
+    def __init__(self, id: _Optional[str] = ..., clientId: _Optional[bytes] = ..., createdOn: _Optional[int] = ..., firstAccess: _Optional[int] = ..., lastAccess: _Optional[int] = ..., publicKey: _Optional[bytes] = ..., lockIp: bool = ..., ipAddress: _Optional[str] = ..., firstAccessExpireOn: _Optional[int] = ..., accessExpireOn: _Optional[int] = ..., appClientType: _Optional[_Union[_enterprise_pb2.AppClientType, str]] = ..., canEdit: bool = ...) -> None: ...
 
 class GetAppInfoRequest(_message.Message):
     __slots__ = ("appRecordUid",)
@@ -2131,14 +2228,20 @@ class PasskeyRegistrationFinalization(_message.Message):
     def __init__(self, challengeToken: _Optional[bytes] = ..., authenticatorResponse: _Optional[str] = ..., friendlyName: _Optional[str] = ...) -> None: ...
 
 class PasskeyAuthenticationRequest(_message.Message):
-    __slots__ = ("authenticatorAttachment", "passkeyPurpose", "encryptedLoginToken")
+    __slots__ = ("authenticatorAttachment", "passkeyPurpose", "clientVersion", "encryptedDeviceToken", "username", "encryptedLoginToken")
     AUTHENTICATORATTACHMENT_FIELD_NUMBER: _ClassVar[int]
     PASSKEYPURPOSE_FIELD_NUMBER: _ClassVar[int]
+    CLIENTVERSION_FIELD_NUMBER: _ClassVar[int]
+    ENCRYPTEDDEVICETOKEN_FIELD_NUMBER: _ClassVar[int]
+    USERNAME_FIELD_NUMBER: _ClassVar[int]
     ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: _ClassVar[int]
     authenticatorAttachment: AuthenticatorAttachment
     passkeyPurpose: PasskeyPurpose
+    clientVersion: str
+    encryptedDeviceToken: bytes
+    username: str
     encryptedLoginToken: bytes
-    def __init__(self, authenticatorAttachment: _Optional[_Union[AuthenticatorAttachment, str]] = ..., passkeyPurpose: _Optional[_Union[PasskeyPurpose, str]] = ..., encryptedLoginToken: _Optional[bytes] = ...) -> None: ...
+    def __init__(self, authenticatorAttachment: _Optional[_Union[AuthenticatorAttachment, str]] = ..., passkeyPurpose: _Optional[_Union[PasskeyPurpose, str]] = ..., clientVersion: _Optional[str] = ..., encryptedDeviceToken: _Optional[bytes] = ..., username: _Optional[str] = ..., encryptedLoginToken: _Optional[bytes] = ...) -> None: ...
 
 class PasskeyAuthenticationResponse(_message.Message):
     __slots__ = ("pkRequestOptions", "challengeToken", "encryptedLoginToken")
@@ -2209,3 +2312,23 @@ class PasskeyListResponse(_message.Message):
     PASSKEYINFO_FIELD_NUMBER: _ClassVar[int]
     passkeyInfo: _containers.RepeatedCompositeFieldContainer[PasskeyInfo]
     def __init__(self, passkeyInfo: _Optional[_Iterable[_Union[PasskeyInfo, _Mapping]]] = ...) -> None: ...
+
+class TranslationInfo(_message.Message):
+    __slots__ = ("translationKey", "translationValue")
+    TRANSLATIONKEY_FIELD_NUMBER: _ClassVar[int]
+    TRANSLATIONVALUE_FIELD_NUMBER: _ClassVar[int]
+    translationKey: str
+    translationValue: str
+    def __init__(self, translationKey: _Optional[str] = ..., translationValue: _Optional[str] = ...) -> None: ...
+
+class TranslationRequest(_message.Message):
+    __slots__ = ("translationKey",)
+    TRANSLATIONKEY_FIELD_NUMBER: _ClassVar[int]
+    translationKey: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, translationKey: _Optional[_Iterable[str]] = ...) -> None: ...
+
+class TranslationResponse(_message.Message):
+    __slots__ = ("translationInfo",)
+    TRANSLATIONINFO_FIELD_NUMBER: _ClassVar[int]
+    translationInfo: _containers.RepeatedCompositeFieldContainer[TranslationInfo]
+    def __init__(self, translationInfo: _Optional[_Iterable[_Union[TranslationInfo, _Mapping]]] = ...) -> None: ...
