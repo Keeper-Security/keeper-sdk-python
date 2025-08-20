@@ -1,3 +1,4 @@
+from google.protobuf import struct_pb2 as _struct_pb2
 from google.protobuf.internal import containers as _containers
 from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
@@ -14,6 +15,7 @@ class Currency(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     JPY: _ClassVar[Currency]
     EUR: _ClassVar[Currency]
     AUD: _ClassVar[Currency]
+    CAD: _ClassVar[Currency]
 
 class GradientIntegrationStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -21,16 +23,59 @@ class GradientIntegrationStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrappe
     PENDING: _ClassVar[GradientIntegrationStatus]
     CONNECTED: _ClassVar[GradientIntegrationStatus]
     NONE: _ClassVar[GradientIntegrationStatus]
+
+class EventType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    UNKNOWN_TRACKING_EVENT_TYPE: _ClassVar[EventType]
+    TRACKING_POPUP_DISPLAYED: _ClassVar[EventType]
+    TRACKING_POPUP_ACCEPTED: _ClassVar[EventType]
+    TRACKING_POPUP_DISMISSED: _ClassVar[EventType]
+    TRACKING_POPUP_PAID: _ClassVar[EventType]
+    TRACKING_PUSH_CLICKED: _ClassVar[EventType]
+    CONSOLE_ACTION: _ClassVar[EventType]
+    VAULT_ACTION: _ClassVar[EventType]
+
+class PurchaseProductType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    upgradeToEnterprise: _ClassVar[PurchaseProductType]
+    addUsers: _ClassVar[PurchaseProductType]
+    addStorage: _ClassVar[PurchaseProductType]
+    addAudit: _ClassVar[PurchaseProductType]
+    addBreachWatch: _ClassVar[PurchaseProductType]
+    addCompliance: _ClassVar[PurchaseProductType]
+    addChat: _ClassVar[PurchaseProductType]
+    addPAM: _ClassVar[PurchaseProductType]
+    addSilverSupport: _ClassVar[PurchaseProductType]
+    addPlatinumSupport: _ClassVar[PurchaseProductType]
 UNKNOWN: Currency
 USD: Currency
 GBP: Currency
 JPY: Currency
 EUR: Currency
 AUD: Currency
+CAD: Currency
 NOTCONNECTED: GradientIntegrationStatus
 PENDING: GradientIntegrationStatus
 CONNECTED: GradientIntegrationStatus
 NONE: GradientIntegrationStatus
+UNKNOWN_TRACKING_EVENT_TYPE: EventType
+TRACKING_POPUP_DISPLAYED: EventType
+TRACKING_POPUP_ACCEPTED: EventType
+TRACKING_POPUP_DISMISSED: EventType
+TRACKING_POPUP_PAID: EventType
+TRACKING_PUSH_CLICKED: EventType
+CONSOLE_ACTION: EventType
+VAULT_ACTION: EventType
+upgradeToEnterprise: PurchaseProductType
+addUsers: PurchaseProductType
+addStorage: PurchaseProductType
+addAudit: PurchaseProductType
+addBreachWatch: PurchaseProductType
+addCompliance: PurchaseProductType
+addChat: PurchaseProductType
+addPAM: PurchaseProductType
+addSilverSupport: PurchaseProductType
+addPlatinumSupport: PurchaseProductType
 
 class ValidateSessionTokenRequest(_message.Message):
     __slots__ = ("encryptedSessionToken", "returnMcEnterpiseIds", "ip")
@@ -116,12 +161,18 @@ class LicenseStats(_message.Message):
         MC_BUSINESS_PLUS: _ClassVar[LicenseStats.Type]
         MC_ENTERPRISE: _ClassVar[LicenseStats.Type]
         MC_ENTERPRISE_PLUS: _ClassVar[LicenseStats.Type]
+        B2B_BUSINESS_STARTER: _ClassVar[LicenseStats.Type]
+        B2B_BUSINESS: _ClassVar[LicenseStats.Type]
+        B2B_ENTERPRISE: _ClassVar[LicenseStats.Type]
     LICENSE_STAT_UNKNOWN: LicenseStats.Type
     MSP_BASE: LicenseStats.Type
     MC_BUSINESS: LicenseStats.Type
     MC_BUSINESS_PLUS: LicenseStats.Type
     MC_ENTERPRISE: LicenseStats.Type
     MC_ENTERPRISE_PLUS: LicenseStats.Type
+    B2B_BUSINESS_STARTER: LicenseStats.Type
+    B2B_BUSINESS: LicenseStats.Type
+    B2B_ENTERPRISE: LicenseStats.Type
     TYPE_FIELD_NUMBER: _ClassVar[int]
     AVAILABLE_FIELD_NUMBER: _ClassVar[int]
     USED_FIELD_NUMBER: _ClassVar[int]
@@ -259,10 +310,20 @@ class Cost(_message.Message):
         MONTH: _ClassVar[Cost.AmountPer]
         USER_MONTH: _ClassVar[Cost.AmountPer]
         USER_CONSUMED_MONTH: _ClassVar[Cost.AmountPer]
+        ENDPOINT_MONTH: _ClassVar[Cost.AmountPer]
+        USER_YEAR: _ClassVar[Cost.AmountPer]
+        USER_CONSUMED_YEAR: _ClassVar[Cost.AmountPer]
+        YEAR: _ClassVar[Cost.AmountPer]
+        ENDPOINT_YEAR: _ClassVar[Cost.AmountPer]
     UNKNOWN: Cost.AmountPer
     MONTH: Cost.AmountPer
     USER_MONTH: Cost.AmountPer
     USER_CONSUMED_MONTH: Cost.AmountPer
+    ENDPOINT_MONTH: Cost.AmountPer
+    USER_YEAR: Cost.AmountPer
+    USER_CONSUMED_YEAR: Cost.AmountPer
+    YEAR: Cost.AmountPer
+    ENDPOINT_YEAR: Cost.AmountPer
     AMOUNT_FIELD_NUMBER: _ClassVar[int]
     AMOUNTPER_FIELD_NUMBER: _ClassVar[int]
     CURRENCY_FIELD_NUMBER: _ClassVar[int]
@@ -326,6 +387,30 @@ class Invoice(_message.Message):
     invoiceType: Invoice.Type
     def __init__(self, id: _Optional[int] = ..., invoiceNumber: _Optional[str] = ..., invoiceDate: _Optional[int] = ..., licenseCount: _Optional[int] = ..., totalCost: _Optional[_Union[Invoice.Cost, _Mapping]] = ..., invoiceType: _Optional[_Union[Invoice.Type, str]] = ...) -> None: ...
 
+class VaultInvoicesListRequest(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class VaultInvoicesListResponse(_message.Message):
+    __slots__ = ("invoices",)
+    INVOICES_FIELD_NUMBER: _ClassVar[int]
+    invoices: _containers.RepeatedCompositeFieldContainer[VaultInvoice]
+    def __init__(self, invoices: _Optional[_Iterable[_Union[VaultInvoice, _Mapping]]] = ...) -> None: ...
+
+class VaultInvoice(_message.Message):
+    __slots__ = ("id", "invoiceNumber", "dateCreated", "total", "purchaseType")
+    ID_FIELD_NUMBER: _ClassVar[int]
+    INVOICENUMBER_FIELD_NUMBER: _ClassVar[int]
+    DATECREATED_FIELD_NUMBER: _ClassVar[int]
+    TOTAL_FIELD_NUMBER: _ClassVar[int]
+    PURCHASETYPE_FIELD_NUMBER: _ClassVar[int]
+    id: int
+    invoiceNumber: str
+    dateCreated: int
+    total: Invoice.Cost
+    purchaseType: Invoice.Type
+    def __init__(self, id: _Optional[int] = ..., invoiceNumber: _Optional[str] = ..., dateCreated: _Optional[int] = ..., total: _Optional[_Union[Invoice.Cost, _Mapping]] = ..., purchaseType: _Optional[_Union[Invoice.Type, str]] = ...) -> None: ...
+
 class InvoiceDownloadRequest(_message.Message):
     __slots__ = ("invoiceNumber",)
     INVOICENUMBER_FIELD_NUMBER: _ClassVar[int]
@@ -333,6 +418,20 @@ class InvoiceDownloadRequest(_message.Message):
     def __init__(self, invoiceNumber: _Optional[str] = ...) -> None: ...
 
 class InvoiceDownloadResponse(_message.Message):
+    __slots__ = ("link", "fileName")
+    LINK_FIELD_NUMBER: _ClassVar[int]
+    FILENAME_FIELD_NUMBER: _ClassVar[int]
+    link: str
+    fileName: str
+    def __init__(self, link: _Optional[str] = ..., fileName: _Optional[str] = ...) -> None: ...
+
+class VaultInvoiceDownloadLinkRequest(_message.Message):
+    __slots__ = ("invoiceNumber",)
+    INVOICENUMBER_FIELD_NUMBER: _ClassVar[int]
+    invoiceNumber: str
+    def __init__(self, invoiceNumber: _Optional[str] = ...) -> None: ...
+
+class VaultInvoiceDownloadLinkResponse(_message.Message):
     __slots__ = ("link", "fileName")
     LINK_FIELD_NUMBER: _ClassVar[int]
     FILENAME_FIELD_NUMBER: _ClassVar[int]
@@ -510,3 +609,166 @@ class KCMLicenseResponse(_message.Message):
     MESSAGE_FIELD_NUMBER: _ClassVar[int]
     message: str
     def __init__(self, message: _Optional[str] = ...) -> None: ...
+
+class EventRequest(_message.Message):
+    __slots__ = ("eventType", "eventValue", "eventTime", "attributes")
+    EVENTTYPE_FIELD_NUMBER: _ClassVar[int]
+    EVENTVALUE_FIELD_NUMBER: _ClassVar[int]
+    EVENTTIME_FIELD_NUMBER: _ClassVar[int]
+    ATTRIBUTES_FIELD_NUMBER: _ClassVar[int]
+    eventType: EventType
+    eventValue: str
+    eventTime: int
+    attributes: _struct_pb2.Struct
+    def __init__(self, eventType: _Optional[_Union[EventType, str]] = ..., eventValue: _Optional[str] = ..., eventTime: _Optional[int] = ..., attributes: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+
+class EventsRequest(_message.Message):
+    __slots__ = ("event",)
+    EVENT_FIELD_NUMBER: _ClassVar[int]
+    event: _containers.RepeatedCompositeFieldContainer[EventRequest]
+    def __init__(self, event: _Optional[_Iterable[_Union[EventRequest, _Mapping]]] = ...) -> None: ...
+
+class CustomerCaptureRequest(_message.Message):
+    __slots__ = ("pageUrl", "tree", "hash", "image", "pageLoadTime", "keyId", "test", "issueType", "notes")
+    PAGEURL_FIELD_NUMBER: _ClassVar[int]
+    TREE_FIELD_NUMBER: _ClassVar[int]
+    HASH_FIELD_NUMBER: _ClassVar[int]
+    IMAGE_FIELD_NUMBER: _ClassVar[int]
+    PAGELOADTIME_FIELD_NUMBER: _ClassVar[int]
+    KEYID_FIELD_NUMBER: _ClassVar[int]
+    TEST_FIELD_NUMBER: _ClassVar[int]
+    ISSUETYPE_FIELD_NUMBER: _ClassVar[int]
+    NOTES_FIELD_NUMBER: _ClassVar[int]
+    pageUrl: str
+    tree: str
+    hash: str
+    image: str
+    pageLoadTime: str
+    keyId: str
+    test: bool
+    issueType: str
+    notes: str
+    def __init__(self, pageUrl: _Optional[str] = ..., tree: _Optional[str] = ..., hash: _Optional[str] = ..., image: _Optional[str] = ..., pageLoadTime: _Optional[str] = ..., keyId: _Optional[str] = ..., test: bool = ..., issueType: _Optional[str] = ..., notes: _Optional[str] = ...) -> None: ...
+
+class CustomerCaptureResponse(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class Error(_message.Message):
+    __slots__ = ("code", "message", "extras")
+    class ExtrasEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: str
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
+    CODE_FIELD_NUMBER: _ClassVar[int]
+    MESSAGE_FIELD_NUMBER: _ClassVar[int]
+    EXTRAS_FIELD_NUMBER: _ClassVar[int]
+    code: str
+    message: str
+    extras: _containers.ScalarMap[str, str]
+    def __init__(self, code: _Optional[str] = ..., message: _Optional[str] = ..., extras: _Optional[_Mapping[str, str]] = ...) -> None: ...
+
+class QuotePurchase(_message.Message):
+    __slots__ = ("quoteTotal", "includedTax", "includedOtherAddons", "taxAmount", "taxLabel")
+    QUOTETOTAL_FIELD_NUMBER: _ClassVar[int]
+    INCLUDEDTAX_FIELD_NUMBER: _ClassVar[int]
+    INCLUDEDOTHERADDONS_FIELD_NUMBER: _ClassVar[int]
+    TAXAMOUNT_FIELD_NUMBER: _ClassVar[int]
+    TAXLABEL_FIELD_NUMBER: _ClassVar[int]
+    quoteTotal: float
+    includedTax: bool
+    includedOtherAddons: bool
+    taxAmount: float
+    taxLabel: str
+    def __init__(self, quoteTotal: _Optional[float] = ..., includedTax: bool = ..., includedOtherAddons: bool = ..., taxAmount: _Optional[float] = ..., taxLabel: _Optional[str] = ...) -> None: ...
+
+class UpgradeLicenseStatusRequest(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class UpgradeLicenseStatusResponse(_message.Message):
+    __slots__ = ("allowPurchaseFromConsole", "checkoutLink", "error")
+    ALLOWPURCHASEFROMCONSOLE_FIELD_NUMBER: _ClassVar[int]
+    CHECKOUTLINK_FIELD_NUMBER: _ClassVar[int]
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    allowPurchaseFromConsole: bool
+    checkoutLink: str
+    error: Error
+    def __init__(self, allowPurchaseFromConsole: bool = ..., checkoutLink: _Optional[str] = ..., error: _Optional[_Union[Error, _Mapping]] = ...) -> None: ...
+
+class UpgradeLicenseQuotePurchaseRequest(_message.Message):
+    __slots__ = ("productType", "quantity")
+    PRODUCTTYPE_FIELD_NUMBER: _ClassVar[int]
+    QUANTITY_FIELD_NUMBER: _ClassVar[int]
+    productType: PurchaseProductType
+    quantity: int
+    def __init__(self, productType: _Optional[_Union[PurchaseProductType, str]] = ..., quantity: _Optional[int] = ...) -> None: ...
+
+class UpgradeLicenseQuotePurchaseResponse(_message.Message):
+    __slots__ = ("success", "quotePurchase", "viewSummaryLink", "error")
+    SUCCESS_FIELD_NUMBER: _ClassVar[int]
+    QUOTEPURCHASE_FIELD_NUMBER: _ClassVar[int]
+    VIEWSUMMARYLINK_FIELD_NUMBER: _ClassVar[int]
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    success: bool
+    quotePurchase: QuotePurchase
+    viewSummaryLink: str
+    error: Error
+    def __init__(self, success: bool = ..., quotePurchase: _Optional[_Union[QuotePurchase, _Mapping]] = ..., viewSummaryLink: _Optional[str] = ..., error: _Optional[_Union[Error, _Mapping]] = ...) -> None: ...
+
+class UpgradeLicenseCompletePurchaseRequest(_message.Message):
+    __slots__ = ("productType", "quantity", "quotePurchase")
+    PRODUCTTYPE_FIELD_NUMBER: _ClassVar[int]
+    QUANTITY_FIELD_NUMBER: _ClassVar[int]
+    QUOTEPURCHASE_FIELD_NUMBER: _ClassVar[int]
+    productType: PurchaseProductType
+    quantity: int
+    quotePurchase: QuotePurchase
+    def __init__(self, productType: _Optional[_Union[PurchaseProductType, str]] = ..., quantity: _Optional[int] = ..., quotePurchase: _Optional[_Union[QuotePurchase, _Mapping]] = ...) -> None: ...
+
+class UpgradeLicenseCompletePurchaseResponse(_message.Message):
+    __slots__ = ("success", "invoiceNumber", "error", "quotePurchase")
+    SUCCESS_FIELD_NUMBER: _ClassVar[int]
+    INVOICENUMBER_FIELD_NUMBER: _ClassVar[int]
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    QUOTEPURCHASE_FIELD_NUMBER: _ClassVar[int]
+    success: bool
+    invoiceNumber: str
+    error: Error
+    quotePurchase: QuotePurchase
+    def __init__(self, success: bool = ..., invoiceNumber: _Optional[str] = ..., error: _Optional[_Union[Error, _Mapping]] = ..., quotePurchase: _Optional[_Union[QuotePurchase, _Mapping]] = ...) -> None: ...
+
+class EnterpriseBasePlan(_message.Message):
+    __slots__ = ("baseplanVersion", "cost")
+    class EnterpriseBasePlanVersion(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+        __slots__ = ()
+        UNKNOWN: _ClassVar[EnterpriseBasePlan.EnterpriseBasePlanVersion]
+        BUSINESS_STARTER: _ClassVar[EnterpriseBasePlan.EnterpriseBasePlanVersion]
+        BUSINESS: _ClassVar[EnterpriseBasePlan.EnterpriseBasePlanVersion]
+        ENTERPRISE: _ClassVar[EnterpriseBasePlan.EnterpriseBasePlanVersion]
+    UNKNOWN: EnterpriseBasePlan.EnterpriseBasePlanVersion
+    BUSINESS_STARTER: EnterpriseBasePlan.EnterpriseBasePlanVersion
+    BUSINESS: EnterpriseBasePlan.EnterpriseBasePlanVersion
+    ENTERPRISE: EnterpriseBasePlan.EnterpriseBasePlanVersion
+    BASEPLANVERSION_FIELD_NUMBER: _ClassVar[int]
+    COST_FIELD_NUMBER: _ClassVar[int]
+    baseplanVersion: EnterpriseBasePlan.EnterpriseBasePlanVersion
+    cost: Cost
+    def __init__(self, baseplanVersion: _Optional[_Union[EnterpriseBasePlan.EnterpriseBasePlanVersion, str]] = ..., cost: _Optional[_Union[Cost, _Mapping]] = ...) -> None: ...
+
+class SubscriptionEnterprisePricingRequest(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class SubscriptionEnterprisePricingResponse(_message.Message):
+    __slots__ = ("basePlans", "addons", "filePlans")
+    BASEPLANS_FIELD_NUMBER: _ClassVar[int]
+    ADDONS_FIELD_NUMBER: _ClassVar[int]
+    FILEPLANS_FIELD_NUMBER: _ClassVar[int]
+    basePlans: _containers.RepeatedCompositeFieldContainer[EnterpriseBasePlan]
+    addons: _containers.RepeatedCompositeFieldContainer[Addon]
+    filePlans: _containers.RepeatedCompositeFieldContainer[FilePlan]
+    def __init__(self, basePlans: _Optional[_Iterable[_Union[EnterpriseBasePlan, _Mapping]]] = ..., addons: _Optional[_Iterable[_Union[Addon, _Mapping]]] = ..., filePlans: _Optional[_Iterable[_Union[FilePlan, _Mapping]]] = ...) -> None: ...

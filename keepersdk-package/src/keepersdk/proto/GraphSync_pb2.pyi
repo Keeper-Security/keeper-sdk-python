@@ -8,30 +8,28 @@ DESCRIPTOR: _descriptor.FileDescriptor
 
 class RefType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
-    RFT_UNSPECIFIED: _ClassVar[RefType]
     RFT_GENERAL: _ClassVar[RefType]
-    USER: _ClassVar[RefType]
-    DEVICE: _ClassVar[RefType]
-    REC: _ClassVar[RefType]
-    FOLDER: _ClassVar[RefType]
-    TEAM: _ClassVar[RefType]
-    ENTERPRISE: _ClassVar[RefType]
-    PAM_DIRECTORY: _ClassVar[RefType]
-    PAM_MACHINE: _ClassVar[RefType]
-    PAM_DATABASE: _ClassVar[RefType]
-    PAM_USER: _ClassVar[RefType]
-    PAM_NETWORK: _ClassVar[RefType]
-    PAM_BROWSER: _ClassVar[RefType]
-    CONNECTION: _ClassVar[RefType]
-    WORKFLOW: _ClassVar[RefType]
-    NOTIFICATION: _ClassVar[RefType]
-    USER_INFO: _ClassVar[RefType]
-    TEAM_INFO: _ClassVar[RefType]
-    ROLE: _ClassVar[RefType]
+    RFT_USER: _ClassVar[RefType]
+    RFT_DEVICE: _ClassVar[RefType]
+    RFT_REC: _ClassVar[RefType]
+    RFT_FOLDER: _ClassVar[RefType]
+    RFT_TEAM: _ClassVar[RefType]
+    RFT_ENTERPRISE: _ClassVar[RefType]
+    RFT_PAM_DIRECTORY: _ClassVar[RefType]
+    RFT_PAM_MACHINE: _ClassVar[RefType]
+    RFT_PAM_DATABASE: _ClassVar[RefType]
+    RFT_PAM_USER: _ClassVar[RefType]
+    RFT_PAM_NETWORK: _ClassVar[RefType]
+    RFT_PAM_BROWSER: _ClassVar[RefType]
+    RFT_CONNECTION: _ClassVar[RefType]
+    RFT_WORKFLOW: _ClassVar[RefType]
+    RFT_NOTIFICATION: _ClassVar[RefType]
+    RFT_USER_INFO: _ClassVar[RefType]
+    RFT_TEAM_INFO: _ClassVar[RefType]
+    RFT_ROLE: _ClassVar[RefType]
 
 class GraphSyncDataType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
-    GSE_UNSPECIFIED: _ClassVar[GraphSyncDataType]
     GSE_DATA: _ClassVar[GraphSyncDataType]
     GSE_KEY: _ClassVar[GraphSyncDataType]
     GSE_LINK: _ClassVar[GraphSyncDataType]
@@ -40,37 +38,33 @@ class GraphSyncDataType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
 
 class GraphSyncActorType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
-    GSA_UNSPECIFIED: _ClassVar[GraphSyncActorType]
     GSA_USER: _ClassVar[GraphSyncActorType]
     GSA_SERVICE: _ClassVar[GraphSyncActorType]
     GSA_PAM_GATEWAY: _ClassVar[GraphSyncActorType]
-RFT_UNSPECIFIED: RefType
 RFT_GENERAL: RefType
-USER: RefType
-DEVICE: RefType
-REC: RefType
-FOLDER: RefType
-TEAM: RefType
-ENTERPRISE: RefType
-PAM_DIRECTORY: RefType
-PAM_MACHINE: RefType
-PAM_DATABASE: RefType
-PAM_USER: RefType
-PAM_NETWORK: RefType
-PAM_BROWSER: RefType
-CONNECTION: RefType
-WORKFLOW: RefType
-NOTIFICATION: RefType
-USER_INFO: RefType
-TEAM_INFO: RefType
-ROLE: RefType
-GSE_UNSPECIFIED: GraphSyncDataType
+RFT_USER: RefType
+RFT_DEVICE: RefType
+RFT_REC: RefType
+RFT_FOLDER: RefType
+RFT_TEAM: RefType
+RFT_ENTERPRISE: RefType
+RFT_PAM_DIRECTORY: RefType
+RFT_PAM_MACHINE: RefType
+RFT_PAM_DATABASE: RefType
+RFT_PAM_USER: RefType
+RFT_PAM_NETWORK: RefType
+RFT_PAM_BROWSER: RefType
+RFT_CONNECTION: RefType
+RFT_WORKFLOW: RefType
+RFT_NOTIFICATION: RefType
+RFT_USER_INFO: RefType
+RFT_TEAM_INFO: RefType
+RFT_ROLE: RefType
 GSE_DATA: GraphSyncDataType
 GSE_KEY: GraphSyncDataType
 GSE_LINK: GraphSyncDataType
 GSE_ACL: GraphSyncDataType
 GSE_DELETION: GraphSyncDataType
-GSA_UNSPECIFIED: GraphSyncActorType
 GSA_USER: GraphSyncActorType
 GSA_SERVICE: GraphSyncActorType
 GSA_PAM_GATEWAY: GraphSyncActorType

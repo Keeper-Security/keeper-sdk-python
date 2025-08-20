@@ -161,6 +161,12 @@ class SetPolicyCollectionRequest(_message.Message):
     setCollection: _containers.RepeatedCompositeFieldContainer[PolicyLink]
     def __init__(self, setCollection: _Optional[_Iterable[_Union[PolicyLink, _Mapping]]] = ...) -> None: ...
 
+class SetPolicyCollectionResponse(_message.Message):
+    __slots__ = ("setCollectionStatus",)
+    SETCOLLECTIONSTATUS_FIELD_NUMBER: _ClassVar[int]
+    setCollectionStatus: _containers.RepeatedCompositeFieldContainer[PedmStatus]
+    def __init__(self, setCollectionStatus: _Optional[_Iterable[_Union[PedmStatus, _Mapping]]] = ...) -> None: ...
+
 class CollectionValue(_message.Message):
     __slots__ = ("collectionUid", "collectionType", "encryptedData")
     COLLECTIONUID_FIELD_NUMBER: _ClassVar[int]
@@ -210,6 +216,16 @@ class ApprovalActionRequest(_message.Message):
     deny: _containers.RepeatedScalarFieldContainer[bytes]
     remove: _containers.RepeatedScalarFieldContainer[bytes]
     def __init__(self, approve: _Optional[_Iterable[bytes]] = ..., deny: _Optional[_Iterable[bytes]] = ..., remove: _Optional[_Iterable[bytes]] = ...) -> None: ...
+
+class ApprovalActionResponse(_message.Message):
+    __slots__ = ("approve", "deny", "remove")
+    APPROVE_FIELD_NUMBER: _ClassVar[int]
+    DENY_FIELD_NUMBER: _ClassVar[int]
+    REMOVE_FIELD_NUMBER: _ClassVar[int]
+    approve: _containers.RepeatedCompositeFieldContainer[PedmStatus]
+    deny: _containers.RepeatedCompositeFieldContainer[PedmStatus]
+    remove: _containers.RepeatedCompositeFieldContainer[PedmStatus]
+    def __init__(self, approve: _Optional[_Iterable[_Union[PedmStatus, _Mapping]]] = ..., deny: _Optional[_Iterable[_Union[PedmStatus, _Mapping]]] = ..., remove: _Optional[_Iterable[_Union[PedmStatus, _Mapping]]] = ...) -> None: ...
 
 class DeploymentNode(_message.Message):
     __slots__ = ("deploymentUid", "disabled", "aesKey", "ecPublicKey", "encryptedData", "agentData", "created", "modified")
@@ -418,15 +434,3 @@ class AuditCollectionResponse(_message.Message):
     hasMore: bool
     continuationToken: bytes
     def __init__(self, values: _Optional[_Iterable[_Union[AuditCollectionValue, _Mapping]]] = ..., hasMore: bool = ..., continuationToken: _Optional[bytes] = ...) -> None: ...
-
-class GetCollectionLinkRequest(_message.Message):
-    __slots__ = ("collectionLink",)
-    COLLECTIONLINK_FIELD_NUMBER: _ClassVar[int]
-    collectionLink: _containers.RepeatedCompositeFieldContainer[CollectionLink]
-    def __init__(self, collectionLink: _Optional[_Iterable[_Union[CollectionLink, _Mapping]]] = ...) -> None: ...
-
-class GetCollectionLinkResponse(_message.Message):
-    __slots__ = ("collectionLinkData",)
-    COLLECTIONLINKDATA_FIELD_NUMBER: _ClassVar[int]
-    collectionLinkData: _containers.RepeatedCompositeFieldContainer[CollectionLinkData]
-    def __init__(self, collectionLinkData: _Optional[_Iterable[_Union[CollectionLinkData, _Mapping]]] = ...) -> None: ...

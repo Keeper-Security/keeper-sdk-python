@@ -11,6 +11,7 @@ from keepersdk import crypto, utils
 from keepersdk.proto.APIRequest_pb2 import AddAppClientRequest, Device, RemoveAppClientsRequest, AppShareAdd, ApplicationShareType, AddAppSharesRequest, RemoveAppSharesRequest
 from keepersdk.proto.enterprise_pb2 import GENERAL
 from keepersdk.vault import ksm_management, vault_online
+from keepersdk.vault.vault_record import TypedRecord
 
 from . import base
 from .share_management import ShareAction, ShareFolderCommand, ShareRecordCommand
@@ -916,6 +917,9 @@ class SecretsManagerShareCommand(base.ArgparseCommand):
         is_shared_folder = secret_uid in vault.vault_data._shared_folders
 
         if is_record:
+            record = vault.vault_data.load_record(record_uid=secret_uid)
+            if not isinstance(record, TypedRecord):
+                raise ValueError("Unable to share application secret, only typed records can be shared")
             share_key_decrypted = vault.vault_data.get_record_key(record_uid=secret_uid)
             share_type = ApplicationShareType.SHARE_TYPE_RECORD
             secret_type_name = RECORD
@@ -969,7 +973,7 @@ class SecretsManagerShareCommand(base.ArgparseCommand):
                     "Please remove already shared UIDs from your command and try again."
                 )
             else:
-                logger.error(f"Failed to share secrets: {kae}")
+                raise ValueError(f"Failed to share secrets: {kae}")
             return False
 
     @staticmethod
