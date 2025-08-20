@@ -12,7 +12,7 @@
 import json
 from typing import Dict, Any, Tuple
 
-from .... import utils, crypto
+from keepersdk import utils, crypto
 from ...utils.constants import (
     AUTH_REASONS,
     ERROR_MESSAGES,
