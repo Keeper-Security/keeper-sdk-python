@@ -1209,7 +1209,7 @@ class RecordGetCommand(base.ArgparseCommand):
         """Display a record in the specified format."""
         record_uid = record.record_uid
         dispatch = {
-            'json': lambda: self._display_record_json(vault, record_uid),
+            'json': lambda: self._display_record_json(vault, record_uid, unmask),
             'password': lambda: self._display_record_password(vault, record_uid),
             'fields': lambda: self._display_record_fields(vault, record_uid, unmask)
         }
@@ -1238,18 +1238,18 @@ class RecordGetCommand(base.ArgparseCommand):
         else:  # detail format
             self._display_team_detail(vault, team.team_uid)
     
-    def _display_record_json(self, vault: vault_data.VaultData, uid: str):
+    def _display_record_json(self, vault: vault_data.VaultData, uid: str, unmask: bool = False):
         """Display record information in JSON format."""
         record = vault.vault_data.get_record(record_uid=uid)
         record_data = vault.vault_data.load_record(record_uid=uid)
         
-        output = self._build_record_json_output(record, record_data, uid)
+        output = self._build_record_json_output(record, record_data, uid, unmask)
         
         self._add_share_info_to_json(vault, uid, output)
         
         logger.info(json.dumps(output, indent=2))
 
-    def _build_record_json_output(self, record, record_data, uid: str):
+    def _build_record_json_output(self, record, record_data, uid: str, unmask: bool = False):
         """Build the JSON output structure for a record."""
         output = {
             'Record UID:': uid,
@@ -1258,29 +1258,29 @@ class RecordGetCommand(base.ArgparseCommand):
         }
         
         if isinstance(record_data, vault_record.PasswordRecord):
-            self._add_password_record_json_fields(record_data, output)
+            self._add_password_record_json_fields(record_data, output, unmask)
         elif isinstance(record_data, vault_record.TypedRecord):
-            self._add_typed_record_json_fields(record_data, output)
+            self._add_typed_record_json_fields(record_data, output, unmask)
         elif isinstance(record_data, vault_record.FileRecord):
             self._add_file_record_json_fields(record_data, output)
         else:
             raise ValueError('Record data could not be displayed. Record is of unsupported type for this command(eg Application record)')
 
-        output['Last Modified:'] = record_data.client_time_modified
+        output['Last Modified:'] = datetime.datetime.fromtimestamp(record_data.client_time_modified / 1000).strftime('%Y-%m-%d %H:%M:%S') if record_data.client_time_modified else None
         output['Version:'] = record.version
         output['Revision'] = record.revision
         
         return output
 
-    def _add_password_record_json_fields(self, record_data: vault_record.PasswordRecord, output: dict):
+    def _add_password_record_json_fields(self, record_data: vault_record.PasswordRecord, output: dict, unmask: bool = False):
         """Add password record specific fields to JSON output."""
         output['Notes:'] = record_data.notes
         output['$login:'] = record_data.login
-        output['$password:'] = record_data.password
+        output['$password:'] = '********' if not unmask else record_data.password
         output['$link:'] = record_data.link
 
         if record_data.totp:
-            output['Totp:'] = record_data.totp
+            output['Totp:'] = '********' if not unmask else record_data.totp
         
         if record_data.attachments:
             output['Attachments:'] = [{
@@ -1290,13 +1290,42 @@ class RecordGetCommand(base.ArgparseCommand):
             } for a in record_data.attachments]
         
         if record_data.custom:
-            output['Custom fields:'] = [vault_extensions.extract_typed_field(field) for field in record_data.custom]
+            custom_output = []
+            for field in record_data.custom:
+                field_data = vault_extensions.extract_typed_field(field)
+                if not unmask and self._is_sensitive_field_type(field.type):
+                    if isinstance(field_data, dict) and 'value' in field_data:
+                        field_data['value'] = '********'
+                    elif isinstance(field_data, str):
+                        field_data = '********'
+                custom_output.append(field_data)
+            output['Custom fields:'] = custom_output
 
-    def _add_typed_record_json_fields(self, record_data: vault_record.TypedRecord, output: dict):
+    def _add_typed_record_json_fields(self, record_data: vault_record.TypedRecord, output: dict, unmask: bool = False):
         """Add typed record specific fields to JSON output."""
         output['Notes:'] = record_data.notes
-        output['Fields:'] = [vault_extensions.extract_typed_field(field) for field in record_data.fields]
-        output['Custom:'] = [vault_extensions.extract_typed_field(field) for field in record_data.custom]
+        
+        fields_output = []
+        for field in record_data.fields:
+            field_data = vault_extensions.extract_typed_field(field)
+            if not unmask and self._is_sensitive_field_type(field.type):
+                if isinstance(field_data, dict) and 'value' in field_data:
+                    field_data['value'] = '********'
+                elif isinstance(field_data, str):
+                    field_data = '********'
+            fields_output.append(field_data)
+        output['Fields:'] = fields_output
+        
+        custom_output = []
+        for field in record_data.custom:
+            field_data = vault_extensions.extract_typed_field(field)
+            if not unmask and self._is_sensitive_field_type(field.type):
+                if isinstance(field_data, dict) and 'value' in field_data:
+                    field_data['value'] = '********'
+                elif isinstance(field_data, str):
+                    field_data = '********'
+            custom_output.append(field_data)
+        output['Custom:'] = custom_output
 
     def _add_file_record_json_fields(self, record_data: vault_record.FileRecord, output: dict):
         """Add file record specific fields to JSON output."""

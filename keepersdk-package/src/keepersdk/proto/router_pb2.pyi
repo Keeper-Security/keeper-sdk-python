@@ -92,7 +92,7 @@ class RouterControllerMessage(_message.Message):
     def __init__(self, messageType: _Optional[_Union[_pam_pb2.ControllerMessageType, str]] = ..., messageUid: _Optional[bytes] = ..., controllerUid: _Optional[bytes] = ..., streamResponse: bool = ..., payload: _Optional[bytes] = ..., timeout: _Optional[int] = ...) -> None: ...
 
 class RouterUserAuth(_message.Message):
-    __slots__ = ("transmissionKey", "sessionToken", "userId", "enterpriseUserId", "deviceName", "deviceToken", "clientVersionId", "needUsername", "username", "mspEnterpriseId")
+    __slots__ = ("transmissionKey", "sessionToken", "userId", "enterpriseUserId", "deviceName", "deviceToken", "clientVersionId", "needUsername", "username", "mspEnterpriseId", "isPedmAdmin", "mcEnterpriseId")
     TRANSMISSIONKEY_FIELD_NUMBER: _ClassVar[int]
     SESSIONTOKEN_FIELD_NUMBER: _ClassVar[int]
     USERID_FIELD_NUMBER: _ClassVar[int]
@@ -103,6 +103,8 @@ class RouterUserAuth(_message.Message):
     NEEDUSERNAME_FIELD_NUMBER: _ClassVar[int]
     USERNAME_FIELD_NUMBER: _ClassVar[int]
     MSPENTERPRISEID_FIELD_NUMBER: _ClassVar[int]
+    ISPEDMADMIN_FIELD_NUMBER: _ClassVar[int]
+    MCENTERPRISEID_FIELD_NUMBER: _ClassVar[int]
     transmissionKey: bytes
     sessionToken: bytes
     userId: int
@@ -113,7 +115,9 @@ class RouterUserAuth(_message.Message):
     needUsername: bool
     username: str
     mspEnterpriseId: int
-    def __init__(self, transmissionKey: _Optional[bytes] = ..., sessionToken: _Optional[bytes] = ..., userId: _Optional[int] = ..., enterpriseUserId: _Optional[int] = ..., deviceName: _Optional[str] = ..., deviceToken: _Optional[bytes] = ..., clientVersionId: _Optional[int] = ..., needUsername: bool = ..., username: _Optional[str] = ..., mspEnterpriseId: _Optional[int] = ...) -> None: ...
+    isPedmAdmin: bool
+    mcEnterpriseId: int
+    def __init__(self, transmissionKey: _Optional[bytes] = ..., sessionToken: _Optional[bytes] = ..., userId: _Optional[int] = ..., enterpriseUserId: _Optional[int] = ..., deviceName: _Optional[str] = ..., deviceToken: _Optional[bytes] = ..., clientVersionId: _Optional[int] = ..., needUsername: bool = ..., username: _Optional[str] = ..., mspEnterpriseId: _Optional[int] = ..., isPedmAdmin: bool = ..., mcEnterpriseId: _Optional[int] = ...) -> None: ...
 
 class RouterDeviceAuth(_message.Message):
     __slots__ = ("clientId", "clientVersion", "signature", "enterpriseId", "nodeId", "deviceName", "deviceToken", "controllerName", "controllerUid", "ownerUser", "challenge", "ownerId")
@@ -328,10 +332,14 @@ class EnforcementType(_message.Message):
     def __init__(self, enforcementTypeId: _Optional[int] = ..., value: _Optional[str] = ...) -> None: ...
 
 class GetEnforcementResponse(_message.Message):
-    __slots__ = ("enforcementTypes",)
+    __slots__ = ("enforcementTypes", "addOnIds", "isInTrial")
     ENFORCEMENTTYPES_FIELD_NUMBER: _ClassVar[int]
+    ADDONIDS_FIELD_NUMBER: _ClassVar[int]
+    ISINTRIAL_FIELD_NUMBER: _ClassVar[int]
     enforcementTypes: _containers.RepeatedCompositeFieldContainer[EnforcementType]
-    def __init__(self, enforcementTypes: _Optional[_Iterable[_Union[EnforcementType, _Mapping]]] = ...) -> None: ...
+    addOnIds: _containers.RepeatedScalarFieldContainer[int]
+    isInTrial: bool
+    def __init__(self, enforcementTypes: _Optional[_Iterable[_Union[EnforcementType, _Mapping]]] = ..., addOnIds: _Optional[_Iterable[int]] = ..., isInTrial: bool = ...) -> None: ...
 
 class PEDMTOTPValidateRequest(_message.Message):
     __slots__ = ("username", "enterpriseId", "code")

@@ -421,7 +421,7 @@ class RoleUsersRemoveResponse(_message.Message):
     def __init__(self, results: _Optional[_Iterable[_Union[RoleUserRemoveResult, _Mapping]]] = ...) -> None: ...
 
 class EnterpriseRegistration(_message.Message):
-    __slots__ = ("encryptedTreeKey", "enterpriseName", "rootNodeData", "adminUserData", "adminName", "roleData", "rsaKeyPair", "numberSeats", "enterpriseType", "rolePublicKey", "rolePrivateKeyEncryptedWithRoleKey", "roleKeyEncryptedWithTreeKey", "eccKeyPair", "allUsersRoleData", "roleKeyEncryptedWithUserPublicKey")
+    __slots__ = ("encryptedTreeKey", "enterpriseName", "rootNodeData", "adminUserData", "adminName", "roleData", "rsaKeyPair", "numberSeats", "enterpriseType", "rolePublicKey", "rolePrivateKeyEncryptedWithRoleKey", "roleKeyEncryptedWithTreeKey", "eccKeyPair", "allUsersRoleData", "roleKeyEncryptedWithUserPublicKey", "approverRoleData")
     ENCRYPTEDTREEKEY_FIELD_NUMBER: _ClassVar[int]
     ENTERPRISENAME_FIELD_NUMBER: _ClassVar[int]
     ROOTNODEDATA_FIELD_NUMBER: _ClassVar[int]
@@ -437,6 +437,7 @@ class EnterpriseRegistration(_message.Message):
     ECCKEYPAIR_FIELD_NUMBER: _ClassVar[int]
     ALLUSERSROLEDATA_FIELD_NUMBER: _ClassVar[int]
     ROLEKEYENCRYPTEDWITHUSERPUBLICKEY_FIELD_NUMBER: _ClassVar[int]
+    APPROVERROLEDATA_FIELD_NUMBER: _ClassVar[int]
     encryptedTreeKey: bytes
     enterpriseName: str
     rootNodeData: bytes
@@ -452,7 +453,8 @@ class EnterpriseRegistration(_message.Message):
     eccKeyPair: EnterpriseKeyPairRequest
     allUsersRoleData: bytes
     roleKeyEncryptedWithUserPublicKey: bytes
-    def __init__(self, encryptedTreeKey: _Optional[bytes] = ..., enterpriseName: _Optional[str] = ..., rootNodeData: _Optional[bytes] = ..., adminUserData: _Optional[bytes] = ..., adminName: _Optional[str] = ..., roleData: _Optional[bytes] = ..., rsaKeyPair: _Optional[_Union[EnterpriseKeyPairRequest, _Mapping]] = ..., numberSeats: _Optional[int] = ..., enterpriseType: _Optional[_Union[EnterpriseType, str]] = ..., rolePublicKey: _Optional[bytes] = ..., rolePrivateKeyEncryptedWithRoleKey: _Optional[bytes] = ..., roleKeyEncryptedWithTreeKey: _Optional[bytes] = ..., eccKeyPair: _Optional[_Union[EnterpriseKeyPairRequest, _Mapping]] = ..., allUsersRoleData: _Optional[bytes] = ..., roleKeyEncryptedWithUserPublicKey: _Optional[bytes] = ...) -> None: ...
+    approverRoleData: bytes
+    def __init__(self, encryptedTreeKey: _Optional[bytes] = ..., enterpriseName: _Optional[str] = ..., rootNodeData: _Optional[bytes] = ..., adminUserData: _Optional[bytes] = ..., adminName: _Optional[str] = ..., roleData: _Optional[bytes] = ..., rsaKeyPair: _Optional[_Union[EnterpriseKeyPairRequest, _Mapping]] = ..., numberSeats: _Optional[int] = ..., enterpriseType: _Optional[_Union[EnterpriseType, str]] = ..., rolePublicKey: _Optional[bytes] = ..., rolePrivateKeyEncryptedWithRoleKey: _Optional[bytes] = ..., roleKeyEncryptedWithTreeKey: _Optional[bytes] = ..., eccKeyPair: _Optional[_Union[EnterpriseKeyPairRequest, _Mapping]] = ..., allUsersRoleData: _Optional[bytes] = ..., roleKeyEncryptedWithUserPublicKey: _Optional[bytes] = ..., approverRoleData: _Optional[bytes] = ...) -> None: ...
 
 class DomainPasswordRulesRequest(_message.Message):
     __slots__ = ("username", "verificationCode")
