@@ -582,3 +582,9 @@ class BreachWatchGetSyncDataResponse(_message.Message):
     breachWatchSecurityData: _containers.RepeatedCompositeFieldContainer[BreachWatchSecurityData]
     users: _containers.RepeatedCompositeFieldContainer[User]
     def __init__(self, breachWatchRecords: _Optional[_Iterable[_Union[BreachWatchRecord, _Mapping]]] = ..., breachWatchSecurityData: _Optional[_Iterable[_Union[BreachWatchSecurityData, _Mapping]]] = ..., users: _Optional[_Iterable[_Union[User, _Mapping]]] = ...) -> None: ...
+
+class GetAccountUidMapResponse(_message.Message):
+    __slots__ = ("users",)
+    USERS_FIELD_NUMBER: _ClassVar[int]
+    users: _containers.RepeatedCompositeFieldContainer[User]
+    def __init__(self, users: _Optional[_Iterable[_Union[User, _Mapping]]] = ...) -> None: ...

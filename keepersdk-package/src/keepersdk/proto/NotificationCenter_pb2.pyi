@@ -13,6 +13,10 @@ class NotificationCategory(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     NC_ACCOUNT: _ClassVar[NotificationCategory]
     NC_SHARING: _ClassVar[NotificationCategory]
     NC_ENTERPRISE: _ClassVar[NotificationCategory]
+    NC_SECURITY: _ClassVar[NotificationCategory]
+    NC_REQUEST: _ClassVar[NotificationCategory]
+    NC_SYSTEM: _ClassVar[NotificationCategory]
+    NC_PROMOTION: _ClassVar[NotificationCategory]
 
 class NotificationType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -28,6 +32,8 @@ class NotificationType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     NT_APPROVAL_REQUEST: _ClassVar[NotificationType]
     NT_APPROVED_RESPONSE: _ClassVar[NotificationType]
     NT_DENIED_RESPONSE: _ClassVar[NotificationType]
+    NT_2FA_CONFIGURED: _ClassVar[NotificationType]
+    NT_SHARE_APPROVAL_DENIED: _ClassVar[NotificationType]
 
 class NotificationReadStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -47,6 +53,10 @@ NC_UNSPECIFIED: NotificationCategory
 NC_ACCOUNT: NotificationCategory
 NC_SHARING: NotificationCategory
 NC_ENTERPRISE: NotificationCategory
+NC_SECURITY: NotificationCategory
+NC_REQUEST: NotificationCategory
+NC_SYSTEM: NotificationCategory
+NC_PROMOTION: NotificationCategory
 NT_UNSPECIFIED: NotificationType
 NT_ALERT: NotificationType
 NT_DEVICE_APPROVAL: NotificationType
@@ -59,6 +69,8 @@ NT_LICENSE_LIMIT_REACHED: NotificationType
 NT_APPROVAL_REQUEST: NotificationType
 NT_APPROVED_RESPONSE: NotificationType
 NT_DENIED_RESPONSE: NotificationType
+NT_2FA_CONFIGURED: NotificationType
+NT_SHARE_APPROVAL_DENIED: NotificationType
 NRS_UNSPECIFIED: NotificationReadStatus
 NRS_LAST: NotificationReadStatus
 NRS_READ: NotificationReadStatus
@@ -78,20 +90,22 @@ class EncryptedData(_message.Message):
     def __init__(self, version: _Optional[int] = ..., data: _Optional[bytes] = ...) -> None: ...
 
 class Notification(_message.Message):
-    __slots__ = ("type", "category", "sender", "senderFullName", "encryptedData", "refs")
+    __slots__ = ("type", "category", "sender", "senderFullName", "encryptedData", "refs", "categories")
     TYPE_FIELD_NUMBER: _ClassVar[int]
     CATEGORY_FIELD_NUMBER: _ClassVar[int]
     SENDER_FIELD_NUMBER: _ClassVar[int]
     SENDERFULLNAME_FIELD_NUMBER: _ClassVar[int]
     ENCRYPTEDDATA_FIELD_NUMBER: _ClassVar[int]
     REFS_FIELD_NUMBER: _ClassVar[int]
+    CATEGORIES_FIELD_NUMBER: _ClassVar[int]
     type: NotificationType
     category: NotificationCategory
     sender: _GraphSync_pb2.GraphSyncRef
     senderFullName: str
     encryptedData: EncryptedData
     refs: _containers.RepeatedCompositeFieldContainer[_GraphSync_pb2.GraphSyncRef]
-    def __init__(self, type: _Optional[_Union[NotificationType, str]] = ..., category: _Optional[_Union[NotificationCategory, str]] = ..., sender: _Optional[_Union[_GraphSync_pb2.GraphSyncRef, _Mapping]] = ..., senderFullName: _Optional[str] = ..., encryptedData: _Optional[_Union[EncryptedData, _Mapping]] = ..., refs: _Optional[_Iterable[_Union[_GraphSync_pb2.GraphSyncRef, _Mapping]]] = ...) -> None: ...
+    categories: _containers.RepeatedScalarFieldContainer[NotificationCategory]
+    def __init__(self, type: _Optional[_Union[NotificationType, str]] = ..., category: _Optional[_Union[NotificationCategory, str]] = ..., sender: _Optional[_Union[_GraphSync_pb2.GraphSyncRef, _Mapping]] = ..., senderFullName: _Optional[str] = ..., encryptedData: _Optional[_Union[EncryptedData, _Mapping]] = ..., refs: _Optional[_Iterable[_Union[_GraphSync_pb2.GraphSyncRef, _Mapping]]] = ..., categories: _Optional[_Iterable[_Union[NotificationCategory, str]]] = ...) -> None: ...
 
 class NotificationReadMark(_message.Message):
     __slots__ = ("uid", "notification_edge_id", "mark_edge_id", "readStatus")
@@ -106,18 +120,20 @@ class NotificationReadMark(_message.Message):
     def __init__(self, uid: _Optional[bytes] = ..., notification_edge_id: _Optional[int] = ..., mark_edge_id: _Optional[int] = ..., readStatus: _Optional[_Union[NotificationReadStatus, str]] = ...) -> None: ...
 
 class NotificationContent(_message.Message):
-    __slots__ = ("notification", "readStatus", "approvalStatus", "clientTypeIDs", "deviceIDs")
+    __slots__ = ("notification", "readStatus", "approvalStatus", "trimmingPoint", "clientTypeIDs", "deviceIDs")
     NOTIFICATION_FIELD_NUMBER: _ClassVar[int]
     READSTATUS_FIELD_NUMBER: _ClassVar[int]
     APPROVALSTATUS_FIELD_NUMBER: _ClassVar[int]
+    TRIMMINGPOINT_FIELD_NUMBER: _ClassVar[int]
     CLIENTTYPEIDS_FIELD_NUMBER: _ClassVar[int]
     DEVICEIDS_FIELD_NUMBER: _ClassVar[int]
     notification: Notification
     readStatus: NotificationReadStatus
     approvalStatus: NotificationApprovalStatus
+    trimmingPoint: bool
     clientTypeIDs: _containers.RepeatedScalarFieldContainer[int]
     deviceIDs: _containers.RepeatedScalarFieldContainer[int]
-    def __init__(self, notification: _Optional[_Union[Notification, _Mapping]] = ..., readStatus: _Optional[_Union[NotificationReadStatus, str]] = ..., approvalStatus: _Optional[_Union[NotificationApprovalStatus, str]] = ..., clientTypeIDs: _Optional[_Iterable[int]] = ..., deviceIDs: _Optional[_Iterable[int]] = ...) -> None: ...
+    def __init__(self, notification: _Optional[_Union[Notification, _Mapping]] = ..., readStatus: _Optional[_Union[NotificationReadStatus, str]] = ..., approvalStatus: _Optional[_Union[NotificationApprovalStatus, str]] = ..., trimmingPoint: bool = ..., clientTypeIDs: _Optional[_Iterable[int]] = ..., deviceIDs: _Optional[_Iterable[int]] = ...) -> None: ...
 
 class NotificationWrapper(_message.Message):
     __slots__ = ("uid", "content", "timestamp")
