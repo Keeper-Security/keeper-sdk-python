@@ -149,13 +149,13 @@ class AuditSettingMixin:
         settings = AuditSettingMixin.load_settings(auth)
         if not settings:
             raise ValueError(f'Alert with name \"{alert_name}\" not found')
-        alert_filter = settings.get('AuditAlertFilter')
-        if not isinstance(alert_filter, list):
+        alert_filters = settings.get('AuditAlertFilter')
+        if not isinstance(alert_filters, list):
             raise ValueError(f'Alert with name \"{alert_name}\" not found')
 
         a_number = int(alert_name) if alert_name.isnumeric() else 0
         if a_number > 0:
-            for alert_filter in alert_filter:
+            for alert_filter in alert_filters:
                 a_id = alert_filter.get('id')
                 if isinstance(a_id, int):
                     if a_id == a_number:
@@ -163,7 +163,7 @@ class AuditSettingMixin:
 
         alerts = []
         l_name = alert_name.casefold()
-        for alert_filter in alert_filter:
+        for alert_filter in alert_filters:
             a_name = alert_filter.get('name') or ''
             if a_name.casefold() == l_name:
                 alerts.append(alert_filter)
@@ -339,6 +339,8 @@ class AuditAlertView(base.ArgparseCommand, AuditSettingMixin):
         alert = AuditSettingMixin.get_alert_configuration(context.auth, kwargs.get('target'))
         alert_id: int = alert.get('id') or 0
         ctx = AuditSettingMixin.get_alert_context(alert_id) or alert
+        if not ctx:
+            raise base.CommandError('No alert found for the given alert ID/name')
         table = []
         header = ['name', 'value']
         table.append(['Alert ID', alert_id])
@@ -452,6 +454,8 @@ class AuditAlertDelete(base.ArgparseCommand, AuditSettingMixin):
         assert context.auth
 
         alert = AuditSettingMixin.get_alert_configuration(context.auth, kwargs.get('target'))
+        if not alert:
+            raise base.CommandError('No alert found for the given alert ID/name')
 
         rq = {
             'command': 'delete_enterprise_setting',
@@ -562,6 +566,8 @@ class AuditAlertEdit(base.ArgparseCommand, AuditSettingMixin):
             alert_id = alert.get('id')
             assert isinstance(alert_id, int)
             ctx = AuditSettingMixin.get_alert_context(alert_id) or {'id': alert_id}
+            if not ctx:
+                raise base.CommandError('No alert found for the given alert ID/name')
             current_active = 'off' if ctx.get('disabled') is True else 'on'
             if active != current_active:
                 rq = {
