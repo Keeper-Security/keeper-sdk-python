@@ -510,14 +510,12 @@ class EnterpriseUserAliasCommand(base.ArgparseCommand):
                 alias_rq.alias = add_user
                 context.auth.execute_auth_rest('enterprise/enterprise_user_set_primary_alias', alias_rq)
             else:
-                add_rq = APIRequest_pb2.EnterpriseUserAddAliasRequestV2()
                 alias_request = APIRequest_pb2.EnterpriseUserAddAliasRequest()
                 alias_request.enterpriseUserId = user.enterprise_user_id
                 alias_request.alias = add_user
                 alias_request.primary = True
-                add_rq.enterpriseUserAddAliasRequest.append(alias_request)
                 add_rs = context.auth.execute_auth_rest(
-                    'enterprise/enterprise_user_add_alias', add_rq, response_type=APIRequest_pb2.EnterpriseUserAddAliasResponse)
+                    'enterprise/enterprise_user_add_alias', alias_request, response_type=APIRequest_pb2.EnterpriseUserAddAliasResponse)
                 assert add_rs
                 for rs in add_rs.status:
                     if rs.status != 'success':

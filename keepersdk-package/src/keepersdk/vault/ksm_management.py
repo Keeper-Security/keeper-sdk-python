@@ -22,7 +22,7 @@ def list_secrets_manager_apps(vault: vault_online.VaultOnline) -> list[ksm.Secre
     )
 
     apps_list = []
-    if response.applicationSummary:
+    if response and response.applicationSummary:
         for app_summary in response.applicationSummary:
             uid = utils.base64_url_encode(app_summary.appRecordUid)
             app_record = vault.vault_data.load_record(uid)
