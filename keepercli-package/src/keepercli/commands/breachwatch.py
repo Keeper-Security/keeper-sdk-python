@@ -88,11 +88,11 @@ class BreachWatchIgnoreCommand(base.ArgparseCommand):
         # Parse and resolve record names to UIDs
         record_names = self._get_record_names(kwargs)
         if not record_names:
-            return
+            raise base.CommandError('Record name or UID is required. Example: breachwatch ignore <RECORD_UID>')
         
         record_uids = self._resolve_record_uids(record_names, context)
         if not record_uids:
-            return
+            raise base.CommandError('Record not found for the given UID/name/path')
 
         # Get breached records and their passwords
         breached_records = self._get_breached_records(vault)
