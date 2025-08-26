@@ -11,6 +11,9 @@
 
 import argparse
 import json
+from typing import Optional
+
+from keepersdk.authentication import login_auth
 
 from ..commands.base import BiometricArgparseCommand
 from ..utils.constants import SUCCESS_MESSAGES, API_ENDPOINTS
@@ -75,6 +78,29 @@ class BiometricVerifyCommand(BiometricArgparseCommand):
         except Exception as e:
             raise Exception(str(e))
 
+    def _verify_login_authentication_response(self, login_auth: login_auth.LoginAuth, auth_options, assertion_response, purpose):
+        """Verify the authentication response with Keeper"""
+        try:
+            actual_response = self._extract_assertion_response(assertion_response)
+
+            if not hasattr(actual_response, 'response'):
+                raise Exception(f"Invalid assertion response object: {type(actual_response)}")
+
+            client_data_bytes = actual_response.response.client_data
+            client_data_b64 = self._extract_client_data_b64(client_data_bytes)
+
+            credential_id = actual_response.id
+            credential_raw_id = actual_response.raw_id
+            if not credential_id or not credential_raw_id:
+                raise Exception("Could not extract credential ID from assertion response")
+
+            assertion_object = self._create_assertion_object(actual_response, client_data_b64)
+
+            return self._send_login_verification_request(login_auth, auth_options, assertion_object, purpose)
+
+        except Exception as e:
+            raise Exception(str(e))
+
     def _extract_client_data_b64(self, client_data_bytes):
         """Extract base64-encoded client data"""
         if hasattr(client_data_bytes, 'b64'):
@@ -113,6 +139,29 @@ class BiometricVerifyCommand(BiometricArgparseCommand):
             rq.encryptedLoginToken = utils.base64_url_decode(login_token) if isinstance(login_token, str) else login_token
 
         rs = vault.keeper_auth.execute_auth_rest(rest_endpoint=API_ENDPOINTS['verify_authentication'], request=rq, response_type=APIRequest_pb2.PasskeyValidationResponse)
+
+        return {
+            'is_valid': rs.isValid,
+            'login_token': rs.encryptedLoginToken,
+            'credential_id': assertion_object['id'].encode() if isinstance(assertion_object['id'], str) else assertion_object['id'],
+            'user_handle': getattr(getattr(getattr(assertion_object, 'response', None), 'response', None), 'user_handle', None)
+        }
+
+    def _send_login_verification_request(self, login_auth: login_auth.LoginAuth, auth_options, assertion_object, purpose):
+        """Send verification request to Keeper API"""
+        from keepersdk.proto import APIRequest_pb2
+
+        rq = APIRequest_pb2.PasskeyValidationRequest()
+        rq.challengeToken = auth_options['challenge_token']
+        rq.assertionResponse = json.dumps(assertion_object).encode('utf-8')
+        rq.passkeyPurpose = (APIRequest_pb2.PasskeyPurpose.PK_REAUTH 
+                           if purpose == 'vault' else APIRequest_pb2.PasskeyPurpose.PK_LOGIN)
+
+        if auth_options.get('login_token'):
+            login_token = auth_options['login_token']
+            rq.encryptedLoginToken = utils.base64_url_decode(login_token) if isinstance(login_token, str) else login_token
+
+        rs = login_auth.execute_rest(rest_endpoint=API_ENDPOINTS['verify_authentication'], request=rq, response_type=APIRequest_pb2.PasskeyValidationResponse)
 
         return {
             'is_valid': rs.isValid,
@@ -163,14 +212,13 @@ class BiometricVerifyCommand(BiometricArgparseCommand):
 
         print("=" * 50)
 
-    def biometric_authenticate(self, context: KeeperParams, **kwargs):
+    def biometric_authenticate(self, login_auth: login_auth.LoginAuth, client_version: str, username: str, purpose: str = 'login', device_token: Optional[str] = None):
         """Perform biometric authentication for login"""
         try:
-            purpose = kwargs.get('purpose', 'login')
 
-            auth_options = self.client.generate_authentication_options(context, purpose)
+            auth_options = self.client.generate_login_authentication_options(login_auth, client_version, username, purpose, device_token)
             assertion_response = self.client.perform_authentication(auth_options)
-            verification_result = self._verify_authentication_response(context.vault, auth_options, assertion_response, purpose)
+            verification_result = self._verify_login_authentication_response(login_auth, auth_options, assertion_response, purpose)
 
             return verification_result
 

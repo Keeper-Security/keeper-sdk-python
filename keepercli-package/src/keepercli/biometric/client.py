@@ -11,14 +11,14 @@
 
 import json
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from fido2.client import DefaultClientDataCollector
 from fido2.webauthn import PublicKeyCredentialCreationOptions, PublicKeyCredentialRequestOptions
 
-from .. import api
 from ..params import KeeperParams
 from keepersdk import utils
+from keepersdk.authentication import login_auth
 from keepersdk.vault import vault_online
 from keepersdk.proto import APIRequest_pb2
 from .platforms.detector import BiometricDetector
@@ -149,6 +149,30 @@ class BiometricClient:
                 rq.encryptedDeviceToken = context.auth.auth_context.device_token
 
             rs = context.vault.keeper_auth.execute_auth_rest(rest_endpoint=API_ENDPOINTS['generate_authentication'], request=rq, response_type=APIRequest_pb2.PasskeyAuthenticationResponse)
+
+            return {
+                'challenge_token': rs.challengeToken,
+                'request_options': json.loads(rs.pkRequestOptions),
+                'login_token': rs.encryptedLoginToken,
+                'purpose': purpose
+            }
+        except Exception as e:
+            raise Exception(str(e))
+
+    def generate_login_authentication_options(self, login_auth: login_auth.LoginAuth, client_version: str, username: str, purpose: str = 'login', device_token: Optional[str] = None) -> Dict[str, Any]:
+        """Generate authentication options"""
+        try:
+            rq = APIRequest_pb2.PasskeyAuthenticationRequest()
+            rq.authenticatorAttachment = APIRequest_pb2.AuthenticatorAttachment.PLATFORM
+            rq.clientVersion = client_version
+            rq.username = username
+            rq.passkeyPurpose = (APIRequest_pb2.PasskeyPurpose.PK_REAUTH
+                               if purpose == 'vault' else APIRequest_pb2.PasskeyPurpose.PK_LOGIN)
+
+            if login_auth.context.device_token:
+                rq.encryptedDeviceToken = login_auth.context.device_token
+
+            rs = login_auth.execute_rest(rest_endpoint=API_ENDPOINTS['generate_authentication'], request=rq, response_type=APIRequest_pb2.PasskeyAuthenticationResponse)
 
             return {
                 'challenge_token': rs.challengeToken,
