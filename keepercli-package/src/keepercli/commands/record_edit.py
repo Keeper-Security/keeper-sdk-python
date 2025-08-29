@@ -1748,7 +1748,7 @@ class RecordSearchCommand(base.ArgparseCommand):
     def execute(self, context: KeeperParams, **kwargs):
         """Main execution method for the search command."""
         if not context.vault:
-            raise Exception('Vault is not initialized. Login to initialize the vault.')
+            raise ValueError('Vault is not initialized. Login to initialize the vault.')
 
         search_config = self._prepare_search_config(kwargs)
         self._perform_search(context.vault, search_config, context)
@@ -1782,12 +1782,13 @@ class RecordSearchCommand(base.ArgparseCommand):
         # Store search results for each category
         search_results = {}
         total_found = 0
-        
+        max_results_per_category = 1000
+
         # Search in each requested category
         if 'r' in config['categories']:
             try:
                 records = context.vault.vault_data.find_records(criteria=config['pattern'], record_type=None, record_version=None)
-                search_results['records'] = list(records)
+                search_results['records'] = list(itertools.islice(records, max_results_per_category))
                 total_found += len(search_results['records'])
             except Exception as e:
                 logger.error(f"Error searching records: {e}")
@@ -1796,7 +1797,7 @@ class RecordSearchCommand(base.ArgparseCommand):
         if 's' in config['categories']:
             try:
                 shared_folders = vault.vault_data.find_shared_folders(criteria=config['pattern'])
-                search_results['shared_folders'] = list(shared_folders)
+                search_results['shared_folders'] = list(itertools.islice(shared_folders, max_results_per_category))
                 total_found += len(search_results['shared_folders'])
             except Exception as e:
                 logger.error(f"Error searching shared folders: {e}")
@@ -1805,7 +1806,7 @@ class RecordSearchCommand(base.ArgparseCommand):
         if 't' in config['categories']:
             try:
                 teams = vault.vault_data.find_teams(criteria=config['pattern'])
-                search_results['teams'] = list(teams)
+                search_results['teams'] = list(itertools.islice(teams, max_results_per_category))
                 total_found += len(search_results['teams'])
             except Exception as e:
                 logger.error(f"Error searching teams: {e}")
