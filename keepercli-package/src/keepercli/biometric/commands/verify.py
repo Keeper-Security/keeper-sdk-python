@@ -163,12 +163,7 @@ class BiometricVerifyCommand(BiometricArgparseCommand):
 
         rs = login_auth.execute_rest(rest_endpoint=API_ENDPOINTS['verify_authentication'], request=rq, response_type=APIRequest_pb2.PasskeyValidationResponse)
 
-        return {
-            'is_valid': rs.isValid,
-            'login_token': rs.encryptedLoginToken,
-            'credential_id': assertion_object['id'].encode() if isinstance(assertion_object['id'], str) else assertion_object['id'],
-            'user_handle': getattr(getattr(getattr(assertion_object, 'response', None), 'response', None), 'user_handle', None)
-        }
+        return rs
 
     def _extract_assertion_response(self, assertion_result):
         """Extract assertion response from various result types"""
