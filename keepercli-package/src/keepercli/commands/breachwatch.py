@@ -1,5 +1,6 @@
 import argparse
 import base64
+import getpass
 import json
 from typing import Any, Optional, Set
 
@@ -28,6 +29,7 @@ class BreachWatchCommand(base.GroupCommand):
         self.register_command(BreachWatchListCommand(), 'list', 'l')
         self.register_command(BreachWatchIgnoreCommand(), 'ignore')
         self.register_command(BreachWatchScanCommand(), 'scan')
+        self.register_command(BreachWatchPasswordCommand(), 'password')
 
 class BreachWatchListCommand(base.ArgparseCommand):
     def __init__(self):
@@ -374,3 +376,100 @@ class BreachWatchScanCommand(base.ArgparseCommand):
 
     def _get_status_display(self, status: int) -> str: 
         return STATUS_TO_TEXT.get(status, "UNKNOWN")
+
+
+class BreachWatchPasswordCommand(base.ArgparseCommand):
+
+    PASSWORD_FIELD_WIDTH = 16
+    
+    def __init__(self):
+        parser = argparse.ArgumentParser(prog='breachwatch password', description='Scan a password against the breach watch database.')
+        parser.add_argument('passwords', type=str, nargs='*', help='Password')
+        super().__init__(parser)
+
+    def execute(self, context: KeeperParams, **kwargs) -> Any:
+        if not self._is_vault_ready(context):
+            return
+            
+        breach_watch = context.vault.breach_watch_plugin().breach_watch
+        passwords = self._get_passwords_to_scan(kwargs)
+        
+        if not passwords:
+            raise base.CommandError('No passwords to scan.')
+            
+        try:
+            scan_results = self._scan_passwords(breach_watch, passwords)
+            self._display_results(scan_results, kwargs.get('passwords'))
+            self._cleanup_scan_data(breach_watch, scan_results)
+        except Exception as e:
+            logger.error(f"Error scanning passwords: {e}")
+
+    def _is_vault_ready(self, context: KeeperParams) -> bool:
+        """Check if vault and breach watch are properly initialized."""
+        if not context.vault:
+            raise base.CommandError('Vault is not initialized.')
+        if not context.vault.breach_watch_plugin():
+            raise base.CommandError('Breach watch is not enabled. Please contact your administrator to enable this feature.')
+        return True
+
+    def _get_passwords_to_scan(self, kwargs: dict) -> list[str]:
+        """Get passwords from command line arguments or prompt user."""
+        passwords = kwargs.get('passwords', [])
+        if passwords:
+            return passwords
+            
+        try:
+            password = getpass.getpass(prompt='Password to Check: ', stream=None)
+            if password.strip():
+                return [password]
+        except KeyboardInterrupt:
+            logger.info('')
+        return []
+
+    def _scan_passwords(self, breach_watch, passwords: list[str]) -> list:
+        """Scan passwords and return results with EUIDs for cleanup."""
+        scan_results = []
+        for result in breach_watch.scan_passwords(passwords):
+            if self._is_valid_scan_result(result):
+                scan_results.append(result)
+        return scan_results
+
+    def _is_valid_scan_result(self, result) -> bool:
+        """Validate scan result structure."""
+        return result and len(result) == 2
+
+    def _display_results(self, scan_results: list, echo_passwords: bool) -> None:
+        """Display scan results in a formatted way."""
+        for result in scan_results:
+            password, scan_result = result
+            self._display_single_result(password, scan_result, echo_passwords)
+
+    def _display_single_result(self, password: str, scan_result, echo_passwords: bool) -> None:
+        """Display a single password scan result."""
+        pwd = password if echo_passwords else "*" * len(password)
+        status = self._get_status_text(scan_result)
+        logger.info(f'{pwd:>{self.PASSWORD_FIELD_WIDTH}s}: {status}')
+
+    def _get_status_text(self, scan_result) -> str:
+        """Get human-readable status text for scan result."""
+        is_breached = getattr(scan_result, 'breachDetected', False)
+        status_code = client_pb2.BWStatus.BREACHED if is_breached else client_pb2.BWStatus.GOOD
+        return STATUS_TO_TEXT.get(status_code, "Unknown")
+
+    def _cleanup_scan_data(self, breach_watch, scan_results: list) -> None:
+        """Clean up scan data by deleting EUIDs."""
+        euids = self._extract_euids(scan_results)
+        if euids:
+            try:
+                breach_watch.delete_euids(euids)
+            except Exception as e:
+                logger.warning(f"Failed to cleanup scan data: {e}")
+
+    def _extract_euids(self, scan_results: list) -> list:
+        """Extract EUIDs from scan results for cleanup."""
+        euids = []
+        for result in scan_results:
+            password, scan_result = result
+            if hasattr(scan_result, 'euid') and scan_result.euid:
+                euids.append(scan_result.euid)
+        return euids
