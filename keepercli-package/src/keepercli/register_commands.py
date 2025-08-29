@@ -36,6 +36,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('mv', vault_folder.FolderMoveCommand(), base.CommandScope.Vault)
         commands.register_command('list', vault_record.RecordListCommand(), base.CommandScope.Vault, 'l')
         commands.register_command('shortcut', vault_record.ShortcutCommand(), base.CommandScope.Vault)
+        commands.register_command('search', record_edit.RecordSearchCommand(), base.CommandScope.Vault, 's')
         commands.register_command('record-add', record_edit.RecordAddCommand(), base.CommandScope.Vault, 'ra')
         commands.register_command('record-update', record_edit.RecordUpdateCommand(), base.CommandScope.Vault, 'ru')
         commands.register_command('rm', record_edit.RecordDeleteCommand(), base.CommandScope.Vault)
