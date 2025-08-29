@@ -6,7 +6,7 @@ import datetime
 import itertools
 import json
 import os
-from typing import Optional, List, Any, Sequence, Union
+from typing import Iterable, Optional, List, Any, Sequence, Union
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
@@ -17,7 +17,7 @@ from keepersdk import crypto, generator
 
 from . import base
 from .. import prompt_utils, api, constants
-from ..helpers import folder_utils, record_utils, share_utils, timeout_utils
+from ..helpers import folder_utils, record_utils, report_utils, share_utils, timeout_utils
 from ..params import KeeperParams
 
 
@@ -1715,3 +1715,243 @@ class RecordGetCommand(base.ArgparseCommand):
             'oneTimeCode', 'keyPair', 'licenseNumber'
         }
         return field_type in sensitive_types
+
+
+class RecordSearchCommand(base.ArgparseCommand):
+    """Command for searching vault records, shared folders, and teams."""
+    
+    DEFAULT_CATEGORIES = 'rst'
+    MAX_DETAILS_THRESHOLD = 5
+    DEFAULT_COLUMN_WIDTH = 40
+
+    def __init__(self):
+        self.parser = argparse.ArgumentParser(
+            prog='search', description='Search the vault for records. Can use a regular expression.'
+        )
+        RecordSearchCommand.add_arguments_to_parser(self.parser)
+        super().__init__(self.parser)
+    
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
+        parser.add_argument(
+            'pattern', nargs='?', type=str, action='store', help='search pattern'
+        )
+        parser.add_argument(
+            '-v', '--verbose', dest='verbose', action='store_true', help='verbose output'
+        )
+        parser.add_argument(
+            '-c', '--categories', dest='categories', action='store',
+            help='One or more of these letters for categories to search: "r" = records, '
+                    '"s" = shared folders, "t" = teams'
+        )
+    
+    def execute(self, context: KeeperParams, **kwargs):
+        """Main execution method for the search command."""
+        if not context.vault:
+            raise Exception('Vault is not initialized. Login to initialize the vault.')
+
+        search_config = self._prepare_search_config(kwargs)
+        self._perform_search(context.vault, search_config, context)
+
+    def _prepare_search_config(self, kwargs: dict) -> dict:
+        """Prepare search configuration from command line arguments."""
+        pattern = kwargs.get('pattern') or ''
+        
+        if pattern == '*':
+            pattern = '.*'
+
+        verbose = kwargs.get('verbose') is True
+        
+        return {
+            'pattern': pattern,
+            'categories': (kwargs.get('categories') or self.DEFAULT_CATEGORIES).lower(),
+            'verbose': verbose,
+            'skip_details': not verbose
+        }
+
+    def _perform_search(self, vault: vault_online.VaultOnline, config: dict, context: KeeperParams):
+        """Perform the search across all specified categories."""
+        # Validate categories
+        valid_categories = set('rst')
+        requested_categories = set(config['categories'])
+        if not requested_categories.issubset(valid_categories):
+            logger.warning(f"Invalid categories specified: {requested_categories - valid_categories}. "
+                          f"Using valid categories: {requested_categories & valid_categories}")
+            config['categories'] = ''.join(requested_categories & valid_categories)
+        
+        # Store search results for each category
+        search_results = {}
+        total_found = 0
+        
+        # Search in each requested category
+        if 'r' in config['categories']:
+            try:
+                records = context.vault.vault_data.find_records(criteria=config['pattern'], record_type=None, record_version=None)
+                search_results['records'] = list(records)
+                total_found += len(search_results['records'])
+            except Exception as e:
+                logger.error(f"Error searching records: {e}")
+                search_results['records'] = []
+        
+        if 's' in config['categories']:
+            try:
+                shared_folders = vault.vault_data.find_shared_folders(criteria=config['pattern'])
+                search_results['shared_folders'] = list(shared_folders)
+                total_found += len(search_results['shared_folders'])
+            except Exception as e:
+                logger.error(f"Error searching shared folders: {e}")
+                search_results['shared_folders'] = []
+        
+        if 't' in config['categories']:
+            try:
+                teams = vault.vault_data.find_teams(criteria=config['pattern'])
+                search_results['teams'] = list(teams)
+                total_found += len(search_results['teams'])
+            except Exception as e:
+                logger.error(f"Error searching teams: {e}")
+                search_results['teams'] = []
+        
+        # Check if any objects were found in any of the requested categories
+        if total_found == 0:
+            categories_str = ', '.join(requested_categories)
+            raise base.CommandError(f"No objects found in any of the requested categories: {categories_str}")
+        
+        # Display results after all searches are completed
+        self._display_all_search_results(search_results, config, context, vault)
+
+    def _display_all_search_results(self, search_results: dict, config: dict, context: KeeperParams, vault: vault_online.VaultOnline):
+        """Display all search results after all searches are completed."""
+        if 'records' in search_results and search_results['records']:
+            logger.info('')
+            self._display_records_table(search_results['records'], config['verbose'])
+            
+            if config['verbose'] and len(search_results['records']) < self.MAX_DETAILS_THRESHOLD:
+                self._display_record_details(search_results['records'], context)
+        
+        if 'shared_folders' in search_results and search_results['shared_folders']:
+            logger.info('')
+            self._display_shared_folders(search_results['shared_folders'], config['skip_details'], vault)
+        
+        if 'teams' in search_results and search_results['teams']:
+            logger.info('')
+            self._display_teams(search_results['teams'], config['skip_details'], vault)
+
+    def _search_records(self, config: dict, context: KeeperParams):
+        """Search and display records matching the pattern."""
+        try:
+            records = context.vault.vault_data.find_records(criteria=config['pattern'], record_type=None, record_version=None)
+
+            logger.info('')
+            self._display_records_table(records, config['verbose'])
+            
+            if config['verbose'] and len(records) < self.MAX_DETAILS_THRESHOLD:
+                self._display_record_details(records, context)
+        except Exception as e:
+            logger.error(f"Error searching records: {e}")
+
+    def _search_shared_folders(self, vault: vault_online.VaultOnline, config: dict):
+        """Search and display shared folders matching the pattern."""
+        try:
+            shared_folders = vault.vault_data.find_shared_folders(criteria=config['pattern'])
+            if shared_folders:
+                logger.info('')
+                self._display_shared_folders(shared_folders, config['skip_details'], vault)
+        except Exception as e:
+            logger.error(f"Error searching shared folders: {e}")
+
+    def _search_teams(self, vault: vault_online.VaultOnline, config: dict):
+        """Search and display teams matching the pattern."""
+        try:
+            teams = vault.vault_data.find_teams(criteria=config['pattern'])
+            if teams:
+                logger.info('')
+                self._display_teams(teams, config['skip_details'], vault)
+        except Exception as e:
+            logger.error(f"Error searching teams: {e}")
+
+    def _display_records_table(self, records: Iterable[vault_record.KeeperRecordInfo], verbose: bool):
+        """Display records in a formatted table."""
+        table = []
+        headers = ['Record UID', 'Type', 'Title', 'Description']
+        
+        for record in records:
+            row = [
+                record.record_uid, 
+                record.record_type, 
+                record.title,
+                record.description
+            ]
+            table.append(row)
+        
+        table.sort(key=lambda x: (x[2] or '').lower())
+        
+        column_width = None if verbose else self.DEFAULT_COLUMN_WIDTH
+        report_utils.dump_report_data(
+            table, headers, row_number=True, column_width=column_width
+        )
+
+    def _display_record_details(self, records: Iterable[vault_record.KeeperRecordInfo], context: KeeperParams):
+        """Display detailed information for records when verbose mode is enabled."""
+        get_command = RecordGetCommand()
+        for record in records:
+            kwargs = {'uid': record.record_uid, 'record': True}
+            get_command.execute(context, **kwargs)
+
+    def _display_shared_folders(self, shared_folders: Iterable[vault_types.SharedFolder], 
+                               skip_details: bool, vault: vault_online.VaultOnline):
+        """Display shared folders in a formatted table with optional details."""
+        shared_folders_list = list(shared_folders)
+        
+        shared_folders_list.sort(key=lambda x: (x.name or ' ').lower())
+
+        if shared_folders_list:
+            self._display_shared_folders_table(shared_folders_list)
+            
+            # Display details for small result sets
+            if len(shared_folders_list) < self.MAX_DETAILS_THRESHOLD and not skip_details:
+                self._display_shared_folder_details(shared_folders_list, vault)
+
+    def _display_shared_folders_table(self, shared_folders: Iterable[vault_types.SharedFolder]):
+        """Display shared folders in a formatted table."""
+        table = [[i + 1, sf.shared_folder_uid, sf.name] 
+                for i, sf in enumerate(shared_folders)]
+        report_utils.dump_report_data(
+            table, headers=["#", 'Shared Folder UID', 'Name']
+        )
+        logger.info('')
+
+    def _display_shared_folder_details(self, shared_folders: Iterable[vault_types.SharedFolder], 
+                                     vault: vault_online.VaultOnline):
+        """Display detailed information for shared folders."""
+        get_command = RecordGetCommand()
+        for sf in shared_folders:
+            get_command._display_shared_folder_detail(vault=vault, uid=sf.shared_folder_uid)
+    
+    def _display_teams(self, teams: Iterable[vault_types.Team], skip_details: bool, 
+                       vault: vault_online.VaultOnline):
+        """Display teams in a formatted table with optional details."""
+        teams_list = list(teams)
+        
+        teams_list.sort(key=lambda x: (x.name or ' ').lower())
+
+        if teams_list:
+            self._display_teams_table(teams_list)
+            
+            # Display details for small result sets
+            if len(teams_list) < self.MAX_DETAILS_THRESHOLD and not skip_details:
+                self._display_team_details(teams_list, vault)
+
+    def _display_teams_table(self, teams: Iterable[vault_types.Team]):
+        """Display teams in a formatted table."""
+        table = [[i + 1, team.team_uid, team.name] 
+                for i, team in enumerate(teams)]
+        report_utils.dump_report_data(
+            table, headers=["#", 'Team UID', 'Name']
+        )
+        logger.info('')
+
+    def _display_team_details(self, teams: Iterable[vault_types.Team], vault: vault_online.VaultOnline):
+        """Display detailed information for teams."""
+        get_command = RecordGetCommand()
+        for team in teams:
+            get_command._display_team_detail(vault=vault, uid=team.team_uid)

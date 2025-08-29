@@ -1,5 +1,6 @@
 import argparse
 import base64
+import getpass
 import json
 from typing import Any, Optional, Set
 
@@ -28,6 +29,7 @@ class BreachWatchCommand(base.GroupCommand):
         self.register_command(BreachWatchListCommand(), 'list', 'l')
         self.register_command(BreachWatchIgnoreCommand(), 'ignore')
         self.register_command(BreachWatchScanCommand(), 'scan')
+        self.register_command(BreachWatchPasswordCommand(), 'password')
 
 class BreachWatchListCommand(base.ArgparseCommand):
     def __init__(self):
@@ -374,3 +376,40 @@ class BreachWatchScanCommand(base.ArgparseCommand):
 
     def _get_status_display(self, status: int) -> str: 
         return STATUS_TO_TEXT.get(status, "UNKNOWN")
+
+
+class BreachWatchPasswordCommand(base.ArgparseCommand):
+    def __init__(self):
+        parser = argparse.ArgumentParser(prog='breachwatch password', description='Scan a password against the breach watch database.')
+        parser.add_argument('passwords', type=str, nargs='*', help='Password')
+        super().__init__(parser)
+
+    def execute(self, context: KeeperParams, **kwargs) -> Any:
+        if not context.vault:
+            raise base.CommandError('Vault is not initialized.')
+        if not context.vault.breach_watch_plugin():
+            raise base.CommandError('Breach watch is not enabled. Please contact your administrator to enable this feature.')
+        
+        breach_watch = context.vault.breach_watch_plugin().breach_watch
+        
+        passwords = kwargs.get('passwords')
+        echo_password = True
+        if not passwords:
+            echo_password = False
+            passwords = []
+            try:
+                password = getpass.getpass(prompt='Password to Check: ', stream=None)
+                if not password:
+                    return
+                passwords.append(password)
+            except KeyboardInterrupt:
+                logger.info('')
+
+        euids = []
+        for result in breach_watch.scan_passwords(passwords):
+            if result[1].euid:
+                euids.append(result[1].euid)
+            pwd = result[0] if echo_password else "".rjust(len(result[0]), "*")
+            logger.info(f'{pwd:>16s}: {"WEAK" if result[1].breachDetected else "GOOD" }')
+        if euids:
+            breach_watch.delete_euids(euids)
