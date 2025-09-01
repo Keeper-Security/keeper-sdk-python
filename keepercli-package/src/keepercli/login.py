@@ -365,24 +365,6 @@ class LoginFlow:
     def handle_biometric_password_step(step: login_auth._PasswordLoginStep, login_auth_context: login_auth.LoginAuth, username: str, client_version: str):
         """Handle biometric authentication as part of the password verification step"""
         logger = utils.get_logger()
-        rq = APIRequest_pb2.StartLoginRequest()
-        rq.clientVersion = login_auth_context.keeper_endpoint.client_version
-        rq.encryptedDeviceToken = login_auth_context.context.device_token
-        rq.loginType = APIRequest_pb2.PASSKEY_BIO
-        rq.loginMethod = APIRequest_pb2.EXISTING_ACCOUNT
-        rq.messageSessionUid = login_auth_context.context.message_session_uid
-        rq.forceNewLogin = False
-
-        if login_auth_context.context.clone_code and login_auth_context.resume_session:
-            rq.cloneCode = login_auth_context.context.clone_code
-        else:
-            rq.username = login_auth_context.context.username
-        response = login_auth_context.execute_rest(
-                rest_endpoint='authentication/start_login', request=rq, response_type=APIRequest_pb2.LoginResponse)
-        
-        salt = next((x for x in response.salt
-                    if x.name.lower() == ('master')), None)
-        step = login_auth._PasswordLoginStep(login=login_auth_context, login_token=response.encryptedLoginToken, salt=salt)
         
         while True:
             try:
@@ -394,12 +376,24 @@ class LoginFlow:
                 
                 auth_helper = BiometricVerifyCommand()
                 biometric_result = auth_helper.biometric_authenticate(login_auth_context, client_version, username, purpose='login')
+
+                rq = APIRequest_pb2.StartLoginRequest()
+                rq.clientVersion = login_auth_context.keeper_endpoint.client_version
+                rq.encryptedLoginToken = biometric_result.encryptedLoginToken
+                rq.encryptedDeviceToken = login_auth_context.context.device_token
+                rq.username = username
+                rq.loginType = APIRequest_pb2.PASSKEY_BIO
+                if login_auth_context.context.clone_code:
+                    rq.loginMethod = APIRequest_pb2.EXISTING_ACCOUNT
+                    rq.cloneCode = login_auth_context.context.clone_code
+
+                response = login_auth_context.execute_rest(
+                    rest_endpoint='authentication/start_login', request=rq, response_type=APIRequest_pb2.LoginResponse)
                 
                 if biometric_result and biometric_result.isValid:
                     logger.info("Biometric authentication successful!")
-                    biometric_key = biometric_result.encryptedLoginToken
-                    login_auth._on_logged_in(login=login_auth_context, response=response, on_decrypt_data_key=lambda x: crypto.decrypt_aes_v2(x, biometric_key))
-                    break
+                    login_auth._resume_login(login_auth_context, response.encryptedLoginToken)
+                    return
                 else:
                     logger.info("Biometric authentication failed")
                     prompt_utils.output_text("Biometric authentication failed. Please use password authentication.")
