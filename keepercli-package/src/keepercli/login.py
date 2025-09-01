@@ -377,22 +377,9 @@ class LoginFlow:
                 auth_helper = BiometricVerifyCommand()
                 biometric_result = auth_helper.biometric_authenticate(login_auth_context, client_version, username, purpose='login')
 
-                rq = APIRequest_pb2.StartLoginRequest()
-                rq.clientVersion = login_auth_context.keeper_endpoint.client_version
-                rq.encryptedLoginToken = biometric_result.encryptedLoginToken
-                rq.encryptedDeviceToken = login_auth_context.context.device_token
-                rq.username = username
-                rq.loginType = APIRequest_pb2.PASSKEY_BIO
-                if login_auth_context.context.clone_code:
-                    rq.loginMethod = APIRequest_pb2.EXISTING_ACCOUNT
-                    rq.cloneCode = login_auth_context.context.clone_code
-
-                response = login_auth_context.execute_rest(
-                    rest_endpoint='authentication/start_login', request=rq, response_type=APIRequest_pb2.LoginResponse)
-                
                 if biometric_result and biometric_result.isValid:
                     logger.info("Biometric authentication successful!")
-                    login_auth._resume_login(login_auth_context, response.encryptedLoginToken)
+                    login_auth._resume_login(login_auth_context, biometric_result.encryptedLoginToken, method=APIRequest_pb2.EXISTING_ACCOUNT, login_type=APIRequest_pb2.PASSKEY_BIO)
                     return True
                 else:
                     logger.info("Biometric authentication failed")
