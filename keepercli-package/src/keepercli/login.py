@@ -86,7 +86,7 @@ class LoginFlow:
                 step = auth.login_step
 
                 if biometric_present and not isinstance(step, login_auth._ConnectedLoginStep):
-                    LoginFlow.handle_biometric_password_step(step, auth, username, keeper_endpoint.client_version)
+                    biometric_present = LoginFlow.handle_biometric_password_step(auth, username, keeper_endpoint.client_version)
                 elif isinstance(step, login_auth.LoginStepDeviceApproval):
                     LoginFlow.verify_device(step)
                 elif isinstance(step, login_auth.LoginStepTwoFactor):
@@ -362,7 +362,7 @@ class LoginFlow:
                             prompt_utils.output_text(f'Invalid 2FA code: ({kae.result_code}) {kae.message}')
 
     @staticmethod
-    def handle_biometric_password_step(step: login_auth._PasswordLoginStep, login_auth_context: login_auth.LoginAuth, username: str, client_version: str):
+    def handle_biometric_password_step(login_auth_context: login_auth.LoginAuth, username: str, client_version: str) -> bool:
         """Handle biometric authentication as part of the password verification step"""
         logger = utils.get_logger()
         
@@ -393,7 +393,7 @@ class LoginFlow:
                 if biometric_result and biometric_result.isValid:
                     logger.info("Biometric authentication successful!")
                     login_auth._resume_login(login_auth_context, response.encryptedLoginToken)
-                    return
+                    return True
                 else:
                     logger.info("Biometric authentication failed")
                     prompt_utils.output_text("Biometric authentication failed. Please use password authentication.")
@@ -419,7 +419,7 @@ class LoginFlow:
                     prompt_utils.output_text("Biometric authentication error. Using password authentication.")
                     break
 
-        LoginFlow.handle_verify_password(step)
+        return False
 
     @staticmethod
     def verify_device(step: login_auth.LoginStepDeviceApproval):
