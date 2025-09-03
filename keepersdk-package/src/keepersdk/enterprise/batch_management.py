@@ -698,10 +698,8 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
                         rq['enterprise_user_id'] = enterprise_user_id
                         if user_action in {UserAction.Lock, UserAction.Unlock}:
                             rq['command'] = 'enterprise_user_lock'
-                            rq['lock'] = 'locked' if UserAction.Lock else 'unlocked'
+                            rq['lock'] = 'locked' if user_action == UserAction.Lock else 'unlocked'
                         elif user_action == UserAction.ExtendTransfer:
-                            rq['command'] = 'extend_account_share_expiration'
-                        elif user_action == UserAction.DisableTfa:
                             rq['command'] = 'extend_account_share_expiration'
                         else:
                             raise Exception('unsupported action')
