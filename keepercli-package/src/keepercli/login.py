@@ -379,6 +379,7 @@ class LoginFlow:
 
             if biometric_result and biometric_result.isValid:
                 logger.info("Biometric authentication successful!")
+                login_auth_context.context.biometric = True
                 login_auth._resume_login(login_auth_context, biometric_result.encryptedLoginToken, method=APIRequest_pb2.EXISTING_ACCOUNT)
                 return True
             else:
