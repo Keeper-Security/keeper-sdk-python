@@ -18,6 +18,8 @@ from keepersdk.authentication.yubikey import yubikey_authenticate, IKeeperUserIn
 from . import prompt_utils, constants
 from .params import KeeperParams
 
+DEVICE_APPROVAL_ERRORS = ["device_needs_approval", "device approval"]
+
 
 class FidoCliInteraction(fido2.client.UserInteraction, IKeeperUserInteraction):
     def output_text(self, text: str) -> None:
@@ -366,46 +368,57 @@ class LoginFlow:
         """Handle biometric authentication as part of the password verification step"""
         logger = utils.get_logger()
         
-        while True:
-            try:
-                from .biometric.commands.verify import BiometricVerifyCommand
-                
-                logger.info("Attempting biometric authentication...")
-                logger.info("Press Ctrl+C to skip biometric and use password")
-                
-                
-                auth_helper = BiometricVerifyCommand()
-                biometric_result = auth_helper.biometric_authenticate(login_auth_context, client_version, username, purpose='login')
+        from .biometric.commands.verify import BiometricVerifyCommand
+        
+        logger.info("Attempting biometric authentication...")
+        logger.info("Press Ctrl+C to skip biometric and use password")
+        
+        try:
+            auth_helper = BiometricVerifyCommand()
+            biometric_result = auth_helper.biometric_authenticate(login_auth_context, client_version, username, purpose='login')
 
-                if biometric_result and biometric_result.isValid:
-                    logger.info("Biometric authentication successful!")
-                    login_auth._resume_login(login_auth_context, biometric_result.encryptedLoginToken, method=APIRequest_pb2.EXISTING_ACCOUNT)
-                    return True
-                else:
-                    logger.info("Biometric authentication failed")
-                    prompt_utils.output_text("Biometric authentication failed. Please use password authentication.")
-                    break
-                    
-            except KeyboardInterrupt:
-                logger.info("Biometric authentication cancelled by user")
-                prompt_utils.output_text("Biometric authentication cancelled. Using password authentication.")
-                break
-                    
-            except Exception as e:
-                error_message = str(e).lower()
+            if biometric_result and biometric_result.isValid:
+                logger.info("Biometric authentication successful!")
+                login_auth._resume_login(login_auth_context, biometric_result.encryptedLoginToken, method=APIRequest_pb2.EXISTING_ACCOUNT)
+                return True
+            else:
+                return LoginFlow._handle_biometric_failure(logger, "Biometric authentication failed")
                 
-                if "device_needs_approval" in error_message or "device approval" in error_message:
-                    logger.error(f"\nBiometric Login Failed")
-                    logger.warning(f"Device registration required for biometric authentication.")
-                    logger.warning(f"\nPlease run: this-device register")
-                    logger.warning("Then try biometric login again.")
-                    prompt_utils.output_text("Device needs approval for biometric authentication. Using password authentication.")
-                    break
-                else:
-                    logger.info(f"Biometric authentication error: {e}")
-                    prompt_utils.output_text("Biometric authentication error. Using password authentication.")
-                    break
+        except KeyboardInterrupt:
+            return LoginFlow._handle_biometric_cancellation(logger)
+            
+        except Exception as e:
+            return LoginFlow._handle_biometric_error(logger, e)
 
+    @staticmethod
+    def _handle_biometric_failure(logger, message: str) -> bool:
+        """Handle biometric authentication failure"""
+        logger.info(message)
+        prompt_utils.output_text("Biometric authentication failed. Please use password authentication.")
+        return False
+
+    @staticmethod
+    def _handle_biometric_cancellation(logger) -> bool:
+        """Handle biometric authentication cancellation by user"""
+        logger.info("Biometric authentication cancelled by user")
+        prompt_utils.output_text("Biometric authentication cancelled. Using password authentication.")
+        return False
+
+    @staticmethod
+    def _handle_biometric_error(logger, error: Exception) -> bool:
+        """Handle biometric authentication errors"""
+        error_message = str(error).lower()
+        
+        if any(pattern in error_message for pattern in DEVICE_APPROVAL_ERRORS):
+            logger.error("\nBiometric Login Failed")
+            logger.warning("Device registration required for biometric authentication.")
+            logger.warning("\nPlease run: this-device register")
+            logger.warning("Then try biometric login again.")
+            prompt_utils.output_text("Device needs approval for biometric authentication. Using password authentication.")
+        else:
+            logger.info(f"Biometric authentication error: {error}")
+            prompt_utils.output_text("Biometric authentication error. Using password authentication.")
+        
         return False
 
     @staticmethod
