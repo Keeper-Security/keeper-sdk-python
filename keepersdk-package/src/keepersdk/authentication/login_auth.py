@@ -193,6 +193,7 @@ class LoginContext:
         self.message_session_uid: bytes = crypto.get_random_bytes(16)
         self.account_type: AccountAuthType = AccountAuthType.Regular
         self.sso_login_info: Optional[keeper_auth.SsoLoginInfo] = None
+        self.biometric: Optional[bool] = False
 
 
 class LoginAuth:
@@ -533,7 +534,9 @@ def _process_start_login(login: LoginAuth, request: APIRequest_pb2.StartLoginReq
         def decrypt_with_device_key(encrypted_data_key):
             return crypto.decrypt_ec(encrypted_data_key, login.context.device_private_key)
         _on_logged_in(login, response, decrypt_with_device_key)
-        if login.context.sso_login_info is None:
+        if login.context.biometric:
+            utils.get_logger().info('Successfully authenticated with Biometric Login')
+        elif login.context.sso_login_info is None:
             utils.get_logger().info('Successfully authenticated with Persistent Login')
         else:
             utils.get_logger().info('Successfully authenticated with %s SSO',
