@@ -125,9 +125,10 @@ Example:
     title_to_delete = "Test Record 1"
     force_delete = True
 
+    context = None
     try:
-        vault = login_to_keeper_with_config(args.config).vault
-
+        context = login_to_keeper_with_config(args.config)
+        vault = context.vault
         record_uid = find_record_by_title(vault, title_to_delete)
         if not record_uid:
             print(f"No record found with title: '{title_to_delete}'")
@@ -143,3 +144,6 @@ Example:
     except Exception as e:
         print(f'Error: {str(e)}')
         sys.exit(1)
+    finally:
+        if context:
+            context.clear_session()

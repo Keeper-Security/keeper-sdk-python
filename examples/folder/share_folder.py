@@ -132,6 +132,7 @@ Example:
 
     print(f"Note: This example will attempt to share folder '{folder_uid}' with '{user_email}'")
 
+    context = None
     try:
         context = login_to_keeper_with_config(args.config)
         success = share_folder_with_user(
@@ -149,3 +150,6 @@ Example:
     except Exception as e:
         print(f'Error: {str(e)}')
         sys.exit(1)
+    finally:
+        if context:
+            context.clear_session()

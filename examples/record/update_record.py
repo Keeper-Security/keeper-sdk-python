@@ -248,9 +248,10 @@ Example:
         'notes': 'This record has been updated by the Keeper SDK example'
     }
 
+    context = None
     try:
-        vault = login_to_keeper_with_config(args.config).vault
-        success = update_record(vault, record_to_update_uid, updates, record_type=record_type, record_version=record_version)
+        context = login_to_keeper_with_config(args.config)
+        success = update_record(context.vault, record_to_update_uid, updates, record_type=record_type, record_version=record_version)
         
         if success:
             print('\nRecord update completed successfully!')
@@ -260,3 +261,6 @@ Example:
     except Exception as e:
         print(f'Error: {str(e)}')
         sys.exit(1)
+    finally:
+        if context:
+            context.clear_session()

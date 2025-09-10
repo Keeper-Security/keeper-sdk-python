@@ -103,9 +103,10 @@ Example:
     app_name = "Secrets Manager App 1"
     force = True
 
+    context = None
     try:
-        vault = login_to_keeper_with_config(args.config).vault
-        result = create_secrets_manager_app(vault, app_name, force)
+        context = login_to_keeper_with_config(args.config)
+        result = create_secrets_manager_app(context.vault, app_name, force)
         
         if result is None:
             sys.exit(1)
@@ -113,3 +114,6 @@ Example:
     except Exception as e:
         print(f'Error: {str(e)}')
         sys.exit(1)
+    finally:
+        if context:
+            context.clear_session()

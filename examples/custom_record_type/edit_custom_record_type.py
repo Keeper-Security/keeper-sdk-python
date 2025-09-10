@@ -124,10 +124,14 @@ Example:
     fields = [{"$ref": field} for field in field_names if field]
     print(f"Note: This example will attempt to edit record type ID {record_type_id}")
 
+    context = None
     try:
-        vault = login_to_keeper_with_config(args.config).vault
-        edit_custom_record_type(vault, record_type_id, title, fields, description, categories)
+        context = login_to_keeper_with_config(args.config)
+        edit_custom_record_type(context.vault, record_type_id, title, fields, description, categories)
         
     except Exception as e:
         print(f'Error: {str(e)}')
         sys.exit(1)
+    finally:
+        if context:
+            context.clear_session()

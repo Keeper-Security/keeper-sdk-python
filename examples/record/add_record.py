@@ -122,10 +122,14 @@ Example:
     notes = "This is an example record created by the Keeper SDK"
     folder_uid = None
 
+    context = None
     try:
-        vault = login_to_keeper_with_config(args.config).vault
-        add_record(vault, title, login, password, url, notes, folder_uid)
+        context = login_to_keeper_with_config(args.config)
+        add_record(context.vault, title, login, password, url, notes, folder_uid)
         
     except Exception as e:
         print(f'Error: {str(e)}')
         sys.exit(1)
+    finally:
+        if context:
+            context.clear_session()
