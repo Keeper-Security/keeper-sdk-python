@@ -89,6 +89,10 @@ class LoginFlow:
 
                 if biometric_present and not isinstance(step, login_auth._ConnectedLoginStep):
                     biometric_present = LoginFlow.handle_biometric_password_step(auth, username, keeper_endpoint.client_version)
+                    if not isinstance(auth.login_step, login_auth._ConnectedLoginStep):
+                        logger.error('Biometric authentication failed, falling back to default login method. Device might not be registered')
+                    else:
+                        logger.info("Biometric authentication successful!")
                 elif isinstance(step, login_auth.LoginStepDeviceApproval):
                     LoginFlow.verify_device(step)
                 elif isinstance(step, login_auth.LoginStepTwoFactor):
@@ -378,10 +382,9 @@ class LoginFlow:
             biometric_result = auth_helper.biometric_authenticate(login_auth_context, client_version, username, purpose='login')
 
             if biometric_result and biometric_result.isValid:
-                logger.info("Biometric authentication successful!")
                 login_auth_context.context.biometric = True
                 login_auth._resume_login(login_auth_context, biometric_result.encryptedLoginToken, method=APIRequest_pb2.EXISTING_ACCOUNT)
-                return True
+                return False
             else:
                 return LoginFlow._handle_biometric_failure(logger, "Biometric authentication failed")
                 

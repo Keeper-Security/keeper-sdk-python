@@ -15,7 +15,7 @@ from keepersdk.vault import (record_types, typed_field_utils, vault_record, atta
                              record_management, vault_online, vault_data, vault_types, vault_utils, vault_extensions)
 from keepersdk import crypto, generator
 
-from . import base
+from . import base, enterprise_utils
 from .. import prompt_utils, api, constants
 from ..helpers import folder_utils, record_utils, report_utils, share_utils, timeout_utils
 from ..params import KeeperParams
@@ -1113,7 +1113,7 @@ class RecordGetCommand(base.ArgparseCommand):
                 else:
                     raise base.CommandError('The given UID or title is not a valid folder')
         elif team:
-            team = self._find_team(context.vault, team)
+            team = self._find_team(context, team)
             if team:
                 target_object = ('team', team)
             else:
@@ -1125,23 +1125,24 @@ class RecordGetCommand(base.ArgparseCommand):
             else:
                 raise base.CommandError('The given UID or title is not a valid record')
         elif uid:
-            target_object = self._find_target_object(context.vault, uid)
+            target_object = self._find_target_object(context, uid)
         else:
             raise base.CommandError('Either UID parameter or one of -f, -t, -r flags is required')
 
         if not target_object:
             raise base.CommandError('The given UID is not a valid Keeper Object')
         
-        self._display_object(context.vault, target_object, output_format, unmask)
+        self._display_object(context, target_object, output_format, unmask)
 
     def _validate_context(self, context: KeeperParams):
         """Validate that the vault is properly initialized."""
         if not context.vault:
             raise ValueError("Vault is not initialized.")
 
-    def _find_target_object(self, vault: vault_data.VaultData, uid_or_title: str):
+    def _find_target_object(self, context: KeeperParams, uid_or_title: str):
         """Find a Keeper object (record, folder, shared folder, or team) by UID or title."""
         
+        vault = context.vault
         shared_folder = self._find_shared_folder(vault, uid_or_title)
         if shared_folder:
             return ('shared_folder', shared_folder)
@@ -1150,7 +1151,7 @@ class RecordGetCommand(base.ArgparseCommand):
         if folder:
             return ('folder', folder)
         
-        team = self._find_team(vault, uid_or_title)
+        team = self._find_team(context, uid_or_title)
         if team:
             return ('team', team)
         
@@ -1184,18 +1185,18 @@ class RecordGetCommand(base.ArgparseCommand):
             None
         )
     
-    def _find_team(self, vault: vault_data.VaultData, uid_or_title: str):
+    def _find_team(self, context: KeeperParams, uid_or_title: str):
         """Find a team by UID or name."""
-        return next(
-            (t for t in vault.vault_data.teams() 
-             if t.team_uid == uid_or_title or t.name == uid_or_title), 
-            None
-        )
+        if not context.enterprise_data:
+            raise base.CommandError('You must be an enterprise admin to use this command')
 
-    def _display_object(self, vault: vault_data.VaultData, target_object, output_format: str, unmask: bool):
+        team = enterprise_utils.TeamUtils.resolve_single_team(context.enterprise_data, uid_or_title)
+        return team
+
+    def _display_object(self, context: KeeperParams, target_object, output_format: str, unmask: bool):
         """Display the target object in the specified format."""
         object_type, object_data = target_object
-        
+        vault = context.vault
         if object_type == 'record':
             self._display_record(vault, object_data, output_format, unmask)
         elif object_type == 'shared_folder':
@@ -1203,7 +1204,7 @@ class RecordGetCommand(base.ArgparseCommand):
         elif object_type == 'folder':
             self._display_folder(vault, object_data, output_format)
         elif object_type == 'team':
-            self._display_team(vault, object_data, output_format)
+            self._display_team(context, object_data, output_format)
 
     def _display_record(self, vault: vault_data.VaultData, record, output_format: str, unmask: bool):
         """Display a record in the specified format."""
@@ -1231,12 +1232,12 @@ class RecordGetCommand(base.ArgparseCommand):
         else:  # detail format
             self._display_folder_detail(vault, folder.folder_uid)
 
-    def _display_team(self, vault: vault_data.VaultData, team, output_format: str):
+    def _display_team(self, context: KeeperParams, team, output_format: str):
         """Display a team in the specified format."""
         if output_format == 'json':
-            self._display_team_json(vault, team.team_uid)
+            self._display_team_json(context, team.team_uid)
         else:  # detail format
-            self._display_team_detail(vault, team.team_uid)
+            self._display_team_detail(context, team.team_uid)
     
     def _display_record_json(self, vault: vault_data.VaultData, uid: str, unmask: bool = False):
         """Display record information in JSON format."""
@@ -1388,9 +1389,13 @@ class RecordGetCommand(base.ArgparseCommand):
         }
         logger.info(json.dumps(output, indent=2))
     
-    def _display_team_json(self, vault: vault_data.VaultData, uid: str):
+    def _display_team_json(self, context: KeeperParams, uid: str):
         """Display team information in JSON format."""
-        team = vault.vault_data.get_team(team_uid=uid)
+        team = context.enterprise_data.teams.get_entity(uid)
+        user = enterprise_utils.UserUtils.resolve_single_user(context.enterprise_data, context.username)
+        team_users = {x.team_uid for x in context.enterprise_data.team_users.get_links_by_object(user.enterprise_user_id)}
+        if team.team_uid not in team_users:
+            logger.info(f'User {context.username} does not belong to team {team.name}')
         output = {
             'Team UID:': uid,
             'Name:': team.name
@@ -1617,15 +1622,24 @@ class RecordGetCommand(base.ArgparseCommand):
         if folder.folder_type == 'shared_folder_folder':
             logger.info('{0:>20s}: {1:<20s}'.format('Shared Folder UID', folder.folder_scope_uid))
     
-    def _display_team_detail(self, vault: vault_data.VaultData, uid: str):
+    def _display_team_detail(self, context: KeeperParams, uid: str):
         """Display team information in detailed format."""
-        team = vault.vault_data.get_team(team_uid=uid)
+        team = context.enterprise_data.teams.get_entity(uid)
+
+        user = enterprise_utils.UserUtils.resolve_single_user(context.enterprise_data, context.username)
+        team_users = {x.team_uid for x in context.enterprise_data.team_users.get_links_by_object(user.enterprise_user_id)}
+        team_user = True
+        if team.team_uid not in team_users:
+            logger.info(f'User {context.username} does not belong to team {team.name}')
+            team_user = False
+
         logger.info('')
         logger.info('{0:>20s}: {1:<20s}'.format('Team UID', team.team_uid))
         logger.info('{0:>20s}: {1}'.format('Name', team.name))
-        logger.info('{0:>20s}: {1}'.format('Restrict Edit', team.restrict_edit))
-        logger.info('{0:>20s}: {1}'.format('Restrict View', team.restrict_view))
-        logger.info('{0:>20s}: {1}'.format('Restrict Share', team.restrict_share))
+        if team_user:
+            logger.info('{0:>20s}: {1}'.format('Restrict Edit', team.restrict_edit))
+            logger.info('{0:>20s}: {1}'.format('Restrict View', team.restrict_view))
+            logger.info('{0:>20s}: {1}'.format('Restrict Share', team.restrict_share))
         logger.info('')
     
     def _display_record_password(self, vault: vault_data.VaultData, uid: str):

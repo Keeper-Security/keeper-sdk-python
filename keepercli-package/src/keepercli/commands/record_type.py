@@ -208,10 +208,10 @@ class RecordTypeInfoCommand(base.ArgparseCommand):
                 record_type.id,
                 record_type.name,
                 scope,
-                fields[0].label if hasattr(fields[0], 'label') else str(fields[0])
+                fields[0].label if hasattr(fields[0], 'label') and fields[0].label != '' else str(fields[0].type)
             ])
             for field in fields[1:]:
-                rows.append(['', '', '', field.label if hasattr(field, 'label') else str(field)])
+                rows.append(['', '', '', field.label if hasattr(field, 'label') and field.label != '' else str(field.type)])
 
             headers = ('id', 'name', 'scope', 'fields')
             return report_utils.dump_report_data(rows, headers, column_width='auto', fmt='simple')
