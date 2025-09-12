@@ -465,7 +465,6 @@ class FolderMoveCommand(base.ArgparseCommand, _FolderMixin):
                            help='apply \"Can Share\" record permission')
     parser.add_argument('-e', '--can-edit', dest='can_edit', action='store', choices=['on', 'off'],
                         help='apply \"Can Edit\" record permission')
-    group = parser.add_mutually_exclusive_group()
     parser.add_argument('src', nargs='+', type=str, metavar='PATH',
                            help='source path to folder/record, search pattern or record UID')
     parser.add_argument('dst', type=str,

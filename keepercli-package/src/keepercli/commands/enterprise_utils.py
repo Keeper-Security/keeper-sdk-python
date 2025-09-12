@@ -158,6 +158,8 @@ class RoleUtils:
                                 r = rr[0]
                             elif len(rr) >= 2:
                                 raise base.CommandError(f'Role name "{role_name}" is not unique. Use Role ID.')
+                        elif isinstance(rr, enterprise_types.Role):
+                            r = rr
                 if r is None:
                     raise base.CommandError(f'Role name "{role_name}" is not found')
                 found_roles[r.role_id] = r

@@ -447,11 +447,15 @@ def move_vault_objects(vault: vault_online.VaultOnline,
                 for f in folders:
                     if f.folder_type == 'user_folder':
                         scope_uid = ''
+                        selected_folder_uid = f.folder_uid
+                        break
                     else:
                         scope_uid = f.folder_scope_uid or ''
                     if scope_uid == dst_scope_uid:
                         selected_folder_uid = f.folder_uid
                         break
+                    else:
+                        selected_folder_uid = f.folder_scope_uid
                 if selected_folder_uid is None:
                     selected_folder_uid = next((x for x in record_uid_to_move))
                 folders = [x for x in folders if x.folder_uid != selected_folder_uid]
