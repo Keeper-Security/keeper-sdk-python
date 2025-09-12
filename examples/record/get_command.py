@@ -66,7 +66,7 @@ def get(
     try:
         get_command = RecordGetCommand()
         kwargs = {
-            'uid': uid,
+            'uid': uid, # 'team'/'folder'/'record' can be used to specify type and will replace uid
         }
         get_command.execute(context=context, **kwargs)
         print('Details retrieved successfully!')
@@ -98,10 +98,11 @@ Example:
         print(f'Config file {args.config} not found')
         sys.exit(1)
 
-    uid = "record_uid"
+    uid = "record_uid"  # Replace with actual record/folder/team UID or path or title
     
     print(f"Note: This example will attempt to get details for record/folder/team '{uid}'")
 
+    context = None
     try:
         context = login_to_keeper_with_config(args.config)
         success = get(
@@ -115,3 +116,6 @@ Example:
     except Exception as e:
         print(f'Error: {str(e)}')
         sys.exit(1)
+    finally:
+        if context:
+            context.clear_session()

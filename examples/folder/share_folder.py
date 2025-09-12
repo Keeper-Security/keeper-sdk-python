@@ -126,12 +126,13 @@ Example:
 
     folder_uid = "t5C4bl3iWmOPWugaWGaMIQ"
     user_email = "example@example.com"
-    manage_records = 'on'
-    manage_users = 'off'
-    action = 'grant'
+    manage_records = 'on' # 'on' or 'off'
+    manage_users = 'off' # 'on' or 'off'
+    action = 'grant' # 'grant' or 'remove' with grant being default if skipped
 
     print(f"Note: This example will attempt to share folder '{folder_uid}' with '{user_email}'")
 
+    context = None
     try:
         context = login_to_keeper_with_config(args.config)
         success = share_folder_with_user(
@@ -149,3 +150,6 @@ Example:
     except Exception as e:
         print(f'Error: {str(e)}')
         sys.exit(1)
+    finally:
+        if context:
+            context.clear_session()

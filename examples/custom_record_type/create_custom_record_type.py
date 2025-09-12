@@ -115,13 +115,17 @@ Example:
     record_type_title = "New Custom Record Type" # Max 32 characters
     description = "An example custom record type created by the Keeper SDK"
     categories = ["custom", "example"]
-    field_names = ["login", "password", "url"]
+    field_names = ["login", "password", "url"] # For valid fields refer to record_types.FieldTypes and record_types.RecordFields in keepersdk.vault
     fields = [{"$ref": field} for field in field_names if field]
 
+    context = None
     try:
-        vault = login_to_keeper_with_config(args.config).vault
-        create_custom_record_type(vault, record_type_title, description, categories, fields)
+        context = login_to_keeper_with_config(args.config)
+        create_custom_record_type(context.vault, record_type_title, description, categories, fields)
         
     except Exception as e:
         print(f'Error: {str(e)}')
         sys.exit(1)
+    finally:
+        if context:
+            context.clear_session()

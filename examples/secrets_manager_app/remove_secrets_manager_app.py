@@ -124,17 +124,18 @@ Example:
         sys.exit(1)
 
     uid_or_name = "Secrets Manager App 1"
-    force = True
+    force = True # Set to True to force removal if app has shared records, folders, or clients; set to None to send as False
 
     print(f"Note: This example will attempt to remove app '{uid_or_name}'")
 
+    context = None
     try:
-        vault = login_to_keeper_with_config(args.config).vault
-        removed_app = remove_secrets_manager_app(vault, uid_or_name, force)
-        
-        if removed_app is None:
-            sys.exit(1)
+        context = login_to_keeper_with_config(args.config)
+        removed_app = remove_secrets_manager_app(context.vault, uid_or_name, force)
         
     except Exception as e:
         print(f'Error: {str(e)}')
         sys.exit(1)
+    finally:
+        if context:
+            context.clear_session()

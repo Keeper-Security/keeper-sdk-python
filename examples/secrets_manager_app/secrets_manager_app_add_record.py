@@ -114,10 +114,11 @@ Example:
 
     app_id = "RlO6y-idGBqu1Ax2yUYXKw"
     secret_uids = ["YJAAssUpHCf-2Xfjnlw5cw"]
-    is_editable = False
+    is_editable = None # Set to True to make secrets editable, set to None to send as False
 
     print(f"Note: This example will attempt to add secrets to app ID '{app_id}'")
 
+    context = None
     try:
         context = login_to_keeper_with_config(args.config)
         success = add_secrets_to_app(
@@ -133,3 +134,6 @@ Example:
     except Exception as e:
         print(f'Error: {str(e)}')
         sys.exit(1)
+    finally:
+        if context:
+            context.clear_session()
