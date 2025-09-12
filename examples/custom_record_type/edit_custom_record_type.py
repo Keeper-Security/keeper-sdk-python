@@ -120,7 +120,7 @@ Example:
     title = "Updated Custom Record New" # Max 32 characters
     description = "An example custom record type created by the Keeper SDK"
     categories = ["custom", "example"]
-    field_names = ["login", "password", "url"]
+    field_names = ["login", "password", "url"] # For valid fields refer to record_types.FieldTypes and record_types.RecordFields in keepersdk.vault
     fields = [{"$ref": field} for field in field_names if field]
     print(f"Note: This example will attempt to edit record type ID {record_type_id}")
 

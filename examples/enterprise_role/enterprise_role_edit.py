@@ -90,8 +90,8 @@ Example:
 
     role_name = "Test Role"
     new_name = "Updated Role"
-    new_user_inherit = "off"
-    visible_below = "on"
+    new_user_inherit = "off" # on or off
+    visible_below = "on" # on or off
     parent_node = "Keeper Security"
 
     context = None

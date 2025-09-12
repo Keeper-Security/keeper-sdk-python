@@ -87,8 +87,8 @@ Example:
     record_name = "record_name"
     expire_time = "1h"
     share_name = "share_name"
-    output_destination = "stdout"
-    is_editable = True
+    output_destination = "stdout" # 'stdout' for printing the link in console or 'clipboard' to copy it to clipboard
+    is_editable = True # True or None
 
     context = None
     try:

@@ -104,7 +104,7 @@ Example:
         'name': output_file,
         'permissions': None,  # Force shared folder permissions: manage (U)sers, manage (R)ecords
         'restrictions': None,  # Force shared folder restrictions: manage (U)sers, manage (R)ecords
-        'folders_only': False,  # Download shared folders only, skip teams
+        'folders_only': None,  # Download shared folders only, skip teams
         'sub_folder': None  # Shared sub-folder handling: ignore, flatten
     }
 

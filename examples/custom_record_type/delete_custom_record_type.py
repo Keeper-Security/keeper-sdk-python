@@ -100,8 +100,8 @@ Example:
         print(f'Config file {args.config} not found')
         sys.exit(1)
 
-    record_type_id = 24375
-    force = True
+    record_type_id = 000000
+    force = True # True or False
 
     print(f"Note: This example will attempt to delete record type ID {record_type_id}")
 

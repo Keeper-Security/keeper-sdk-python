@@ -124,7 +124,7 @@ Example:
         sys.exit(1)
 
     uid_or_name = "Secrets Manager App 1"
-    force = True
+    force = True # Set to True to force removal if app has shared records, folders, or clients; set to None to send as False
 
     print(f"Note: This example will attempt to remove app '{uid_or_name}'")
 

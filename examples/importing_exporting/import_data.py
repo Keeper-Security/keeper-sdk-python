@@ -99,16 +99,17 @@ Example:
         print(f'Error: {str(e)}')
         sys.exit(1)
 
+    # Flags can be set as None for false and True for true
     kwargs = {
         'source': import_source,
         'name': import_file,
-        'display_csv': False,
-        'overwrite': False,
-        'login_replace': False,
-        'ignore_csv': False,
-        'skip_errors': False,
+        'display_csv': None,
+        'overwrite': None,
+        'login_replace': None,
+        'ignore_csv': None,
+        'skip_errors': None,
         'format': 'json',
-        'share_existing': False
+        'share_existing': None
     }
 
     print(f"Importing data from: {import_file}")

@@ -114,7 +114,7 @@ Example:
 
     app_id = "RlO6y-idGBqu1Ax2yUYXKw"
     secret_uids = ["YJAAssUpHCf-2Xfjnlw5cw"]
-    is_editable = False
+    is_editable = None # Set to True to make secrets editable, set to None to send as False
 
     print(f"Note: This example will attempt to add secrets to app ID '{app_id}'")
 

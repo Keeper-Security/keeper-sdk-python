@@ -115,7 +115,7 @@ Example:
 
     app_id = "RlO6y-idGBqu1Ax2yUYXKw"
     client_names_or_ids = ["DemoClient"]
-    force = True
+    force = True # Set to True to skip confirmation prompts, set to None to send as False
 
     print(f"Note: This example will attempt to remove clients from app ID '{app_id}'")
 

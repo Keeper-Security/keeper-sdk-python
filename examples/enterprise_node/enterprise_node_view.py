@@ -99,7 +99,7 @@ Example:
 
     kwargs = {
         'node': node_name,
-        'format': 'table'
+        'format': 'table' # Supported formats: 'table', 'csv', 'json'
     }
 
     print(f"Viewing enterprise node information: {node_name}")

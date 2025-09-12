@@ -91,7 +91,7 @@ Example:
     role_name = "Test Role"
     node_name = "New Test Node"
     privileges = ["MANAGE_TEAMS"]
-    cascade = "on"
+    cascade = "on" # on or off
 
     context = None
     try:

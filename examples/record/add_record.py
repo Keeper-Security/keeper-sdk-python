@@ -66,7 +66,7 @@ def add_record(
     folder and include additional metadata like URL and notes.
     """
     try:
-        record = vault_record.PasswordRecord()
+        record = vault_record.PasswordRecord() # Other option is vault_record.TypedRecord()
         record.title = title
         record.login = login
         record.password = password

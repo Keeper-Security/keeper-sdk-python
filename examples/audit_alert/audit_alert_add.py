@@ -103,7 +103,7 @@ Example:
         'name': alert_name,
         'frequency': frequency,
         'audit_event': audit_events,
-        'active': 'on'
+        'active': 'on' # Set to 'on' to activate the alert or 'off' to create it inactive
     }
 
     print(f"Adding new audit alert: {alert_name}")

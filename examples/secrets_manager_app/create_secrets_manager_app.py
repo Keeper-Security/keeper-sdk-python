@@ -101,7 +101,7 @@ Example:
         sys.exit(1)
 
     app_name = "Secrets Manager App 1"
-    force = True
+    force = True # Set to True to overwrite if app with same name exists, set to None to send as False
 
     context = None
     try:

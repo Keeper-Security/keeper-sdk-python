@@ -101,7 +101,7 @@ Example:
     kwargs = {
         'team': [team],
         'parent': parent_node,
-        'force': None
+        'force': None # Set as True or None
     }
 
     print(f"Adding new enterprise team: {team}")

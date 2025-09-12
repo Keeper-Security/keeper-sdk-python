@@ -89,8 +89,8 @@ Example:
         sys.exit(1)
 
     role_name = "Test Role"
-    new_user_inherit = "on"
-    visible_below = "off"
+    new_user_inherit = "on" # on or off
+    visible_below = "off" # on or off
 
     context = None
     try:
@@ -103,7 +103,7 @@ Example:
         'role': [role_name],
         'new_user': new_user_inherit,
         'visible_below': visible_below,
-        'force': True
+        'force': True # True or None
     }
 
     print(f"Adding new enterprise role: {role_name}")

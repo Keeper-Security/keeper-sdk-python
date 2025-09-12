@@ -101,7 +101,7 @@ Example:
     kwargs = {
         'node': node_name_or_id,
         'email': [invite_email],
-        'force': True
+        'force': True # True or None 
     }
 
     print(f"Sending invitation email from enterprise node: {node_name_or_id}")

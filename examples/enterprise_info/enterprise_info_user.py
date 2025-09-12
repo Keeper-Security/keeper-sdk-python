@@ -101,7 +101,7 @@ Example:
     kwargs = {
         'pattern': search_pattern,
         'columns': columns,
-        'format': 'table'
+        'format': 'table' # Supported formats: 'table', 'csv', 'json'
     }
 
     print("Displaying enterprise user information...")

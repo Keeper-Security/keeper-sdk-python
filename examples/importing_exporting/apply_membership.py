@@ -100,7 +100,7 @@ Example:
 
     kwargs = {
         'name': input_file,
-        'full_sync': False  # Update and remove membership also
+        'full_sync': None  # Update and remove membership also, can be set to True
     }
 
     print(f"Applying membership from file: {input_file}")

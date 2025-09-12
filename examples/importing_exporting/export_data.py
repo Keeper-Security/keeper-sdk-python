@@ -99,20 +99,21 @@ Example:
         print(f'Error: {str(e)}')
         sys.exit(1)
 
+    # Flags can be set as None for false and True for true
     kwargs = {
         'format': export_format,
         'output': output_file,
         'max_size': 100,  # Maximum file size in MB
         'max_records': 10000,  # Maximum number of records
         'regex': None,  # Optional regex filter
-        'only_password': False,
-        'display': False,
+        'only_password': None,
+        'display': None,
         'title': True,
         'notes': True,
         'custom': True,
         'type': True,
         'folders': True,
-        'attachments': False
+        'attachments': None
     }
 
     print(f"Exporting data to: {output_file}")

@@ -107,7 +107,7 @@ Example:
 
     app_id = "RlO6y-idGBqu1Ax2yUYXKw"
     user_email = "example@example.com"
-    is_admin = False
+    is_admin = None # Set to True to grant admin permissions, set to None to send as False
 
     print(f"Note: This example will attempt to share app ID '{app_id}'")
 

@@ -99,7 +99,7 @@ Example:
 
     kwargs = {
         'team': team_name_or_id,
-        'format': 'table'
+        'format': 'table' # Supported formats: 'table', 'csv', 'json'
     }
 
     print(f"Viewing enterprise team information: {team_name_or_id}")

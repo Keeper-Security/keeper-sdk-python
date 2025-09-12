@@ -99,7 +99,7 @@ Example:
 
     kwargs = {
         'target': alert_target,
-        'format': 'table'
+        'format': 'table' # Supported formats: table, json, csv
     }
 
     print(f"Viewing audit alert history for: {alert_target}")

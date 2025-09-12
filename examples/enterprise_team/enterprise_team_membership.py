@@ -103,7 +103,7 @@ Example:
         'team': [team_name],
         'add_user': [add_user_email],
         'add_role': [add_role_name],
-        'force': True
+        'force': True # Set as None to keep false
     }
 
     print(f"Managing membership for enterprise team: {team_name}")

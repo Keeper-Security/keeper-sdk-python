@@ -101,7 +101,7 @@ Example:
 
     kwargs = {
         'node': node_filter,
-        'verbose': True
+        'verbose': True # True or None
     }
 
     print("Displaying enterprise tree structure...")

@@ -99,7 +99,7 @@ Example:
 
     kwargs = {
         'email': [user_email],
-        'force': True
+        'force': True # Set as None to keep as false
     }
 
     print(f"Deleting enterprise user: {user_email}")

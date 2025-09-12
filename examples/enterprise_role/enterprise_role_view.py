@@ -99,7 +99,7 @@ Example:
 
     kwargs = {
         'role': role_name,
-        'verbose': True
+        'verbose': True # True or None
     }
 
     print(f"Viewing enterprise role details for: {role_name}")

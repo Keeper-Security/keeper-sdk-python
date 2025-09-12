@@ -238,7 +238,7 @@ Example:
         sys.exit(1)
 
     record_to_update_uid = "UkezdUGQoTOztfi5cGFJnQ"
-    record_type = None
+    record_type = None # Can be set to default or custom record type if needed
     record_version = None
     updates = {
         'title': 'Updated Example Record',

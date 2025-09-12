@@ -101,7 +101,7 @@ Example:
     kwargs = {
         'email': [user_email],
         'full_name': full_name,
-        'hide_shared_folders': 'off'
+        'hide_shared_folders': 'off' # 'on' or 'off'
     }
 
     print(f"Adding new enterprise user: {user_email}")

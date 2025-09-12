@@ -123,7 +123,7 @@ Example:
         sys.exit(1)
 
     title_to_delete = "Test Record 1"
-    force_delete = True
+    force_delete = True # Set to True to skip confirmation prompt or None to send as False
 
     context = None
     try:

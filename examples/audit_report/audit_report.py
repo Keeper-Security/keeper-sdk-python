@@ -110,7 +110,7 @@ Example:
         'order': 'desc',  # Sort order: desc or asc
         'timezone': None,  # Specific timezone
         'columns': ['username', 'audit_event_type'] if report_type != 'raw' else None,  # Columns for aggregate reports
-        'aggregates': ['occurrences'] if report_type != 'raw' else None,  # Aggregated values
+        'aggregates': ['occurrences'] if report_type != 'raw' else None,  # Aggregated values - 'occurrences', 'first_created', 'last_created'
         'username': None,  # Filter by username
         'to_username': None,  # Filter by target username
         'from_username': None,  # Filter by source username

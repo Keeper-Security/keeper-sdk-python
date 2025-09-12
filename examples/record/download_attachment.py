@@ -99,6 +99,7 @@ Example:
         print(f'Error: {str(e)}')
         sys.exit(1)
 
+    # Bool flags can be set to True or None (to be sent as False)
     kwargs = {
         'records': [record_uid],
         'out_dir': output_dir,

@@ -101,7 +101,7 @@ Example:
     kwargs = {
         'node': [node_name],
         'parent': parent_node,
-        'force': True
+        'force': True # True or None
     }
 
     print(f"Adding new enterprise node: {node_name}")

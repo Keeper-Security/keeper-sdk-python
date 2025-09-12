@@ -88,8 +88,9 @@ Example:
         print(f'Config file {args.config} not found')
         sys.exit(1)
 
+    # Set all flags as either True for setting or None for False
     show_all = True
-    owned_only = False
+    owned_only = None
     numbered = True
 
     context = None

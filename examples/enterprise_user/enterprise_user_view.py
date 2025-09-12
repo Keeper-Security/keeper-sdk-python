@@ -99,7 +99,7 @@ Example:
 
     kwargs = {
         'team': user_email,
-        'verbose': True
+        'verbose': True # Set as None to keep as false
     }
 
     print(f"Viewing enterprise user details for: {user_email}")

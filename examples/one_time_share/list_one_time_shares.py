@@ -98,9 +98,9 @@ Example:
 
     kwargs = {
         'record': record_name,
-        'recursive': recursive, # If recursive is sent, it will be considered True regardless of value, unless set as None
-        'verbose': verbose, # If verbose is sent, it will be considered True regardless of value, unless set as None
-        'show_all': show_all # If show_all is sent, it will be considered True regardless of value, unless set as None
+        'recursive': recursive, # If recursive is sent, it will be considered True regardless of value (True or False), unless set as None
+        'verbose': verbose, # If verbose is sent, it will be considered True regardless of value (True or False), unless set as None
+        'show_all': show_all # If show_all is sent, it will be considered True regardless of value (True or False), unless set as None
     }
 
     print(f"Listing one-time shares for record: {record_name}")
