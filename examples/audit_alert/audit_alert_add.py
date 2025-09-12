@@ -92,6 +92,7 @@ Example:
     frequency = "event"
     audit_events = ["login"]
 
+    context = None
     try:
         context = login_to_keeper_with_config(args.config)
     except Exception as e:
@@ -102,7 +103,7 @@ Example:
         'name': alert_name,
         'frequency': frequency,
         'audit_event': audit_events,
-        'active': 'on'
+        'active': 'on' # Set to 'on' to activate the alert or 'off' to create it inactive
     }
 
     print(f"Adding new audit alert: {alert_name}")
@@ -113,3 +114,6 @@ Example:
     except Exception as e:
         print(f'Error: {str(e)}')
         sys.exit(1)
+    finally:
+        if context:
+            context.clear_session()

@@ -87,9 +87,10 @@ Example:
     record_name = "record_name"
     expire_time = "1h"
     share_name = "share_name"
-    output_destination = "stdout"
-    is_editable = True
+    output_destination = "stdout" # 'stdout' for printing the link in console or 'clipboard' to copy it to clipboard
+    is_editable = True # True or None
 
+    context = None
     try:
         context = login_to_keeper_with_config(args.config)
     except Exception as e:
@@ -114,3 +115,6 @@ Example:
     except Exception as e:
         print(f'Error: {str(e)}')
         sys.exit(1)
+    finally:
+        if context:
+            context.clear_session()

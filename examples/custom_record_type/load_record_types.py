@@ -100,16 +100,16 @@ Example:
         print("You can create one first using the download_record_types.py example.")
         sys.exit(1)
 
+    context = None
     try:
         context = login_to_keeper_with_config(args.config)
         kwargs = {
             'file': json_file
         }
         success = load_record_types(context, **kwargs)
-        
-        if not success:
-            sys.exit(1)
-        
     except Exception as e:
         print(f'Error: {str(e)}')
         sys.exit(1)
+    finally:
+        if context:
+            context.clear_session()

@@ -105,6 +105,7 @@ Example:
 
     print(f"Note: This example will attempt to unshare app ID '{app_id}'")
 
+    context = None
     try:
         context = login_to_keeper_with_config(args.config)
         success = unshare_secrets_manager_app(
@@ -119,3 +120,6 @@ Example:
     except Exception as e:
         print(f'Error: {str(e)}')
         sys.exit(1)
+    finally:
+        if context:
+            context.clear_session()

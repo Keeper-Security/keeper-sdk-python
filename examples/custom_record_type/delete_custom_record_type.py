@@ -100,18 +100,18 @@ Example:
         print(f'Config file {args.config} not found')
         sys.exit(1)
 
-    record_type_id = 24375
-    force = True
+    record_type_id = 000000
+    force = True # True or False
 
     print(f"Note: This example will attempt to delete record type ID {record_type_id}")
 
+    context = None
     try:
-        vault = login_to_keeper_with_config(args.config).vault
-        success = delete_custom_record_type(vault, record_type_id, force)
-        
-        if not success:
-            sys.exit(1)
-        
+        context = login_to_keeper_with_config(args.config)
+        success = delete_custom_record_type(context.vault, record_type_id, force)
     except Exception as e:
         print(f'Error: {str(e)}')
         sys.exit(1)
+    finally:
+        if context:
+            context.clear_session()

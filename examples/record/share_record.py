@@ -123,14 +123,16 @@ Example:
         print(f'Config file {args.config} not found')
         sys.exit(1)
 
+    # Bool flags can be set to True or None (to be sent as False)
     record_uid = "UkezdUGQoTOztfi5cGFJnQ"
     user_email = "example@example.com"
     can_edit = True
     can_share = False
-    action = 'grant'
+    action = 'grant' # 'grant', 'revoke', 'owner', 'cancel' or 'remove'
 
     print(f"Note: This example will attempt to share record '{record_uid}' with '{user_email}'")
 
+    context = None
     try:
         context = login_to_keeper_with_config(args.config)
         success = share_record_with_user(
@@ -148,3 +150,6 @@ Example:
     except Exception as e:
         print(f'Error: {str(e)}')
         sys.exit(1)
+    finally:
+        if context:
+            context.clear_session()
