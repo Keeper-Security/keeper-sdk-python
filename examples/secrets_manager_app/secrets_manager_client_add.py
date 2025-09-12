@@ -131,13 +131,14 @@ Example:
     app_id = "RlO6y-idGBqu1Ax2yUYXKw"
     client_name = "DemoClient"
     count = 1
-    unlock_ip = False
-    first_access_expires_in = 60
+    unlock_ip = None # Set to True to unlock IP, set to None to send as False
+    first_access_expires_in = 60 # Minutes until first access expires
     access_expire_in_min = None
-    return_tokens = True
+    return_tokens = True # Set to True to return tokens, set to None to send as False
 
     print(f"Note: This example will attempt to add a client to app ID '{app_id}'")
 
+    context = None
     try:
         context = login_to_keeper_with_config(args.config)
         success = add_client_to_app(
@@ -157,3 +158,6 @@ Example:
     except Exception as e:
         print(f'Error: {str(e)}')
         sys.exit(1)
+    finally:
+        if context:
+            context.clear_session()

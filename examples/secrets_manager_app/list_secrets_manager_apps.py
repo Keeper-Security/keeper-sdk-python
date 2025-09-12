@@ -115,10 +115,14 @@ Example:
         logger.error(f'Config file {args.config} not found')
         sys.exit(1)
 
+    context = None
     try:
-        vault = login_to_keeper_with_config(args.config).vault
-        list_secrets_manager_apps(vault)
+        context = login_to_keeper_with_config(args.config)
+        list_secrets_manager_apps(context.vault)
         
     except Exception as e:
         logger.error(f'Error: {str(e)}')
         sys.exit(1)
+    finally:
+        if context:
+            context.clear_session()

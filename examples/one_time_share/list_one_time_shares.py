@@ -89,6 +89,7 @@ Example:
     verbose = None
     show_all = None
 
+    context = None
     try:
         context = login_to_keeper_with_config(args.config)
     except Exception as e:
@@ -97,9 +98,9 @@ Example:
 
     kwargs = {
         'record': record_name,
-        'recursive': recursive, # If recursive is sent, it will be considered True regardless of value, unless set as None
-        'verbose': verbose, # If verbose is sent, it will be considered True regardless of value, unless set as None
-        'show_all': show_all # If show_all is sent, it will be considered True regardless of value, unless set as None
+        'recursive': recursive, # If recursive is sent, it will be considered True regardless of value (True or False), unless set as None
+        'verbose': verbose, # If verbose is sent, it will be considered True regardless of value (True or False), unless set as None
+        'show_all': show_all # If show_all is sent, it will be considered True regardless of value (True or False), unless set as None
     }
 
     print(f"Listing one-time shares for record: {record_name}")
@@ -110,3 +111,6 @@ Example:
     except Exception as e:
         print(f'Error: {str(e)}')
         sys.exit(1)
+    finally:
+        if context:
+            context.clear_session()
