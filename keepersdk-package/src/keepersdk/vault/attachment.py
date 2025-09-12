@@ -13,6 +13,7 @@ from .record_facades import FileRefRecordFacade
 from .vault_extensions import resolve_record_access_path
 from .vault_record import FileRecord, PasswordRecord, TypedRecord, AttachmentFile, AttachmentFileThumb
 from .. import utils, crypto
+from ..authentication import endpoint
 from ..proto import record_pb2
 
 
@@ -165,6 +166,7 @@ class FileUploadTask(UploadTask):
     def __init__(self, file_path: str) -> None:
         super().__init__()
         self.file_path = file_path
+        self.name = os.path.basename(self.file_path)
 
     def prepare(self):
         self.file_path = os.path.expanduser(self.file_path)
@@ -178,7 +180,7 @@ class FileUploadTask(UploadTask):
 
     @contextlib.contextmanager
     def open(self):
-        yield open(self.file_path, 'r')
+        yield open(self.file_path, 'rb')
 
 
 def upload_attachments(vault: vault_online.VaultOnline,
