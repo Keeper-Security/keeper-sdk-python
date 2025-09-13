@@ -88,15 +88,17 @@ Example:
         print(f'Config file {args.config} not found')
         sys.exit(1)
 
+    context = None
     try:
         context = login_to_keeper_with_config(args.config)
+        kwargs = {
+            'record_name': '*'
+        }
+
+        success = execute_record_type_info(context, **kwargs)
     except Exception as e:
         print(f'Error: {str(e)}')
         sys.exit(1)
-
-    kwargs = {
-        'record_name': '*'
-    }
-
-    success = execute_record_type_info(context, **kwargs)
-    sys.exit(0 if success else 1)
+    finally:
+        if context:
+            context.clear_session()

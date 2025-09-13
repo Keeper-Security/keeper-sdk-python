@@ -102,10 +102,12 @@ Example:
         print(f'Config file {args.config} not found')
         sys.exit(1)
 
+    # Bool flags can be set to True or None (to be sent as False)
     show_details = True
     criteria = None
     record_type = None
 
+    context = None
     try:
         context = login_to_keeper_with_config(args.config)
         list_records(
@@ -118,3 +120,6 @@ Example:
     except Exception as e:
         print(f'Error: {str(e)}')
         sys.exit(1)
+    finally:
+        if context:
+            context.clear_session()

@@ -107,10 +107,11 @@ Example:
 
     app_id = "RlO6y-idGBqu1Ax2yUYXKw"
     user_email = "example@example.com"
-    is_admin = False
+    is_admin = None # Set to True to grant admin permissions, set to None to send as False
 
     print(f"Note: This example will attempt to share app ID '{app_id}'")
 
+    context = None
     try:
         context = login_to_keeper_with_config(args.config)
         success = share_secrets_manager_app(
@@ -126,3 +127,6 @@ Example:
     except Exception as e:
         print(f'Error: {str(e)}')
         sys.exit(1)
+    finally:
+        if context:
+            context.clear_session()
