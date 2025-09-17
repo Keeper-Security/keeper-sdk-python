@@ -4,9 +4,6 @@ from typing import List, Dict
 
 from . import vault_online, record_types
 from ..proto import record_pb2
-from ..utils import get_logger
-
-logger = get_logger()
 
 def create_custom_record_type(vault: vault_online.VaultOnline, title: str, fields: List[Dict[str, str]], description: str, categories: List[str] = None):
     is_enterprise_admin = vault.keeper_auth.auth_context.is_enterprise_admin

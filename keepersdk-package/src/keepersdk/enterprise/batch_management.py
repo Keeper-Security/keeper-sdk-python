@@ -582,7 +582,7 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
                     }
                     if action == EntityAction.Add or action == EntityAction.Update:
                         if isinstance(team.team_uid, str):
-                            rq['node_id'] = team.team_uid
+                            rq['node_id'] = team.node_id
 
                         existing_team = enterprise_data.teams.get_entity(team.team_uid) if action == EntityAction.Update else None
                         if not team.name and existing_team:
