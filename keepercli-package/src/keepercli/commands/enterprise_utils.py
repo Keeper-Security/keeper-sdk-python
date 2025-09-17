@@ -363,6 +363,8 @@ class TeamUtils:
                                 t = tt[0]
                             elif len(tt) >= 2:
                                 raise base.CommandError(f'Team name "{team_name}" is not unique. Use Team UID.')
+                        elif isinstance(tt, enterprise_types.Team):
+                            t = tt
                 if t is None:
                     missing_teams.append(team_name)
                     continue
