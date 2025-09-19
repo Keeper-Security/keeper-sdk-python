@@ -1,14 +1,21 @@
 import argparse
 import fnmatch
+from functools import reduce
 import re
 
 from typing import Set, Dict, List, Any
 
 from . import base
-from ..params import KeeperParams
-from ..helpers import report_utils, folder_utils
 from .. import api, prompt_utils
-from keepersdk.vault import vault_data, vault_utils, vault_types, record_management, vault_record
+from ..params import KeeperParams
+from ..helpers import folder_utils, report_utils, share_utils
+from keepersdk import utils
+from keepersdk.proto import enterprise_pb2
+from keepersdk.vault import record_management, vault_data, vault_types, vault_record, vault_utils
+
+
+logger = api.get_logger()
+
 
 class RecordListCommand(base.ArgparseCommand):
     parser = argparse.ArgumentParser(prog='list', description='List records', parents=[base.report_output_parser])
@@ -63,8 +70,259 @@ class RecordListCommand(base.ArgparseCommand):
             return report_utils.dump_report_data(table, headers, fmt=fmt, filename=kwargs.get('output'),
                                     row_number=True, column_width=None if verbose else 40)
         else:
-            api.get_logger().info('No records are found')
+            logger.info('No records are found')
 
+
+class SharedFolderListCommand(base.ArgparseCommand):
+
+    def __init__(self):
+        parser = argparse.ArgumentParser(
+            prog='list-sf', parents=[base.report_output_parser], 
+            description='Displays shared folders'
+        )
+        SharedFolderListCommand.add_arguments_to_parser(parser)
+        super().__init__(parser)
+    
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser) -> None:
+        parser.add_argument('--verbose', '-v', dest='verbose', action='store_true',
+                            help='verbose output')
+        parser.add_argument('pattern', nargs='?', metavar='pattern', help='pattern, or UID. Optional')
+
+    def execute(self, context: KeeperParams, **kwargs):
+        if not context.vault:
+            raise ValueError("Vault is not initialized.")
+        
+        pattern = kwargs.get('pattern')
+        shared_folders = self._find_shared_folders(context, pattern)
+        
+        if not shared_folders:
+            logger.info('No shared folders are found')
+            return None
+            
+        return self._build_shared_folders_report(shared_folders, kwargs)
+
+    def _find_shared_folders(self, context: KeeperParams, pattern: str):
+        """Find shared folders matching the given pattern."""
+        return context.vault.vault_data.find_shared_folders(criteria=pattern)
+
+    def _build_shared_folders_report(self, shared_folders, kwargs):
+        """Build and format the shared folders report."""
+        headers = self._get_shared_folders_headers(kwargs.get('format', 'table'))
+        table = self._build_shared_folders_table(shared_folders)
+        
+        return report_utils.dump_report_data(
+            table, 
+            headers, 
+            fmt=kwargs.get('format', 'table'), 
+            filename=kwargs.get('output'), 
+            row_number=True, 
+            column_width=None if kwargs.get('verbose') else 40
+        )
+
+    def _get_shared_folders_headers(self, format_type: str):
+        """Get headers for shared folders report."""
+        headers = ['shared_folder_uid', 'name']
+        if format_type == 'table':
+            headers = [report_utils.field_to_title(x) for x in headers]
+        return headers
+
+    def _build_shared_folders_table(self, shared_folders):
+        """Build table data for shared folders."""
+        return [
+            [shared_folder.shared_folder_uid, shared_folder.name] 
+            for shared_folder in shared_folders
+        ]
+
+
+class TeamListCommand(base.ArgparseCommand):
+
+    def __init__(self):
+        parser = argparse.ArgumentParser(
+            prog='list-team', parents=[base.report_output_parser], description='Displays teams'
+        )
+        TeamListCommand.add_arguments_to_parser(parser)
+        super().__init__(parser)
+    
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser) -> None:
+        parser.add_argument(
+            '-v', '--verbose', dest='verbose', action='store_true', 
+            help='verbose output (include team membership info)'
+        )
+        parser.add_argument(
+            '-vv', '--very-verbose', dest='very_verbose', action='store_true', 
+            help='more verbose output (fetches team membership info not in cache)'
+        )
+        parser.add_argument(
+            '-a', '--all', dest='all', action='store_true', 
+            help='show all teams in your contacts (including those outside your primary organization)'
+        )
+        parser.add_argument(
+            '--sort', dest='sort', choices=['company', 'team_uid', 'name'], default='company', 
+            help='sort teams by column (default: company)'
+        )
+
+    def execute(self, context: KeeperParams, **kwargs):
+        if not context.vault:
+            raise ValueError("Vault is not initialized.")
+        
+        teams = self._get_teams(context, kwargs)
+        
+        if not teams:
+            logger.info('No teams are found')
+            return None
+            
+        return self._build_teams_report(teams, kwargs)
+
+    def _get_teams(self, context: KeeperParams, kwargs):
+        """Get teams based on filters and options."""
+        show_all_teams = kwargs.get('all', False)
+        show_team_users = kwargs.get('verbose') or kwargs.get('very_verbose', False)
+        fetch_missing_users = kwargs.get('very_verbose', False)
+        
+        # Get teams from share objects
+        teams = self._get_teams_from_share_objects(context, show_all_teams)
+        
+        # Add additional teams if needed
+        teams = self._add_additional_teams(context, teams)
+        
+        # Add team members if requested
+        if show_team_users:
+            teams = self.get_team_members(context, teams, fetch_missing_users)
+            
+        return teams
+
+    def _get_teams_from_share_objects(self, context: KeeperParams, show_all_teams: bool):
+        """Get teams from share objects with enterprise filtering."""
+        share_objects = share_utils.get_share_objects(vault=context.vault)
+        teams_data = share_objects.get('teams', {})
+        orgs = share_objects.get('enterprises', {})
+        
+        enterprise_id = self._get_current_enterprise_id(context)
+        is_included = lambda t: show_all_teams or t.get('enterprise_id') == enterprise_id
+        
+        teams = []
+        for team_uid, team_info in teams_data.items():
+            if not is_included(team_info):
+                continue
+            teams.append({
+                'team_uid': team_uid,
+                'name': team_info.get('name'),
+                'enterprise_id': orgs.get(str(team_info.get('enterprise_id')))
+            })
+        
+        return teams
+
+    def _get_current_enterprise_id(self, context: KeeperParams):
+        """Get the current user's enterprise ID."""
+        if context.auth.auth_context.license:
+            return context.auth.auth_context.license.get('enterpriseId')
+        return None
+
+    def _add_additional_teams(self, context: KeeperParams, teams):
+        """Add additional teams if the current list is large enough."""
+        if len(teams) >= 500:
+            team_uids = {team['team_uid'] for team in teams}
+            available_teams = vault_utils.load_available_teams(auth=context.vault.keeper_auth)
+            
+            additional_teams = [
+                {
+                    'team_uid': team.team_uid, 
+                    'name': team.name, 
+                    'enterprise_id': self._get_current_enterprise_id(context)
+                } 
+                for team in available_teams 
+                if team.team_uid not in team_uids
+            ]
+            teams.extend(additional_teams)
+        
+        return teams
+
+    def _build_teams_report(self, teams, kwargs):
+        """Build and format the teams report."""
+        headers = self._get_teams_headers(kwargs)
+        table = self._build_teams_table(teams, kwargs)
+        table = self._sort_teams_table(table, kwargs.get('sort', 'company'))
+        
+        return report_utils.dump_report_data(
+            table, 
+            headers, 
+            fmt=kwargs.get('format', 'table'), 
+            filename=kwargs.get('output'),
+            row_number=True
+        )
+
+    def _get_teams_headers(self, kwargs):
+        """Get headers for teams report."""
+        show_team_users = kwargs.get('verbose') or kwargs.get('very_verbose', False)
+        fmt = kwargs.get('format', 'table')
+        
+        headers = ['company', 'team_uid', 'name']
+        if show_team_users:
+            headers.append('member')
+        
+        if fmt != 'json':
+            headers = [report_utils.field_to_title(x) for x in headers]
+        
+        return headers
+
+    def _build_teams_table(self, teams, kwargs):
+        """Build table data for teams."""
+        show_team_users = kwargs.get('verbose') or kwargs.get('very_verbose', False)
+        
+        table = []
+        for team in teams:
+            row = [team.get('enterprise_id'), team.get('team_uid'), team.get('name')]
+            if show_team_users:
+                row.append(team.get('members'))
+            table.append(row)
+        
+        return table
+
+    def _sort_teams_table(self, table, sort_column):
+        """Sort teams table by the specified column."""
+        if sort_column == 'company':
+            table.sort(key=lambda x: (x[0] or '').lower())
+        elif sort_column == 'team_uid':
+            table.sort(key=lambda x: x[1].lower())
+        elif sort_column == 'name':
+            table.sort(key=lambda x: x[2].lower())
+        
+        return table
+    
+    @classmethod
+    def get_team_members(self, context: KeeperParams, teams: List[Dict[str, Any]], allow_fetch: bool) -> List[Dict[str, Any]]:
+        if not context.enterprise_data:
+            return teams
+
+        def get_enterprise_teams():
+            if not context.enterprise_data:
+                return {}
+            users = {x.enterprise_user_id: x.username for x in context.enterprise_data.users.get_all_entities()}
+            return reduce(
+                lambda a, b: {**a, b.team_uid: [*a.get(b.team_uid, []), users.get(b.enterprise_user_id)]},
+                context.enterprise_data.team_users.get_all_links(),
+                dict()
+            )
+
+        def fetch_members(team_uid: str) -> List[str]:
+            if not allow_fetch:
+                return []
+            rq = enterprise_pb2.GetTeamMemberRequest()
+            rq.teamUid = utils.base64_url_decode(team_uid)
+            rs = context.vault.keeper_auth.execute_auth_rest(
+                rest_endpoint='vault/get_team_members',
+                request=rq,
+                response_type=enterprise_pb2.GetTeamMemberResponse
+            )
+            return [x.email for x in rs.enterpriseUser]
+
+        enterprise_teams = get_enterprise_teams()
+        for t in teams:
+            t['members'] = enterprise_teams.get(t.get('team_uid')) if enterprise_teams.get(t.get('team_uid')) else fetch_members(t.get('team_uid'))
+
+        return teams
 
 class ShortcutCommand(base.GroupCommand):
     def __init__(self):
