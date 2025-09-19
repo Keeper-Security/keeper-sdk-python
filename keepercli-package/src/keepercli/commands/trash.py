@@ -17,6 +17,9 @@ from keepersdk.vault.trash_management import TrashManagement
 
 
 logger = api.get_logger()
+STRING_LENGTH_LIMIT = 100
+CHUNK_SIZE_LIMIT = 900
+TRUNCATE_SUFFIX = '...'
 
 
 class TrashCommand(base.GroupCommand):
@@ -91,24 +94,37 @@ class TrashListCommand(base.ArgparseCommand):
         return pattern
     
     def _create_title_pattern(self, pattern: Optional[str]) -> Optional[re.Pattern]:
-        """Create regex pattern for title matching."""
-        if not pattern:
+        """Safely compile regex pattern with length limits."""
+        if len(pattern) > STRING_LENGTH_LIMIT:  # Prevent ReDoS
+            logger.warning("Pattern too long, truncated")
+            pattern = pattern[:STRING_LENGTH_LIMIT]
+        
+        try:
+            return re.compile(fnmatch.translate(pattern), re.IGNORECASE)
+        except re.error as e:
+            logger.warning("Invalid pattern: %s", e)
             return None
-        return re.compile(fnmatch.translate(pattern), re.IGNORECASE)
     
     def _build_record_table(self, deleted_records: Dict, orphaned_records: Dict, 
                            pattern: Optional[str], title_pattern: Optional[re.Pattern]) -> List[List]:
         """Build the record table for deleted and orphaned records."""
         record_table = []
         
-        for is_shared in (False, True):
-            records = orphaned_records if is_shared else deleted_records
-            for record in records.values():
-                if self._should_include_record(record, pattern, title_pattern):
-                    row = self._create_record_row(record, is_shared)
-                    record_table.append(row)
+        # Process deleted records
+        self._add_records_to_table(deleted_records, False, pattern, title_pattern, record_table)
+        
+        # Process orphaned records
+        self._add_records_to_table(orphaned_records, True, pattern, title_pattern, record_table)
         
         return record_table
+    
+    def _add_records_to_table(self, records: Dict, is_shared: bool, pattern: Optional[str], 
+                             title_pattern: Optional[re.Pattern], record_table: List[List]) -> None:
+        """Add records to the table if they match the criteria."""
+        for record in records.values():
+            if self._should_include_record(record, pattern, title_pattern):
+                row = self._create_record_row(record, is_shared)
+                record_table.append(row)
     
     def _should_include_record(self, record: Dict, pattern: Optional[str], 
                               title_pattern: Optional[re.Pattern]) -> bool:
@@ -122,9 +138,13 @@ class TrashListCommand(base.ArgparseCommand):
             
         if title_pattern:
             record_data_json = record.get('data_unencrypted')
-            record_data = json.loads(record_data_json)
-            record_title = record_data.get('title')
-            return title_pattern.match(record_title)
+            try:
+                record_data = json.loads(record_data_json)
+                record_title = record_data.get('title', '')
+                return title_pattern.match(record_title) is not None
+            except (json.JSONDecodeError, UnicodeDecodeError) as e:
+                logger.debug("Failed to parse record data: %s", e)
+                return False
             
         return False
     
@@ -132,19 +152,24 @@ class TrashListCommand(base.ArgparseCommand):
         """Create a table row for a record."""
         record_uid = record.get('record_uid')
         record_data_json = record.get('data_unencrypted')
-        record_data = json.loads(record_data_json)
-        record_title = record_data.get('title')
         
-        date_deleted = None
+        try:
+            record_data = json.loads(record_data_json) if record_data_json else {}
+            record_title = record_data.get('title', '')
+            record_type = record_data.get('type', '')
+        except (json.JSONDecodeError, UnicodeDecodeError) as e:
+            logger.debug("Failed to parse record data for row creation: %s", e)
+            record_title = 'Parse Error'
+            record_type = 'Unknown'
+        
         if is_shared:
             status = 'Share'
+            date_deleted = None
         else:
             status = 'Record'
-            date_deleted_timestamp = record.get('date_deleted', 0)
-            if date_deleted_timestamp:
-                date_deleted = datetime.datetime.fromtimestamp(int(date_deleted_timestamp / 1000))
+            date_deleted = self._get_deleted_date(record)
         
-        return ['', record_uid, record_title, record_data.get('type'), date_deleted, status]
+        return ['', record_uid, record_title, record_type, date_deleted, status]
     
     def _build_folder_table(self, shared_folders: Dict, verbose: bool) -> List[List]:
         """Build the folder table for shared folders."""
@@ -167,17 +192,24 @@ class TrashListCommand(base.ArgparseCommand):
             folder_uid = record.get('folder_uid')
             record_uid = record.get('record_uid')
             record_data_json = record.get('data_unencrypted')
-            record_data = json.loads(record_data_json)
             
-            if not record_data:
-                continue
+            try:
+                record_data = json.loads(record_data_json) if record_data_json else {}
                 
-            record_title = record_data.get('title')
+                if not record_data:
+                    continue
+                    
+                record_title = record_data.get('title', '')
+                record_type = record_data.get('type', '')
+            except (json.JSONDecodeError, UnicodeDecodeError) as e:
+                logger.debug("Failed to parse folder record data: %s", e)
+                continue
+            
             date_deleted = self._get_deleted_date(record)
             
             folder_table.append([
                 folder_uid, record_uid, record_title, 
-                record_data.get('type'), date_deleted, 'Folder'
+                record_type, date_deleted, 'Folder'
             ])
         
         return folder_table
@@ -211,10 +243,27 @@ class TrashListCommand(base.ArgparseCommand):
         return record_counts
     
     def _get_deleted_date(self, item: Dict) -> Optional[datetime.datetime]:
-        """Get deleted date from item."""
+        """Get deleted date from item with validation."""
         date_deleted_timestamp = item.get('date_deleted', 0)
         if date_deleted_timestamp:
-            return datetime.datetime.fromtimestamp(int(date_deleted_timestamp / 1000))
+            try:
+                # Validate timestamp type
+                if not isinstance(date_deleted_timestamp, (int, float)):
+                    logger.debug("Invalid timestamp type: %s", type(date_deleted_timestamp))
+                    return None
+                
+                # Convert to seconds and validate range
+                timestamp_seconds = int(date_deleted_timestamp / 1000)
+                
+                # Check for reasonable date range (1970-2100)
+                if timestamp_seconds < 0 or timestamp_seconds > 4102444800:  # Jan 1, 2100
+                    logger.debug("Timestamp out of range: %s", timestamp_seconds)
+                    return None
+                
+                return datetime.datetime.fromtimestamp(timestamp_seconds)
+            except (ValueError, OSError, OverflowError) as e:
+                logger.debug("Invalid timestamp conversion: %s", e)
+                return None
         return None
     
     def _get_folder_name(self, folder: Dict, folder_uid: str) -> str:
@@ -224,6 +273,9 @@ class TrashListCommand(base.ArgparseCommand):
             data_json = utils.base64_url_encode(data_bytes)
             data = json.loads(data_json)
             return data.get('name') or folder_uid
+        except (json.JSONDecodeError, UnicodeDecodeError) as e:
+            logger.debug('Load folder data: %s', e)
+            return folder_uid
         except Exception as e:
             logger.debug('Load folder data: %s', e)
             return folder_uid
@@ -249,7 +301,20 @@ class TrashGetCommand(base.ArgparseCommand):
             logger.info('Record UID parameter is required')
             return
 
-        record, is_shared = trash_management.get_trash_record(context.vault, record_uid)
+        # Validate record UID format and length
+        if not isinstance(record_uid, str):
+            logger.info('Record UID must be a string')
+            return
+        
+        if len(record_uid) == 0 or len(record_uid) > STRING_LENGTH_LIMIT:
+            logger.info('Invalid record UID length')
+            return
+
+        try:
+            record, is_shared = trash_management.get_trash_record(context.vault, record_uid)
+        except Exception as e:
+            logger.error('Error retrieving record: %s', e)
+            return
         if not record:
             logger.info('%s is not a valid deleted record UID', record_uid)
             return
@@ -265,11 +330,16 @@ class TrashGetCommand(base.ArgparseCommand):
             self._display_share_info(context, record, record_uid)
     
     def _parse_record_data(self, record: Dict) -> Optional[Dict]:
-        """Parse record data from JSON."""
+        """Parse record data from JSON with security validation."""
         record_data_json = record.get('data_unencrypted')
         if not record_data_json:
             return None
-        return json.loads(record_data_json)
+        
+        try:
+            return json.loads(record_data_json)
+        except (json.JSONDecodeError, UnicodeDecodeError) as e:
+            logger.debug("Failed to parse record data: %s", e)
+            return None
     
     def _display_record_info(self, record_data: Dict):
         """Display basic record information."""
@@ -305,8 +375,8 @@ class TrashGetCommand(base.ArgparseCommand):
         if isinstance(value, list):
             value = '\n'.join(value)
         
-        if len(value) > 100:
-            value = value[:99] + '...'
+        if len(value) > STRING_LENGTH_LIMIT:
+            value = value[:STRING_LENGTH_LIMIT-1] + TRUNCATE_SUFFIX
             
         return value
     
@@ -400,10 +470,34 @@ class TrashRestoreCommand(base.ArgparseCommand):
         trash_management.restore_trash_records(context.vault, records, confirm_callback)
     
     def _validate_records_parameter(self, records: Any) -> Optional[List[str]]:
-        """Validate and normalize records parameter."""
+        """Validate and normalize records parameter with security checks."""
         if not isinstance(records, (tuple, list)):
             return None
-        return records
+        
+        # Check list size to prevent DoS
+        if len(records) > 10000:  # Reasonable limit
+            logger.info('Too many records specified (max: 10000)')
+            return None
+        
+        validated_records = []
+        for i, record in enumerate(records):
+            if self._is_valid_record(record, i + 1):
+                validated_records.append(record)
+        
+        return validated_records if validated_records else None
+    
+    def _is_valid_record(self, record: str, index: int) -> bool:
+        """Check if a single record is valid."""
+        if not isinstance(record, str):
+            logger.info('Record %d must be a string', index)
+            return False
+        
+        # Validate UID format and length
+        if len(record) == 0 or len(record) > STRING_LENGTH_LIMIT:
+            logger.info('Record %d has invalid length', index)
+            return False
+        
+        return True
     
     def _create_confirm_callback(self, force: bool):
         """Create confirmation callback based on force flag."""
@@ -491,10 +585,29 @@ class TrashUnshareCommand(base.ArgparseCommand):
         self._remove_shares_from_records(context.vault, records_to_unshare)
     
     def _validate_records_parameter(self, records: Any) -> Optional[List[str]]:
-        """Validate and normalize records parameter."""
+        """Validate and normalize records parameter with security checks."""
         if not isinstance(records, (tuple, list)):
             return None
-        return records
+        
+        # Check list size to prevent DoS
+        if len(records) > 10000:  # Reasonable limit
+            logger.info('Too many records specified (max: 10000)')
+            return None
+        
+        validated_records = []
+        for i, record in enumerate(records):
+            if self._is_valid_record(record, i + 1):
+                validated_records.append(record)
+        
+        return validated_records if validated_records else None
+    
+    def _is_valid_record(self, record: str, index: int) -> bool:
+        """Check if a single record is valid."""
+        if len(record) == 0 or len(record) > STRING_LENGTH_LIMIT:
+            logger.info('Record %d has invalid length', index)
+            return False
+        
+        return True
     
     def _find_records_to_unshare(self, record_patterns: List[str], orphaned_records: Dict) -> List[str]:
         """Find records to unshare based on patterns."""
@@ -510,7 +623,14 @@ class TrashUnshareCommand(base.ArgparseCommand):
     
     def _add_matching_records(self, pattern: str, orphaned_records: Dict, records_to_unshare: set):
         """Add records matching the pattern to the unshare set."""
-        title_pattern = re.compile(fnmatch.translate(pattern), re.IGNORECASE)
+        if len(pattern) > STRING_LENGTH_LIMIT:  # Prevent ReDoS
+            logger.warning("Pattern too long, truncated")
+            pattern = pattern[:STRING_LENGTH_LIMIT]
+        
+        try:
+            title_pattern = re.compile(fnmatch.translate(pattern), re.IGNORECASE)
+        except re.error as e:
+            raise base.CommandError("Invalid pattern: %s", e)
         
         for record_uid, record in orphaned_records.items():
             if record_uid in records_to_unshare:
@@ -521,13 +641,15 @@ class TrashUnshareCommand(base.ArgparseCommand):
                 records_to_unshare.add(record_uid)
     
     def _parse_record_data(self, record: Dict) -> Optional[Dict]:
-        """Parse record data from JSON."""
+        """Parse record data from JSON with security validation."""
         record_data_json = record.get('data_unencrypted')
         if not record_data_json:
             return None
+        
         try:
             return json.loads(record_data_json)
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, UnicodeDecodeError) as e:
+            logger.debug("Failed to parse record data: %s", e)
             return None
     
     def _confirm_unshare(self, force: bool, record_count: int) -> bool:
@@ -567,21 +689,25 @@ class TrashUnshareCommand(base.ArgparseCommand):
             shares = record_share['shares']
             if 'user_permissions' not in shares:
                 continue
-                
-            for user_permission in shares['user_permissions']:
-                if user_permission.get('owner') is False:
-                    share_request = record_pb2.SharedRecord()
-                    share_request.toUsername = user_permission['username']
-                    share_request.recordUid = utils.base64_url_decode(record_share['record_uid'])
-                    remove_requests.append(share_request)
+            
+            self._process_user_permissions(shares['user_permissions'], record_share['record_uid'], remove_requests)
         
         return remove_requests
+    
+    def _process_user_permissions(self, user_permissions: List[Dict], record_uid: str, remove_requests: List[record_pb2.SharedRecord]) -> None:
+        """Process user permissions and add to remove requests."""
+        for user_permission in user_permissions:
+            if user_permission.get('owner') is False:
+                share_request = record_pb2.SharedRecord()
+                share_request.toUsername = user_permission['username']
+                share_request.recordUid = utils.base64_url_decode(record_uid)
+                remove_requests.append(share_request)
     
     def _execute_share_removal_requests(self, vault, remove_requests: List[record_pb2.SharedRecord]):
         """Execute share removal requests in chunks."""
         while remove_requests:
-            chunk = remove_requests[:900]
-            remove_requests = remove_requests[900:]
+            chunk = remove_requests[:CHUNK_SIZE_LIMIT]
+            remove_requests = remove_requests[CHUNK_SIZE_LIMIT:]
             
             self._process_share_removal_chunk(vault, chunk)
     

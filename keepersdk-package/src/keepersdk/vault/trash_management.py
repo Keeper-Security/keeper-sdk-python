@@ -1,5 +1,4 @@
 import fnmatch
-import itertools
 import json
 import re
 from .. import utils, crypto
@@ -107,8 +106,7 @@ class TrashManagement:
         try:
             return TrashManagement._decrypt_folder_key_by_type(sf, vault, folder_keys)
         except Exception as e:
-            logger.debug('Folder key decryption failed: %s', e)
-            return None
+            raise ValueError(f'Folder key decryption failed: {e}')
 
     @staticmethod
     def _decrypt_folder_key_by_type(sf: Any, vault: vault_online.VaultOnline, folder_keys: Dict[str, Tuple[bytes, str]]) -> Optional[bytes]:
@@ -182,8 +180,7 @@ class TrashManagement:
             return folder_dict
             
         except Exception as e:
-            logger.debug('Shared folder data decryption failed: %s', e)
-            return None
+            raise ValueError(f'Shared folder data decryption failed: {e}')
 
     @staticmethod
     def _create_folder_dict(sf: Any, shared_folder_uid: str, folder_uid: str, folder_key: bytes, decrypted_data: bytes) -> Dict[str, Any]:
@@ -235,8 +232,7 @@ class TrashManagement:
             return record_uid, (record_key, folder_uid, rk.dateDeleted)
             
         except Exception as e:
-            logger.debug('Record "%s" key decryption failed: %s', record_uid, e)
-            return None
+            raise ValueError(f'Record "{record_uid}" key decryption failed: {e}')
 
     @staticmethod
     def _decrypt_shared_record_key(encrypted_key: bytes, folder_key: bytes) -> bytes:
@@ -277,8 +273,7 @@ class TrashManagement:
             return record_uid, record_dict
             
         except Exception as e:
-            logger.debug('Record "%s" data decryption failed: %s', record_uid, e)
-            return None
+            raise ValueError(f'Record "{record_uid}" data decryption failed: {e}')
 
     @staticmethod
     def _decrypt_record_data_by_version(encrypted_data: bytes, version: int, record_key: bytes) -> bytes:
@@ -332,12 +327,10 @@ class TrashManagement:
             elif key_type == 4:
                 return crypto.decrypt_ec(record_key, vault.keeper_auth.auth_context.ec_private_key)
             else:
-                logger.debug('Unknown record key type %d for record %s', key_type, record['record_uid'])
-                return None
+                raise ValueError(f'Unknown record key type {key_type} for record {record["record_uid"]}')
                 
         except Exception as e:
-            logger.debug('Record key decryption failed for %s: %s', record['record_uid'], e)
-            return None
+            raise ValueError(f'Record key decryption failed for {record["record_uid"]}: {e}')
 
     @staticmethod
     def _decrypt_record_data(record: Dict[str, Any], record_key: bytes) -> Optional[bytes]:
@@ -352,8 +345,7 @@ class TrashManagement:
                 return crypto.decrypt_aes_v1(data, record_key)
                 
         except Exception as e:
-            logger.debug('Record data decryption failed for %s: %s', record['record_uid'], e)
-            return None
+            raise ValueError(f'Record data decryption failed for {record["record_uid"]}: {e}')
 
     @staticmethod
     def _load_deleted_records_from_command(vault: vault_online.VaultOnline) -> None:
