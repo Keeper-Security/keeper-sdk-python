@@ -259,16 +259,15 @@ class EnterpriseTeamEditCommand(base.ArgparseCommand, enterprise_management.IEnt
 
         restrict_edit: Optional[bool] = None
         r_edit = kwargs.get('restrict_edit')
-        if r_edit is not None:
-            restrict_edit = r_edit == 'on'
+        restrict_edit = r_edit == 'on'
+
         restrict_share: Optional[bool] = None
         r_share = kwargs.get('restrict_share')
-        if r_share is not None:
-            restrict_share = r_share == 'on'
+        restrict_share = r_share == 'on'
+        
         restrict_view: Optional[bool] = None
         r_view = kwargs.get('restrict_view')
-        if r_view is not None:
-            restrict_view = r_view == 'on'
+        restrict_view = r_view == 'on'
 
         teams_to_edit = [enterprise_management.TeamEdit(
             team_uid=x.team_uid, name=team_name, node_id=parent_id,
@@ -277,6 +276,7 @@ class EnterpriseTeamEditCommand(base.ArgparseCommand, enterprise_management.IEnt
 
         batch = batch_management.BatchManagement(loader=context.enterprise_loader, logger=self)
         batch.modify_teams(to_update=teams_to_edit)
+        batch.apply()
 
 
 class EnterpriseTeamDeleteCommand(base.ArgparseCommand, enterprise_management.IEnterpriseManagementLogger):

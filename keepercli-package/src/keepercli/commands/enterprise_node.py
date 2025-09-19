@@ -321,7 +321,7 @@ class EnterpriseNodeEditCommand(base.ArgparseCommand, enterprise_management.IEnt
         is_isolated = set_isolated if isinstance(set_isolated, bool) else None
 
         nodes_to_update = [enterprise_management.NodeEdit(
-            node_id=x.node_id, name=display_name, parent_id=parent_id, restrict_visibility=is_isolated)
+            node_id=x.node_id, name=display_name, parent_id=parent_id if parent_id else x.parent_id, restrict_visibility=is_isolated)
             for x in node_list]
         batch = batch_management.BatchManagement(loader=context.enterprise_loader, logger=self)
         batch.modify_nodes(to_update=nodes_to_update)
