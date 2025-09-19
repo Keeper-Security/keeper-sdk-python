@@ -52,6 +52,8 @@ class NodeUtils:
                                 n = nn[0]
                             elif len(nn) >= 2:
                                 raise base.CommandError(f'Node name "{node_name}" is not unique')
+                        elif isinstance(nn, enterprise_types.Node):
+                            n = nn
                 if n is None:
                     raise base.CommandError(f'Node name "{node_name}" is not found')
                 found_nodes[n.node_id] = n
@@ -361,6 +363,8 @@ class TeamUtils:
                                 t = tt[0]
                             elif len(tt) >= 2:
                                 raise base.CommandError(f'Team name "{team_name}" is not unique. Use Team UID.')
+                        elif isinstance(tt, enterprise_types.Team):
+                            t = tt
                 if t is None:
                     missing_teams.append(team_name)
                     continue

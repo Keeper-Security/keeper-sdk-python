@@ -13,7 +13,6 @@ from .record_facades import FileRefRecordFacade
 from .vault_extensions import resolve_record_access_path
 from .vault_record import FileRecord, PasswordRecord, TypedRecord, AttachmentFile, AttachmentFileThumb
 from .. import utils, crypto
-from ..authentication import endpoint
 from ..proto import record_pb2
 
 
