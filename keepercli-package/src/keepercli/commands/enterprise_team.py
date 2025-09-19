@@ -34,7 +34,10 @@ class EnterpriseTeamViewCommand(base.ArgparseCommand):
         verbose = kwargs.get('verbose') is True
 
         enterprise_data = context.enterprise_data
-        team = enterprise_utils.TeamUtils.resolve_single_team(enterprise_data, kwargs.get('team'))
+        team_name =  kwargs.get('team')
+        team = enterprise_utils.TeamUtils.resolve_single_team(enterprise_data, team_name)
+        if team is None:
+            raise base.CommandError(f'Team name \"{team_name}\" does not exist')
         node_name = enterprise_utils.NodeUtils.get_node_path(enterprise_data, team.node_id, omit_root=False)
         team_obj = {
             'team_uid': team.team_uid,
