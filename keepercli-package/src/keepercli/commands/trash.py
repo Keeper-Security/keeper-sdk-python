@@ -64,7 +64,10 @@ class TrashListCommand(base.ArgparseCommand):
             return
 
         pattern = self._normalize_search_pattern(kwargs.get('pattern'))
-        title_pattern = self._create_title_pattern(pattern)
+        if not pattern:
+            title_pattern = None
+        else:
+            title_pattern = self._create_title_pattern(pattern)
         
         headers = ['Folder UID', 'Record UID', 'Name', 'Record Type', 'Deleted At', 'Status']
         record_table = self._build_record_table(deleted_records, orphaned_records, pattern, title_pattern)
@@ -624,13 +627,13 @@ class TrashUnshareCommand(base.ArgparseCommand):
     def _add_matching_records(self, pattern: str, orphaned_records: Dict, records_to_unshare: set):
         """Add records matching the pattern to the unshare set."""
         if len(pattern) > STRING_LENGTH_LIMIT:  # Prevent ReDoS
-            logger.warning("Pattern too long, truncated")
+            logger.warning("Record name too long, truncated")
             pattern = pattern[:STRING_LENGTH_LIMIT]
         
         try:
             title_pattern = re.compile(fnmatch.translate(pattern), re.IGNORECASE)
         except re.error as e:
-            raise base.CommandError("Invalid pattern: %s", e)
+            raise base.CommandError("Invalid record name: %s", e)
         
         for record_uid, record in orphaned_records.items():
             if record_uid in records_to_unshare:

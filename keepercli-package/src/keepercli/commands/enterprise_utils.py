@@ -398,7 +398,7 @@ class TeamUtils:
         return list(found_teams.values()), missing_teams
 
     @staticmethod
-    def resolve_single_team(e_data: enterprise_types.IEnterpriseData, team_name: Any) -> enterprise_types.Team:
+    def resolve_single_team(e_data: enterprise_types.IEnterpriseData, team_name: Any) -> Optional[enterprise_types.Team]:
         team: Optional[enterprise_types.Team] = None
         if isinstance(team_name, str):
             team = e_data.teams.get_entity(team_name)
@@ -408,8 +408,6 @@ class TeamUtils:
                     raise base.CommandError(f'Team name \"{team_name}\" is not unique. Please use Node UID')
                 elif len(ts) == 1:
                     team = ts[0]
-        if team is None:
-            raise base.CommandError(f'Team name \"{team_name}\" does not exist')
         return team
 
 
