@@ -2,6 +2,8 @@ import argparse
 import fnmatch
 import functools
 import itertools
+import json
+import logging
 import re
 import shutil
 from collections import OrderedDict
@@ -10,6 +12,7 @@ from typing import Iterable, List, Tuple, Optional, Callable, Any, Dict, Set
 from asciitree import LeftAligned
 from colorama import Style
 
+from keepersdk import crypto, utils
 from keepersdk.vault import vault_types, vault_record, folder_management, record_management, vault_utils
 from . import base
 from .. import prompt_utils, constants, api
@@ -27,7 +30,7 @@ class _FolderMixin:
         if not folder:
             folder, pattern = folder_utils.try_resolve_path(context, folder_name)
             if pattern:
-               folder = None
+                folder = None
 
         if not folder:
             raise base.CommandError(f'Folder "{folder_name}" not found')
@@ -176,7 +179,6 @@ class FolderListCommand(base.ArgparseCommand):
                 rows = ['  '.join(x) for x in tbl]
                 prompt_utils.output_text(*rows)
 
-
 class FolderTreeCommand(base.ArgparseCommand, _FolderMixin):
     parser = argparse.ArgumentParser(prog='tree', description='Display the folder structure')
     parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', help='print ids')
@@ -272,7 +274,6 @@ class FolderTreeCommand(base.ArgparseCommand, _FolderMixin):
             return 'Can Share'
         return 'View Only'
 
-
 class FolderMakeCommand(base.ArgparseCommand):
     parser = argparse.ArgumentParser(prog='mkdir', description='Create a folder')
     folder_type = parser.add_mutually_exclusive_group()
@@ -355,7 +356,6 @@ class FolderMakeCommand(base.ArgparseCommand):
         except Exception as e:
             raise base.CommandError(str(e))
 
-
 class FolderRemoveCommand(base.ArgparseCommand):
     parser = argparse.ArgumentParser(prog='rmdir', description='Remove a folder and its contents')
     parser.add_argument('-f', '--force', dest='force', action='store_true',
@@ -425,7 +425,6 @@ class FolderRemoveCommand(base.ArgparseCommand):
         except Exception as e:
             raise base.CommandError(str(e))
 
-
 class FolderRenameCommand(base.ArgparseCommand, _FolderMixin):
     parser = argparse.ArgumentParser(prog='rndir', description='Rename a folder')
     parser.add_argument('-n', '--name', dest='name', action='store', required=True, help='folder new name')
@@ -453,7 +452,6 @@ class FolderRenameCommand(base.ArgparseCommand, _FolderMixin):
             api.get_logger().info('Folder \"%s\" has been renamed to \"%s\"', folder.name, new_name)
         except Exception as e:
             raise base.CommandError(str(e))
-
 
 class FolderMoveCommand(base.ArgparseCommand, _FolderMixin):
     parser = argparse.ArgumentParser(prog='mv', description='Move a record or folder to another folder')
@@ -542,3 +540,467 @@ class FolderMoveCommand(base.ArgparseCommand, _FolderMixin):
                                              is_link=kwargs.get('link') is True,
                                              can_edit=can_edit, can_share=can_share,
                                              on_warning=on_warning)
+
+class FolderTransformCommand(base.ArgparseCommand, _FolderMixin):
+    parser = argparse.ArgumentParser(prog='transform-folder', description='Move folders to another location')
+    parser.add_argument('folder', nargs='+', type=str, action='store', metavar='FOLDER',
+                        help='folder path or UID (can specify multiple folders)')
+    parser.add_argument('-t', '--target', type=str,
+                        help='target folder UID or path/name (root folder if not specified)')
+    parser.add_argument('-f', '--force', action='store_true',
+                        help='Skip confirmation prompt and minimize output')
+    parser.add_argument('--link', action='store_true',
+                        help='Do not delete the source folder(s)')
+    parser.add_argument('--dry-run', action='store_true',
+                        help='Dry run mode: do not apply any changes')
+    parser.add_argument('--folder-type', choices=['personal', 'shared'],
+                        help='Folder type: Personal or Shared if target folder parameter is omitted')
+
+    def __init__(self):
+        super().__init__(FolderTransformCommand.parser)
+
+    @staticmethod
+    def rename_source_folders(context, source_folders):
+        """Rename source folders by appending @delete to mark them for deletion."""
+        rename_rqs = []
+        
+        for folder_uid in source_folders:
+            folder = context.vault.vault_data.get_folder(folder_uid)
+            if not folder:
+                continue
+
+            rq = {
+                'command': 'folder_update',
+                'folder_uid': folder_uid,
+                'folder_type': folder.folder_type,
+            }
+
+            if folder.folder_type == 'user_folder':
+                encryption_key = folder.folder_key
+                folder_name = f'{folder.name}@delete'
+                data = {'name': folder_name}
+                encrypted_data = crypto.encrypt_aes_v1(
+                    json.dumps(data).encode(), encryption_key
+                )
+                rq['data'] = utils.base64_url_encode(encrypted_data)
+
+            elif folder.folder_type == 'shared_folder':
+                rq['shared_folder_uid'] = folder_uid
+                encryption_key = context.vault.vault_data.get_shared_folder_key(folder_uid)
+                if not encryption_key:
+                    continue
+                
+                folder_name = f'{folder.name}@delete'
+                data = {'name': folder_name}
+                encrypted_data = crypto.encrypt_aes_v1(
+                    json.dumps(data).encode(), encryption_key
+                )
+                rq['data'] = utils.base64_url_encode(encrypted_data)
+                rq['name'] = utils.base64_url_encode(
+                    crypto.encrypt_aes_v1(folder_name.encode('utf-8'), encryption_key)
+                )
+
+            elif folder.folder_type == 'shared_folder_folder':
+                rq['shared_folder_uid'] = folder.folder_scope_uid
+                encryption_key = folder.folder_key
+                if not encryption_key:
+                    continue
+                
+                folder_name = f'{folder.name}@delete'
+                data = {'name': folder_name}
+                encrypted_data = crypto.encrypt_aes_v1(
+                    json.dumps(data).encode(), encryption_key
+                )
+                rq['data'] = utils.base64_url_encode(encrypted_data)
+            else:
+                continue
+
+            rename_rqs.append(rq)
+
+        if rename_rqs:
+            try:
+                for rq in rename_rqs:
+                    context.vault.keeper_auth.execute_auth_command(rq)
+            except Exception as e:
+                logging.debug('Error renaming source folders: %s', e)
+
+    @staticmethod
+    def move_records(context, folder_map, is_link):
+        """Move records from source folders to destination folders."""
+        move_rqs = []
+        
+        for src_folder_uid, dst_folder_uid in folder_map:
+            src_folder = context.vault.vault_data.get_folder(src_folder_uid)
+            dst_folder = context.vault.vault_data.get_folder(dst_folder_uid)
+            if not src_folder or not dst_folder:
+                continue
+
+            src_scope = ''
+            dst_scope = ''
+            if src_folder.folder_type == 'shared_folder':
+                src_scope = src_folder.folder_uid
+            elif src_folder.folder_type == 'shared_folder_folder':
+                src_scope = src_folder.folder_scope_uid
+
+            if dst_folder.folder_type == 'shared_folder':
+                dst_scope = dst_folder.folder_uid
+            elif dst_folder.folder_type == 'shared_folder_folder':
+                dst_scope = dst_folder.folder_scope_uid
+
+            scope_key = None
+            if dst_scope != src_scope:
+                if dst_scope:
+                    scope_key = context.vault.vault_data.get_shared_folder_key(dst_scope)
+                else:
+                    scope_key = context.vault.keeper_auth.auth_context.data_key
+
+            src_type = 'user_folder'
+            if src_scope:
+                folder_type = src_folder.folder_type
+                src_type = (
+                    'shared_folder' if folder_type == 'shared_folder'
+                    else 'shared_folder_folder'
+                )
+
+            records = list(src_folder.records)
+            while len(records) > 0:
+                rq = {
+                    'command': 'move',
+                    'to_type': 'shared_folder_folder' if dst_scope else 'user_folder',
+                    'to_uid': dst_folder.folder_uid,
+                    'link': is_link,
+                    'move': [],
+                    'transition_keys': []
+                }
+                chunk = records[:990]
+                records = records[990:]
+
+                for record_uid in chunk:
+                    move = {
+                        'type': 'record',
+                        'uid': record_uid,
+                        'from_type': src_type,
+                        'from_uid': src_folder_uid,
+                        'cascade': False,
+                    }
+                    rq['move'].append(move)
+
+                    if scope_key:
+                        record_key = context.vault.vault_data.get_record_key(record_uid)
+                        record_info = context.vault.vault_data.get_record(record_uid)
+                        if record_key and record_info:
+                            if record_info.version < 3:
+                                transfer_key = crypto.encrypt_aes_v1(record_key, scope_key)
+                            else:
+                                transfer_key = crypto.encrypt_aes_v2(record_key, scope_key)
+                            
+                            tko = {
+                                'uid': record_uid,
+                                'key': utils.base64_url_encode(transfer_key)
+                            }
+                            rq['transition_keys'].append(tko)
+
+                move_rqs.append(rq)
+
+        while len(move_rqs) > 0:
+            record_count = 0
+            requests = []
+            
+            while len(move_rqs) > 0:
+                rq = move_rqs.pop()
+                record_rq = len(rq['move'])
+                
+                if (record_count + record_rq) > 1000:
+                    if record_count > 0:
+                        move_rqs.append(rq)
+                    else:
+                        requests.append(rq)
+                    break
+                else:
+                    requests.append(rq)
+                    record_count += record_rq
+
+            if requests:
+                try:
+                    for rq in requests:
+                        context.vault.keeper_auth.execute_auth_command(rq)
+                except Exception as e:
+                    logging.debug('Error moving records: %s', e)
+
+    @staticmethod
+    def delete_source_tree(context, folders_to_remove):
+        """Delete the source folder tree."""
+        folder_by_scope = {}
+        
+        for folder_uid in folders_to_remove:
+            folder = context.vault.vault_data.get_folder(folder_uid)
+            if not folder:
+                continue
+
+            if folder.folder_type == 'user_folder':
+                folder_scope = ''
+            elif folder.folder_type == 'shared_folder':
+                folder_scope = folder.folder_uid
+            elif folder.folder_type == 'shared_folder_folder':
+                folder_scope = folder.folder_scope_uid
+            else:
+                continue
+
+            if folder_scope not in folder_by_scope:
+                folder_by_scope[folder_scope] = []
+            folder_by_scope[folder_scope].append(folder_uid)
+
+        user_folders = folder_by_scope.pop('', None)
+        scopes = list(folder_by_scope.values())
+        if user_folders:
+            scopes.append(user_folders)
+
+        for folders in scopes:
+            while len(folders) > 0:
+                chunk = folders[-450:]
+                folders = folders[:-450]
+                folder_roots = set(chunk)
+
+                def remove_nested_folders(folder_uid, roots):
+                    def remove_nested(f):
+                        roots.difference_update(f.subfolders or [])
+                    
+                    vault_utils.traverse_folder_tree(
+                        context.vault.vault_data,
+                        context.vault.vault_data.get_folder(folder_uid),
+                        remove_nested
+                    )
+
+                for folder_uid in chunk:
+                    if folder_uid in folder_roots:
+                        remove_nested_folders(folder_uid, folder_roots)
+
+                chunk = [x for x in chunk if x in folder_roots]
+
+                delete_rq = {
+                    'command': 'pre_delete',
+                    'objects': [],
+                }
+
+                for folder_uid in chunk:
+                    folder = context.vault.vault_data.get_folder(folder_uid)
+                    if folder is None:
+                        continue
+
+                    rq = {
+                        'delete_resolution': 'unlink',
+                        'object_uid': folder.folder_uid,
+                        'object_type': folder.folder_type,
+                    }
+
+                    if folder.parent_uid:
+                        parent_folder = context.vault.vault_data.get_folder(folder.parent_uid)
+                        if parent_folder:
+                            rq['from_uid'] = parent_folder.folder_uid
+                            rq['from_type'] = parent_folder.folder_type
+                    else:
+                        rq['from_type'] = 'user_folder'
+
+                    delete_rq['objects'].append(rq)
+
+                try:
+                    delete_rs = context.vault.keeper_auth.execute_auth_command(delete_rq)
+                except Exception as e:
+                    logging.debug('Error deleting source tree: %s', e)
+                    continue
+
+                token = ''
+                if 'pre_delete_response' in delete_rs:
+                    pre_delete = delete_rs['pre_delete_response']
+                    if 'pre_delete_token' in pre_delete:
+                        token = pre_delete['pre_delete_token']
+
+                if token:
+                    delete_rq = {
+                        'command': 'delete',
+                        'pre_delete_token': token
+                    }
+                    try:
+                        context.vault.keeper_auth.execute_auth_command(delete_rq)
+                    except Exception as e:
+                        logging.debug('Error deleting source tree: %s', e)
+
+    @staticmethod
+    def create_target_folder(context, source_folder_uid, dst_parent_uid, is_shared_folder=False):
+        """Create a target folder structure using the folder_management API."""
+        src_subfolder = context.vault.vault_data.get_folder(source_folder_uid)
+        if not src_subfolder:
+            return None
+
+        try:
+            new_folder_uid = folder_management.add_folder(
+                context.vault,
+                src_subfolder.name,
+                is_shared_folder=is_shared_folder,
+                parent_uid=dst_parent_uid
+            )
+            return new_folder_uid
+        except Exception as e:
+            logging.debug('Error creating target folder: %s', e)
+            return None
+
+    def execute(self, context: KeeperParams, **kwargs):
+        assert context.vault is not None
+
+        target = kwargs.get('target')
+        if target:
+            target_folder_uid = self.resolve_single_folder(target, context).folder_uid
+        else:
+            target_folder_uid = None
+
+        source_folder_uids = set()
+        folder_names = kwargs.get('folder')
+        if not folder_names:
+            raise base.CommandError('At least one folder parameter is required')
+        
+        if isinstance(folder_names, str):
+            folder_names = [folder_names]
+
+        for folder_name in folder_names:
+            folder = self.resolve_single_folder(folder_name, context)
+            if not folder.folder_uid:
+                raise base.CommandError(f'Folder "{folder_name}" cannot be found')
+            source_folder_uids.add(folder.folder_uid)
+
+        for folder_uid in source_folder_uids:
+            src_folder = context.vault.vault_data.get_folder(folder_uid)
+            if target_folder_uid and src_folder.parent_uid == target_folder_uid:
+                raise base.CommandError(f'Folder "{src_folder.folder_uid}" is already in the target')
+
+            while src_folder and src_folder.parent_uid:
+                if src_folder.parent_uid in source_folder_uids:
+                    raise base.CommandError(
+                        f'Folder "{src_folder.parent_uid}" is a parent of "{folder_uid}"\n'
+                        f'Move folder "{folder_uid}" first'
+                    )
+                src_folder = context.vault.vault_data.get_folder(src_folder.parent_uid)
+
+        is_link = kwargs.get('link') is True
+
+        table = []
+        headers = ['Source Folder', 'Folder Count', 'Record Count']
+        folders_to_process = []
+
+        for source_uid in source_folder_uids:
+            source_folder = context.vault.vault_data.get_folder(source_uid)
+            if not source_folder:
+                continue
+
+            is_target_shared = False
+            if target_folder_uid is None:
+                if kwargs.get('folder_type') == 'shared':
+                    is_target_shared = True
+                elif kwargs.get('folder_type') == 'personal':
+                    is_target_shared = False
+                else:
+                    is_target_shared = source_folder.folder_type == 'shared_folder'
+
+            subfolder_count = 0
+            record_count = 0
+
+            def count_subfolders(folder):
+                nonlocal subfolder_count, record_count
+                subfolder_count += 1
+                record_count += len(folder.records)
+
+            vault_utils.traverse_folder_tree(
+                context.vault.vault_data, source_folder, count_subfolders
+            )
+
+            folders_to_process.append({
+                'source_uid': source_uid,
+                'source_folder': source_folder,
+                'is_target_shared': is_target_shared,
+                'subfolder_count': subfolder_count,
+                'record_count': record_count
+            })
+
+            folder_path = vault_utils.get_folder_path(context.vault.vault_data, source_uid)
+            table.append([folder_path, subfolder_count, record_count])
+
+        operation = 'copied' if is_link else 'moved'
+        target_name = (
+            vault_utils.get_folder_path(context.vault.vault_data, target_folder_uid)
+            if target_folder_uid else 'My Vault'
+        )
+        title = f'The following folders will be {operation} to "{target_name}"'
+        report_utils.dump_report_data(table, headers=headers, title=title)
+
+        if kwargs.get('dry_run') is True:
+            return
+
+        if kwargs.get('force') is not True:
+            inp = prompt_utils.user_choice(
+                'Are you sure you want to proceed with this action?', 'yn', default='n'
+            )
+            if inp.lower() == 'y':
+                logging.info('Executing transformation(s)...')
+            else:
+                logging.info('Cancelled.')
+                return
+
+        folders_to_remove = []
+        src_to_dst_map = {}
+
+        for folder_info in folders_to_process:
+            source_uid = folder_info['source_uid']
+            source_folder = folder_info['source_folder']
+            is_target_shared = folder_info['is_target_shared']
+
+            try:
+                target_uid = folder_management.add_folder(
+                    context.vault,
+                    source_folder.name,
+                    is_shared_folder=is_target_shared,
+                    parent_uid=target_folder_uid
+                )
+                src_to_dst_map[source_uid] = target_uid
+                folders_to_remove.append(source_uid)
+            except Exception as e:
+                logging.debug('Error creating main target folder: %s', e)
+                continue
+
+            def create_subfolders(folder):
+                dst_folder_uid = src_to_dst_map.get(folder.folder_uid)
+                if dst_folder_uid:
+                    for src_subfolder_uid in folder.subfolders:
+                        new_subfolder_uid = self.create_target_folder(
+                            context, src_subfolder_uid, dst_folder_uid, is_shared_folder=False
+                        )
+                        if new_subfolder_uid:
+                            folders_to_remove.append(src_subfolder_uid)
+                            src_to_dst_map[src_subfolder_uid] = new_subfolder_uid
+
+            vault_utils.traverse_folder_tree(
+                context.vault.vault_data, source_folder, create_subfolders
+            )
+
+        if hasattr(context.vault, 'sync_down'):
+            context.vault.sync_down()
+
+        if not is_link:
+            self.rename_source_folders(context, source_folder_uids)
+            if hasattr(context.vault, 'sync_down'):
+                context.vault.sync_down()
+
+        self.move_records(context, src_to_dst_map.items(), is_link)
+        if hasattr(context.vault, 'sync_down'):
+            context.vault.sync_down()
+
+        if not is_link:
+            self.delete_source_tree(context, folders_to_remove)
+
+        if hasattr(context.vault, 'sync_down'):
+            context.vault.sync_down()
+
+        operation = 'copied' if is_link else 'moved'
+        target_name = (
+            vault_utils.get_folder_path(context.vault.vault_data, target_folder_uid)
+            if target_folder_uid else 'My Vault'
+        )
+        prompt_utils.output_text(f'Folders successfully {operation} to "{target_name}"')

@@ -36,6 +36,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('rmdir', vault_folder.FolderRemoveCommand(), base.CommandScope.Vault)
         commands.register_command('rndir', vault_folder.FolderRenameCommand(), base.CommandScope.Vault)
         commands.register_command('mv', vault_folder.FolderMoveCommand(), base.CommandScope.Vault)
+        commands.register_command('transform-folder', vault_folder.FolderTransformCommand(), base.CommandScope.Vault)
         commands.register_command('list', vault_record.RecordListCommand(), base.CommandScope.Vault, 'l')
         commands.register_command('list-sf', vault_record.SharedFolderListCommand(), base.CommandScope.Vault, 'lsf')
         commands.register_command('list-team', vault_record.TeamListCommand(), base.CommandScope.Vault, 'lt')
