@@ -166,37 +166,6 @@ class WindowsHandler(BasePlatformHandler):
             logging.debug("Failed to check biometrics availability: %s", str(e))
             return False
 
-    # def _check_biometrics(self) -> bool:
-    #     """Check if biometrics (face/fingerprint) are enrolled"""
-    #     sid = self._get_current_user_sid()
-    #     if not sid:
-    #         return False
-        
-    #     reg_path = r"SOFTWARE\Microsoft\Windows\CurrentVersion\WinBio\AccountInfo\{}".format(sid)
-    #     try:
-    #         import winreg
-    #         with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, reg_path) as key:
-    #             value, regtype = winreg.QueryValueEx(key, "EnrolledFactors")
-    #             # 2 = Face, 8 = Fingerprint, 10 = Face and Fingerprint
-    #             return value in [2, 8, 10]
-    #     except (FileNotFoundError, ImportError):
-    #         return False
-
-    # def _check_pin_enrollment(self) -> bool:
-    #     """Check if PIN is enrolled"""
-    #     sid = self._get_current_user_sid()
-    #     if not sid:
-    #         return False
-        
-    #     reg_path = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\Credential Providers\{{D6886603-9D2F-4EB2-B667-1971041FA96B}}\{}".format(sid)
-    #     try:
-    #         import winreg
-    #         with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, reg_path) as key:
-    #             value, regtype = winreg.QueryValueEx(key, "LogonCredsAvailable")
-    #             return value == 1
-    #     except (FileNotFoundError, ImportError):
-    #         return False
-
     def detect_capabilities(self) -> Tuple[bool, str]:
         """Detect Windows Hello capabilities"""
         if os.name != 'nt':
