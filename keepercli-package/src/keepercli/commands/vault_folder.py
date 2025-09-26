@@ -13,7 +13,7 @@ from asciitree import LeftAligned
 from colorama import Style
 
 from keepersdk import crypto, utils
-from keepersdk.vault import vault_types, vault_record, folder_management, record_management, vault_utils
+from keepersdk.vault import vault_types, vault_record, folder_management, record_management, vault_utils, vault_online
 from . import base
 from .. import prompt_utils, constants, api
 from ..helpers import folder_utils, report_utils
@@ -179,6 +179,7 @@ class FolderListCommand(base.ArgparseCommand):
                 rows = ['  '.join(x) for x in tbl]
                 prompt_utils.output_text(*rows)
 
+
 class FolderTreeCommand(base.ArgparseCommand, _FolderMixin):
     parser = argparse.ArgumentParser(prog='tree', description='Display the folder structure')
     parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', help='print ids')
@@ -274,6 +275,7 @@ class FolderTreeCommand(base.ArgparseCommand, _FolderMixin):
             return 'Can Share'
         return 'View Only'
 
+
 class FolderMakeCommand(base.ArgparseCommand):
     parser = argparse.ArgumentParser(prog='mkdir', description='Create a folder')
     folder_type = parser.add_mutually_exclusive_group()
@@ -356,6 +358,7 @@ class FolderMakeCommand(base.ArgparseCommand):
         except Exception as e:
             raise base.CommandError(str(e))
 
+
 class FolderRemoveCommand(base.ArgparseCommand):
     parser = argparse.ArgumentParser(prog='rmdir', description='Remove a folder and its contents')
     parser.add_argument('-f', '--force', dest='force', action='store_true',
@@ -425,6 +428,7 @@ class FolderRemoveCommand(base.ArgparseCommand):
         except Exception as e:
             raise base.CommandError(str(e))
 
+
 class FolderRenameCommand(base.ArgparseCommand, _FolderMixin):
     parser = argparse.ArgumentParser(prog='rndir', description='Rename a folder')
     parser.add_argument('-n', '--name', dest='name', action='store', required=True, help='folder new name')
@@ -452,6 +456,7 @@ class FolderRenameCommand(base.ArgparseCommand, _FolderMixin):
             api.get_logger().info('Folder \"%s\" has been renamed to \"%s\"', folder.name, new_name)
         except Exception as e:
             raise base.CommandError(str(e))
+
 
 class FolderMoveCommand(base.ArgparseCommand, _FolderMixin):
     parser = argparse.ArgumentParser(prog='mv', description='Move a record or folder to another folder')
@@ -541,31 +546,36 @@ class FolderMoveCommand(base.ArgparseCommand, _FolderMixin):
                                              can_edit=can_edit, can_share=can_share,
                                              on_warning=on_warning)
 
+
 class FolderTransformCommand(base.ArgparseCommand, _FolderMixin):
-    parser = argparse.ArgumentParser(prog='transform-folder', description='Move folders to another location')
-    parser.add_argument('folder', nargs='+', type=str, action='store', metavar='FOLDER',
-                        help='folder path or UID (can specify multiple folders)')
-    parser.add_argument('-t', '--target', type=str,
-                        help='target folder UID or path/name (root folder if not specified)')
-    parser.add_argument('-f', '--force', action='store_true',
-                        help='Skip confirmation prompt and minimize output')
-    parser.add_argument('--link', action='store_true',
-                        help='Do not delete the source folder(s)')
-    parser.add_argument('--dry-run', action='store_true',
-                        help='Dry run mode: do not apply any changes')
-    parser.add_argument('--folder-type', choices=['personal', 'shared'],
-                        help='Folder type: Personal or Shared if target folder parameter is omitted')
 
     def __init__(self):
-        super().__init__(FolderTransformCommand.parser)
+        self.parser = argparse.ArgumentParser(prog='transform-folder', description='Move folders to another location')
+        FolderTransformCommand.add_arguments_to_parser(self.parser)
+        super().__init__(self.parser)
+    
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
+        parser.add_argument('folder', nargs='+', type=str, action='store', metavar='FOLDER',
+                        help='folder path or UID (can specify multiple folders)')
+        parser.add_argument('-t', '--target', type=str,
+                        help='target folder UID or path/name (root folder if not specified)')
+        parser.add_argument('-f', '--force', action='store_true',
+                        help='Skip confirmation prompt and minimize output')
+        parser.add_argument('--link', action='store_true',
+                        help='Do not delete the source folder(s)')
+        parser.add_argument('--dry-run', action='store_true',
+                        help='Dry run mode: do not apply any changes')
+        parser.add_argument('--folder-type', choices=['personal', 'shared'],
+                        help='Folder type: Personal or Shared if target folder parameter is omitted')
 
     @staticmethod
-    def rename_source_folders(context, source_folders):
+    def rename_source_folders(vault: vault_online.VaultOnline, source_folders):
         """Rename source folders by appending @delete to mark them for deletion."""
         rename_rqs = []
         
         for folder_uid in source_folders:
-            folder = context.vault.vault_data.get_folder(folder_uid)
+            folder = vault.vault_data.get_folder(folder_uid)
             if not folder:
                 continue
 
@@ -586,7 +596,7 @@ class FolderTransformCommand(base.ArgparseCommand, _FolderMixin):
 
             elif folder.folder_type == 'shared_folder':
                 rq['shared_folder_uid'] = folder_uid
-                encryption_key = context.vault.vault_data.get_shared_folder_key(folder_uid)
+                encryption_key = vault.vault_data.get_shared_folder_key(folder_uid)
                 if not encryption_key:
                     continue
                 
@@ -620,18 +630,18 @@ class FolderTransformCommand(base.ArgparseCommand, _FolderMixin):
         if rename_rqs:
             try:
                 for rq in rename_rqs:
-                    context.vault.keeper_auth.execute_auth_command(rq)
+                    vault.keeper_auth.execute_auth_command(rq)
             except Exception as e:
                 logging.debug('Error renaming source folders: %s', e)
 
     @staticmethod
-    def move_records(context, folder_map, is_link):
+    def move_records(vault: vault_online.VaultOnline, folder_map, is_link):
         """Move records from source folders to destination folders."""
         move_rqs = []
         
         for src_folder_uid, dst_folder_uid in folder_map:
-            src_folder = context.vault.vault_data.get_folder(src_folder_uid)
-            dst_folder = context.vault.vault_data.get_folder(dst_folder_uid)
+            src_folder = vault.vault_data.get_folder(src_folder_uid)
+            dst_folder = vault.vault_data.get_folder(dst_folder_uid)
             if not src_folder or not dst_folder:
                 continue
 
@@ -650,9 +660,9 @@ class FolderTransformCommand(base.ArgparseCommand, _FolderMixin):
             scope_key = None
             if dst_scope != src_scope:
                 if dst_scope:
-                    scope_key = context.vault.vault_data.get_shared_folder_key(dst_scope)
+                    scope_key = vault.vault_data.get_shared_folder_key(dst_scope)
                 else:
-                    scope_key = context.vault.keeper_auth.auth_context.data_key
+                    scope_key = vault.keeper_auth.auth_context.data_key
 
             src_type = 'user_folder'
             if src_scope:
@@ -686,8 +696,8 @@ class FolderTransformCommand(base.ArgparseCommand, _FolderMixin):
                     rq['move'].append(move)
 
                     if scope_key:
-                        record_key = context.vault.vault_data.get_record_key(record_uid)
-                        record_info = context.vault.vault_data.get_record(record_uid)
+                        record_key = vault.vault_data.get_record_key(record_uid)
+                        record_info = vault.vault_data.get_record(record_uid)
                         if record_key and record_info:
                             if record_info.version < 3:
                                 transfer_key = crypto.encrypt_aes_v1(record_key, scope_key)
@@ -723,17 +733,17 @@ class FolderTransformCommand(base.ArgparseCommand, _FolderMixin):
             if requests:
                 try:
                     for rq in requests:
-                        context.vault.keeper_auth.execute_auth_command(rq)
+                        vault.keeper_auth.execute_auth_command(rq)
                 except Exception as e:
                     logging.debug('Error moving records: %s', e)
 
     @staticmethod
-    def delete_source_tree(context, folders_to_remove):
+    def delete_source_tree(vault: vault_online.VaultOnline, folders_to_remove):
         """Delete the source folder tree."""
         folder_by_scope = {}
         
         for folder_uid in folders_to_remove:
-            folder = context.vault.vault_data.get_folder(folder_uid)
+            folder = vault.vault_data.get_folder(folder_uid)
             if not folder:
                 continue
 
@@ -766,8 +776,8 @@ class FolderTransformCommand(base.ArgparseCommand, _FolderMixin):
                         roots.difference_update(f.subfolders or [])
                     
                     vault_utils.traverse_folder_tree(
-                        context.vault.vault_data,
-                        context.vault.vault_data.get_folder(folder_uid),
+                        vault.vault_data,
+                        vault.vault_data.get_folder(folder_uid),
                         remove_nested
                     )
 
@@ -783,7 +793,7 @@ class FolderTransformCommand(base.ArgparseCommand, _FolderMixin):
                 }
 
                 for folder_uid in chunk:
-                    folder = context.vault.vault_data.get_folder(folder_uid)
+                    folder = vault.vault_data.get_folder(folder_uid)
                     if folder is None:
                         continue
 
@@ -794,7 +804,7 @@ class FolderTransformCommand(base.ArgparseCommand, _FolderMixin):
                     }
 
                     if folder.parent_uid:
-                        parent_folder = context.vault.vault_data.get_folder(folder.parent_uid)
+                        parent_folder = vault.vault_data.get_folder(folder.parent_uid)
                         if parent_folder:
                             rq['from_uid'] = parent_folder.folder_uid
                             rq['from_type'] = parent_folder.folder_type
@@ -804,7 +814,7 @@ class FolderTransformCommand(base.ArgparseCommand, _FolderMixin):
                     delete_rq['objects'].append(rq)
 
                 try:
-                    delete_rs = context.vault.keeper_auth.execute_auth_command(delete_rq)
+                    delete_rs = vault.keeper_auth.execute_auth_command(delete_rq)
                 except Exception as e:
                     logging.debug('Error deleting source tree: %s', e)
                     continue
@@ -821,20 +831,20 @@ class FolderTransformCommand(base.ArgparseCommand, _FolderMixin):
                         'pre_delete_token': token
                     }
                     try:
-                        context.vault.keeper_auth.execute_auth_command(delete_rq)
+                        vault.keeper_auth.execute_auth_command(delete_rq)
                     except Exception as e:
                         logging.debug('Error deleting source tree: %s', e)
 
     @staticmethod
-    def create_target_folder(context, source_folder_uid, dst_parent_uid, is_shared_folder=False):
+    def create_target_folder(vault: vault_online.VaultOnline, source_folder_uid, dst_parent_uid, is_shared_folder=False):
         """Create a target folder structure using the folder_management API."""
-        src_subfolder = context.vault.vault_data.get_folder(source_folder_uid)
+        src_subfolder = vault.vault_data.get_folder(source_folder_uid)
         if not src_subfolder:
             return None
 
         try:
             new_folder_uid = folder_management.add_folder(
-                context.vault,
+                vault,
                 src_subfolder.name,
                 is_shared_folder=is_shared_folder,
                 parent_uid=dst_parent_uid
@@ -846,6 +856,7 @@ class FolderTransformCommand(base.ArgparseCommand, _FolderMixin):
 
     def execute(self, context: KeeperParams, **kwargs):
         assert context.vault is not None
+        vault = context.vault
 
         target = kwargs.get('target')
         if target:
@@ -856,19 +867,19 @@ class FolderTransformCommand(base.ArgparseCommand, _FolderMixin):
         source_folder_uids = set()
         folder_names = kwargs.get('folder')
         if not folder_names:
-            raise base.CommandError('At least one folder parameter is required')
+            raise base.CommandError('At least one folder parameter is required. Example: transform-folder folder1_UID -t target_folder')
         
         if isinstance(folder_names, str):
             folder_names = [folder_names]
 
         for folder_name in folder_names:
             folder = self.resolve_single_folder(folder_name, context)
-            if not folder.folder_uid:
+            if not folder:
                 raise base.CommandError(f'Folder "{folder_name}" cannot be found')
             source_folder_uids.add(folder.folder_uid)
 
         for folder_uid in source_folder_uids:
-            src_folder = context.vault.vault_data.get_folder(folder_uid)
+            src_folder = vault.vault_data.get_folder(folder_uid)
             if target_folder_uid and src_folder.parent_uid == target_folder_uid:
                 raise base.CommandError(f'Folder "{src_folder.folder_uid}" is already in the target')
 
@@ -878,7 +889,7 @@ class FolderTransformCommand(base.ArgparseCommand, _FolderMixin):
                         f'Folder "{src_folder.parent_uid}" is a parent of "{folder_uid}"\n'
                         f'Move folder "{folder_uid}" first'
                     )
-                src_folder = context.vault.vault_data.get_folder(src_folder.parent_uid)
+                src_folder = vault.vault_data.get_folder(src_folder.parent_uid)
 
         is_link = kwargs.get('link') is True
 
@@ -887,7 +898,7 @@ class FolderTransformCommand(base.ArgparseCommand, _FolderMixin):
         folders_to_process = []
 
         for source_uid in source_folder_uids:
-            source_folder = context.vault.vault_data.get_folder(source_uid)
+            source_folder = vault.vault_data.get_folder(source_uid)
             if not source_folder:
                 continue
 
@@ -909,7 +920,7 @@ class FolderTransformCommand(base.ArgparseCommand, _FolderMixin):
                 record_count += len(folder.records)
 
             vault_utils.traverse_folder_tree(
-                context.vault.vault_data, source_folder, count_subfolders
+                vault.vault_data, source_folder, count_subfolders
             )
 
             folders_to_process.append({
@@ -920,12 +931,12 @@ class FolderTransformCommand(base.ArgparseCommand, _FolderMixin):
                 'record_count': record_count
             })
 
-            folder_path = vault_utils.get_folder_path(context.vault.vault_data, source_uid)
+            folder_path = vault_utils.get_folder_path(vault.vault_data, source_uid)
             table.append([folder_path, subfolder_count, record_count])
 
         operation = 'copied' if is_link else 'moved'
         target_name = (
-            vault_utils.get_folder_path(context.vault.vault_data, target_folder_uid)
+            vault_utils.get_folder_path(vault.vault_data, target_folder_uid)
             if target_folder_uid else 'My Vault'
         )
         title = f'The following folders will be {operation} to "{target_name}"'
@@ -954,7 +965,7 @@ class FolderTransformCommand(base.ArgparseCommand, _FolderMixin):
 
             try:
                 target_uid = folder_management.add_folder(
-                    context.vault,
+                    vault,
                     source_folder.name,
                     is_shared_folder=is_target_shared,
                     parent_uid=target_folder_uid
@@ -970,37 +981,33 @@ class FolderTransformCommand(base.ArgparseCommand, _FolderMixin):
                 if dst_folder_uid:
                     for src_subfolder_uid in folder.subfolders:
                         new_subfolder_uid = self.create_target_folder(
-                            context, src_subfolder_uid, dst_folder_uid, is_shared_folder=False
+                            vault, src_subfolder_uid, dst_folder_uid, is_shared_folder=False
                         )
                         if new_subfolder_uid:
                             folders_to_remove.append(src_subfolder_uid)
                             src_to_dst_map[src_subfolder_uid] = new_subfolder_uid
 
             vault_utils.traverse_folder_tree(
-                context.vault.vault_data, source_folder, create_subfolders
+                vault.vault_data, source_folder, create_subfolders
             )
 
-        if hasattr(context.vault, 'sync_down'):
-            context.vault.sync_down()
+        vault.sync_down()
 
         if not is_link:
-            self.rename_source_folders(context, source_folder_uids)
-            if hasattr(context.vault, 'sync_down'):
-                context.vault.sync_down()
+            self.rename_source_folders(vault, source_folder_uids)
+            vault.sync_down()
 
-        self.move_records(context, src_to_dst_map.items(), is_link)
-        if hasattr(context.vault, 'sync_down'):
-            context.vault.sync_down()
+        self.move_records(vault, src_to_dst_map.items(), is_link)
+        vault.sync_down()
 
         if not is_link:
-            self.delete_source_tree(context, folders_to_remove)
+            self.delete_source_tree(vault, folders_to_remove)
 
-        if hasattr(context.vault, 'sync_down'):
-            context.vault.sync_down()
+        vault.sync_down()
 
         operation = 'copied' if is_link else 'moved'
         target_name = (
-            vault_utils.get_folder_path(context.vault.vault_data, target_folder_uid)
+            vault_utils.get_folder_path(vault.vault_data, target_folder_uid)
             if target_folder_uid else 'My Vault'
         )
         prompt_utils.output_text(f'Folders successfully {operation} to "{target_name}"')
