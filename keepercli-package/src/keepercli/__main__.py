@@ -25,7 +25,7 @@ from . import __version__, cli, versioning, register_commands, params
 from .commands import base
 
 
-def get_params_from_config(config_filename: Optional[str]=None) -> params.KeeperParams:
+def get_keeper_config(config_filename: Optional[str]=None) -> params.KeeperConfig:
     if os.getenv("KEEPER_COMMANDER_DEBUG"):
         logging.getLogger().setLevel(logging.DEBUG)
         logging.info('Debug ON')
@@ -67,9 +67,7 @@ def get_params_from_config(config_filename: Optional[str]=None) -> params.Keeper
         except IOError as ioe:
             logging.warning('Error: Unable to open config file %s: %s', config_filename, ioe)
 
-    context = params.KeeperParams(config_filename, config or {})
-    context.config_filename = config_filename
-    return context
+    return params.KeeperConfig(config_filename=config_filename, config=config or {})
 
 
 def usage(message: str) -> None:
@@ -135,7 +133,9 @@ unmask_help = 'Disable default masking of sensitive information (e.g., passwords
 parser.add_argument('--unmask-all', action='store_true', help=unmask_help)
 fail_on_throttle_help = 'Disable default client-side pausing of command execution and re-sending of requests upon ' \
                         'server-side throttling'
-parser.add_argument('--fail-on-throttle', action='store_true', help=fail_on_throttle_help)
+parser.add_argument('--fail-on-throttle', dest='fail_on_throttle', action='store_true', help=fail_on_throttle_help)
+parser.add_argument('--skip-vault', dest='skip_vault', action='store_true', help='Skip loading vault')
+parser.add_argument('--skip-enterprise', dest='skip_enterprise', action='store_true', help='Skip loading enterprise')
 parser.add_argument('command', nargs='?', type=str, action='store', help='Command')
 parser.add_argument('options', nargs='*', action='store', help='Options')
 setattr(parser, 'error', usage)
@@ -147,44 +147,55 @@ def main():
     sys.argv[0] = re.sub(r'(-script\.pyw?|\.exe)?$', '', sys.argv[0])
     opts, flags = parser.parse_known_args(sys.argv[1:])
 
-    context = get_params_from_config(opts.config)
+    app_config = get_keeper_config(opts.config)
 
     if opts.batch_mode:
-        context.batch_mode = True
+        app_config.batch_mode = True
 
     if opts.debug:
-        context.debug = opts.debug
+        app_config.debug = opts.debug
 
-    logging.getLogger().setLevel(logging.WARNING if context.batch_mode else logging.DEBUG if opts.debug else logging.INFO)
+    logging.getLogger().setLevel(logging.WARNING if app_config.batch_mode else logging.DEBUG if opts.debug else logging.INFO)
 
     if opts.version:
         print(f'Keeper Commander, version {__version__}')
         return
 
     if opts.unmask_all:
-        context.unmask_all = opts.unmask_all
+        app_config.unmask_all = opts.unmask_all
+
+    if opts.skip_vault:
+        app_config.skip_vault = True
+
+    if opts.skip_enterprise:
+        app_config.skip_enterprise = True
 
     if opts.fail_on_throttle:
-        context.fail_on_throttle = opts.fail_on_throttle
+        app_config.fail_on_throttle = opts.fail_on_throttle
+
+    if opts.server:
+        app_config.server = opts.server
+
+    if opts.user:
+        app_config.username = opts.user
 
     if opts.password:
-        context.password = opts.password
+        app_config.password = opts.password
     else:
         pwd = os.getenv('KEEPER_PASSWORD')
         if pwd:
-            context.password = pwd
+            app_config.password = pwd
 
     if not opts.command:
         opts.command = 'shell'
 
-    if not context.batch_mode:
+    if not app_config.batch_mode:
         welcome()
         versioning.welcome_print_version()
 
     commands = base.CliCommands()
     register_commands.register_commands(commands)
-    r_code = cli.loop(context, commands)
-    context.clear_session()
+    r_code = cli.loop(app_config, commands)
     sys.exit(r_code)
 
 

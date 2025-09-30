@@ -6,11 +6,10 @@ from typing import Type, Optional, List, Callable, Dict, Any, Sequence
 from urllib.parse import urlparse, urlunparse, quote_plus
 
 from cryptography.hazmat.primitives.asymmetric import ec
-from google.protobuf.json_format import MessageToDict
 
-from . import endpoint, configuration, notifications, keeper_auth, auth_utils
+from . import endpoint, configuration, notifications, keeper_auth
 from .. import crypto, utils, errors
-from ..proto import APIRequest_pb2, breachwatch_pb2, ssocloud_pb2
+from ..proto import APIRequest_pb2, ssocloud_pb2
 
 
 class ILoginStep(abc.ABC):
@@ -681,58 +680,6 @@ def _on_requires_2fa(login: LoginAuth, response: APIRequest_pb2.LoginResponse):
     login.login_step = _TwoFactorStep(login, response.encryptedLoginToken, list(response.channels))
 
 
-def _post_login(logged_auth: keeper_auth.KeeperAuth) -> None:
-    rs = auth_utils.load_account_summary(logged_auth)
-
-    assert rs is not None
-    if rs.license.enterpriseId:
-        logged_auth.auth_context.enterprise_id = rs.license.enterpriseId
-    logged_auth.auth_context.forbid_rsa = rs.forbidKeyType2
-    logged_auth.auth_context.settings.update(MessageToDict(rs.settings))
-    logged_auth.auth_context.license.update(MessageToDict(rs.license))
-    enf = MessageToDict(rs.Enforcements)
-    if 'strings' in enf:
-        strs = {x['key']: x['value'] for x in enf['strings'] if 'key' in x and 'value' in x}
-        logged_auth.auth_context.enforcements.update(strs)
-    if 'booleans' in enf:
-        bools = {x['key']: x.get('value', False) for x in enf['booleans'] if 'key' in x}
-        logged_auth.auth_context.enforcements.update(bools)
-    if 'longs' in enf:
-        longs = {x['key']: x['value'] for x in enf['longs'] if 'key' in x and 'value' in x}
-        logged_auth.auth_context.enforcements.update(longs)
-    if 'jsons' in enf:
-        jsons = {x['key']: x['value'] for x in enf['jsons'] if 'key' in x and 'value' in x}
-        logged_auth.auth_context.enforcements.update(jsons)
-    logged_auth.auth_context.is_enterprise_admin = rs.isEnterpriseAdmin
-    if rs.clientKey:
-        logged_auth.auth_context.client_key = crypto.decrypt_aes_v1(rs.clientKey, logged_auth.auth_context.data_key)
-    if rs.keysInfo.encryptedPrivateKey:
-        rsa_private_key = crypto.decrypt_aes_v1(rs.keysInfo.encryptedPrivateKey, logged_auth.auth_context.data_key)
-        logged_auth.auth_context.rsa_private_key = crypto.load_rsa_private_key(rsa_private_key)
-    if rs.keysInfo.encryptedEccPrivateKey:
-        ec_private_key = crypto.decrypt_aes_v2(rs.keysInfo.encryptedEccPrivateKey, logged_auth.auth_context.data_key)
-        logged_auth.auth_context.ec_private_key = crypto.load_ec_private_key(ec_private_key)
-    if rs.keysInfo.eccPublicKey:
-        logged_auth.auth_context.ec_public_key = crypto.load_ec_public_key(rs.keysInfo.eccPublicKey)
-
-    if logged_auth.auth_context.session_token_restriction == keeper_auth.SessionTokenRestriction.Unrestricted:
-        if logged_auth.auth_context.license.get('accountType', 0) == 2:
-            try:
-                e_rs = logged_auth.execute_auth_rest('enterprise/get_enterprise_public_key', None,
-                                                     response_type=breachwatch_pb2.EnterprisePublicKeyResponse)
-                assert e_rs is not None
-                if e_rs.enterpriseECCPublicKey:
-                    logged_auth.auth_context.enterprise_ec_public_key = \
-                        crypto.load_ec_public_key(e_rs.enterpriseECCPublicKey)
-                if e_rs.enterprisePublicKey:
-                    logged_auth.auth_context.enterprise_rsa_public_key = \
-                        crypto.load_rsa_public_key(e_rs.enterprisePublicKey)
-
-            except Exception as e:
-                logger = utils.get_logger()
-                logger.debug('Get enterprise public key error: %s', e)
-
-
 def _on_logged_in(login: LoginAuth, response: APIRequest_pb2.LoginResponse,
                   on_decrypt_data_key: Callable[[bytes], bytes]) -> None:
     login.context.username = response.primaryUsername
@@ -752,7 +699,7 @@ def _on_logged_in(login: LoginAuth, response: APIRequest_pb2.LoginResponse,
 
     keeper_endpoint = login.keeper_endpoint
     logged_auth = keeper_auth.KeeperAuth(keeper_endpoint, auth_context)
-    _post_login(logged_auth)
+    logged_auth.post_login()
 
     if auth_context.session_token_restriction == keeper_auth.SessionTokenRestriction.Unrestricted:
         logged_auth.start_pushes()

@@ -116,26 +116,30 @@ class ModifyAgentRequest(_message.Message):
     def __init__(self, updateAgent: _Optional[_Iterable[_Union[AgentUpdate, _Mapping]]] = ..., removeAgent: _Optional[_Iterable[bytes]] = ...) -> None: ...
 
 class PolicyAdd(_message.Message):
-    __slots__ = ("policyUid", "plainData", "encryptedData", "encryptedKey")
+    __slots__ = ("policyUid", "plainData", "encryptedData", "encryptedKey", "disabled")
     POLICYUID_FIELD_NUMBER: _ClassVar[int]
     PLAINDATA_FIELD_NUMBER: _ClassVar[int]
     ENCRYPTEDDATA_FIELD_NUMBER: _ClassVar[int]
     ENCRYPTEDKEY_FIELD_NUMBER: _ClassVar[int]
+    DISABLED_FIELD_NUMBER: _ClassVar[int]
     policyUid: bytes
     plainData: bytes
     encryptedData: bytes
     encryptedKey: bytes
-    def __init__(self, policyUid: _Optional[bytes] = ..., plainData: _Optional[bytes] = ..., encryptedData: _Optional[bytes] = ..., encryptedKey: _Optional[bytes] = ...) -> None: ...
+    disabled: bool
+    def __init__(self, policyUid: _Optional[bytes] = ..., plainData: _Optional[bytes] = ..., encryptedData: _Optional[bytes] = ..., encryptedKey: _Optional[bytes] = ..., disabled: bool = ...) -> None: ...
 
 class PolicyUpdate(_message.Message):
-    __slots__ = ("policyUid", "plainData", "encryptedData")
+    __slots__ = ("policyUid", "plainData", "encryptedData", "disabled")
     POLICYUID_FIELD_NUMBER: _ClassVar[int]
     PLAINDATA_FIELD_NUMBER: _ClassVar[int]
     ENCRYPTEDDATA_FIELD_NUMBER: _ClassVar[int]
+    DISABLED_FIELD_NUMBER: _ClassVar[int]
     policyUid: bytes
     plainData: bytes
     encryptedData: bytes
-    def __init__(self, policyUid: _Optional[bytes] = ..., plainData: _Optional[bytes] = ..., encryptedData: _Optional[bytes] = ...) -> None: ...
+    disabled: _folder_pb2.SetBooleanValue
+    def __init__(self, policyUid: _Optional[bytes] = ..., plainData: _Optional[bytes] = ..., encryptedData: _Optional[bytes] = ..., disabled: _Optional[_Union[_folder_pb2.SetBooleanValue, str]] = ...) -> None: ...
 
 class PolicyRequest(_message.Message):
     __slots__ = ("addPolicy", "updatePolicy", "removePolicy")
@@ -252,20 +256,22 @@ class AgentNode(_message.Message):
     def __init__(self, agentUid: _Optional[bytes] = ..., machineId: _Optional[str] = ..., deploymentUid: _Optional[bytes] = ..., ecPublicKey: _Optional[bytes] = ..., disabled: bool = ..., encryptedData: _Optional[bytes] = ..., created: _Optional[int] = ..., modified: _Optional[int] = ...) -> None: ...
 
 class PolicyNode(_message.Message):
-    __slots__ = ("policyUid", "plainData", "encryptedData", "encryptedKey", "created", "modified")
+    __slots__ = ("policyUid", "plainData", "encryptedData", "encryptedKey", "created", "modified", "disabled")
     POLICYUID_FIELD_NUMBER: _ClassVar[int]
     PLAINDATA_FIELD_NUMBER: _ClassVar[int]
     ENCRYPTEDDATA_FIELD_NUMBER: _ClassVar[int]
     ENCRYPTEDKEY_FIELD_NUMBER: _ClassVar[int]
     CREATED_FIELD_NUMBER: _ClassVar[int]
     MODIFIED_FIELD_NUMBER: _ClassVar[int]
+    DISABLED_FIELD_NUMBER: _ClassVar[int]
     policyUid: bytes
     plainData: bytes
     encryptedData: bytes
     encryptedKey: bytes
     created: int
     modified: int
-    def __init__(self, policyUid: _Optional[bytes] = ..., plainData: _Optional[bytes] = ..., encryptedData: _Optional[bytes] = ..., encryptedKey: _Optional[bytes] = ..., created: _Optional[int] = ..., modified: _Optional[int] = ...) -> None: ...
+    disabled: bool
+    def __init__(self, policyUid: _Optional[bytes] = ..., plainData: _Optional[bytes] = ..., encryptedData: _Optional[bytes] = ..., encryptedKey: _Optional[bytes] = ..., created: _Optional[int] = ..., modified: _Optional[int] = ..., disabled: bool = ...) -> None: ...
 
 class CollectionNode(_message.Message):
     __slots__ = ("collectionUid", "collectionType", "encryptedData", "created")
@@ -387,6 +393,22 @@ class GetPedmDataResponse(_message.Message):
     approvalStatus: _containers.RepeatedCompositeFieldContainer[ApprovalStatusNode]
     def __init__(self, continuationToken: _Optional[bytes] = ..., resetCache: bool = ..., hasMore: bool = ..., removedDeployments: _Optional[_Iterable[bytes]] = ..., removedAgents: _Optional[_Iterable[bytes]] = ..., removedPolicies: _Optional[_Iterable[bytes]] = ..., removedCollection: _Optional[_Iterable[bytes]] = ..., removedCollectionLink: _Optional[_Iterable[_Union[CollectionLink, _Mapping]]] = ..., removedApprovals: _Optional[_Iterable[bytes]] = ..., deployments: _Optional[_Iterable[_Union[DeploymentNode, _Mapping]]] = ..., agents: _Optional[_Iterable[_Union[AgentNode, _Mapping]]] = ..., policies: _Optional[_Iterable[_Union[PolicyNode, _Mapping]]] = ..., collections: _Optional[_Iterable[_Union[CollectionNode, _Mapping]]] = ..., collectionLink: _Optional[_Iterable[_Union[CollectionLink, _Mapping]]] = ..., approvals: _Optional[_Iterable[_Union[ApprovalNode, _Mapping]]] = ..., approvalStatus: _Optional[_Iterable[_Union[ApprovalStatusNode, _Mapping]]] = ...) -> None: ...
 
+class PolicyAgentRequest(_message.Message):
+    __slots__ = ("policyUid", "summaryOnly")
+    POLICYUID_FIELD_NUMBER: _ClassVar[int]
+    SUMMARYONLY_FIELD_NUMBER: _ClassVar[int]
+    policyUid: _containers.RepeatedScalarFieldContainer[bytes]
+    summaryOnly: bool
+    def __init__(self, policyUid: _Optional[_Iterable[bytes]] = ..., summaryOnly: bool = ...) -> None: ...
+
+class PolicyAgentResponse(_message.Message):
+    __slots__ = ("agentCount", "agentUid")
+    AGENTCOUNT_FIELD_NUMBER: _ClassVar[int]
+    AGENTUID_FIELD_NUMBER: _ClassVar[int]
+    agentCount: int
+    agentUid: _containers.RepeatedScalarFieldContainer[bytes]
+    def __init__(self, agentCount: _Optional[int] = ..., agentUid: _Optional[_Iterable[bytes]] = ...) -> None: ...
+
 class AuditCollectionRequest(_message.Message):
     __slots__ = ("continuationToken", "valueUid", "collectionName")
     CONTINUATIONTOKEN_FIELD_NUMBER: _ClassVar[int]
@@ -430,3 +452,81 @@ class GetCollectionLinkResponse(_message.Message):
     COLLECTIONLINKDATA_FIELD_NUMBER: _ClassVar[int]
     collectionLinkData: _containers.RepeatedCompositeFieldContainer[CollectionLinkData]
     def __init__(self, collectionLinkData: _Optional[_Iterable[_Union[CollectionLinkData, _Mapping]]] = ...) -> None: ...
+
+class GetActiveAgentCountRequest(_message.Message):
+    __slots__ = ("enterpriseId",)
+    ENTERPRISEID_FIELD_NUMBER: _ClassVar[int]
+    enterpriseId: _containers.RepeatedScalarFieldContainer[int]
+    def __init__(self, enterpriseId: _Optional[_Iterable[int]] = ...) -> None: ...
+
+class ActiveAgentCount(_message.Message):
+    __slots__ = ("enterpriseId", "activeAgents")
+    ENTERPRISEID_FIELD_NUMBER: _ClassVar[int]
+    ACTIVEAGENTS_FIELD_NUMBER: _ClassVar[int]
+    enterpriseId: int
+    activeAgents: int
+    def __init__(self, enterpriseId: _Optional[int] = ..., activeAgents: _Optional[int] = ...) -> None: ...
+
+class ActiveAgentFailure(_message.Message):
+    __slots__ = ("enterpriseId", "message")
+    ENTERPRISEID_FIELD_NUMBER: _ClassVar[int]
+    MESSAGE_FIELD_NUMBER: _ClassVar[int]
+    enterpriseId: int
+    message: str
+    def __init__(self, enterpriseId: _Optional[int] = ..., message: _Optional[str] = ...) -> None: ...
+
+class GetActiveAgentCountResponse(_message.Message):
+    __slots__ = ("agentCount", "failedCount")
+    AGENTCOUNT_FIELD_NUMBER: _ClassVar[int]
+    FAILEDCOUNT_FIELD_NUMBER: _ClassVar[int]
+    agentCount: _containers.RepeatedCompositeFieldContainer[ActiveAgentCount]
+    failedCount: _containers.RepeatedCompositeFieldContainer[ActiveAgentFailure]
+    def __init__(self, agentCount: _Optional[_Iterable[_Union[ActiveAgentCount, _Mapping]]] = ..., failedCount: _Optional[_Iterable[_Union[ActiveAgentFailure, _Mapping]]] = ...) -> None: ...
+
+class GetAgentDailyCountRequest(_message.Message):
+    __slots__ = ("enterpriseId", "monthYear", "dateRange")
+    ENTERPRISEID_FIELD_NUMBER: _ClassVar[int]
+    MONTHYEAR_FIELD_NUMBER: _ClassVar[int]
+    DATERANGE_FIELD_NUMBER: _ClassVar[int]
+    enterpriseId: _containers.RepeatedScalarFieldContainer[int]
+    monthYear: MonthYear
+    dateRange: DateRange
+    def __init__(self, enterpriseId: _Optional[_Iterable[int]] = ..., monthYear: _Optional[_Union[MonthYear, _Mapping]] = ..., dateRange: _Optional[_Union[DateRange, _Mapping]] = ...) -> None: ...
+
+class MonthYear(_message.Message):
+    __slots__ = ("month", "year")
+    MONTH_FIELD_NUMBER: _ClassVar[int]
+    YEAR_FIELD_NUMBER: _ClassVar[int]
+    month: int
+    year: int
+    def __init__(self, month: _Optional[int] = ..., year: _Optional[int] = ...) -> None: ...
+
+class DateRange(_message.Message):
+    __slots__ = ("start", "end")
+    START_FIELD_NUMBER: _ClassVar[int]
+    END_FIELD_NUMBER: _ClassVar[int]
+    start: int
+    end: int
+    def __init__(self, start: _Optional[int] = ..., end: _Optional[int] = ...) -> None: ...
+
+class AgentDailyCount(_message.Message):
+    __slots__ = ("date", "agentCount")
+    DATE_FIELD_NUMBER: _ClassVar[int]
+    AGENTCOUNT_FIELD_NUMBER: _ClassVar[int]
+    date: int
+    agentCount: int
+    def __init__(self, date: _Optional[int] = ..., agentCount: _Optional[int] = ...) -> None: ...
+
+class AgentCountForEnterprise(_message.Message):
+    __slots__ = ("enterpriseId", "counts")
+    ENTERPRISEID_FIELD_NUMBER: _ClassVar[int]
+    COUNTS_FIELD_NUMBER: _ClassVar[int]
+    enterpriseId: int
+    counts: _containers.RepeatedCompositeFieldContainer[AgentDailyCount]
+    def __init__(self, enterpriseId: _Optional[int] = ..., counts: _Optional[_Iterable[_Union[AgentDailyCount, _Mapping]]] = ...) -> None: ...
+
+class GetAgentDailyCountResponse(_message.Message):
+    __slots__ = ("enterpriseCounts",)
+    ENTERPRISECOUNTS_FIELD_NUMBER: _ClassVar[int]
+    enterpriseCounts: _containers.RepeatedCompositeFieldContainer[AgentCountForEnterprise]
+    def __init__(self, enterpriseCounts: _Optional[_Iterable[_Union[AgentCountForEnterprise, _Mapping]]] = ...) -> None: ...

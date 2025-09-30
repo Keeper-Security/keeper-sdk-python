@@ -11,7 +11,7 @@ import pyperclip
 from prompt_toolkit.formatted_text import FormattedText
 
 from keepersdk import errors, utils, crypto
-from keepersdk.authentication import login_auth, keeper_auth, endpoint
+from keepersdk.authentication import login_auth, keeper_auth, endpoint, configuration
 from keepersdk.proto import APIRequest_pb2, enterprise_pb2, ssocloud_pb2
 from keepersdk.authentication.yubikey import yubikey_authenticate, IKeeperUserInteraction
 
@@ -38,15 +38,18 @@ class FidoCliInteraction(fido2.client.UserInteraction, IKeeperUserInteraction):
 
 class LoginFlow:
     @staticmethod
-    def login(context: KeeperParams, *,
+    def login(storage: configuration.IConfigurationStorage, *,
+              server: Optional[str] = None,
               username: Optional[str] = None,
               password: Optional[str] = None,
               sso_master_password: bool = False,
-              resume_session: bool = False) -> Optional[bool]:
+              resume_session: bool = False) -> Optional[keeper_auth.KeeperAuth]:
 
+        login_configuration = storage.get()
+        if not server:
+            server = login_configuration.last_server
         if not username:
-            conf = context.get()
-            username = conf.last_login
+            username = login_configuration.last_login
             resume_session = True
         if not username:
             raise Exception('Keeper username is not provided')
@@ -54,7 +57,7 @@ class LoginFlow:
         logger = utils.get_logger()
         logger.info('Logging in to Keeper as "%s"', username)
 
-        keeper_endpoint = endpoint.KeeperEndpoint(context, context.server)
+        keeper_endpoint = endpoint.KeeperEndpoint(storage, server)
         auth = login_auth.LoginAuth(keeper_endpoint)
         try:
             def on_next_step():
@@ -71,8 +74,11 @@ class LoginFlow:
             passwords = []
             if password:
                 passwords.append(password)
-            if context.password:
-                passwords.append(context.password)
+            user_configuration = login_configuration.users().get(username)
+            if user_configuration is not None:
+                user_password = user_configuration.password
+                if user_password and user_password != password:
+                    passwords.append(user_password)
 
             auth.resume_session = resume_session
             auth.alternate_password = sso_master_password
@@ -83,7 +89,7 @@ class LoginFlow:
                 if isinstance(step, login_auth.LoginStepDeviceApproval):
                     LoginFlow.verify_device(step)
                 elif isinstance(step, login_auth.LoginStepTwoFactor):
-                    LoginFlow.handle_two_factor(context, step)
+                    LoginFlow.handle_two_factor(step)
                 elif isinstance(step, login_auth.LoginStepPassword):
                     LoginFlow.handle_verify_password(step)
                 elif isinstance(step, login_auth.LoginStepSsoToken):
@@ -95,9 +101,7 @@ class LoginFlow:
             if isinstance(step, login_auth.LoginStepError):
                 raise errors.KeeperApiError(step.code, step.message)
             if isinstance(step, login_auth.LoginStepConnected):
-                authentication = step.take_keeper_auth()
-                LoginFlow.post_login(context, authentication)
-                return True
+                return LoginFlow.post_login(step.take_keeper_auth())
             else:
                 raise errors.KeeperApiError('not_supported', f'Login step {type(step).__name__} is not supported')
         except KeyboardInterrupt:
@@ -263,7 +267,7 @@ class LoginFlow:
         FormattedText([('', 'Install fido2 package '), ('class:h3', "'pip install fido2'")])]
 
     @staticmethod
-    def handle_two_factor(context: KeeperParams, step: login_auth.LoginStepTwoFactor):
+    def handle_two_factor(step: login_auth.LoginStepTwoFactor):
         channels = [x for x in step.get_channels() if x.channel_type != login_auth.TwoFactorChannel.Other]
         menu = []
         for i in range(len(channels)):
@@ -320,8 +324,6 @@ class LoginFlow:
                     utils.get_logger().error(e)
 
             else:   # 2FA code
-                config_expiration = context.mfa_duration
-                step.duration = LoginFlow.two_factor_code_to_duration(config_expiration)
                 step.duration = min(step.duration, channel.max_expiration)
                 available_dura = sorted((x for x in LoginFlow.DurationCodes.keys() if x <= channel.max_expiration))
                 available_codes = [LoginFlow.two_factor_duration_to_code(x) for x in available_dura]
@@ -402,32 +404,34 @@ class LoginFlow:
             step.resume()
 
     @staticmethod
-    def post_login(context: KeeperParams, auth: keeper_auth.KeeperAuth):
-        if auth.auth_context.session_token_restriction != keeper_auth.SessionTokenRestriction.Unrestricted:
-            if auth.auth_context.session_token_restriction == keeper_auth.SessionTokenRestriction.AccountExpired:
-                msg = (
-                    'Your Keeper account has expired. Please open the Keeper app to renew or visit the Web '
-                    'Vault at https://keepersecurity.com/vault'
-                )
-                raise Exception(msg)
-            if auth.auth_context.session_token_restriction == keeper_auth.SessionTokenRestriction.AccountRecovery:
-                prompt_utils.output_text(
-                    'Your Master Password has expired, you are required to change it before you can login.')
-                password = LoginAPI.change_master_password(auth)
-                if password:
-                    context.password = password
-                    LoginFlow.login(context)
+    def post_login(auth: keeper_auth.KeeperAuth) -> keeper_auth.KeeperAuth:
+        if auth.auth_context.session_token_restriction == keeper_auth.SessionTokenRestriction.Unrestricted:
+            return auth
+
+        if auth.auth_context.session_token_restriction == keeper_auth.SessionTokenRestriction.AccountExpired:
+            msg = (
+                'Your Keeper account has expired. Please open the Keeper app to renew or visit the Web '
+                'Vault at https://keepersecurity.com/vault'
+            )
+            raise Exception(msg)
+        if auth.auth_context.session_token_restriction == keeper_auth.SessionTokenRestriction.AccountRecovery:
+            prompt_utils.output_text(
+                'Your Master Password has expired, you are required to change it before you can login.')
+            password = LoginAPI.change_master_password(auth)
+            if password:
+                new_auth = LoginFlow.login(auth.keeper_endpoint.storage, password=password)
+                if new_auth:
+                    auth.close()
+                    return new_auth
                 else:
-                    raise Exception('Change master password failed')
-            elif auth.auth_context.session_token_restriction == keeper_auth.SessionTokenRestriction.ShareAccount:
-                prompt_utils.output_text('Account transfer required.')
-                _ = LoginAPI.accept_account_transfer_consent(auth)
-                
-
-        if auth.auth_context.session_token_restriction != keeper_auth.SessionTokenRestriction.Unrestricted:
-            raise Exception('Please log into the Web Vault to update your account settings.')
-
-        context.auth = auth
+                    return auth
+            else:
+                raise Exception('Change master password failed')
+        if auth.auth_context.session_token_restriction == keeper_auth.SessionTokenRestriction.ShareAccount:
+            prompt_utils.output_text('Account transfer required.')
+            _ = LoginAPI.accept_account_transfer_consent(auth)
+            return auth
+        raise Exception('Please log into the Web Vault to update your account settings.')
 
 
 class LoginAPI:

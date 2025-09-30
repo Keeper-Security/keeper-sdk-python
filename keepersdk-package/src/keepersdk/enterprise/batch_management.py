@@ -240,7 +240,6 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
         enterprise_data = self.loader.enterprise_data
 
         u: Optional[enterprise_types.User]
-        user: enterprise_management.UserEdit
         for user_list, user_action in ((to_lock, UserAction.Lock), (to_unlock, UserAction.Unlock),
                                        (to_extend_transfer, UserAction.ExtendTransfer),
                                        (to_expire_password, UserAction.ExpirePassword),
@@ -263,8 +262,6 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
                           to_remove: Optional[Iterable[enterprise_management.TeamUserEdit]] = None) -> None:
         enterprise_data = self.loader.enterprise_data
 
-        t: Optional[enterprise_types.Team]
-        u: Optional[enterprise_types.User]
         team_user: enterprise_management.TeamUserEdit
         for team_user_list, action in ((to_add, EntityAction.Add), (to_remove, EntityAction.Remove)):
             if team_user_list is None:
@@ -294,7 +291,6 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
                           to_remove: Optional[Iterable[enterprise_management.RoleUserEdit]] = None) -> None:
         enterprise_data = self.loader.enterprise_data
 
-        r: Optional[enterprise_types.Role]
         u: Optional[enterprise_types.User]
         role_user: enterprise_management.RoleUserEdit
         for role_user_list, action in ((to_add, EntityAction.Add), (to_remove, EntityAction.Remove)):
@@ -324,8 +320,6 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
                           to_remove: Optional[Iterable[enterprise_management.RoleTeamEdit]] = None) -> None:
         enterprise_data = self.loader.enterprise_data
 
-        r: Optional[enterprise_types.Role]
-        t: Optional[enterprise_types.Team]
         role_team: enterprise_management.RoleTeamEdit
         for role_team_list, action in ((to_add, EntityAction.Add), (to_remove, EntityAction.Remove)):
             if role_team_list is None:
@@ -356,8 +350,6 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
                              to_remove: Optional[Iterable[enterprise_management.ManagedNodeEdit]] = None) -> None:
         enterprise_data = self.loader.enterprise_data
 
-        r: Optional[enterprise_types.Role]
-        n: Optional[enterprise_types.Node]
         mn: Optional[enterprise_types.ManagedNode]
         managed_node: enterprise_management.ManagedNodeEdit
         for mn_list, action in ((to_add, EntityAction.Add), (to_update, EntityAction.Update), (to_remove, EntityAction.Remove)):
@@ -493,7 +485,7 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
                             if existing_node is not None:
                                 rq['encrypted_data'] = existing_node.encrypted_data
                             elif action == EntityAction.Add:
-                                raise Exception(f'empty node name')
+                                raise Exception('empty node name')
                         if isinstance(node.restrict_visibility, bool):
                             rq['restrict_visibility'] = '1' if node.restrict_visibility else '0'
 
@@ -615,7 +607,7 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
                         rq['ecc_public_key'] = utils.base64_url_encode(ec_public_data)
                         team_key = utils.generate_aes_key()
                         team_keys.aes = team_key
-                        encrypted_team_key = crypto.encrypt_aes_v1(team_key, tree_key)
+                        encrypted_team_key = crypto.encrypt_aes_v1(team_key, auth.auth_context.data_key)
                         rq['team_key'] = utils.base64_url_encode(encrypted_team_key)
                         encrypted_team_key = crypto.encrypt_aes_v2(team_key, tree_key)
                         rq['encrypted_team_key'] = utils.base64_url_encode(encrypted_team_key)
@@ -727,10 +719,10 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
                     node_id = m_node.managed_node_id
                     r = enterprise_data.roles.get_entity(role_id)
                     if not r:
-                        raise Exception(f'role not found')
+                        raise Exception('role not found')
                     n = enterprise_data.nodes.get_entity(node_id)
                     if not n:
-                        raise Exception(f'node not found')
+                        raise Exception('node not found')
 
                     mn = enterprise_data.managed_nodes.get_link(role_id, node_id)
                     rq: Dict[str, Any] = {
@@ -739,12 +731,12 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
                     }
                     if action == EntityAction.Add:
                         if mn:
-                            raise Exception(f'already exists')
+                            raise Exception('already exists')
                         rq['command'] = 'role_managed_node_add'
                         rq['cascade_node_management'] = m_node.cascade_node_management
                     else:
                         if not mn:
-                            raise Exception(f'does not exist')
+                            raise Exception('does not exist')
                         if action == EntityAction.Update:
                             if not isinstance(m_node.cascade_node_management, bool):
                                 continue

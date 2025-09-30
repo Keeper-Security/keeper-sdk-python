@@ -583,7 +583,7 @@ class IEnterpriseLoader(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def load(self, reset: Optional[bool] = False) -> Set[int]:
+    def load(self, *, reset: bool = False, tree_key: Optional[bytes] = None) -> Set[int]:
         pass
 
     @abc.abstractmethod

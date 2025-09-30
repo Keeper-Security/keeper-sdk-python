@@ -1,12 +1,13 @@
 import abc
 import json
+import os
 import threading
 from typing import Optional, Any, Dict
 
-from fido2.client import Fido2Client, WindowsClient, ClientError, WebAuthnClient, UserInteraction
+from fido2.client import ClientError, WebAuthnClient, UserInteraction, DefaultClientDataCollector
 from fido2.ctap import CtapError
 from fido2.hid import CtapHidDevice
-from fido2.webauthn import PublicKeyCredentialRequestOptions, UserVerificationRequirement, AuthenticatorAssertionResponse
+from fido2.webauthn import PublicKeyCredentialRequestOptions, UserVerificationRequirement, AuthenticationResponse
 from .. import utils
 
 class IKeeperUserInteraction(abc.ABC):
@@ -40,14 +41,17 @@ def yubikey_authenticate(request: Dict[str, Any], user_interaction: UserInteract
         options['challenge'] = utils.base64_url_decode(challenge)
 
     client: WebAuthnClient
-    if WindowsClient.is_available():
-        client = WindowsClient(origin, verify=verify_rp_id_none)
+    client_data_collector = DefaultClientDataCollector(origin, verify=verify_rp_id_none)
+    if os.name == 'nt':
+        from fido2.client.windows import WindowsClient
+        client = WindowsClient(client_data_collector)
     else:
+        from fido2.client import Fido2Client
         dev = next(CtapHidDevice.list_devices(), None)
         if not dev:
             logger.warning("No Security Key detected")
             return None
-        fido_client = Fido2Client(dev, origin, verify=verify_rp_id_none, user_interaction=user_interaction)
+        fido_client = Fido2Client(dev, client_data_collector, user_interaction=user_interaction)
         uv_configured = any(fido_client.info.options.get(k) for k in ("uv", "clientPin", "bioEnroll"))
         if not uv_configured:
             uv = options['userVerification']
@@ -56,10 +60,10 @@ def yubikey_authenticate(request: Dict[str, Any], user_interaction: UserInteract
         client = fido_client
 
     evt= threading.Event()
-    response: Optional[AuthenticatorAssertionResponse] = None
+    response: Optional[AuthenticationResponse] = None
     try:
         try:
-            rq_options = PublicKeyCredentialRequestOptions.from_dict(options)
+            rq_options: PublicKeyCredentialRequestOptions = PublicKeyCredentialRequestOptions.from_dict(options)
             rs = client.get_assertion(rq_options, event=evt)
             response = rs.get_response(0)
         except ClientError as err:
@@ -90,18 +94,16 @@ def yubikey_authenticate(request: Dict[str, Any], user_interaction: UserInteract
         evt.set()
 
     if response:
-        credential_id = utils.base64_url_encode(response.credential_id or b'')
-        extensions = dict(response.extension_results) if response.extension_results else {}
         signature = {
-            "id": credential_id,
-            "rawId": credential_id,
+            "id": response.id,
+            "rawId": utils.base64_url_encode(response.raw_id),
             "response": {
-                "authenticatorData": utils.base64_url_encode(response.authenticator_data),
-                "clientDataJSON": response.client_data.b64,
-                "signature": utils.base64_url_encode(response.signature),
+                "authenticatorData": utils.base64_url_encode(response.response.authenticator_data),
+                "clientDataJSON": response.response.client_data.b64,
+                "signature": utils.base64_url_encode(response.response.signature),
             },
             "type": "public-key",
-            "clientExtensionResults": extensions
+            "clientExtensionResults": dict(response.client_extension_results) if response.client_extension_results else {}
         }
         return json.dumps(signature)
     return None

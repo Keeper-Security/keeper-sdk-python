@@ -2,6 +2,6 @@ attrs>=23.1.0
 certifi
 requests>=2.31.0
 cryptography>=41.0.7
-protobuf>=5.28.3
+protobuf>=5.28,<6.0
 websockets>=12.0
-fido2
+fido2>=2.0.0

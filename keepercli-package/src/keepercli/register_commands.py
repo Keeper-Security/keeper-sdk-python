@@ -12,7 +12,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
     commands.register_command('version', cli_commands.VersionCommand(), base.CommandScope.Common, 'v')
 
     if not scopes or bool(scopes & base.CommandScope.Account):
-        from .commands import account_commands
+        from .commands import account_commands, pedm_agent
         commands.register_command('server',
                                   base.GetterSetterCommand('server', 'Sets or displays current Keeper region'),
                                   base.CommandScope.Account)
@@ -20,6 +20,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('logout', account_commands.LogoutCommand(), base.CommandScope.Account)
         commands.register_command('this-device', account_commands.ThisDeviceCommand(), base.CommandScope.Account)
         commands.register_command('whoami', account_commands.WhoamiCommand(), base.CommandScope.Account)
+        commands.register_command('agent', pedm_agent.PedmAgentCommand(), base.CommandScope.Common)
 
 
     if not scopes or bool(scopes & base.CommandScope.Vault):
@@ -46,7 +47,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
 
     if not scopes or bool(scopes & base.CommandScope.Enterprise):
         from .commands import (enterprise_info, enterprise_node, enterprise_role, enterprise_team, enterprise_user,
-                               importer_commands, audit_report, audit_alert)
+                               importer_commands, audit_report, audit_alert, pedm_admin, msp)
 
         commands.register_command('enterprise-down', enterprise_info.EnterpriseDownCommand(), base.CommandScope.Enterprise, 'ed')
         commands.register_command('enterprise-info', enterprise_info.EnterpriseInfoCommand(), base.CommandScope.Enterprise, 'ei')
@@ -58,3 +59,5 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('audit-alert', audit_alert.AuditAlerts(), base.CommandScope.Enterprise)
         commands.register_command('download-membership', importer_commands.DownloadMembershipCommand(), base.CommandScope.Enterprise)
         commands.register_command('apply-membership', importer_commands.ApplyMembershipCommand(), base.CommandScope.Enterprise)
+        commands.register_command('pedm', pedm_admin.PedmCommand(), base.CommandScope.Enterprise)
+        commands.register_command('switch-to-mc', msp.SwitchToManagedCompanyCommand(), base.CommandScope.Enterprise)

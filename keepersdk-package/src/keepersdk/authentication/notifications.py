@@ -1,7 +1,8 @@
+import abc
 import asyncio
 import json
 import ssl
-from typing import Optional, TypeVar, Generic, Callable, List, Dict, Any
+from typing import Optional, TypeVar, Generic, Callable, List, Dict, Any, Union
 
 import websockets
 import websockets.frames
@@ -65,42 +66,53 @@ class FanOut(Generic[M]):
         self._callbacks.clear()
 
 
-class KeeperPushNotifications(FanOut[Dict[str, Any]]):
+class BasePushNotifications(abc.ABC):
     def __init__(self) -> None:
         super().__init__()
         self._ws_app: Optional[websockets.ClientConnection] = None
 
-    async def main_loop(self, push_url: str, transmission_key: bytes, data: Optional[bytes] = None):
+    @abc.abstractmethod
+    def on_messaged_received(self, message: Union[str, bytes]):
+        pass
+
+    @abc.abstractmethod
+    async def on_connected(self):
+        pass
+
+    async def main_loop(self, *, url: str, headers: Optional[Dict[str, str]]=None):
         logger = utils.get_logger()
         try:
             await self.close_ws()
         except Exception as e:
             logger.debug('Push notification close error: %s', e)
 
-        ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
-        if not endpoint.get_certificate_check():
-            ssl_context.verify_mode = ssl.CERT_NONE
+        ssl_context: Optional[ssl.SSLContext] = None
+        if url.startswith('wss://'):
+            ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+            if not endpoint.get_certificate_check():
+                ssl_context.verify_mode = ssl.CERT_NONE
 
         try:
-            async with websockets.connect(push_url, ping_interval=30, open_timeout=4, ssl=ssl_context) as ws_app:
+            async with websockets.connect(
+                    url, additional_headers=headers, ping_interval=30, open_timeout=4, ssl=ssl_context) as ws_app:
                 self._ws_app = ws_app
-                if data:
-                    await ws_app.send(utils.base64_url_encode(data))
+                await self.on_connected()
+
                 async for message in ws_app:
-                    if isinstance(message, bytes):
-                        try:
-                            decrypted_data = crypto.decrypt_aes_v2(message, transmission_key)
-                            rs = push_pb2.WssClientResponse()
-                            rs.ParseFromString(decrypted_data)
-                            self.push(json.loads(rs.message))
-                        except Exception as e:
-                            logger.debug('Push notification: decrypt error: ', e)
+                    try:
+                        self.on_messaged_received(message)
+                    except Exception as e:
+                        logger.debug('Push notification: decrypt error: ', e)
         except Exception as e:
             logger.debug('Push notification: exception: %s', e)
 
         logger.debug('Push notification: exit.')
         if self._ws_app == ws_app:
             self._ws_app = None
+
+    async def send_message(self, message: Union[str, bytes]):
+        if self._ws_app and self._ws_app.state == websockets.protocol.State.OPEN:
+            await self._ws_app.send(message)
 
     async def close_ws(self):
         ws_app = self._ws_app
@@ -110,9 +122,35 @@ class KeeperPushNotifications(FanOut[Dict[str, Any]]):
             except Exception:
                 pass
 
+    def close(self):
+        asyncio.run_coroutine_threadsafe(self.close_ws(), loop=background.get_loop()).result()
+
+
+class KeeperPushNotifications(BasePushNotifications, FanOut[Dict[str, Any]]):
+    def __init__(self) -> None:
+        super().__init__()
+        self.transmission_key: Optional[bytes] = None
+        self.session_token: Optional[bytes] = None
+
+    def on_messaged_received(self, message: Union[str, bytes]):
+        if isinstance(message, bytes):
+            if self.transmission_key:
+                decrypted_data = crypto.decrypt_aes_v2(message, self.transmission_key)
+            else:
+                decrypted_data = message
+            rs = push_pb2.WssClientResponse()
+            rs.ParseFromString(decrypted_data)
+            self.push(json.loads(rs.message))
+
+    async def on_connected(self):
+        if self.session_token:
+            await self.send_message(utils.base64_url_encode(self.session_token))
+
     def connect_to_push_channel(self, push_url: str, transmission_key: bytes, data: Optional[bytes]=None) -> None:
-        asyncio.run_coroutine_threadsafe(self.main_loop(push_url, transmission_key, data), background.get_loop())
+        self.transmission_key = transmission_key
+        self.session_token = data
+        asyncio.run_coroutine_threadsafe(self.main_loop(url=push_url, headers=None), background.get_loop())
 
     def shutdown(self):
-        super().shutdown()
-        asyncio.run_coroutine_threadsafe(self.close_ws(), loop=background.get_loop()).result()
+        BasePushNotifications.close(self)
+        FanOut.shutdown(self)

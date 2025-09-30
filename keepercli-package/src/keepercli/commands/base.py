@@ -106,11 +106,11 @@ class GetterSetterCommand(ICliCommand):
 
     def execute_args(self, context: KeeperParams, args: str, **kwargs):
         value = self.validate(args)
-        if hasattr(context, self._attr_name):
+        if hasattr(context.keeper_config, self._attr_name):
             if args:
-                setattr(context, self._attr_name, value)
+                setattr(context.keeper_config, self._attr_name, value)
             else:
-                return getattr(context, self._attr_name)
+                return getattr(context.keeper_config, self._attr_name)
 
     def validate(self, value: str) -> Any:
         return value

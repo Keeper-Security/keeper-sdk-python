@@ -11,11 +11,11 @@ from typing import Optional, Dict, Any, List, Type, Set, Iterable
 import attrs
 from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePrivateKey, EllipticCurvePublicKey
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
-from google.protobuf.json_format import MessageToJson
+from google.protobuf.json_format import MessageToJson, MessageToDict
 
 from . import endpoint, notifications
 from .. import errors, utils, crypto, background
-from ..proto import APIRequest_pb2
+from ..proto import APIRequest_pb2, breachwatch_pb2, AccountSummary_pb2
 
 
 class IKeeperAuth(abc.ABC):
@@ -51,8 +51,8 @@ class UserKeys:
 class AuthContext:
     def __init__(self) -> None:
         self.username = ''
-        self.account_uid = b''
-        self.session_token = b''
+        self.account_uid: bytes = b''
+        self.session_token: bytes = b''
         self.session_token_restriction: SessionTokenRestriction = SessionTokenRestriction.Unrestricted
         self.data_key: bytes = b''
         self.client_key: bytes = b''
@@ -62,6 +62,7 @@ class AuthContext:
         self.enterprise_rsa_public_key: Optional[RSAPublicKey] = None
         self.enterprise_ec_public_key: Optional[EllipticCurvePublicKey] = None
         self.is_enterprise_admin = False
+        self.is_mc_superadmin = False
         self.enterprise_id: Optional[int] = None
         self.enforcements: Dict[str, Any] = {}
         self.settings: Dict[str, Any] = {}
@@ -70,7 +71,6 @@ class AuthContext:
         self.device_token: bytes = b''
         self.device_private_key: Optional[EllipticCurvePrivateKey] = None
         self.forbid_rsa: bool = False
-        self.session_token: bytes = b''
         self.message_session_uid: bytes = b''
 
 
@@ -206,6 +206,7 @@ class KeeperAuth:
                 logger.debug('>>> [RS] \"%s\": %s', path, js)
 
             return response
+        return None
 
     def execute_router_json(self, path: str,  request: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         logger = utils.get_logger()
@@ -311,10 +312,12 @@ class KeeperAuth:
     def get_user_keys(self, username: str) -> Optional[UserKeys]:
         if self._key_cache:
             return self._key_cache.get(username)
+        return None
 
     def get_team_keys(self, team_uid: str) -> Optional[UserKeys]:
         if self._key_cache:
             return self._key_cache.get(team_uid)
+        return None
 
     async def _push_server_guard(self):
         transmission_key = utils.generate_aes_key()
@@ -323,7 +326,9 @@ class KeeperAuth:
             while self._use_pushes:
                 url = self.keeper_endpoint.get_push_url(
                     transmission_key, self.auth_context.device_token, self.auth_context.message_session_uid)
-                await self._push_notifications.main_loop(url, transmission_key, self.auth_context.session_token)
+                self._push_notifications.transmission_key = transmission_key
+                self._push_notifications.session_token = self.auth_context.session_token
+                await self._push_notifications.main_loop(url=url)
                 self.execute_auth_rest('keep_alive', None)
         except Exception as e:
             utils.get_logger().debug(e)
@@ -340,3 +345,100 @@ class KeeperAuth:
     def stop_pushes(self):
         self._use_pushes = False
         self._push_notifications.shutdown()
+
+    def post_login(self) -> None:
+        rs = load_account_summary(self)
+
+        assert rs is not None
+        if rs.license.enterpriseId:
+            self.auth_context.enterprise_id = rs.license.enterpriseId
+        self.auth_context.forbid_rsa = rs.forbidKeyType2
+        self.auth_context.settings.update(MessageToDict(rs.settings))
+        self.auth_context.license.update(MessageToDict(rs.license))
+        enf = MessageToDict(rs.Enforcements)
+        if 'strings' in enf:
+            strs = {x['key']: x['value'] for x in enf['strings'] if 'key' in x and 'value' in x}
+            self.auth_context.enforcements.update(strs)
+        if 'booleans' in enf:
+            bools = {x['key']: x.get('value', False) for x in enf['booleans'] if 'key' in x}
+            self.auth_context.enforcements.update(bools)
+        if 'longs' in enf:
+            longs = {x['key']: x['value'] for x in enf['longs'] if 'key' in x and 'value' in x}
+            self.auth_context.enforcements.update(longs)
+        if 'jsons' in enf:
+            jsons = {x['key']: x['value'] for x in enf['jsons'] if 'key' in x and 'value' in x}
+            self.auth_context.enforcements.update(jsons)
+        self.auth_context.is_enterprise_admin = rs.isEnterpriseAdmin
+        if rs.clientKey:
+            self.auth_context.client_key = crypto.decrypt_aes_v1(rs.clientKey, self.auth_context.data_key)
+        if rs.keysInfo.encryptedPrivateKey:
+            rsa_private_key = crypto.decrypt_aes_v1(rs.keysInfo.encryptedPrivateKey, self.auth_context.data_key)
+            self.auth_context.rsa_private_key = crypto.load_rsa_private_key(rsa_private_key)
+        if rs.keysInfo.encryptedEccPrivateKey:
+            ec_private_key = crypto.decrypt_aes_v2(rs.keysInfo.encryptedEccPrivateKey, self.auth_context.data_key)
+            self.auth_context.ec_private_key = crypto.load_ec_private_key(ec_private_key)
+        if rs.keysInfo.eccPublicKey:
+            self.auth_context.ec_public_key = crypto.load_ec_public_key(rs.keysInfo.eccPublicKey)
+
+        if self.auth_context.session_token_restriction == SessionTokenRestriction.Unrestricted:
+            if self.auth_context.license.get('accountType', 0) == 2:
+                try:
+                    e_rs = self.execute_auth_rest('enterprise/get_enterprise_public_key', None,
+                                                         response_type=breachwatch_pb2.EnterprisePublicKeyResponse)
+                    assert e_rs is not None
+                    if e_rs.enterpriseECCPublicKey:
+                        self.auth_context.enterprise_ec_public_key = \
+                            crypto.load_ec_public_key(e_rs.enterpriseECCPublicKey)
+                    if e_rs.enterprisePublicKey:
+                        self.auth_context.enterprise_rsa_public_key = \
+                            crypto.load_rsa_public_key(e_rs.enterprisePublicKey)
+
+                except Exception as e:
+                    logger = utils.get_logger()
+                    logger.debug('Get enterprise public key error: %s', e)
+
+
+def load_account_summary(auth: KeeperAuth) -> AccountSummary_pb2.AccountSummaryElements:
+    rq = AccountSummary_pb2.AccountSummaryRequest()
+    rq.summaryVersion = 1
+    account_summary = auth.execute_auth_rest(
+        'login/account_summary', rq, response_type=AccountSummary_pb2.AccountSummaryElements)
+    assert account_summary is not None
+    return account_summary
+
+
+def register_data_key_for_device(auth: KeeperAuth) -> bool:
+    device_key = auth.auth_context.device_private_key
+    assert device_key is not None
+    rq = APIRequest_pb2.RegisterDeviceDataKeyRequest()
+    rq.encryptedDeviceToken = auth.auth_context.device_token
+    rq.encryptedDeviceDataKey = crypto.encrypt_ec(auth.auth_context.data_key, device_key.public_key())
+    try:
+        auth.execute_auth_rest('authentication/register_encrypted_data_key_for_device', rq)
+    except errors.KeeperApiError as kae:
+        if kae.result_code == 'device_data_key_exists':
+            return False
+        raise kae
+    return True
+
+
+def rename_device(auth: KeeperAuth, new_name: str):
+    rq = APIRequest_pb2.DeviceUpdateRequest()
+    rq.clientVersion = auth.keeper_endpoint.client_version
+    # rq.deviceStatus = proto.DEVICE_OK
+    rq.deviceName = new_name
+    rq.encryptedDeviceToken = auth.auth_context.device_token
+
+    auth.execute_auth_rest('authentication/update_device', rq)
+
+
+def set_user_setting(auth: KeeperAuth, name: str, value: str) -> None:
+    # Available setting names:
+    #   - logout_timer
+    #   - persistent_login
+    #   - ip_disable_auto_approve
+
+    rq = APIRequest_pb2.UserSettingRequest()
+    rq.setting = name
+    rq.value = value
+    auth.execute_auth_rest('setting/set_user_setting', rq)
