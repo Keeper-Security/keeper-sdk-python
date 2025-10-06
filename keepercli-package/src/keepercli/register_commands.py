@@ -67,12 +67,13 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('share-list', share_management.OneTimeShareListCommand(), base.CommandScope.Vault)
         commands.register_command('share-create', share_management.OneTimeShareCreateCommand(), base.CommandScope.Vault)
         commands.register_command('share-remove', share_management.OneTimeShareRemoveCommand(), base.CommandScope.Vault)
+        commands.register_command('find-duplicate', share_management.FindDuplicatesCommand(), base.CommandScope.Vault)
         commands.register_command('trash', trash.TrashCommand(), base.CommandScope.Vault)
 
 
     if not scopes or bool(scopes & base.CommandScope.Enterprise):
         from .commands import (enterprise_info, enterprise_node, enterprise_role, enterprise_team, enterprise_user,
-                               importer_commands, audit_report, audit_alert)
+                               importer_commands, audit_report, audit_alert, audit_log)
 
         commands.register_command('enterprise-down', enterprise_info.EnterpriseDownCommand(), base.CommandScope.Enterprise, 'ed')
         commands.register_command('enterprise-info', enterprise_info.EnterpriseInfoCommand(), base.CommandScope.Enterprise, 'ei')
