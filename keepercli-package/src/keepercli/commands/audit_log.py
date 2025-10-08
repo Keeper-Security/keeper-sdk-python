@@ -145,8 +145,7 @@ class JsonAuditLogExporter(AuditLogExporter):
             try:
                 self.file_handle = open(self.filename, 'w', encoding='utf-8')
                 self.file_handle.write('[\n')
-                logger.info(f'Creating audit log file: '
-                      f'{os.path.abspath(self.filename)}')
+                logger.info('Creating audit log file: %s', os.path.basename(self.filename))
             except (IOError, OSError) as e:
                 raise CommandError(f'Failed to create file {self.filename}: {e}')
 
@@ -180,8 +179,7 @@ class JsonAuditLogExporter(AuditLogExporter):
                 logger.error('Failed to finalize export: %s', e)
                 raise CommandError(f'Failed to finalize export: {e}')
         
-        full_path = os.path.abspath(self.filename)
-        logger.info(f'Audit log exported to: {full_path}')
+        logger.info('Audit log exported to: %s', os.path.basename(self.filename))
 
     def clean_up(self) -> None:
         """Clean up file resources."""
@@ -294,6 +292,7 @@ class AuditEventFetcher:
     including pagination, filtering, and anonymization of user data.
     """
     
+    LIMIT : int = 1000
     def __init__(self, context: KeeperParams, filter_manager: FilterManager) -> None:
         self.context = context
         self.filter_manager = filter_manager
@@ -322,7 +321,7 @@ class AuditEventFetcher:
             'command': 'get_audit_event_reports',
             'report_type': 'span',
             'scope': 'enterprise',
-            'limit': 1000,
+            'limit': self.LIMIT,
             'order': 'ascending',
             'filter': filter_copy
         }
@@ -373,7 +372,7 @@ class AuditEventFetcher:
             'command': 'get_audit_event_reports',
             'report_type': 'raw',
             'scope': 'enterprise',
-            'limit': 1000,
+            'limit': self.LIMIT,
             'order': 'ascending',
             'filter': rq_filter
         }
@@ -406,7 +405,7 @@ class AuditEventFetcher:
                         logged_ids.add(event['id'])
                         events.append(event)
                     
-                    if event_count < 1000:
+                    if event_count < self.LIMIT:
                         finished = True
                     else:
                         finished = rq_filter['created']['max'] <= last_event_time
@@ -472,24 +471,47 @@ class AuditLogCommand(ArgparseCommand):
     
     def execute(self, context: KeeperParams, **kwargs):
         """Execute the audit log export command."""
+        self._validate_context(context)
+        target = self._validate_target(kwargs.get('target'))
+        
+        log_export = self._setup_exporter()
+        record = self._setup_record(context, log_export, kwargs.get('Record'))
+        filter_manager = self._setup_filter_manager(record, kwargs)
+        event_fetcher = self._setup_event_fetcher(context, filter_manager, kwargs)
+        
+        total_events = self._get_total_events_count(event_fetcher)
+        if total_events == 0:
+            return
+        
+        self._process_and_export_events(event_fetcher, log_export, total_events, kwargs)
+        self._finalize_export(filter_manager, record, context, log_export)
+
+    def _validate_context(self, context: KeeperParams) -> None:
+        """Validate that required context components are available."""
         assert context.auth
         assert context.enterprise_data
 
-        # Validate target
-        target = kwargs.get('target')
+    def _validate_target(self, target: Optional[str]) -> str:
+        """Validate and return the target format."""
         if not target:
             raise CommandError('Target is required')
         if target != 'json':
             raise CommandError(f'Target {target} not yet implemented')
+        return target
 
-        # Get filename and create exporter
+    def _setup_exporter(self) -> JsonAuditLogExporter:
+        """Setup the audit log exporter."""
         filename = self._get_filename()
-        log_export = JsonAuditLogExporter(filename)
+        return JsonAuditLogExporter(filename)
 
-        # Find or create record
-        record = self._find_or_create_record(context, log_export, kwargs.get('Record'))
-        
-        # Setup filter manager
+    def _setup_record(self, context: KeeperParams, log_export: JsonAuditLogExporter, 
+                    record_name: Optional[str]) -> Union[vault_record.PasswordRecord, vault_record.TypedRecord]:
+        """Setup the audit log record."""
+        return self._find_or_create_record(context, log_export, record_name)
+
+    def _setup_filter_manager(self, record: Union[vault_record.PasswordRecord, vault_record.TypedRecord], 
+                            kwargs: Dict[str, Any]) -> FilterManager:
+        """Setup and configure the filter manager."""
         filter_manager = FilterManager(record)
         filter_manager.load_filters_from_record()
         filter_manager.apply_command_line_filters(
@@ -497,22 +519,33 @@ class AuditLogCommand(ArgparseCommand):
             kwargs.get('node_id'),
             kwargs.get('days')
         )
+        return filter_manager
 
-        # Setup audit event fetcher
-        now_ts = int(datetime.datetime.now().timestamp())
+    def _setup_event_fetcher(self, context: KeeperParams, filter_manager: FilterManager, 
+                            kwargs: Dict[str, Any]) -> AuditEventFetcher:
+        """Setup the audit event fetcher."""
         event_fetcher = AuditEventFetcher(context, filter_manager)
         event_fetcher.setup_anonymization(bool(kwargs.get('anonymize')))
+        return event_fetcher
 
-        # Get total events count
-        total_events = event_fetcher.get_total_events_count(now_ts)
-        if total_events == 0:
-            return
+    def _get_total_events_count(self, event_fetcher: AuditEventFetcher) -> int:
+        """Get the total number of events to export."""
+        now_ts = int(datetime.datetime.now().timestamp())
+        return event_fetcher.get_total_events_count(now_ts)
 
-        # Fetch and export events
-        events = event_fetcher.fetch_events(now_ts, bool(kwargs.get('anonymize')))
+    def _process_and_export_events(self, event_fetcher: AuditEventFetcher, 
+                                log_export: JsonAuditLogExporter, 
+                                total_events: int, kwargs: Dict[str, Any]) -> None:
+        """Process and export audit events."""
+        now_ts = int(datetime.datetime.now().timestamp())
+        anonymize = bool(kwargs.get('anonymize'))
+        events = event_fetcher.fetch_events(now_ts, anonymize)
         self._export_events_in_chunks(log_export, events, total_events)
 
-        # Save last event time and update record
+    def _finalize_export(self, filter_manager: FilterManager, 
+                        record: Union[vault_record.PasswordRecord, vault_record.TypedRecord],
+                        context: KeeperParams, log_export: JsonAuditLogExporter) -> None:
+        """Finalize the export process."""
         if filter_manager.last_event_time > 0:
             filter_manager.save_last_event_time(filter_manager.last_event_time)
             record_management.update_record(context.vault, record)
@@ -586,7 +619,7 @@ class AuditLogCommand(ArgparseCommand):
             if total_events > 0:
                 percent_done = num_exported / total_events * 100
                 percent_done = '%.1f' % percent_done
-                logger.info(f'Exporting events.... {percent_done}% DONE', 
+                print(f'Exporting events.... {percent_done}% DONE', 
                       file=sys.stderr, end='\r', flush=True)
 
         logger.info('')
