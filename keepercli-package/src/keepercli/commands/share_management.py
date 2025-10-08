@@ -1117,7 +1117,7 @@ class OneTimeShareListCommand(base.ArgparseCommand):
 
         folder = vault.vault_data.get_folder(folder_uid=folder_uid)
         if recursive:
-            vault_utils.traverse_folder_tree(vault, folder_uid, on_folder)
+            vault_utils.traverse_folder_tree(vault.vault_data, folder, on_folder)
         else:
             on_folder(folder)
 
