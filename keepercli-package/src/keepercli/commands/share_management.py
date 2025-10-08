@@ -16,7 +16,7 @@ from keepersdk.vault import ksm_management, vault_online, vault_utils
 
 from . import base, record_edit
 from .. import api, prompt_utils, constants
-from ..helpers import folder_utils, record_utils, report_utils, share_utils, timeout_utils
+from ..helpers import folder_utils, record_utils, report_utils, share_utils, timeout_utils, share_record
 from ..params import KeeperParams
 
 
@@ -43,37 +43,45 @@ class ManagePermission(Enum):
 logger = api.get_logger()
 
 
-# Missing classes and functions for find-duplicates implementation
-class SharePermissions:
-    class SharePermissionsType:
-        TEAM_USER = "team_user"
+# Import share record classes
+SharePermissions = share_record.SharePermissions
+SharedRecord = share_record.SharedRecord
+get_shared_records = share_record.get_shared_records
+
+
+
+
+def get_record_share_info(context, record_uids):
+    """Get actual share information for records using share_utils"""
+    if not context.vault or not record_uids:
+        return {}
     
-    def __init__(self, to_name, permissions_text, types):
-        self.to_name = to_name
-        self.permissions_text = permissions_text  
-        self.types = types
-
-
-class SharedRecord:
-    def __init__(self, owner, permissions):
-        self.owner = owner
-        self.permissions = permissions
-
-
-def get_shared_records(context, record_uids, cache_only=True):
-    # type: (KeeperParams, List[str], bool) -> Dict[str, SharedRecord]
-    """Get shared records information - simplified implementation"""
-    # cache_only parameter is kept for compatibility but not used in simplified implementation
+    try:
+        share_infos = share_utils.get_record_shares(vault=context.vault, record_uids=record_uids)
+        if not share_infos:
+            return {}
+    except Exception:
+        # If share_utils.get_record_shares fails, return empty result
+        return {}
+    
     result = {}
-    for record_uid in record_uids:
-        # Simplified implementation - in reality this would fetch actual share data
-        # Use auth context as fallback for owner information
-        owner = context.auth.auth_context.username if context.auth and context.auth.auth_context else ''
-        
-        # Create simplified permissions
-        permissions = {}
-        
-        result[record_uid] = SharedRecord(owner, permissions)
+    for share_info in (share_infos or []):
+        record_uid = share_info.get('record_uid')
+        if record_uid:
+            shares = share_info.get('shares', {})
+            user_permissions = shares.get('user_permissions', [])
+            
+            # Get usernames that this record is shared with
+            shared_users = []
+            for up in user_permissions:
+                username = up.get('username', '')
+                if username:
+                    shared_users.append(username)
+            
+            result[record_uid] = {
+                'shared_users': shared_users,
+                'owner': context.auth.auth_context.username if context.auth and context.auth.auth_context else ''
+            }
     
     return result
 
@@ -1483,7 +1491,7 @@ class FindDuplicatesCommand(base.ArgparseCommand):
             '--shares', action='store_true', help='Match duplicates by shares.'
         )
         parser.add_argument(
-            '--fulltext', action='store_true', help='Match duplicates by all fields.'
+            '--full', action='store_true', help='Match duplicates by all fields.'
         )
         parser.add_argument(
             '--force', action='store_true', help='Delete duplicates w/o being prompted for confirmation (valid only w/ --merge option)'
@@ -1512,7 +1520,6 @@ class FindDuplicatesCommand(base.ArgparseCommand):
         out_dst = kwargs.get('output')
 
         def scan_enterprise_vaults():
-            
             # Validate enterprise access
             if not context.auth or not context.auth.auth_context:
                 raise ValueError('User is not authenticated')
@@ -1584,11 +1591,11 @@ class FindDuplicatesCommand(base.ArgparseCommand):
         by_login = kwargs.get('login', False)
         by_password = kwargs.get('password', False)
         by_url = kwargs.get('url', False)
-        by_fulltext = kwargs.get('fulltext', False)
+        by_custom = kwargs.get('full', False)
         by_shares = kwargs.get('shares', False)
         consolidate = kwargs.get('merge', False)
 
-        by_custom = consolidate or by_fulltext
+        by_custom = consolidate or by_custom
 
         if by_custom:
             by_title = True
@@ -1605,20 +1612,33 @@ class FindDuplicatesCommand(base.ArgparseCommand):
         if not context.vault or not context.vault.vault_data:
             logging_fn('Vault data not available')
             return
-            
-        vault_records = context.vault.vault_data.records()
-        for vault_record in vault_records:
-            # Skip records that are not version 2 or 3
-            if vault_record.version not in {2, 3}:
+
+        record_cache = {x.record_uid: x for x in context.vault.vault_data.records()}
+        
+        for record_uid in record_cache:
+            rec = record_cache[record_uid]
+            if rec.version not in {2, 3}:
                 continue
             
-            record = context.vault.vault_data.load_record(vault_record.record_uid)
+            record = context.vault.vault_data.load_record(record_uid)
+            if not record:
+                continue
             tokens = []
             
             if by_title:
-                tokens.append((record.title or '').lower())
+                tokens.append((record.title or '').strip().lower())
             if by_login:
-                tokens.append((record.login or '').lower())
+                # Handle both PasswordRecord and TypedRecord login fields
+                if hasattr(record, 'login'):
+                    # PasswordRecord has direct login attribute
+                    login_value = record.login or ''
+                elif hasattr(record, 'get_typed_field'):
+                    # TypedRecord uses get_typed_field method
+                    login_field = record.get_typed_field('login')
+                    login_value = login_field.get_default_value(str) if login_field else ''
+                else:
+                    login_value = ''
+                tokens.append((login_value or '').lower())
             if by_password:
                 # Use the existing extract_password method
                 password_value = record.extract_password() or ''
@@ -1716,7 +1736,7 @@ class FindDuplicatesCommand(base.ArgparseCommand):
             if non_empty > 0:
                 hash_value = hasher.hexdigest()
                 rec_uids = hashes.get(hash_value, set())
-                rec_uids.add(vault_record.record_uid)
+                rec_uids.add(record_uid)
                 hashes[hash_value] = rec_uids
 
         fields = []
@@ -1777,16 +1797,18 @@ class FindDuplicatesCommand(base.ArgparseCommand):
                     if not owner:
                         # Try to get owner from auth context as fallback
                         owner = context.auth.auth_context.username if context.auth and context.auth.auth_context else ''
-                    team_user_type = SharePermissions.SharePermissionsType.TEAM_USER
                     if shared_record:
                         perms = {k: p for k, p in shared_record.permissions.items()}
+                        print(f"DEBUG: Final permissions for {record_uid}: {list(perms.keys())}")
                         keys = list(perms.keys())
                         keys.sort()
                         perms = [perms.get(k) for k in keys]
-                        perms = [p for p in perms if team_user_type not in p.types or len(p.types) > 1]
+                        # Show all permissions except the owner
                         shares = '\n'.join([p.to_name for p in perms if owner != p.to_name])
+                        print(f"DEBUG: Final shares string for {record_uid}: '{shares}'")
                     else:
                         shares = ''
+                        print(f"DEBUG: No shared_record for {record_uid}")
                     row = [i + 1, title, login] + url + [record_uid, owner, shares]
                     table.append(row)
 
