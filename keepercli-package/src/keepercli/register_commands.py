@@ -76,7 +76,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
 
     if not scopes or bool(scopes & base.CommandScope.Enterprise):
         from .commands import (enterprise_info, enterprise_node, enterprise_role, enterprise_team, enterprise_user,
-                               importer_commands, audit_report, audit_alert)
+                               importer_commands, audit_report, audit_alert, audit_log)
 
         commands.register_command('enterprise-down', enterprise_info.EnterpriseDownCommand(), base.CommandScope.Enterprise, 'ed')
         commands.register_command('enterprise-info', enterprise_info.EnterpriseInfoCommand(), base.CommandScope.Enterprise, 'ei')
@@ -86,5 +86,6 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('enterprise-user', enterprise_user.EnterpriseUserCommand(), base.CommandScope.Enterprise, 'eu')
         commands.register_command('audit-report', audit_report.EnterpriseAuditReport(), base.CommandScope.Enterprise)
         commands.register_command('audit-alert', audit_alert.AuditAlerts(), base.CommandScope.Enterprise)
+        commands.register_command('audit-log', audit_log.AuditLogCommand(), base.CommandScope.Enterprise, 'al')
         commands.register_command('download-membership', importer_commands.DownloadMembershipCommand(), base.CommandScope.Enterprise)
         commands.register_command('apply-membership', importer_commands.ApplyMembershipCommand(), base.CommandScope.Enterprise)
