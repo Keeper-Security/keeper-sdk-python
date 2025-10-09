@@ -7,7 +7,7 @@ import math
 import re
 import urllib.parse
 from enum import Enum
-from typing import Optional, List, Dict, Set
+from typing import Optional
 from tabulate import tabulate
 
 from keepersdk import crypto, utils
@@ -177,10 +177,14 @@ class ShareRecordCommand(base.ArgparseCommand):
             shared_objects = share_utils.get_share_objects(vault=vault)
             known_users = shared_objects.get('users', {})
             known_emails = [u.casefold() for u in known_users.keys()]
-            is_unknown = lambda e: e.casefold() not in known_emails and utils.is_email(e)
+            def is_unknown(e):
+                return e.casefold() not in known_emails and utils.is_email(e)
             unknowns = [e for e in emails if is_unknown(e)]
             if unknowns:
-                username_map = {e: ShareRecordCommand.get_contact(e, known_users) for e in unknowns}
+                username_map = {
+                    e: ShareRecordCommand.get_contact(e, known_users) 
+                    for e in unknowns
+                }
                 table = [[k, v] for k, v in username_map.items()]
                 logger.info(f'{len(unknowns)} unrecognized share recipient(s) and closest matching contact(s)')
                 report_utils.dump_report_data(table, ['Username', 'From Contacts'])
@@ -411,7 +415,7 @@ class ShareRecordCommand(base.ArgparseCommand):
                         data = json.loads(rec['data_unencrypted'].decode())
                         if isinstance(data, dict) and 'title' in data:
                             record_titles[record_uid] = data['title']
-                    except Exception:
+                    except (ValueError, AttributeError):
                         pass
 
             record_path = share_utils.resolve_record_share_path(context=context, record_uid=record_uid)
@@ -651,8 +655,8 @@ class ShareFolderCommand(base.ArgparseCommand):
                         sa_obj_uids = {sa_obj.uid for sa_obj in rs.isObjectShareAdmin if sa_obj.isAdmin}
                         sa_obj_uids = {utils.base64_url_encode(uid) for uid in sa_obj_uids}
                         return sa_obj_uids
-            except Exception as e:
-                raise ValueError(f'get_share_admin: msg = {e}')
+            except (ValueError, AttributeError) as e:
+                raise ValueError(f'get_share_admin: msg = {e}') from e
 
         def get_folder_uids(context: KeeperParams, name: str) -> set[str]:
             """Get folder UIDs by name or path."""
@@ -674,7 +678,7 @@ class ShareFolderCommand(base.ArgparseCommand):
                     folder, _ = folder_utils.try_resolve_path(context, name)
                     if folder:
                         folder_uids.add(folder.folder_uid)
-                except:
+                except (ValueError, AttributeError):
                     pass
             
             return folder_uids
@@ -711,7 +715,8 @@ class ShareFolderCommand(base.ArgparseCommand):
         if all_folders:
             shared_folder_uids.update(shared_folder_cache.keys())
         else:
-            get_folder_by_uid = lambda uid: folder_cache.get(uid)
+            def get_folder_by_uid(uid):
+                return folder_cache.get(uid)
             folder_uids = {
                 uid 
                 for name in names if name 
@@ -779,7 +784,10 @@ class ShareFolderCommand(base.ArgparseCommand):
                     all_records = True
                 else:
                     r_uids = get_record_uids(context, r)
-                    record_uids.update(r_uids) if r_uids else unresolved_names.append(r)
+                    if r_uids:
+                        record_uids.update(r_uids)
+                    else:
+                        unresolved_names.append(r)
 
             if unresolved_names:
                 sa_record_uids = get_share_admin_obj_uids(vault=vault, obj_names=unresolved_names, obj_type=record_pb2.CHECK_SA_ON_RECORD)
@@ -1516,77 +1524,61 @@ class FindDuplicatesCommand(base.ArgparseCommand):
         )
     
     def execute(self, context: KeeperParams, **kwargs):
+        """Execute the find-duplicate command."""
         out_fmt = kwargs.get('format', 'table')
         out_dst = kwargs.get('output')
 
-        def scan_enterprise_vaults():
-            # Validate enterprise access
-            if not context.auth or not context.auth.auth_context:
-                raise ValueError('User is not authenticated')
-            
-            if not context.auth.auth_context.is_enterprise_admin:
-                raise ValueError('This feature is available only to enterprise account administrators')
-            refresh_data = kwargs.get('refresh_data')
-            context.enterprise_loader.load(refresh_data)
-            raise ValueError('Enterprise scope not yet implemented - sox module not available')
-
         scope = kwargs.get('scope', 'vault')
         if scope == 'enterprise':
-            return scan_enterprise_vaults()
+            return self._scan_enterprise_vaults(context, kwargs)
 
         quiet = kwargs.get('quiet', False)
         dry_run = kwargs.get('dry_run', False)
         quiet = quiet and not dry_run
         logging_fn = logging.info if not quiet else logging.debug
 
-        def partition_by_shares(duplicate_sets, shared_recs_lookup):
-            # type: (List[Set[str]], Dict[str, SharedRecord]) -> List[Set[str]]
-            result = []
-            for duplicates in duplicate_sets:
-                recs_by_hash = {}
-                for rec_uid in duplicates:
-                    h = hashlib.sha256()
-                    shared_rec = shared_recs_lookup.get(rec_uid)
-                    if not shared_rec:
-                        continue
-                    permissions = shared_rec.permissions
-                    tu_type = SharePermissions.SharePermissionsType.TEAM_USER
-                    permissions = {k: p for k, p in permissions.items() if tu_type not in p.types or len(p.types) > 1}
-                    permissions = {k: p for k, p in permissions.items() if p.to_name != shared_rec.owner}
-                    permissions_keys = list(permissions.keys())
-                    permissions_keys.sort()
+        search_criteria = self._determine_search_criteria(kwargs)
+        
+        if not context.vault or not context.vault.vault_data:
+            logging_fn('Vault data not available')
+            return
 
-                    to_hash = ';'.join(f'{k}={permissions.get(k).permissions_text}' for k in permissions_keys)
-                    to_hash = to_hash or 'non-shared'
-                    h.update(to_hash.encode())
-                    h_val = h.hexdigest()
-                    r_uids = recs_by_hash.get(h_val, set())
-                    r_uids.add(rec_uid)
-                    recs_by_hash[h_val] = r_uids
-                result.extend([r for r in recs_by_hash.values() if len(r) > 1])
-            return result
+        hashes = self._find_duplicate_hashes(context, search_criteria)
+        
+        field_names = self._get_field_names(search_criteria)
+        logging_fn('Find duplicated records by: %s', ', '.join(field_names))
+        
+        partitions = [rec_uids for rec_uids in hashes.values() if len(rec_uids) > 1]
+        
+        if not partitions:
+            logging_fn('No duplicates found')
+            return
 
-        def remove_duplicates(dupe_info, col_headers, dupe_uids):
-            # type: (List[List[str]], List[str], Set[str]) -> None
-            def confirm_removal():
-                prompt_title = f'\nThe following duplicate {"records have" if len(dupe_uids) > 1 else "record has"}' \
-                        f' been marked for removal:\n'
-                indices = (idx + 1 for idx in range(len(dupe_info)))
-                prompt_report = prompt_title + '\n' + tabulate(dupe_info, col_headers, showindex=indices)
-                prompt_msg = prompt_report + '\n\nDo you wish to proceed?'
-                answer = input(f"{prompt_msg} (y/n): ").strip().lower()
-                return answer == 'y'
+        if search_criteria['by_shares']:
+            r_uids = [rec_uid for duplicates in partitions for rec_uid in duplicates]
+            shared_records_lookup = get_shared_records(context, r_uids, cache_only=True)
+            partitions = self._partition_by_shares(partitions, shared_records_lookup)
 
-            if kwargs.get('force') or confirm_removal():
-                logging_fn(f'Deleting {len(dupe_uids)} records...')
-                if not dry_run:
-                    rm_cmd = record_edit.RecordDeleteCommand()
-                    rm_cmd.execute(context, records=list(dupe_uids), force=True)
-                else:
-                    logging.info('In dry-run mode: no actual records removed (exclude --dry-run flag to disable)')
-            else:
-                print('Duplicate record removal aborted. No records removed.')
+        return self._generate_results(
+            context, partitions, search_criteria, 
+            out_fmt, out_dst, kwargs, dry_run, logging_fn)
 
+    def _scan_enterprise_vaults(self, context: KeeperParams, kwargs):
+        """Scan enterprise vaults for duplicates."""
+        if not context.auth or not context.auth.auth_context:
+            raise ValueError('User is not authenticated')
+        
+        if not context.auth.auth_context.is_enterprise_admin:
+            raise ValueError(
+                'This feature is available only to enterprise account administrators')
+        
+        refresh_data = kwargs.get('refresh_data')
+        context.enterprise_loader.load(refresh_data)
+        raise ValueError(
+            'Enterprise scope not yet implemented')
+
+    def _determine_search_criteria(self, kwargs):
+        """Determine which fields to search for duplicates."""
         by_title = kwargs.get('title', False)
         by_login = kwargs.get('login', False)
         by_password = kwargs.get('password', False)
@@ -1602,18 +1594,47 @@ class FindDuplicatesCommand(base.ArgparseCommand):
             by_login = True
             by_password = True
             by_url = True
-            by_shares = not kwargs.get('ignore_shares_on_merge') if consolidate else True
-        elif not by_title and not by_login and not by_password and not by_url:
+            by_shares = (not kwargs.get('ignore_shares_on_merge') 
+                        if consolidate else True)
+        elif (not by_title and not by_login and 
+              not by_password and not by_url):
             by_title = True
             by_login = True
             by_password = True
 
-        hashes = {}
-        if not context.vault or not context.vault.vault_data:
-            logging_fn('Vault data not available')
-            return
+        return {
+            'by_title': by_title,
+            'by_login': by_login,
+            'by_password': by_password,
+            'by_url': by_url,
+            'by_custom': by_custom,
+            'by_shares': by_shares,
+            'consolidate': consolidate
+        }
 
-        record_cache = {x.record_uid: x for x in context.vault.vault_data.records()}
+    def _get_field_names(self, search_criteria):
+        """Get field names for logging."""
+        fields = []
+        if search_criteria['by_title']:
+            fields.append('Title')
+        if search_criteria['by_login']:
+            fields.append('Login')
+        if search_criteria['by_password']:
+            fields.append('Password')
+        if search_criteria['by_url']:
+            fields.append('Website Address')
+        if search_criteria['by_custom']:
+            fields.append('Custom Fields')
+        if search_criteria['by_shares']:
+            fields.append('Shares')
+        return fields
+
+    def _find_duplicate_hashes(self, context: KeeperParams, search_criteria):
+        """Find duplicate records by generating hashes."""
+        hashes = {}
+        record_cache = {
+            x.record_uid: x for x in context.vault.vault_data.records()
+        }
         
         for record_uid in record_cache:
             rec = record_cache[record_uid]
@@ -1623,115 +1644,21 @@ class FindDuplicatesCommand(base.ArgparseCommand):
             record = context.vault.vault_data.load_record(record_uid)
             if not record:
                 continue
-            tokens = []
-            
-            if by_title:
-                tokens.append((record.title or '').strip().lower())
-            if by_login:
-                # Handle both PasswordRecord and TypedRecord login fields
-                if hasattr(record, 'login'):
-                    # PasswordRecord has direct login attribute
-                    login_value = record.login or ''
-                elif hasattr(record, 'get_typed_field'):
-                    # TypedRecord uses get_typed_field method
-                    login_field = record.get_typed_field('login')
-                    login_value = login_field.get_default_value(str) if login_field else ''
-                else:
-                    login_value = ''
-                tokens.append((login_value or '').lower())
-            if by_password:
-                # Use the existing extract_password method
-                password_value = record.extract_password() or ''
-                # Ensure password_value is never None
-                password_value = password_value or ''
-                tokens.append(password_value)
-            if by_url:
-                # Use the existing extract_url method  
-                url_value = record.extract_url()
-                # Ensure url_value is never None
-                url_value = url_value or ''
-                tokens.append(url_value)
+
+            tokens = self._extract_record_tokens(record, search_criteria)
+            custom_hash = self._generate_custom_hash(record, search_criteria)
 
             hasher = hashlib.sha256()
             non_empty = 0
+            
             for token in tokens:
                 if token:
                     non_empty += 1
                 hasher.update(token.encode())
 
-            if by_custom:
-                customs = {}
-                
-                # Handle TypedRecord custom fields
-                if hasattr(record, 'custom') and hasattr(record, 'fields'):
-                    # Process both regular fields and custom fields
-                    all_fields = list(record.fields) + list(record.custom)
-                    for field in all_fields:
-                        name = field.label or field.type  # Use label or type as name
-                        value = field.get_default_value() if hasattr(field, 'get_default_value') else None
-                        if name and value:
-                            if isinstance(value, list):
-                                value = [str(x) for x in value]
-                                value.sort()
-                                value = '|'.join(value)
-                            elif isinstance(value, int):
-                                if value != 0:
-                                    value = str(value)
-                                else:
-                                    value = None
-                            elif isinstance(value, dict):
-                                keys = list(value.keys())
-                                keys.sort()
-                                value = ';'.join((f'{x}:{value[x]}' for x in keys if value.get(x)))
-                            elif not isinstance(value, str):
-                                value = str(value) if value is not None else None
-                            if value:
-                                customs[name] = value
-                
-                # Handle PasswordRecord custom fields (fallback)
-                elif hasattr(record, 'custom_fields'):
-                    for x in record.custom_fields:
-                        name = x.get('name')   # type: str
-                        value = x.get('value')
-                        if name and value:
-                            if isinstance(value, list):
-                                value = [str(x) for x in value]
-                                value.sort()
-                                value = '|'.join(value)
-                            elif isinstance(value, int):
-                                if value != 0:
-                                    value = str(value)
-                                else:
-                                    value = None
-                            elif isinstance(value, dict):
-                                keys = list(value.keys())
-                                keys.sort()
-                                value = ';'.join((f'{x}:{value[x]}' for x in keys if value.get(x)))
-                            elif not isinstance(value, str):
-                                value = None
-                            if value:
-                                customs[name] = value
-                
-                # Add TOTP if available
-                totp_field = None
-                if hasattr(record, 'get_typed_field'):
-                    totp_field = record.get_typed_field('oneTimeCode')
-                    if totp_field:
-                        totp_value = totp_field.get_default_value(str)
-                        if totp_value:
-                            customs['totp'] = totp_value
-                elif hasattr(record, 'totp') and record.totp:
-                    customs['totp'] = record.totp
-                
-                # Add record type
-                if hasattr(record, 'record_type') and record.record_type:
-                    customs['type:'] = record.record_type
-                keys = list(customs.keys())
-                keys.sort()
-                for key in keys:
-                    non_empty += 1
-                    for_hash = f'{key}={customs[key]}'
-                    hasher.update(for_hash.encode('utf-8'))
+            if custom_hash:
+                hasher.update(custom_hash.encode('utf-8'))
+                non_empty += 1
 
             if non_empty > 0:
                 hash_value = hasher.hexdigest()
@@ -1739,94 +1666,250 @@ class FindDuplicatesCommand(base.ArgparseCommand):
                 rec_uids.add(record_uid)
                 hashes[hash_value] = rec_uids
 
-        fields = []
-        if by_title:
-            fields.append('Title')
-        if by_login:
-            fields.append('Login')
-        if by_password:
-            fields.append('Password')
-        if by_url:
-            fields.append('Website Address')
-        if by_custom:
-            fields.append('Custom Fields')
-        if by_shares:
-            fields.append('Shares')
+        return hashes
 
-        logging_fn('Find duplicated records by: %s', ', '.join(fields))
-        partitions = [rec_uids for rec_uids in hashes.values() if len(rec_uids) > 1]
+    def _extract_record_tokens(self, record, search_criteria):
+        """Extract tokens from record for duplicate detection."""
+        tokens = []
+        
+        if search_criteria['by_title']:
+            tokens.append((record.title or '').strip().lower())
+        
+        if search_criteria['by_login']:
+            login_value = self._get_login_value(record)
+            tokens.append((login_value or '').lower())
+        
+        if search_criteria['by_password']:
+            password_value = record.extract_password() or ''
+            tokens.append(password_value or '')
+        
+        if search_criteria['by_url']:
+            url_value = record.extract_url() or ''
+            tokens.append(url_value or '')
+        
+        return tokens
 
-        r_uids = [rec_uid for duplicates in partitions for rec_uid in duplicates]
-        shared_records_lookup = get_shared_records(context, r_uids, cache_only=True)  # type: Dict[str, SharedRecord]
-        if by_shares:
-            partitions = partition_by_shares(partitions, shared_records_lookup)
-        if partitions:
-            headers = ['group', 'title', 'login']
-            if by_url:
-                headers.append('url')
-            headers.extend(['uid', 'record_owner', 'shared_to'])
-            headers = [report_utils.field_to_title(h) for h in headers] if out_fmt != 'json' else headers
-            table_raw = []
-            table = []
-            to_remove = set()
-            for i, partition in enumerate(partitions):
-                for j, record_uid in enumerate(partition):
-                    shared_record = shared_records_lookup.get(record_uid)
-                    record = context.vault.vault_data.load_record(record_uid)
-                    title = record.title or ''
-                    
-                    # Get login field based on record type
-                    if hasattr(record, 'get_typed_field'):
-                        login_field = record.get_typed_field('login')
-                        login = login_field.get_default_value(str) if login_field else ''
-                    elif hasattr(record, 'login'):
-                        login = record.login or ''
-                    else:
-                        login = ''
-                    # Ensure login is never None
-                    login = login or ''
-                    
-                    # Get URL field based on record type
-                    url = record.extract_url() or ''
-                    # Ensure url is never None
-                    url = url or ''
-                    url = urllib.parse.urlparse(url).hostname
-                    url = url[:30] if url else ''
-                    url = [url] if by_url else []
-                    owner = shared_record.owner if shared_record else ''
-                    if not owner:
-                        # Try to get owner from auth context as fallback
-                        owner = context.auth.auth_context.username if context.auth and context.auth.auth_context else ''
-                    if shared_record:
-                        perms = {k: p for k, p in shared_record.permissions.items()}
-                        print(f"DEBUG: Final permissions for {record_uid}: {list(perms.keys())}")
-                        keys = list(perms.keys())
-                        keys.sort()
-                        perms = [perms.get(k) for k in keys]
-                        # Show all permissions except the owner
-                        shares = '\n'.join([p.to_name for p in perms if owner != p.to_name])
-                        print(f"DEBUG: Final shares string for {record_uid}: '{shares}'")
-                    else:
-                        shares = ''
-                        print(f"DEBUG: No shared_record for {record_uid}")
-                    row = [i + 1, title, login] + url + [record_uid, owner, shares]
-                    table.append(row)
+    def _get_login_value(self, record):
+        """Get login value from record, handling different record types."""
+        if hasattr(record, 'login'):
+            return record.login or ''
+        elif hasattr(record, 'get_typed_field'):
+            login_field = record.get_typed_field('login')
+            return (login_field.get_default_value(str) 
+                   if login_field else '')
+        return ''
 
-                    if j != 0:
-                        to_remove.add(record_uid)
-                        table_raw.append(row)
-            if consolidate:
-                uid_header = report_utils.field_to_title('uid')
-                record_uid_index = headers.index(uid_header) if uid_header in headers else None
-                if record_uid_index is None:
-                    raise ValueError('Cannot find record UID for duplicate record')
-                dup_info = [r for r in table_raw for rec_uid in to_remove if r[record_uid_index] == rec_uid]
-                return remove_duplicates(dup_info, headers, to_remove)
-            else:
-                title = 'Duplicates Found:'
-                return report_utils.dump_report_data(table, headers, title=title, fmt=out_fmt, filename=out_dst, group_by=0)
+    def _generate_custom_hash(self, record, search_criteria):
+        """Generate hash for custom fields if needed."""
+        if not search_criteria['by_custom']:
+            return None
+        
+        customs = self._extract_custom_fields(record)
+        
+        self._add_totp_to_customs(record, customs)
+        
+        if hasattr(record, 'record_type') and record.record_type:
+            customs['type:'] = record.record_type
+        
+        if not customs:
+            return None
+        
+        keys = list(customs.keys())
+        keys.sort()
+        custom_hash = ''
+        for key in keys:
+            custom_hash += f'{key}={customs[key]}'
+        
+        return custom_hash
+
+    def _extract_custom_fields(self, record):
+        """Extract custom fields from record."""
+        customs = {}
+        
+        if hasattr(record, 'custom') and hasattr(record, 'fields'):
+            all_fields = list(record.fields) + list(record.custom)
+            for field in all_fields:
+                name = field.label or field.type
+                value = (field.get_default_value() 
+                        if hasattr(field, 'get_default_value') else None)
+                if name and value:
+                    processed_value = self._process_field_value(value)
+                    if processed_value:
+                        customs[name] = processed_value
+        
+        elif hasattr(record, 'custom_fields'):
+            for x in record.custom_fields:
+                name = x.get('name')
+                value = x.get('value')
+                if name and value:
+                    processed_value = self._process_field_value(value)
+                    if processed_value:
+                        customs[name] = processed_value
+        
+        return customs
+
+    def _process_field_value(self, value):
+        """Process field value for hashing."""
+        if isinstance(value, list):
+            value = [str(x) for x in value]
+            value.sort()
+            return '|'.join(value)
+        elif isinstance(value, int):
+            return str(value) if value != 0 else None
+        elif isinstance(value, dict):
+            keys = list(value.keys())
+            keys.sort()
+            return ';'.join(
+                (f'{x}:{value[x]}' for x in keys if value.get(x)))
+        elif isinstance(value, str):
+            return value
         else:
-            logging_fn('No duplicates found')
+            return str(value) if value is not None else None
+
+    def _add_totp_to_customs(self, record, customs):
+        """Add TOTP to customs if available."""
+        if hasattr(record, 'get_typed_field'):
+            totp_field = record.get_typed_field('oneTimeCode')
+            if totp_field:
+                totp_value = totp_field.get_default_value(str)
+                if totp_value:
+                    customs['totp'] = totp_value
+        elif hasattr(record, 'totp') and record.totp:
+            customs['totp'] = record.totp
+                
+    def _partition_by_shares(self, duplicate_sets, shared_recs_lookup):
+        """Partition duplicates by share permissions."""
+        result = []
+        for duplicates in duplicate_sets:
+            recs_by_hash = {}
+            for rec_uid in duplicates:
+                h = hashlib.sha256()
+                shared_rec = shared_recs_lookup.get(rec_uid)
+                if not shared_rec:
+                    continue
+                
+                permissions = shared_rec.permissions
+                tu_type = SharePermissions.SharePermissionsType.TEAM_USER
+                permissions = {k: p for k, p in permissions.items() 
+                             if tu_type not in p.types or len(p.types) > 1}
+                permissions = {k: p for k, p in permissions.items() 
+                             if p.to_name != shared_rec.owner}
+                
+                permissions_keys = list(permissions.keys())
+                permissions_keys.sort()
+
+                to_hash = ';'.join(f'{k}={permissions.get(k).permissions_text}' 
+                                 for k in permissions_keys)
+                to_hash = to_hash or 'non-shared'
+                h.update(to_hash.encode())
+                h_val = h.hexdigest()
+                r_uids = recs_by_hash.get(h_val, set())
+                r_uids.add(rec_uid)
+                recs_by_hash[h_val] = r_uids
+            
+            result.extend([r for r in recs_by_hash.values() if len(r) > 1])
+        return result
+
+    def _generate_results(self, context, partitions, search_criteria, 
+                         out_fmt, out_dst, kwargs, dry_run, logging_fn):
+        """Generate and display results."""
+        headers = ['group', 'title', 'login']
+        if search_criteria['by_url']:
+            headers.append('url')
+        headers.extend(['uid', 'record_owner', 'shared_to'])
+        headers = [report_utils.field_to_title(h) for h in headers] if out_fmt != 'json' else headers
+        
+        table_raw = []
+        table = []
+        to_remove = set()
+        
+        r_uids = [rec_uid for duplicates in partitions for rec_uid in duplicates]
+        shared_records_lookup = get_shared_records(context, r_uids, cache_only=True)
+        
+        for i, partition in enumerate(partitions):
+            for j, record_uid in enumerate(partition):
+                row = self._create_table_row(
+                    context, record_uid, i, 
+                    search_criteria, shared_records_lookup)
+                table.append(row)
+                
+                if j != 0:
+                    to_remove.add(record_uid)
+                    table_raw.append(row)
+        
+        if search_criteria['consolidate']:
+            return self._remove_duplicates(
+                table_raw, headers, to_remove, 
+                kwargs, dry_run, logging_fn, context)
+        else:
+            title = 'Duplicates Found:'
+            return report_utils.dump_report_data(
+                table, headers, title=title, 
+                fmt=out_fmt, filename=out_dst, group_by=0)
+
+    def _create_table_row(self, context, record_uid, group_num, 
+                         search_criteria, shared_records_lookup):
+        """Create a table row for a record."""
+        shared_record = shared_records_lookup.get(record_uid)
+        record = context.vault.vault_data.load_record(record_uid)
+        title = record.title or ''
+        
+        login = self._get_login_value(record) or ''
+        
+        url = ''
+        if search_criteria['by_url']:
+            url_value = record.extract_url() or ''
+            url = urllib.parse.urlparse(url_value).hostname
+            url = url[:30] if url else ''
+        
+        owner = shared_record.owner if shared_record else ''
+        if not owner:
+            owner = (context.auth.auth_context.username 
+                    if context.auth and context.auth.auth_context else '')
+        
+        shares = self._get_shares_string(shared_record, owner)
+        
+        row = [group_num + 1, title, login]
+        if search_criteria['by_url']:
+            row.append(url)
+        row.extend([record_uid, owner, shares])
+        
+        return row
+
+    def _get_shares_string(self, shared_record, owner):
+        """Get shares string for display."""
+        if not shared_record:
+            return ''
+        
+        perms = {k: p for k, p in shared_record.permissions.items()}
+        keys = list(perms.keys())
+        keys.sort()
+        perms = [perms.get(k) for k in keys]
+        return ', '.join([p.to_name for p in perms if owner != p.to_name])
+
+    def _remove_duplicates(self, dupe_info, col_headers, dupe_uids, 
+                          kwargs, dry_run, logging_fn, context):
+        """Remove duplicate records."""
+        def confirm_removal():
+            prompt_title = (f'\nThe following duplicate '
+                          f'{"records have" if len(dupe_uids) > 1 else "record has"} '
+                          f'been marked for removal:\n')
+            indices = (idx + 1 for idx in range(len(dupe_info)))
+            prompt_report = prompt_title + '\n' + tabulate(dupe_info, col_headers, showindex=indices)
+            prompt_msg = prompt_report + '\n\nDo you wish to proceed?'
+            answer = input(f"{prompt_msg} (y/n): ").strip().lower()
+            return answer == 'y'
+
+        if kwargs.get('force') or confirm_removal():
+            logging_fn(f'Deleting {len(dupe_uids)} records...')
+            if not dry_run:
+                rm_cmd = record_edit.RecordDeleteCommand()
+                rm_cmd.execute(context, records=list(dupe_uids), force=True)
+            else:
+                logging.info('In dry-run mode: no actual records removed '
+                           '(exclude --dry-run flag to disable)')
+        else:
+            print('Duplicate record removal aborted. No records removed.')
 
     
     

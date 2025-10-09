@@ -91,7 +91,6 @@ class SharedRecord:
         self.record = record
         self.uid = getattr(record, 'record_uid', getattr(record, 'uid', ''))
         
-        # Initialize owner
         has_owner = hasattr(params, 'record_owner_cache') and self.uid in params.record_owner_cache
         user_owned = has_owner and params.record_owner_cache.get(self.uid).owner
         self.owner = getattr(params, 'user', '') if user_owned else ''
@@ -108,17 +107,14 @@ class SharedRecord:
         self.folder_uids = []
         self.folder_paths = []
         try:
+            from keepersdk.vault import vault_utils
             if hasattr(params, 'vault') and params.vault and hasattr(params.vault, 'vault_data'):
-                from keepersdk.vault import vault_utils
                 folders = vault_utils.get_folders_for_record(params.vault.vault_data, self.uid)
                 self.folder_uids = [f.folder_uid for f in folders]
-                print(f"DEBUG: Record {self.uid} is in folders: {self.folder_uids}")
-        except Exception as e:
-            print(f"DEBUG: Error getting folders for record {self.uid}: {e}")
+        except Exception:
             pass
         self.team_members = team_members or {}
 
-        # Initialize with default values if parameters are None
         if sf_sharing_admins is None:
             sf_sharing_admins = {}
         if role_restricted_members is None:
@@ -127,6 +123,9 @@ class SharedRecord:
         self.load(params, sf_sharing_admins, team_members, role_restricted_members)
 
     def get_ordered_permissions(self):
+        """
+        Get ordered permissions.
+        """
         ordered = list(self.permissions.values())
         for user_perms in self.user_permissions.values():
             if user_perms.to_uid:
@@ -138,6 +137,9 @@ class SharedRecord:
         return ordered
 
     def merge_permissions(self, share_target, perms_to_merge, sp_type):
+        """
+        Merge permissions for a given share target.
+        """
         new_perms = SharePermissions.load_permissions(perms_to_merge, sp_type)
         existing = self.permissions.get(share_target) or new_perms
         existing.to_uid = new_perms.to_uid or existing.to_uid
@@ -153,7 +155,6 @@ class SharedRecord:
                 existing.expiration = 0
 
         self.permissions[share_target] = existing
-        print(f"DEBUG: Added permission for {share_target}: {existing.to_name} (types: {existing.types})")
         return existing
 
     def merge_user_permissions(self, email, user_perms, sp_type=None):
@@ -199,7 +200,6 @@ class SharedRecord:
 
         def load_user_permissions(u_perms, sf_uid=None, sp_type=None):
             for up in u_perms:
-                # Handle both dict and object types
                 if isinstance(up, dict):
                     email = up.get('username')
                     if not email:
@@ -213,7 +213,6 @@ class SharedRecord:
                         up['share_admin'] = True
                     self.merge_user_permissions(email, up, sp_type)
                 else:
-                    # Handle object types (like SharedFolderPermission)
                     email = getattr(up, 'name', '')
                     if not email:
                         continue
@@ -221,7 +220,6 @@ class SharedRecord:
                     share_admins = sf_sharing_admins.get(sf_uid, [])
                     is_admin = share_admins and email in share_admins
                     
-                    # Convert object to dict format
                     up_dict = {
                         'username': email,
                         'editable': getattr(up, 'manage_records', False) if sp_type == SharePermissions.SharePermissionsType.SF_USER else getattr(up, 'editable', False),
@@ -233,7 +231,6 @@ class SharedRecord:
                         up_dict['editable'] = True
                         up_dict['shareable'] = True
                         up_dict['share_admin'] = True
-                    print(f"DEBUG: Processing SF permission for {email}: {up_dict}")
                     self.merge_user_permissions(email, up_dict, sp_type)
 
         def load_team_permissions(t_perms, sf_uid):
@@ -248,21 +245,18 @@ class SharedRecord:
                     tp = apply_team_restrictions(tp)
                     merged = self.merge_team_permissions(team_uid, tp)
 
-                    # load team-members' permissions
                     t_users = team_members.get(team_uid, set()) if team_members else set()
                     ups = [{**tp, 'username': t_username} for t_username in t_users]
                     load_user_permissions(ups, sf_uid, SharePermissions.SharePermissionsType.TEAM_USER)
                     if merged:
                         merged.team_members.update({t_username: self.permissions.get(t_username) for t_username in t_users})
                 else:
-                    # Handle object types (like SharedFolderTeamPermission)
                     team_uid = getattr(tp, 'team_uid', '')
                     team_name = getattr(tp, 'name', '')
                     if not team_uid:
                         continue
                     update_sf_shares(team_name, sf_uid)
                     
-                    # Convert object to dict format
                     tp_dict = {
                         'team_uid': team_uid,
                         'name': team_name,
@@ -273,19 +267,16 @@ class SharedRecord:
                     tp_dict = apply_team_restrictions(tp_dict)
                     merged = self.merge_team_permissions(team_uid, tp_dict)
 
-                    # load team-members' permissions
                     t_users = team_members.get(team_uid, set()) if team_members else set()
                     ups = [{**tp_dict, 'username': t_username} for t_username in t_users]
                     load_user_permissions(ups, sf_uid, SharePermissions.SharePermissionsType.TEAM_USER)
                     if merged:
                         merged.team_members.update({t_username: self.permissions.get(t_username) for t_username in t_users})
 
-        # Use provided share_info or try to get from record cache
         shares = {}
         if share_info:
             shares = share_info.get('shares', {})
         else:
-            # Fallback to record cache
             try:
                 if hasattr(params, 'record_cache') and self.uid in params.record_cache:
                     rec_cached = params.record_cache.get(self.uid, {})
@@ -306,78 +297,41 @@ class SharedRecord:
         shared_folders = {sfp.get(SF_UID): sf_cache.get(sfp.get(SF_UID)) for sfp in sf_perms}
         shared_folders = {k: v for k, v in shared_folders.items() if v}
 
-        # Always check if record is in any shared folders via folder structure first
         shared_folder_found = False
         if hasattr(params, 'vault') and params.vault and hasattr(params.vault, 'vault_data'):
             try:
-                print(f"DEBUG: Checking folder structure for record {self.uid}, folder_uids: {self.folder_uids}")
-                # Check if record is in any shared folders by examining folder structure
                 for folder_uid in self.folder_uids:
                     folder = params.vault.vault_data.get_folder(folder_uid)
-                    print(f"DEBUG: Folder {folder_uid}: type={getattr(folder, 'folder_type', 'unknown') if folder else 'None'}")
                     if folder and folder.folder_type == 'shared_folder':
-                        print(f"DEBUG: Record {self.uid} is in shared folder {folder_uid} via folder structure")
                         shared_folder_found = True
-                        # Clear direct record permissions and use shared folder permissions instead
-                        print(f"DEBUG: Clearing permissions for record {self.uid} (was in shared folder {folder_uid})")
                         self.permissions.clear()
                         self.user_permissions.clear()
                         self.team_permissions.clear()
                         
-                        # Load shared folder permissions
                         sf = params.vault.vault_data.load_shared_folder(shared_folder_uid=folder_uid)
                         if sf:
-                            print(f"DEBUG: Loaded shared folder {folder_uid}: name={sf.name}")
                             if sf.user_permissions:
-                                print(f"DEBUG: Loading {len(sf.user_permissions)} user permissions from shared folder {folder_uid}")
-                                for up in sf.user_permissions:
-                                    print(f"DEBUG: SF user permission: {up.name} (manage_records: {up.manage_records}, manage_users: {up.manage_users})")
                                 load_user_permissions(sf.user_permissions, folder_uid, SharePermissions.SharePermissionsType.SF_USER)
                             if sf.team_permissions:
-                                print(f"DEBUG: Loading {len(sf.team_permissions)} team permissions from shared folder {folder_uid}")
-                                for tp in sf.team_permissions:
-                                    print(f"DEBUG: SF team permission: {tp.team_uid} (manage_records: {tp.manage_records}, manage_users: {tp.manage_users})")
                                 load_team_permissions(sf.team_permissions, folder_uid)
-                        else:
-                            print(f"DEBUG: Failed to load shared folder {folder_uid}")
                     elif folder and folder.folder_type == 'shared_folder_folder':
-                        # Check if this is a subfolder of a shared folder
-                        print(f"DEBUG: Record {self.uid} is in shared folder subfolder {folder_uid}")
                         if folder.folder_scope_uid:
-                            print(f"DEBUG: Subfolder scope UID: {folder.folder_scope_uid}")
                             shared_folder_found = True
-                            # Clear direct record permissions and use shared folder permissions instead
-                            print(f"DEBUG: Clearing permissions for record {self.uid} (was in shared folder subfolder {folder_uid})")
                             self.permissions.clear()
                             self.user_permissions.clear()
                             self.team_permissions.clear()
                             
-                            # Load parent shared folder permissions
                             sf = params.vault.vault_data.load_shared_folder(shared_folder_uid=folder.folder_scope_uid)
                             if sf:
-                                print(f"DEBUG: Loaded parent shared folder {folder.folder_scope_uid}: name={sf.name}")
                                 if sf.user_permissions:
-                                    print(f"DEBUG: Loading {len(sf.user_permissions)} user permissions from parent shared folder {folder.folder_scope_uid}")
-                                    for up in sf.user_permissions:
-                                        print(f"DEBUG: SF user permission: {up.name} (manage_records: {up.manage_records}, manage_users: {up.manage_users})")
                                     load_user_permissions(sf.user_permissions, folder.folder_scope_uid, SharePermissions.SharePermissionsType.SF_USER)
                                 if sf.team_permissions:
-                                    print(f"DEBUG: Loading {len(sf.team_permissions)} team permissions from parent shared folder {folder.folder_scope_uid}")
-                                    for tp in sf.team_permissions:
-                                        print(f"DEBUG: SF team permission: {tp.team_uid} (manage_records: {tp.manage_records}, manage_users: {tp.manage_users})")
                                     load_team_permissions(sf.team_permissions, folder.folder_scope_uid)
-                            else:
-                                print(f"DEBUG: Failed to load parent shared folder {folder.folder_scope_uid}")
-            except Exception as e:
-                print(f"DEBUG: Error checking folder structure: {e}")
+            except Exception:
                 pass
 
-        # If no shared folder found via folder structure, check via share_info
         if not shared_folder_found:
-            print(f"DEBUG: No shared folder found via folder structure, checking share_info")
             if shared_folders:
-                print(f"DEBUG: Record {self.uid} is in {len(shared_folders)} shared folders via share_info")
-                # Clear direct record permissions and use shared folder permissions instead
                 self.permissions.clear()
                 self.user_permissions.clear()
                 self.team_permissions.clear()
@@ -387,20 +341,12 @@ class SharedRecord:
 
             for sf_uid, sf_ups in sf_user_perms.items():
                 share_type = SharePermissions.SharePermissionsType.SF_USER
-                print(f"DEBUG: Loading {len(sf_ups)} user permissions from shared folder {sf_uid}")
                 load_user_permissions(sf_ups, sf_uid, share_type)
             for sf_uid, teams in team_perms.items():
-                print(f"DEBUG: Loading {len(teams)} team permissions from shared folder {sf_uid}")
                 load_team_permissions(teams, sf_uid)
-        else:
-            print(f"DEBUG: Shared folder found via folder structure, skipping share_info processing")
 
         apply_role_restrictions()
         
-        # Final debug: show all permissions
-        print(f"DEBUG: Final permissions for record {self.uid}: {list(self.permissions.keys())}")
-        for key, perm in self.permissions.items():
-            print(f"DEBUG: Final permission {key}: {perm.to_name} (types: {perm.types})")
 
 
 def get_shared_records(params, record_uids, cache_only=False):
@@ -408,20 +354,16 @@ def get_shared_records(params, record_uids, cache_only=False):
     
     def fetch_team_members(t_uids):
         members = {}
-        # Skip enterprise team fetching if not available
         if not hasattr(params, 'enterprise_ec_key') or not params.enterprise_ec_key:
             return members
             
         try:
             for team_uid in t_uids:
                 team_users = members.get(team_uid, set())
-                # Use vault's execute_auth_rest if available
                 if hasattr(params.vault, 'keeper_auth'):
-                    # Simplified team member fetching - skip if protobuf not available
                     pass
                 members[team_uid] = team_users
         except Exception:
-            # If enterprise features fail, return empty members
             pass
         return members
 
@@ -442,7 +384,6 @@ def get_shared_records(params, record_uids, cache_only=False):
                 t_members.add(username)
                 members[team_uid] = t_members
         except Exception:
-            # If enterprise data access fails, return empty members
             pass
 
         return members
@@ -452,16 +393,13 @@ def get_shared_records(params, record_uids, cache_only=False):
         try:
             if hasattr(params, 'shared_folder_cache'):
                 sf_uids = [uid for uid in params.shared_folder_cache]
-                # Skip if API function not available
                 for sf_uid in sf_uids:
                     sf_admins[sf_uid] = []
         except Exception:
-            # If shared folder admin fetching fails, return empty
             pass
         return sf_admins
 
     def get_restricted_role_members(uname_lookup):
-        # Get team_uids and usernames (assigned directly and indirectly) in share-restricted roles
         members = set()
         if not hasattr(params, 'enterprise') or not params.enterprise:
             return members
@@ -479,31 +417,18 @@ def get_shared_records(params, record_uids, cache_only=False):
             no_share_team_members = {t for team_uid in no_share_teams for t in cached_team_members.get(team_uid, set())}
             members = no_share_users.union(no_share_teams).union(no_share_team_members)
         except Exception:
-            # If role restriction logic fails, return empty set
             pass
         return members
 
-    # Load record shares using share_utils
     share_infos = []
     try:
         from ..helpers import share_utils
         share_infos = share_utils.get_record_shares(vault=params.vault, record_uids=record_uids) or []
-        print(f"DEBUG: Loaded {len(share_infos)} share infos")
-        for share_info in share_infos:
-            record_uid = share_info.get('record_uid')
-            shares = share_info.get('shares', {})
-            user_perms = shares.get('user_permissions', [])
-            print(f"DEBUG: Record {record_uid} has {len(user_perms)} user permissions in share_info")
-            for up in user_perms:
-                print(f"DEBUG: Share permission: {up.get('username')} (owner: {up.get('owner')})")
     except Exception as e:
-        print(f"DEBUG: Error loading share infos: {e}")
         pass
 
-    # Ensure shared folder cache is populated
     try:
         if hasattr(params, 'vault') and params.vault and hasattr(params.vault, 'vault_data'):
-            # Load shared folders if not already cached
             if not hasattr(params, 'shared_folder_cache') or not params.shared_folder_cache:
                 params.shared_folder_cache = {}
                 for sf_info in params.vault.vault_data.shared_folders():
@@ -521,7 +446,6 @@ def get_shared_records(params, record_uids, cache_only=False):
     except Exception:
         pass
 
-    # Get shared folder teams
     sf_teams = []
     try:
         if hasattr(params, 'shared_folder_cache'):
@@ -532,7 +456,6 @@ def get_shared_records(params, record_uids, cache_only=False):
     sf_share_admins = fetch_sf_admins() if not cache_only else {}
     team_uids = {t.get('team_uid') for teams in sf_teams for t in teams}
     
-    # Get enterprise users
     enterprise_users = []
     try:
         if hasattr(params, 'enterprise') and params.enterprise:
@@ -545,14 +468,11 @@ def get_shared_records(params, record_uids, cache_only=False):
     team_members = get_cached_team_members(team_uids, username_lookup) if cache_only or hasattr(params, 'enterprise') \
         else fetch_team_members(team_uids)
     
-    # Get records
     records = []
     try:
-        # Use vault data loading directly
         records = [params.vault.vault_data.load_record(uid) for uid in record_uids]
         records = [r for r in records if r]
     except Exception:
-        # If record loading fails, create minimal records
         records = []
         for uid in record_uids:
             try:
@@ -562,12 +482,10 @@ def get_shared_records(params, record_uids, cache_only=False):
             except Exception:
                 pass
     
-    # Create SharedRecord objects
     shared_records = []
     for r in records:
         try:
             uid = getattr(r, 'record_uid', getattr(r, 'uid', ''))
-            # Find share info for this record
             record_share_info = None
             for share_info in share_infos:
                 if share_info.get('record_uid') == uid:
@@ -575,12 +493,10 @@ def get_shared_records(params, record_uids, cache_only=False):
                     break
             
             shared_record = SharedRecord(params, r, sf_share_admins, team_members, restricted_role_members)
-            # Load share information if available
             if record_share_info:
                 shared_record.load(params, sf_share_admins, team_members, restricted_role_members, record_share_info)
             shared_records.append(shared_record)
         except Exception:
-            # If SharedRecord creation fails, create minimal one
             uid = getattr(r, 'record_uid', getattr(r, 'uid', ''))
             if uid:
                 shared_record = SharedRecord(params, r, sf_share_admins, team_members, restricted_role_members)
