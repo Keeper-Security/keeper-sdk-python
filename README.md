@@ -20,7 +20,7 @@ $ git clone https://github.com/Keeper-Security/keeper-sdk-python
 Requirement - python 3.10 or higher
 1. Open a terminal/zsh/powershell
 2. Create a virtual environment (venv) using "python3 -m venv venv" (Optionally python or py depending on python setup)
-3. Activate the venv using "source venv/bin/activate" for MacOS/Linux or "venv\bin\activate' for Windows
+3. Activate the venv using "source venv/bin/activate" for MacOS/Linux or "venv\Scripts\Activate' for Windows
 4. Move to keepersdk-package using "cd keepersdk-package"
 5. Run "pip install -r requirements.txt" for installing dependencies
 6. Run "pip install setuptools" tp install setuptools which will be used to create keepersdk package
