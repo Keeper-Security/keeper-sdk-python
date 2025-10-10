@@ -607,31 +607,6 @@ class ShareFolderCommand(base.ArgparseCommand):
             except Exception as e:
                 raise ValueError(f'get_share_admin: msg = {e}')
 
-        def get_folder_uids(context: KeeperParams, name: str) -> set[str]:
-            """Get folder UIDs by name or path."""
-            folder_uids = set()
-            
-            if not context.vault or not context.vault.vault_data:
-                return folder_uids
-            
-            if name in context.vault.vault_data._folders:
-                folder_uids.add(name)
-                return folder_uids
-            
-            for folder in context.vault.vault_data.folders():
-                if folder.name == name:
-                    folder_uids.add(folder.folder_uid)
-            
-            if not folder_uids:
-                try:
-                    folder, _ = folder_utils.try_resolve_path(context, name)
-                    if folder:
-                        folder_uids.add(folder.folder_uid)
-                except:
-                    pass
-            
-            return folder_uids
-
         def get_record_uids(context: KeeperParams, name: str) -> set[str]:
             """Get record UIDs by name or UID."""
             record_uids = set()
@@ -668,7 +643,7 @@ class ShareFolderCommand(base.ArgparseCommand):
             folder_uids = {
                 uid 
                 for name in names if name 
-                for uid in get_folder_uids(context, name)
+                for uid in share_utils.get_folder_uids(context, name)
             }
             folders = {get_folder_by_uid(uid) for uid in folder_uids if get_folder_by_uid(uid)}
             shared_folder_uids.update([uid for uid in folder_uids if uid in shared_folder_cache])
@@ -676,7 +651,7 @@ class ShareFolderCommand(base.ArgparseCommand):
             sf_subfolders = {f for f in folders if f and f.folder_type == 'shared_folder_folder'}
             shared_folder_uids.update({f.folder_scope_uid for f in sf_subfolders if f.folder_scope_uid})
 
-            unresolved_names = [name for name in names if name and not get_folder_uids(context, name)]
+            unresolved_names = [name for name in names if name and not share_utils.get_folder_uids(context, name)]
             share_admin_folder_uids = get_share_admin_obj_uids(vault=vault, obj_names=unresolved_names, obj_type=record_pb2.CHECK_SA_ON_SF)
             shared_folder_uids.update(share_admin_folder_uids or [])
 
