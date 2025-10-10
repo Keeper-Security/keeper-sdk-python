@@ -9,6 +9,11 @@ from .. import api
 from ..helpers import report_utils, share_utils
 from ..params import KeeperParams
 
+CHUNK_SIZE = 1000
+OWNERLESS_RECORDS_GET_ENDPOINT = 'ownerless_records/get_records'
+OWNERLESS_RECORDS_SET_OWNER_ENDPOINT = 'ownerless_records/set_owner'
+DEFAULT_OUTPUT_FORMAT = 'table'
+DEFAULT_VERBOSE_THRESHOLD = 0  # When verbose should be enabled by default
 
 logger = api.get_logger()
 
@@ -60,7 +65,7 @@ class FindOwnerlessCommand(base.ArgparseCommand):
         vault = context.vault
         
         claim_records = kwargs.get('claim', False)
-        output_format = kwargs.get('format', 'table')
+        output_format = kwargs.get('format', DEFAULT_OUTPUT_FORMAT)
         output_file = kwargs.get('output')
         verbose = kwargs.get('verbose', False) or not claim_records or output_file
         folders = kwargs.get('folder', [])
@@ -98,7 +103,7 @@ class FindOwnerlessCommand(base.ArgparseCommand):
             request = APIRequest_pb2.OwnerlessRecords()
             response = vault.keeper_auth.execute_auth_rest(
                 request=request, 
-                rest_endpoint='ownerless_records/get_records',
+                rest_endpoint=OWNERLESS_RECORDS_GET_ENDPOINT,
                 response_type=APIRequest_pb2.OwnerlessRecords
             )
             
@@ -149,7 +154,7 @@ class FindOwnerlessCommand(base.ArgparseCommand):
         if not records:
             return
             
-        chunk_size = 1000
+        chunk_size = CHUNK_SIZE
         total_claimed = 0
         
         for i in range(0, len(records), chunk_size):
@@ -165,7 +170,7 @@ class FindOwnerlessCommand(base.ArgparseCommand):
                 
                 vault.keeper_auth.execute_auth_rest(
                     request=request, 
-                    rest_endpoint='ownerless_records/set_owner', 
+                    rest_endpoint=OWNERLESS_RECORDS_SET_OWNER_ENDPOINT, 
                     response_type=APIRequest_pb2.OwnerlessRecords
                 )
                 
