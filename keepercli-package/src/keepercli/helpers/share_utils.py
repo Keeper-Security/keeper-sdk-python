@@ -1,19 +1,65 @@
 import datetime
 import itertools
-from typing import Optional, Dict, List, Any, Generator, Tuple, Iterable
+from typing import Optional, Dict, List, Any, Generator, Iterable, Set
 
 from keepersdk import crypto, utils
-from keepersdk.proto import record_pb2
-from keepersdk.vault import storage_types, vault_online, vault_record
+from keepersdk.proto import enterprise_pb2, record_pb2
+from keepersdk.vault import storage_types, vault_online, vault_record, vault_utils
 
 from .. import api
 from ..commands import enterprise_utils
-from ..helpers import timeout_utils
+from ..helpers import timeout_utils, folder_utils
 from ..params import KeeperParams
 
-
+# Constants
 RECORD_DETAILS_URL = 'vault/get_records_details'
 SHARE_OBJECTS_API = 'vault/get_share_objects'
+TEAM_MEMBERS_ENDPOINT = 'vault/get_team_members'
+SHARING_ADMINS_ENDPOINT = 'enterprise/get_sharing_admins'
+
+# Record processing constants
+CHUNK_SIZE = 999
+RECORD_KEY_LENGTH_V2 = 60
+DEFAULT_EXPIRATION = 0
+NEVER_EXPIRES = -1
+NEVER_EXPIRES_STRING = 'never'
+
+# Record version constants
+MAX_V2_VERSION = 2
+V3_VERSION = 3
+V4_VERSION = 4
+
+# User type constants
+TEAM_USER_TYPE = 2
+
+# Permission field names
+CAN_SHARE_PERMISSION = 'can_share'
+CAN_EDIT_FIELD = 'can_edit'
+CAN_SHARE_FIELD = 'can_share'
+CAN_VIEW_FIELD = 'can_view'
+RECORD_UID_FIELD = 'record_uid'
+SHARED_FOLDER_UID_FIELD = 'shared_folder_uid'
+TEAM_UID_FIELD = 'team_uid'
+
+# Share object categories
+RELATIONSHIP_CATEGORY = 'relationship'
+FAMILY_CATEGORY = 'family'
+ENTERPRISE_CATEGORY = 'enterprise'
+MC_CATEGORY = 'mc'
+
+# Default empty dictionaries
+EMPTY_SHARE_OBJECTS = {'users': {}, 'enterprises': {}, 'teams': {}}
+
+# Record field names
+TITLE_FIELD = 'title'
+NAME_FIELD = 'name'
+IS_SA_FIELD = 'is_sa'
+ENTERPRISE_ID_FIELD = 'enterprise_id'
+STATUS_FIELD = 'status'
+CATEGORY_FIELD = 'category'
+SHARES_FIELD = 'shares'
+USER_PERMISSIONS_FIELD = 'user_permissions'
+SHARED_FOLDER_PERMISSIONS_FIELD = 'shared_folder_permissions'
 
 
 logger = api.get_logger()
@@ -21,16 +67,16 @@ logger = api.get_logger()
 
 def get_share_expiration(expire_at: Optional[str], expire_in: Optional[str]) -> int:
     if not expire_at and not expire_in:
-        return 0
+        return DEFAULT_EXPIRATION
 
     dt = None
     if isinstance(expire_at, str):
-        if expire_at == 'never':
-            return -1
+        if expire_at == NEVER_EXPIRES_STRING:
+            return NEVER_EXPIRES
         dt = datetime.datetime.fromisoformat(expire_at)
     elif isinstance(expire_in, str):
-        if expire_in == 'never':
-            return -1
+        if expire_in == NEVER_EXPIRES_STRING:
+            return NEVER_EXPIRES
         td = timeout_utils.parse_timeout(expire_in)
         dt = datetime.datetime.now() + td
     if dt is None:
@@ -49,24 +95,24 @@ def get_share_objects(vault: vault_online.VaultOnline) -> Dict[str, Dict[str, An
     )
     
     if not response:
-        return {'users': {}, 'enterprises': {}, 'teams': {}}
+        return EMPTY_SHARE_OBJECTS
     
     users_by_type = {
-        'relationship': response.shareRelationships,
-        'family': response.shareFamilyUsers,
-        'enterprise': response.shareEnterpriseUsers,
-        'mc': response.shareMCEnterpriseUsers,
+        RELATIONSHIP_CATEGORY: response.shareRelationships,
+        FAMILY_CATEGORY: response.shareFamilyUsers,
+        ENTERPRISE_CATEGORY: response.shareEnterpriseUsers,
+        MC_CATEGORY: response.shareMCEnterpriseUsers,
     }
     
     def process_users(users_data: Iterable[Any], category: str) -> Dict[str, Dict[str, Any]]:
         """Process user data and add category information."""
         return {
             user.username: {
-                'name': user.fullname,
-                'is_sa': user.isShareAdmin,
-                'enterprise_id': user.enterpriseId,
-                'status': user.status,
-                'category': category
+                NAME_FIELD: user.fullname,
+                IS_SA_FIELD: user.isShareAdmin,
+                ENTERPRISE_ID_FIELD: user.enterpriseId,
+                STATUS_FIELD: user.status,
+                CATEGORY_FIELD: category
             } for user in users_data
         }
     
@@ -82,8 +128,8 @@ def get_share_objects(vault: vault_online.VaultOnline) -> Dict[str, Dict[str, An
     def process_teams(teams_data: Iterable[Any]) -> Dict[str, Dict[str, Any]]:
         return {
             utils.base64_url_encode(team.teamUid): {
-                'name': team.teamname,
-                'enterprise_id': team.enterpriseId
+                NAME_FIELD: team.teamname,
+                ENTERPRISE_ID_FIELD: team.enterpriseId
             } for team in teams_data
         }
     
@@ -122,7 +168,7 @@ def load_records_in_shared_folder(
                 if isinstance(getattr(rk, 'record_key', b''), bytes) 
                 else getattr(rk, 'record_key', '')
             )
-            if len(key) == 60:
+            if len(key) == RECORD_KEY_LENGTH_V2:
                 record_key = crypto.decrypt_aes_v2(key, shared_folder_key)
             else:
                 record_key = crypto.decrypt_aes_v1(key, shared_folder_key)
@@ -186,19 +232,19 @@ def load_records_in_shared_folder(
                     'client_modified_time': record_data.clientModifiedTime,
                 }
                 data_decoded = utils.base64_url_decode(record_data.encryptedRecordData)
-                if version <= 2:
+                if version <= MAX_V2_VERSION:
                     record['data_unencrypted'] = crypto.decrypt_aes_v1(data_decoded, record_key)
                 else:
                     record['data_unencrypted'] = crypto.decrypt_aes_v2(data_decoded, record_key)
 
                 # Handle extra data for v2 records
-                if record_data.encryptedExtraData and version <= 2:
+                if record_data.encryptedExtraData and version <= MAX_V2_VERSION:
                     record['extra'] = record_data.encryptedExtraData
                     extra_decoded = utils.base64_url_decode(record_data.encryptedExtraData)
                     record['extra_unencrypted'] = crypto.decrypt_aes_v1(extra_decoded, record_key)
                 
                 # Handle v3 typed records with references
-                if version == 3:
+                if version == V3_VERSION:
                     v3_record = vault.vault_data.load_record(record_uid=record_uid)
                     if isinstance(v3_record, vault_record.TypedRecord):
                         for ref in itertools.chain(v3_record.fields, v3_record.custom):
@@ -206,7 +252,7 @@ def load_records_in_shared_folder(
                                 record_set.update(ref.value)
                 
                 # Handle v4 records with file attachments
-                elif version == 4:
+                elif version == V4_VERSION:
                     if record_data.fileSize > 0:
                         record['file_size'] = record_data.fileSize
                     if record_data.thumbnailSize > 0:
@@ -257,11 +303,11 @@ def get_record_shares(
     
     def create_record_info(record_uid: str, keeper_record: Optional[Any] = None) -> Dict[str, Any]:
         """Create basic record information dictionary."""
-        rec = {'record_uid': record_uid}
+        rec = {RECORD_UID_FIELD: record_uid}
         
         if keeper_record:
-            if hasattr(keeper_record, 'title'):
-                rec['title'] = keeper_record.title
+            if hasattr(keeper_record, TITLE_FIELD):
+                rec[TITLE_FIELD] = keeper_record.title
             if hasattr(keeper_record, 'data_unencrypted'):
                 rec['data_unencrypted'] = keeper_record.data_unencrypted
                 
@@ -307,7 +353,7 @@ def get_record_shares(
     
     result = []
     try:
-        chunk_size = 999
+        chunk_size = CHUNK_SIZE
         for i in range(0, len(uids_needing_info), chunk_size):
             chunk = uids_needing_info[i:i + chunk_size]
             
@@ -346,7 +392,7 @@ def get_record_shares(
 
 
 def resolve_record_share_path(context: KeeperParams, record_uid: str) -> Optional[Dict[str, str]]:
-    return resolve_record_permission_path(context=context, record_uid=record_uid, permission='can_share')
+    return resolve_record_permission_path(context=context, record_uid=record_uid, permission=CAN_SHARE_PERMISSION)
 
 
 def resolve_record_permission_path(
@@ -357,12 +403,12 @@ def resolve_record_permission_path(
     for ap in enumerate_record_access_paths(context=context, record_uid=record_uid):
         if ap.get(permission):
             path = {
-                'record_uid': record_uid
+                RECORD_UID_FIELD: record_uid
             }
-            if 'shared_folder_uid' in ap:
-                path['shared_folder_uid'] = ap['shared_folder_uid']
-            if 'team_uid' in ap:
-                path['team_uid'] = ap['team_uid']
+            if SHARED_FOLDER_UID_FIELD in ap:
+                path[SHARED_FOLDER_UID_FIELD] = ap[SHARED_FOLDER_UID_FIELD]
+            if TEAM_UID_FIELD in ap:
+                path[TEAM_UID_FIELD] = ap[TEAM_UID_FIELD]
             return path
 
     return None
@@ -381,14 +427,14 @@ def enumerate_record_access_paths(
     ) -> Dict[str, Any]:
         """Create a standardized access path dictionary."""
         path = {
-            'record_uid': record_uid,
-            'shared_folder_uid': shared_folder_uid,
-            'can_edit': can_edit,
-            'can_share': can_share,
-            'can_view': True
+            RECORD_UID_FIELD: record_uid,
+            SHARED_FOLDER_UID_FIELD: shared_folder_uid,
+            CAN_EDIT_FIELD: can_edit,
+            CAN_SHARE_FIELD: can_share,
+            CAN_VIEW_FIELD: True
         }
         if team_uid:
-            path['team_uid'] = team_uid
+            path[TEAM_UID_FIELD] = team_uid
         return path
     
     def process_team_permissions(
@@ -401,7 +447,7 @@ def enumerate_record_access_paths(
             return
             
         for user_permission in shared_folder.user_permissions:
-            if user_permission.user_type != storage_types.SharedFolderUserType.Team:
+            if user_permission.user_type != TEAM_USER_TYPE:
                 continue
                 
             team_uid = user_permission.user_uid
@@ -437,3 +483,245 @@ def enumerate_record_access_paths(
         else:
             yield from process_team_permissions(shared_folder, can_edit, can_share)
 
+
+def get_shared_records(context: KeeperParams, record_uids, cache_only=False):
+    """
+    Get shared record information for the specified record UIDs.
+    
+    Args:
+        context: KeeperParams instance containing vault and enterprise data
+        record_uids: Collection of record UIDs to process
+        cache_only: If True, only use cached data without making API calls
+        
+    Returns:
+        Dict mapping record UIDs to SharedRecord instances
+    """
+    
+    def _fetch_team_members_from_api(team_uids: Set[str]) -> Dict[str, Set[str]]:
+        """Fetch team members from the API for the given team UIDs."""
+        members = {}
+        
+        if not context.vault.keeper_auth.auth_context.enterprise_ec_public_key:
+            return members
+            
+        for team_uid in team_uids:
+            try:
+                request = enterprise_pb2.GetTeamMemberRequest()
+                request.teamUid = utils.base64_url_decode(team_uid)
+                
+                response = context.vault.keeper_auth.execute_auth_rest(
+                    rest_endpoint=TEAM_MEMBERS_ENDPOINT,
+                    request=request,
+                    response_type=enterprise_pb2.GetTeamMemberResponse
+                )
+                
+                if response and response.enterpriseUser:
+                    team_members = {user.email for user in response.enterpriseUser}
+                    members[team_uid] = team_members
+                    
+            except Exception as e:
+                logger.debug(f"Failed to fetch team members for {team_uid}: {e}")
+                
+        return members
+
+    def _get_cached_team_members(team_uids: Set[str], username_lookup: Dict[str, str]) -> Dict[str, Set[str]]:
+        """Get team members from cached enterprise data."""
+        members = {}
+        
+        if not context.enterprise_data:
+            return members
+
+        team_user_links = context.enterprise_data.team_users.get_all_links() or []
+        
+        relevant_team_users = [
+            link for link in team_user_links 
+            if link.user_type != 2 and link.team_uid in team_uids
+        ]
+
+        for team_user in relevant_team_users:
+            username = username_lookup.get(team_user.enterprise_user_id)
+            if username:
+                team_uid = team_user.team_uid
+                if team_uid not in members:
+                    members[team_uid] = set()
+                members[team_uid].add(username)
+
+        return members
+
+    def _fetch_shared_folder_admins() -> Dict[str, List[str]]:
+        """Fetch share administrators for all shared folders."""
+        sf_uids = list(context.vault.vault_data._shared_folders.keys())
+        return {
+            sf_uid: get_share_admins_for_shared_folder(context.vault, sf_uid) or []
+            for sf_uid in sf_uids
+        }
+
+    def _get_restricted_role_members(username_lookup: Dict[str, str]) -> Set[str]:
+        """Get usernames with restricted sharing permissions."""
+        if not context.enterprise_data:
+            return set()
+
+        role_enforcements = context.enterprise_data.role_enforcements.get_all_links()
+        restricted_roles = {
+            re.role_id for re in role_enforcements 
+            if re.enforcement_type == 'enforcements' and re.value == 'restrict_sharing_all'
+        }
+
+        if not restricted_roles:
+            return set()
+
+        restricted_users = context.enterprise_data.role_users.get_links_by_object(restricted_roles)
+        restricted_teams = context.enterprise_data.role_teams.get_links_by_object(restricted_roles)
+
+        restricted_members = set()
+        
+        for user_link in restricted_users:
+            username = username_lookup.get(user_link.enterprise_user_id)
+            if username:
+                restricted_members.add(username)
+
+        team_uids = {team_link.team_uid for team_link in restricted_teams}
+        if team_uids:
+            team_members = _get_cached_team_members(team_uids, username_lookup)
+            for members in team_members.values():
+                restricted_members.update(members)
+
+        return restricted_members
+
+    try:
+        shares = get_record_shares(context.vault, record_uids)
+        
+        sf_teams = [share.get('teams', []) for share in shares] if shares else []
+        team_uids = {
+            team.get('team_uid') 
+            for teams in sf_teams 
+            for team in teams 
+            if team.get('team_uid')
+        }
+
+        enterprise_users = context.enterprise_data.users.get_all_entities() if context.enterprise_data else []
+        username_lookup = {user.enterprise_user_id: user.username for user in enterprise_users}
+
+        sf_share_admins = _fetch_shared_folder_admins() if not cache_only else {}
+
+        restricted_role_members = _get_restricted_role_members(username_lookup)
+
+        if cache_only or context.enterprise_data:
+            team_members = _get_cached_team_members(team_uids, username_lookup)
+        else:
+            team_members = _fetch_team_members_from_api(team_uids)
+
+        records = [context.vault.vault_data.get_record(uid) for uid in record_uids]
+        valid_records = [record for record in records if record is not None]
+
+        shared_records = [
+            SharedRecord(record, sf_share_admins, team_members, restricted_role_members)
+            for record in valid_records
+        ]
+
+        return {shared_record.record_uid: shared_record for shared_record in shared_records}
+
+    except Exception as e:
+        logger.error(f"Error in get_shared_records: {e}")
+        return {}
+
+
+def get_share_admins_for_shared_folder(vault: vault_online.VaultOnline, shared_folder_uid):
+    if vault.keeper_auth.auth_context.enterprise_ec_public_key:
+        try:
+            rq = enterprise_pb2.GetSharingAdminsRequest()
+            rq.sharedFolderUid = utils.base64_url_decode(shared_folder_uid)
+            rs = vault.keeper_auth.execute_auth_rest(
+                rest_endpoint=SHARING_ADMINS_ENDPOINT,
+                request=rq,
+                response_type=enterprise_pb2.GetSharingAdminsResponse
+            )
+            admins = [x.email for x in rs.userProfileExts if x.isShareAdminForSharedFolderOwner and x.isInSharedFolder]
+        except Exception as e:
+            logger.debug(e)
+            return
+        return admins
+
+
+def get_folder_uids(context: KeeperParams, name: str) -> set[str]:
+    """Get folder UIDs by name or path."""
+    folder_uids = set()
+    
+    if not context.vault or not context.vault.vault_data:
+        return folder_uids
+    
+    if name in context.vault.vault_data._folders:
+        folder_uids.add(name)
+        return folder_uids
+    
+    for folder in context.vault.vault_data.folders():
+        if folder.name == name:
+            folder_uids.add(folder.folder_uid)
+    
+    if not folder_uids:
+        try:
+            folder, _ = folder_utils.try_resolve_path(context, name)
+            if folder:
+                folder_uids.add(folder.folder_uid)
+        except:
+            pass
+    
+    return folder_uids
+
+
+def get_contained_record_uids(vault: vault_online.VaultOnline, name: str, children_only: bool = True) -> Dict[str, Set[str]]:
+    records_by_folder = dict()
+    root_folder_uids = get_folder_uids(vault, name)
+
+    def add_child_recs(f_uid):
+        folder = vault.vault_data.get_folder(f_uid)
+        child_recs = folder.records
+        records_by_folder.update({f_uid: child_recs})
+
+    def on_folder(f):
+        f_uid = f.folder_uid or ''
+        if not children_only or f_uid in root_folder_uids:
+            add_child_recs(f_uid)
+
+    for uid in root_folder_uids:
+        folder = vault.vault_data.get_folder(uid)
+        vault_utils.traverse_folder_tree(vault.vault_data, folder, on_folder)
+
+    return records_by_folder
+
+
+class SharedRecord:
+    
+    def __init__(self, record, sf_share_admins, team_members, restricted_role_members):
+        self.record = record
+        self.sf_share_admins = sf_share_admins or {}
+        self.team_members = team_members or {}
+        self.restricted_role_members = restricted_role_members or set()
+
+    @property
+    def record_uid(self) -> str:
+        return self.record.record_uid
+    
+    @property
+    def title(self) -> str:
+        return getattr(self.record, 'title', '')
+    
+    def get_all_share_admins(self) -> List[str]:
+        admin_usernames = []
+        for sf_uid, admins_list in self.sf_share_admins.items():
+            if admins_list:
+                admin_usernames.extend(admins_list)
+        return list(set(admin_usernames))  # Remove duplicates
+    
+    def get_share_admins_for_folder(self, sf_uid: str) -> List[str]:
+        return self.sf_share_admins.get(sf_uid, [])
+    
+    def get_all_team_members(self) -> Set[str]:
+        all_members = set()
+        for team_uid, members in self.team_members.items():
+            if members:
+                all_members.update(members)
+        return all_members
+    
+    def is_restricted_user(self, username: str) -> bool:
+        return username in self.restricted_role_members
