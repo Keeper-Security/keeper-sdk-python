@@ -26,7 +26,8 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
 
     if not scopes or bool(scopes & base.CommandScope.Vault):
         from .commands import (vault_folder, vault, vault_record, record_edit, importer_commands, breachwatch, 
-                               record_type, secrets_manager, share_management, password_report, trash, record_file_report)
+                               record_type, secrets_manager, share_management, password_report, trash, record_file_report,
+                               record_handling_commands, register)
         
         commands.register_command('sync-down', vault.SyncDownCommand(), base.CommandScope.Vault, 'd')
         commands.register_command('cd', vault_folder.FolderCdCommand(), base.CommandScope.Vault)
@@ -36,11 +37,16 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('rmdir', vault_folder.FolderRemoveCommand(), base.CommandScope.Vault)
         commands.register_command('rndir', vault_folder.FolderRenameCommand(), base.CommandScope.Vault)
         commands.register_command('mv', vault_folder.FolderMoveCommand(), base.CommandScope.Vault)
+        commands.register_command('transform-folder', vault_folder.FolderTransformCommand(), base.CommandScope.Vault)
         commands.register_command('list', vault_record.RecordListCommand(), base.CommandScope.Vault, 'l')
         commands.register_command('list-sf', vault_record.SharedFolderListCommand(), base.CommandScope.Vault, 'lsf')
         commands.register_command('list-team', vault_record.TeamListCommand(), base.CommandScope.Vault, 'lt')
         commands.register_command('shortcut', vault_record.ShortcutCommand(), base.CommandScope.Vault)
         commands.register_command('search', record_edit.RecordSearchCommand(), base.CommandScope.Vault, 's')
+        commands.register_command('record-history', record_handling_commands.RecordHistoryCommand(), base.CommandScope.Vault, 'rh')
+        commands.register_command('clipboard-copy', record_handling_commands.ClipboardCommand(), base.CommandScope.Vault, 'cc')
+        commands.register_command('find-password', record_handling_commands.ClipboardCommand(), base.CommandScope.Vault)
+        commands.register_command('find-ownerless', register.FindOwnerlessCommand(), base.CommandScope.Vault)
         commands.register_command('record-add', record_edit.RecordAddCommand(), base.CommandScope.Vault, 'ra')
         commands.register_command('record-update', record_edit.RecordUpdateCommand(), base.CommandScope.Vault, 'ru')
         commands.register_command('rm', record_edit.RecordDeleteCommand(), base.CommandScope.Vault)
@@ -73,7 +79,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
 
     if not scopes or bool(scopes & base.CommandScope.Enterprise):
         from .commands import (enterprise_info, enterprise_node, enterprise_role, enterprise_team, enterprise_user,
-                               importer_commands, audit_report, audit_alert)
+                               importer_commands, audit_report, audit_alert, audit_log)
 
         commands.register_command('enterprise-down', enterprise_info.EnterpriseDownCommand(), base.CommandScope.Enterprise, 'ed')
         commands.register_command('enterprise-info', enterprise_info.EnterpriseInfoCommand(), base.CommandScope.Enterprise, 'ei')
@@ -83,5 +89,6 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('enterprise-user', enterprise_user.EnterpriseUserCommand(), base.CommandScope.Enterprise, 'eu')
         commands.register_command('audit-report', audit_report.EnterpriseAuditReport(), base.CommandScope.Enterprise)
         commands.register_command('audit-alert', audit_alert.AuditAlerts(), base.CommandScope.Enterprise)
+        commands.register_command('audit-log', audit_log.AuditLogCommand(), base.CommandScope.Enterprise, 'al')
         commands.register_command('download-membership', importer_commands.DownloadMembershipCommand(), base.CommandScope.Enterprise)
         commands.register_command('apply-membership', importer_commands.ApplyMembershipCommand(), base.CommandScope.Enterprise)
