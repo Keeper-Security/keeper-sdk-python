@@ -2,7 +2,6 @@ import argparse
 import datetime
 import hashlib
 import json
-import logging
 import math
 import re
 import urllib.parse
@@ -1510,7 +1509,7 @@ class FindDuplicatesCommand(base.ArgparseCommand):
         quiet = kwargs.get('quiet', False)
         dry_run = kwargs.get('dry_run', False)
         quiet = quiet and not dry_run
-        logging_fn = logging.info if not quiet else logging.debug
+        logging_fn = logger.info if not quiet else logger.debug
 
         search_criteria = self._determine_search_criteria(kwargs)
         
@@ -1881,10 +1880,10 @@ class FindDuplicatesCommand(base.ArgparseCommand):
                 rm_cmd = record_edit.RecordDeleteCommand()
                 rm_cmd.execute(context, records=list(dupe_uids), force=True)
             else:
-                logging.info('In dry-run mode: no actual records removed '
+                logger.info('In dry-run mode: no actual records removed '
                            '(exclude --dry-run flag to disable)')
         else:
-            print('Duplicate record removal aborted. No records removed.')
+            logger.warning('Duplicate record removal aborted. No records removed.')
 
     
     
