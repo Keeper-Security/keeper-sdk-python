@@ -3,18 +3,50 @@
 
 import json
 import re
-from typing import Optional, Dict, Any
-from dataclasses import dataclass, field
-from urllib.parse import urlunparse
+from typing import Optional
+from dataclasses import dataclass
+
+from keepersdk.authentication import keeper_auth
 
 from . import enterprise_types
 from .. import utils, crypto, generator
 from ..proto import enterprise_pb2
-from ..authentication import keeper_auth
 
-# Constants defined here instead of importing from constants
+# Constants
 EMAIL_PATTERN = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
 PBKDF2_ITERATIONS = 1_000_000
+DEFAULT_PASSWORD_LENGTH = 20
+SALT_LENGTH = 16
+AUTH_VERIFIER_SALT_LENGTH = 16
+
+# Error codes
+ERROR_CODE_EXISTS = "exists"
+ERROR_CODE_SUCCESS = "success"
+ERROR_CODE_OK = "ok"
+
+# Documentation URLs
+DOMAIN_RESERVATION_DOC_URL = (
+    'https://docs.keeper.io/enterprise-guide/'
+    'user-and-team-provisioning/email-auto-provisioning'
+)
+
+# Error messages
+ERROR_MSG_INVALID_EMAIL = "Invalid email format: {}"
+ERROR_MSG_NODE_RESOLUTION_FAILED = "Node resolution failed: {}"
+ERROR_MSG_CANNOT_DETERMINE_ROOT_NODE = "Cannot determine root node"
+ERROR_MSG_NODE_NOT_FOUND_BY_ID = "Node with ID {} not found"
+ERROR_MSG_NODE_NOT_FOUND_BY_NAME = "Node '{}' not found"
+ERROR_MSG_MULTIPLE_NODES_FOUND = "Multiple nodes found with name '{}'"
+ERROR_MSG_PROVISION_REQUEST_FAILED = "Failed to create provision request: {}"
+ERROR_MSG_API_CALL_FAILED = "API call failed: {}"
+ERROR_MSG_USER_EXISTS = 'User "{}" already exists'
+ERROR_MSG_AUTO_CREATE_FAILED = (
+    'Failed to auto-create account "{}".\n'
+    'Creating user accounts without email verification is '
+    'only permitted on reserved domains.\n'
+    'To reserve a domain please contact Keeper support. '
+    'Learn more about domain reservation here:\n{}'
+)
 
 
 @dataclass
@@ -23,8 +55,8 @@ class CreateUserRequest:
     email: str
     display_name: Optional[str] = None
     node_id: Optional[int] = None
-    node_name: Optional[str] = None  # Alternative to node_id for resolution by name
-    password_length: int = 20
+    node_name: Optional[str] = None
+    password_length: int = DEFAULT_PASSWORD_LENGTH
     suppress_email_invite: bool = False
 
 
@@ -53,9 +85,7 @@ class EnterpriseUserCreationError(Exception):
 class EnterpriseUserManager:
     """Manages enterprise user creation operations."""
     
-    EMAIL_PATTERN = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    
-    def __init__(self, loader: enterprise_types.IEnterpriseLoader, auth_context):
+    def __init__(self, loader: enterprise_types.IEnterpriseLoader, auth_context: keeper_auth.KeeperAuth):
         """Initialize the enterprise user manager.
         
         Args:
@@ -77,7 +107,7 @@ class EnterpriseUserManager:
         if not email:
             return False
         
-        return bool(re.match(self.EMAIL_PATTERN, email))
+        return bool(re.match(EMAIL_PATTERN, email))
     
     def resolve_node_id(self, node_name_or_id: Optional[str] = None) -> int:
         """Resolve node ID from name or ID string.
@@ -92,36 +122,47 @@ class EnterpriseUserManager:
             EnterpriseUserCreationError: If node cannot be resolved
         """
         if not node_name_or_id:
-            # Use root node if no specific node specified
-            root_node = self.loader.enterprise_data.root_node
-            if root_node:
-                return root_node.node_id
-            raise EnterpriseUserCreationError("Cannot determine root node")
+            return self._get_root_node_id()
         
-        # Try to parse as integer ID first
+        if self._is_numeric_id(node_name_or_id):
+            return self._resolve_node_by_id(int(node_name_or_id))
+        
+        return self._resolve_node_by_name(node_name_or_id)
+
+    def _get_root_node_id(self) -> int:
+        """Get the root node ID."""
+        root_node = self.loader.enterprise_data.root_node
+        if root_node:
+            return root_node.node_id
+        raise EnterpriseUserCreationError(ERROR_MSG_CANNOT_DETERMINE_ROOT_NODE)
+
+    def _is_numeric_id(self, node_identifier: str) -> bool:
+        """Check if the node identifier is numeric."""
         try:
-            node_id = int(node_name_or_id)
-            # Verify node exists
-            enterprise_data = self.loader.enterprise_data
-            if enterprise_data.nodes.get_entity(node_id):
-                return node_id
-            raise EnterpriseUserCreationError(f"Node with ID {node_id} not found")
+            int(node_identifier)
+            return True
         except ValueError:
-            pass
-        
-        # Try to resolve by name
+            return False
+
+    def _resolve_node_by_id(self, node_id: int) -> int:
+        """Resolve node by numeric ID."""
+        enterprise_data = self.loader.enterprise_data
+        if enterprise_data.nodes.get_entity(node_id):
+            return node_id
+        raise EnterpriseUserCreationError(ERROR_MSG_NODE_NOT_FOUND_BY_ID.format(node_id))
+
+    def _resolve_node_by_name(self, node_name: str) -> int:
+        """Resolve node by name."""
         enterprise_data = self.loader.enterprise_data
         matching_nodes = [
             node for node in enterprise_data.nodes.get_all_entities() 
-            if node.name == node_name_or_id
+            if node.name == node_name
         ]
         
         if len(matching_nodes) == 0:
-            raise EnterpriseUserCreationError(f"Node '{node_name_or_id}' not found")
+            raise EnterpriseUserCreationError(ERROR_MSG_NODE_NOT_FOUND_BY_NAME.format(node_name))
         elif len(matching_nodes) > 1:
-            raise EnterpriseUserCreationError(
-                f"Multiple nodes found with name '{node_name_or_id}'"
-            )
+            raise EnterpriseUserCreationError(ERROR_MSG_MULTIPLE_NODES_FOUND.format(node_name))
         
         return matching_nodes[0].node_id
     
@@ -146,92 +187,146 @@ class EnterpriseUserManager:
             enterprise_data = self.loader.enterprise_data
             tree_key = enterprise_data.enterprise_info.tree_key
             
-            # Create main request
             rq = enterprise_pb2.EnterpriseUsersProvisionRequest()
-            rq.clientVersion = getattr(self.auth.keeper_endpoint, 'client_version', '')
+            rq.clientVersion = self.auth.keeper_endpoint.client_version
             
             # Generate user data and password
-            data = {'displayname': request.display_name or request.email}
-            user_data = json.dumps(data).encode('utf-8')
-            user_password = generator.KeeperPasswordGenerator(
-                length=20
-            ).generate()
-            user_data_key = utils.generate_aes_key()
+            user_data, user_password, user_data_key = self._generate_user_credentials(request)
             enterprise_user_id = self.loader.get_enterprise_id()
             
             # Create user provision request
-            user_rq = enterprise_pb2.EnterpriseUsersProvision()
-            user_rq.enterpriseUserId = enterprise_user_id
-            user_rq.username = request.email
-            user_rq.nodeId = resolved_node_id
-            user_rq.encryptedData = utils.base64_url_encode(
-                crypto.encrypt_aes_v1(user_data, tree_key)
-            )
-            user_rq.keyType = enterprise_pb2.KT_ENCRYPTED_BY_DATA_KEY
-            
-            # Set display name and email
-            # if display_name:
-            #     user_rq.fullName = display_name
-            # user_rq.email = email
-            # user_rq.suppressEmailInvite = request.suppress_email_invite
-            
-            # Get enterprise EC key
-            enterprise_ec_key = enterprise_data.enterprise_info.ec_public_key
-            if not enterprise_ec_key:
-                enterprise_ec_key = crypto.load_ec_public_key(
-                    utils.base64_url_decode(
-                        self.auth.auth_context.enterprise_ec_public_key
-                    )
-                )
-            
-            # Encrypt user data key
-            user_rq.enterpriseUsersDataKey = crypto.encrypt_ec(
-                user_data_key, enterprise_ec_key
-            )
-            
-            # Create auth verifier and encryption params
-            user_rq.authVerifier = utils.create_auth_verifier(
-                user_password,
-                crypto.get_random_bytes(16),
-                PBKDF2_ITERATIONS
-            )
-            user_rq.encryptionParams = utils.create_encryption_params(
-                user_password,
-                crypto.get_random_bytes(16),
-                PBKDF2_ITERATIONS,
-                user_data_key
-            )
-            
-            # Generate RSA keys if not forbidden
-            if not getattr(self.auth.auth_context, 'forbid_rsa', False):
-                rsa_private_key, rsa_public_key = crypto.generate_rsa_key()
-                rsa_private = crypto.unload_rsa_private_key(rsa_private_key)
-                rsa_public = crypto.unload_rsa_public_key(rsa_public_key)
-                user_rq.rsaPublicKey = rsa_public
-                user_rq.rsaEncryptedPrivateKey = crypto.encrypt_aes_v1(
-                    rsa_private, user_data_key
-                )
-            
-            # Generate EC keys
-            ec_private_key, ec_public_key = crypto.generate_ec_key()
-            ec_private = crypto.unload_ec_private_key(ec_private_key)
-            ec_public = crypto.unload_ec_public_key(ec_public_key)
-            user_rq.eccPublicKey = ec_public
-            user_rq.eccEncryptedPrivateKey = crypto.encrypt_aes_v2(
-                ec_private, user_data_key
-            )
-            
-            # Set device token and client key
-            user_rq.encryptedDeviceToken = self.auth.auth_context.device_token
-            user_rq.encryptedClientKey = crypto.encrypt_aes_v1(
-                utils.generate_aes_key(), user_data_key
+            user_rq = self._create_user_provision_request(
+                request, resolved_node_id, enterprise_user_id, 
+                user_data, user_data_key, tree_key, user_password
             )
             
             rq.users.append(user_rq)
             return rq, user_password
             
         except Exception as e:
-            raise EnterpriseUserCreationError(f"Failed to create provision request: {str(e)}")
+            raise EnterpriseUserCreationError(ERROR_MSG_PROVISION_REQUEST_FAILED.format(str(e)))
+
+    def _generate_user_credentials(self, request: CreateUserRequest) -> tuple[bytes, str, bytes]:
+        """Generate user data, password, and data key."""
+        data = {'displayname': request.display_name or request.email}
+        user_data = json.dumps(data).encode('utf-8')
+        user_password = generator.KeeperPasswordGenerator(
+            length=request.password_length
+        ).generate()
+        user_data_key = utils.generate_aes_key()
+        return user_data, user_password, user_data_key
+
+    def _create_user_provision_request(
+        self, 
+        request: CreateUserRequest, 
+        resolved_node_id: int,
+        enterprise_user_id: int,
+        user_data: bytes, 
+        user_data_key: bytes, 
+        tree_key: bytes,
+        user_password: str
+    ) -> enterprise_pb2.EnterpriseUsersProvision:
+        """Create the user provision request object."""
+        user_rq = enterprise_pb2.EnterpriseUsersProvision()
+        user_rq.enterpriseUserId = enterprise_user_id
+        user_rq.username = request.email
+        user_rq.nodeId = resolved_node_id
+        user_rq.encryptedData = utils.base64_url_encode(
+            crypto.encrypt_aes_v1(user_data, tree_key)
+        )
+        user_rq.keyType = enterprise_pb2.KT_ENCRYPTED_BY_DATA_KEY
+        
+        # Set up enterprise data key
+        enterprise_ec_key = self._get_enterprise_ec_key()
+        user_rq.enterpriseUsersDataKey = crypto.encrypt_ec(
+            user_data_key, enterprise_ec_key
+        )
+        
+        # Set up authentication and encryption
+        self._setup_user_authentication(user_rq, user_password, user_data_key)
+        
+        # Set up cryptographic keys
+        self._setup_cryptographic_keys(user_rq, user_data_key)
+        
+        # Set up device token and client key
+        user_rq.encryptedDeviceToken = self.auth.auth_context.device_token
+        user_rq.encryptedClientKey = crypto.encrypt_aes_v1(
+            utils.generate_aes_key(), user_data_key
+        )
+        
+        return user_rq
+
+    def _get_enterprise_ec_key(self):
+        """Get the enterprise EC public key."""
+        enterprise_data = self.loader.enterprise_data
+        enterprise_ec_key = enterprise_data.enterprise_info.ec_public_key
+        if not enterprise_ec_key:
+            enterprise_ec_key = crypto.load_ec_public_key(
+                utils.base64_url_decode(
+                    self.auth.auth_context.enterprise_ec_public_key
+                )
+            )
+        return enterprise_ec_key
+
+    def _setup_user_authentication(
+        self, 
+        user_rq: enterprise_pb2.EnterpriseUsersProvision, 
+        user_password: str, 
+        user_data_key: bytes
+    ) -> None:
+        """Set up user authentication verifier and encryption parameters."""
+        user_rq.authVerifier = utils.create_auth_verifier(
+            user_password,
+            crypto.get_random_bytes(AUTH_VERIFIER_SALT_LENGTH),
+            PBKDF2_ITERATIONS
+        )
+        user_rq.encryptionParams = utils.create_encryption_params(
+            user_password,
+            crypto.get_random_bytes(SALT_LENGTH),
+            PBKDF2_ITERATIONS,
+            user_data_key
+        )
+
+    def _setup_cryptographic_keys(
+        self, 
+        user_rq: enterprise_pb2.EnterpriseUsersProvision, 
+        user_data_key: bytes
+    ) -> None:
+        """Set up RSA and EC cryptographic keys for the user."""
+        # Set up RSA keys if not forbidden
+        if not self.auth.auth_context.forbid_rsa:
+            self._setup_rsa_keys(user_rq, user_data_key)
+        
+        # Set up EC keys
+        self._setup_ec_keys(user_rq, user_data_key)
+
+    def _setup_rsa_keys(
+        self, 
+        user_rq: enterprise_pb2.EnterpriseUsersProvision, 
+        user_data_key: bytes
+    ) -> None:
+        """Set up RSA keys for the user."""
+        rsa_private_key, rsa_public_key = crypto.generate_rsa_key()
+        rsa_private = crypto.unload_rsa_private_key(rsa_private_key)
+        rsa_public = crypto.unload_rsa_public_key(rsa_public_key)
+        user_rq.rsaPublicKey = rsa_public
+        user_rq.rsaEncryptedPrivateKey = crypto.encrypt_aes_v1(
+            rsa_private, user_data_key
+        )
+
+    def _setup_ec_keys(
+        self, 
+        user_rq: enterprise_pb2.EnterpriseUsersProvision, 
+        user_data_key: bytes
+    ) -> None:
+        """Set up EC keys for the user."""
+        ec_private_key, ec_public_key = crypto.generate_ec_key()
+        ec_private = crypto.unload_ec_private_key(ec_private_key)
+        ec_public = crypto.unload_ec_public_key(ec_public_key)
+        user_rq.eccPublicKey = ec_public
+        user_rq.eccEncryptedPrivateKey = crypto.encrypt_aes_v2(
+            ec_private, user_data_key
+        )
     
     def execute_provision_request(
         self, 
@@ -257,33 +352,31 @@ class EnterpriseUserManager:
                 response_type=enterprise_pb2.EnterpriseUsersProvisionResponse
             )
             
-            # Check for errors in response
-            for user_rs in rs.results:
-                if user_rs.code == "exists":
-                    raise EnterpriseUserCreationError(
-                        f'User "{email}" already exists',
-                        code="exists"
-                    )
-                if user_rs.code and user_rs.code not in ['success', 'ok']:
-                    doc_url = (
-                        'https://docs.keeper.io/enterprise-guide/'
-                        'user-and-team-provisioning/email-auto-provisioning'
-                    )
-                    raise EnterpriseUserCreationError(
-                        f'Failed to auto-create account "{email}".\n'
-                        'Creating user accounts without email verification is '
-                        'only permitted on reserved domains.\n'
-                        'To reserve a domain please contact Keeper support. '
-                        f'Learn more about domain reservation here:\n{doc_url}',
-                        code=user_rs.code
-                    )
-            
+            self._validate_provision_response(rs, email)
             return rs
             
         except Exception as e:
             if isinstance(e, EnterpriseUserCreationError):
                 raise
-            raise EnterpriseUserCreationError(f"API call failed: {str(e)}")
+            raise EnterpriseUserCreationError(ERROR_MSG_API_CALL_FAILED.format(str(e)))
+
+    def _validate_provision_response(
+        self, 
+        response: enterprise_pb2.EnterpriseUsersProvisionResponse, 
+        email: str
+    ) -> None:
+        """Validate the provision response and raise appropriate errors."""
+        for user_rs in response.results:
+            if user_rs.code == ERROR_CODE_EXISTS:
+                raise EnterpriseUserCreationError(
+                    ERROR_MSG_USER_EXISTS.format(email),
+                    code=ERROR_CODE_EXISTS
+                )
+            if user_rs.code and user_rs.code not in [ERROR_CODE_SUCCESS, ERROR_CODE_OK]:
+                raise EnterpriseUserCreationError(
+                    ERROR_MSG_AUTO_CREATE_FAILED.format(email, DOMAIN_RESERVATION_DOC_URL),
+                    code=user_rs.code
+                )
     
     def create_user(self, request: CreateUserRequest) -> CreateUserResponse:
         """Create a new enterprise user.
@@ -297,11 +390,28 @@ class EnterpriseUserManager:
         Raises:
             EnterpriseUserCreationError: If user creation fails
         """
-        # Validate input
-        if not self.validate_email(request.email):
-            raise EnterpriseUserCreationError(f"Invalid email format: {request.email}")
+        self._validate_user_request(request)
         
-        # Resolve node
+        resolved_node_id = self._resolve_user_node(request)
+        
+        provision_request, user_password = self.create_provision_request(
+            request, resolved_node_id
+        )
+        
+        response = self.execute_provision_request(provision_request, request.email)
+        
+        # Reload enterprise data to get updated user info
+        self.loader.load()
+        
+        return self._build_user_response(request, response, user_password, resolved_node_id)
+
+    def _validate_user_request(self, request: CreateUserRequest) -> None:
+        """Validate the user creation request."""
+        if not self.validate_email(request.email):
+            raise EnterpriseUserCreationError(ERROR_MSG_INVALID_EMAIL.format(request.email))
+
+    def _resolve_user_node(self, request: CreateUserRequest) -> int:
+        """Resolve the node for the user."""
         try:
             # Use node_id if provided, otherwise use node_name
             node_identifier = None
@@ -310,22 +420,18 @@ class EnterpriseUserManager:
             elif request.node_name:
                 node_identifier = request.node_name
             
-            resolved_node_id = self.resolve_node_id(node_identifier)
+            return self.resolve_node_id(node_identifier)
         except Exception as e:
-            raise EnterpriseUserCreationError(f"Node resolution failed: {str(e)}")
-        
-        # Create provision request
-        provision_request, user_password = self.create_provision_request(
-            request, resolved_node_id
-        )
-        
-        # Execute provision
-        response = self.execute_provision_request(provision_request, request.email)
-        
-        # Reload enterprise data to get updated user info
-        self.loader.load()
-        
-        # Extract response details
+            raise EnterpriseUserCreationError(ERROR_MSG_NODE_RESOLUTION_FAILED.format(str(e)))
+
+    def _build_user_response(
+        self, 
+        request: CreateUserRequest, 
+        response: enterprise_pb2.EnterpriseUsersProvisionResponse,
+        user_password: str,
+        resolved_node_id: int
+    ) -> CreateUserResponse:
+        """Build the user creation response."""
         result = response.results[0] if response.results else None
         
         return CreateUserResponse(
@@ -342,11 +448,11 @@ class EnterpriseUserManager:
 
 def create_enterprise_user(
     loader: enterprise_types.IEnterpriseLoader,
-    auth_context,
+    auth_context: keeper_auth.KeeperAuth,
     email: str,
     display_name: Optional[str] = None,
     node_id: Optional[int] = None,
-    password_length: int = 20,
+    password_length: int = DEFAULT_PASSWORD_LENGTH,
     suppress_email_invite: bool = False
 ) -> CreateUserResponse:
     """Convenience function to create an enterprise user.
