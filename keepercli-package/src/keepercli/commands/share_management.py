@@ -41,13 +41,10 @@ class ManagePermission(Enum):
 
 logger = api.get_logger()
 
-
 # Import share record classes
 SharePermissions = share_record.SharePermissions
 SharedRecord = share_record.SharedRecord
 get_shared_records = share_record.get_shared_records
-
-
 
 
 def get_record_share_info(context, record_uids):
@@ -86,6 +83,19 @@ def get_record_share_info(context, record_uids):
 
 TIMESTAMP_MILLISECONDS_FACTOR = 1000
 TRUNCATE_SUFFIX = '...'
+
+# Constants for FindDuplicatesCommand
+URL_TRUNCATE_LENGTH = 30
+NON_SHARED_DEFAULT = 'non-shared'
+CUSTOM_FIELD_TYPE_PREFIX = 'type:'
+TOTP_FIELD_NAME = 'totp'
+LIST_SEPARATOR = '|'
+DICT_SEPARATOR = ';'
+KEY_VALUE_SEPARATOR = '='
+PERMISSION_SEPARATOR = '='
+SHARE_NAMES_SEPARATOR = ', '
+SUPPORTED_RECORD_VERSIONS = {2, 3}
+DEFAULT_SEARCH_FIELDS = ['by_title', 'by_login', 'by_password']
 
 def set_expiration_fields(obj, expiration):
     """Set expiration and timerNotificationType fields on proto object if expiration is provided."""
@@ -1436,7 +1446,8 @@ class OneTimeShareRemoveCommand(base.ArgparseCommand):
         vault.keeper_auth.execute_auth_rest(request=rq, rest_endpoint=ApiUrl.REMOVE_EXTERNAL_SHARE.value)
         logger.info('One-time share \"%s\" is removed from record \"%s\"', share_name, record_name)
 
-class FindDuplicatesCommand(base.ArgparseCommand):
+
+class FindDuplicateCommand(base.ArgparseCommand):
     """Finds duplicate records and merge them in the vault"""
 
     def __init__(self):
@@ -1444,7 +1455,7 @@ class FindDuplicatesCommand(base.ArgparseCommand):
             prog='find-duplicates',
             description='Finds duplicates in the vault'
         )
-        FindDuplicatesCommand.add_arguments_to_parser(self.parser)
+        FindDuplicateCommand.add_arguments_to_parser(self.parser)
         super().__init__(self.parser)
     
     @staticmethod
@@ -1553,38 +1564,43 @@ class FindDuplicatesCommand(base.ArgparseCommand):
 
     def _determine_search_criteria(self, kwargs):
         """Determine which fields to search for duplicates."""
-        by_title = kwargs.get('title', False)
-        by_login = kwargs.get('login', False)
-        by_password = kwargs.get('password', False)
-        by_url = kwargs.get('url', False)
-        by_custom = kwargs.get('full', False)
-        by_shares = kwargs.get('shares', False)
-        consolidate = kwargs.get('merge', False)
-
-        by_custom = consolidate or by_custom
-
-        if by_custom:
-            by_title = True
-            by_login = True
-            by_password = True
-            by_url = True
-            by_shares = (not kwargs.get('ignore_shares_on_merge') 
-                        if consolidate else True)
-        elif (not by_title and not by_login and 
-              not by_password and not by_url):
-            by_title = True
-            by_login = True
-            by_password = True
-
-        return {
-            'by_title': by_title,
-            'by_login': by_login,
-            'by_password': by_password,
-            'by_url': by_url,
-            'by_custom': by_custom,
-            'by_shares': by_shares,
-            'consolidate': consolidate
+        criteria = {
+            'by_title': kwargs.get('title', False),
+            'by_login': kwargs.get('login', False),
+            'by_password': kwargs.get('password', False),
+            'by_url': kwargs.get('url', False),
+            'by_custom': kwargs.get('full', False),
+            'by_shares': kwargs.get('shares', False),
+            'consolidate': kwargs.get('merge', False)
         }
+
+        # Apply consolidation logic
+        if criteria['consolidate']:
+            criteria = self._apply_consolidation_criteria(criteria, kwargs)
+        elif not self._has_any_search_criteria(criteria):
+            criteria = self._apply_default_criteria(criteria)
+
+        return criteria
+
+    def _apply_consolidation_criteria(self, criteria, kwargs):
+        """Apply criteria for consolidation mode."""
+        criteria['by_custom'] = True
+        criteria['by_title'] = True
+        criteria['by_login'] = True
+        criteria['by_password'] = True
+        criteria['by_url'] = True
+        criteria['by_shares'] = (not kwargs.get('ignore_shares_on_merge', False))
+        return criteria
+
+    def _has_any_search_criteria(self, criteria):
+        """Check if any search criteria is set."""
+        return any(criteria[key] for key in DEFAULT_SEARCH_FIELDS)
+
+    def _apply_default_criteria(self, criteria):
+        """Apply default search criteria."""
+        for field in DEFAULT_SEARCH_FIELDS:
+            criteria[field] = True
+        return criteria
 
     def _get_field_names(self, search_criteria):
         """Get field names for logging."""
@@ -1612,35 +1628,39 @@ class FindDuplicatesCommand(base.ArgparseCommand):
         
         for record_uid in record_cache:
             rec = record_cache[record_uid]
-            if rec.version not in {2, 3}:
+            if rec.version not in SUPPORTED_RECORD_VERSIONS:
                 continue
             
             record = context.vault.vault_data.load_record(record_uid)
             if not record:
                 continue
 
-            tokens = self._extract_record_tokens(record, search_criteria)
-            custom_hash = self._generate_custom_hash(record, search_criteria)
-
-            hasher = hashlib.sha256()
-            non_empty = 0
-            
-            for token in tokens:
-                if token:
-                    non_empty += 1
-                hasher.update(token.encode())
-
-            if custom_hash:
-                hasher.update(custom_hash.encode('utf-8'))
-                non_empty += 1
-
-            if non_empty > 0:
-                hash_value = hasher.hexdigest()
+            hash_value = self._generate_record_hash(record, search_criteria)
+            if hash_value:
                 rec_uids = hashes.get(hash_value, set())
                 rec_uids.add(record_uid)
                 hashes[hash_value] = rec_uids
 
         return hashes
+
+    def _generate_record_hash(self, record, search_criteria):
+        """Generate hash for a single record."""
+        tokens = self._extract_record_tokens(record, search_criteria)
+        custom_hash = self._generate_custom_hash(record, search_criteria)
+
+        hasher = hashlib.sha256()
+        non_empty_count = 0
+        
+        for token in tokens:
+            if token:
+                non_empty_count += 1
+                hasher.update(token.encode())
+
+        if custom_hash:
+            hasher.update(custom_hash.encode('utf-8'))
+            non_empty_count += 1
+
+        return hasher.hexdigest() if non_empty_count > 0 else None
 
     def _extract_record_tokens(self, record, search_criteria):
         """Extract tokens from record for duplicate detection."""
@@ -1679,22 +1699,20 @@ class FindDuplicatesCommand(base.ArgparseCommand):
             return None
         
         customs = self._extract_custom_fields(record)
-        
         self._add_totp_to_customs(record, customs)
         
         if hasattr(record, 'record_type') and record.record_type:
-            customs['type:'] = record.record_type
+            customs[CUSTOM_FIELD_TYPE_PREFIX] = record.record_type
         
         if not customs:
             return None
         
-        keys = list(customs.keys())
-        keys.sort()
-        custom_hash = ''
-        for key in keys:
-            custom_hash += f'{key}={customs[key]}'
-        
-        return custom_hash
+        return self._build_custom_hash_string(customs)
+
+    def _build_custom_hash_string(self, customs):
+        """Build hash string from custom fields."""
+        keys = sorted(customs.keys())
+        return KEY_VALUE_SEPARATOR.join(f'{key}{KEY_VALUE_SEPARATOR}{customs[key]}' for key in keys)
 
     def _extract_custom_fields(self, record):
         """Extract custom fields from record."""
@@ -1725,64 +1743,95 @@ class FindDuplicatesCommand(base.ArgparseCommand):
     def _process_field_value(self, value):
         """Process field value for hashing."""
         if isinstance(value, list):
-            value = [str(x) for x in value]
-            value.sort()
-            return '|'.join(value)
+            return self._process_list_value(value)
         elif isinstance(value, int):
             return str(value) if value != 0 else None
         elif isinstance(value, dict):
-            keys = list(value.keys())
-            keys.sort()
-            return ';'.join(
-                (f'{x}:{value[x]}' for x in keys if value.get(x)))
+            return self._process_dict_value(value)
         elif isinstance(value, str):
             return value
         else:
             return str(value) if value is not None else None
 
+    def _process_list_value(self, value):
+        """Process list value for hashing."""
+        str_values = [str(x) for x in value]
+        str_values.sort()
+        return LIST_SEPARATOR.join(str_values)
+
+    def _process_dict_value(self, value):
+        """Process dictionary value for hashing."""
+        keys = sorted(value.keys())
+        return DICT_SEPARATOR.join(
+            f'{key}:{value[key]}' for key in keys if value.get(key))
+
     def _add_totp_to_customs(self, record, customs):
         """Add TOTP to customs if available."""
+        totp_value = self._extract_totp_value(record)
+        if totp_value:
+            customs[TOTP_FIELD_NAME] = totp_value
+
+    def _extract_totp_value(self, record):
+        """Extract TOTP value from record."""
         if hasattr(record, 'get_typed_field'):
             totp_field = record.get_typed_field('oneTimeCode')
             if totp_field:
-                totp_value = totp_field.get_default_value(str)
-                if totp_value:
-                    customs['totp'] = totp_value
+                return totp_field.get_default_value(str)
         elif hasattr(record, 'totp') and record.totp:
-            customs['totp'] = record.totp
+            return record.totp
+        return None
                 
     def _partition_by_shares(self, duplicate_sets, shared_recs_lookup):
         """Partition duplicates by share permissions."""
         result = []
         for duplicates in duplicate_sets:
-            recs_by_hash = {}
-            for rec_uid in duplicates:
-                h = hashlib.sha256()
-                shared_rec = shared_recs_lookup.get(rec_uid)
-                if not shared_rec:
-                    continue
-                
-                permissions = shared_rec.permissions
-                tu_type = SharePermissions.SharePermissionsType.TEAM_USER
-                permissions = {k: p for k, p in permissions.items() 
-                             if tu_type not in p.types or len(p.types) > 1}
-                permissions = {k: p for k, p in permissions.items() 
-                             if p.to_name != shared_rec.owner}
-                
-                permissions_keys = list(permissions.keys())
-                permissions_keys.sort()
-
-                to_hash = ';'.join(f'{k}={permissions.get(k).permissions_text}' 
-                                 for k in permissions_keys)
-                to_hash = to_hash or 'non-shared'
-                h.update(to_hash.encode())
-                h_val = h.hexdigest()
-                r_uids = recs_by_hash.get(h_val, set())
-                r_uids.add(rec_uid)
-                recs_by_hash[h_val] = r_uids
-            
+            recs_by_hash = self._group_records_by_share_hash(duplicates, shared_recs_lookup)
             result.extend([r for r in recs_by_hash.values() if len(r) > 1])
         return result
+
+    def _group_records_by_share_hash(self, duplicates, shared_recs_lookup):
+        """Group records by their share permission hash."""
+        recs_by_hash = {}
+        for rec_uid in duplicates:
+            shared_rec = shared_recs_lookup.get(rec_uid)
+            if not shared_rec:
+                continue
+            
+            share_hash = self._generate_share_permission_hash(shared_rec)
+            if share_hash:
+                r_uids = recs_by_hash.get(share_hash, set())
+                r_uids.add(rec_uid)
+                recs_by_hash[share_hash] = r_uids
+        return recs_by_hash
+
+    def _generate_share_permission_hash(self, shared_rec):
+        """Generate hash for share permissions."""
+        permissions = self._filter_share_permissions(shared_rec)
+        if not permissions:
+            return None
+        
+        permissions_keys = sorted(permissions.keys())
+        to_hash = DICT_SEPARATOR.join(
+            f'{k}{PERMISSION_SEPARATOR}{permissions.get(k).permissions_text}' 
+            for k in permissions_keys)
+        to_hash = to_hash or NON_SHARED_DEFAULT
+        
+        hasher = hashlib.sha256()
+        hasher.update(to_hash.encode())
+        return hasher.hexdigest()
+
+    def _filter_share_permissions(self, shared_rec):
+        """Filter share permissions for hashing."""
+        permissions = shared_rec.permissions
+        tu_type = SharePermissions.SharePermissionsType.TEAM_USER
+        
+        permissions = {k: p for k, p in permissions.items() 
+                     if tu_type not in p.types or len(p.types) > 1}
+        
+        permissions = {k: p for k, p in permissions.items() 
+                     if p.to_name != shared_rec.owner}
+        
+        return permissions
 
     def _generate_results(self, context, partitions, search_criteria, 
                          out_fmt, out_dst, kwargs, dry_run, logging_fn):
@@ -1834,7 +1883,7 @@ class FindDuplicatesCommand(base.ArgparseCommand):
         if search_criteria['by_url']:
             url_value = record.extract_url() or ''
             url = urllib.parse.urlparse(url_value).hostname
-            url = url[:30] if url else ''
+            url = url[:URL_TRUNCATE_LENGTH] if url else ''
         
         owner = shared_record.owner if shared_record else ''
         if not owner:
@@ -1856,10 +1905,9 @@ class FindDuplicatesCommand(base.ArgparseCommand):
             return ''
         
         perms = {k: p for k, p in shared_record.permissions.items()}
-        keys = list(perms.keys())
-        keys.sort()
+        keys = sorted(perms.keys())
         perms = [perms.get(k) for k in keys]
-        return ', '.join([p.to_name for p in perms if owner != p.to_name])
+        return SHARE_NAMES_SEPARATOR.join([p.to_name for p in perms if owner != p.to_name])
 
     def _remove_duplicates(self, dupe_info, col_headers, dupe_uids, 
                           kwargs, dry_run, logging_fn, context):
@@ -1885,6 +1933,3 @@ class FindDuplicatesCommand(base.ArgparseCommand):
         else:
             logger.warning('Duplicate record removal aborted. No records removed.')
 
-    
-    
-    
