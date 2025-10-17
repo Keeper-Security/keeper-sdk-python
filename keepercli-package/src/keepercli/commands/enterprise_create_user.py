@@ -1,17 +1,30 @@
 import argparse
-import json
-import re
+from typing import Optional
 from urllib.parse import urlunparse
-from typing import Optional, List, Tuple
 
-from . import base, enterprise_utils
-from .. import api, constants
+from . import base
+from .. import api
 from ..params import KeeperParams
-from keepersdk import crypto, utils, generator
-from keepersdk.proto import enterprise_pb2
-from keepersdk.vault import vault_record, record_management, record_facades
+from keepersdk.vault import vault_record
+from keepersdk.enterprise.enterprise_user_management import EnterpriseUserManager, CreateUserResponse
 from .share_management import OneTimeShareCreateCommand
 
+# Constants
+DEFAULT_ONE_TIME_SHARE_EXPIRY = '7d'
+ONE_TIME_SHARE_LABEL = 'One-Time Share'
+ONE_TIME_SHARE_FIELD_TYPE = 'url'
+VAULT_URL_PATH = '/vault'
+PASSWORD_CHANGE_NOTE = (
+    'The user is required to change their Master Password '
+    'upon login.'
+)
+
+# Logging format constants
+LOG_FORMAT_VERBOSE_HEADER = 'The account {} has been created. Login details below:'
+LOG_FORMAT_VERBOSE_SUCCESS = 'User "{}" has been created with ID {}'
+LOG_FORMAT_FIELD_WIDTH = 24
+
+logger = api.get_logger()
 
 class CreateEnterpriseUserCommand(base.ArgparseCommand):
     """Create an enterprise user command."""
@@ -23,7 +36,6 @@ class CreateEnterpriseUserCommand(base.ArgparseCommand):
         )
         CreateEnterpriseUserCommand.add_arguments_to_parser(parser)
         super().__init__(parser)
-        self.logger = api.get_logger()
 
     @staticmethod
     def add_arguments_to_parser(parser: argparse.ArgumentParser):
@@ -46,331 +58,212 @@ class CreateEnterpriseUserCommand(base.ArgparseCommand):
             help='print verbose information'
         )
 
-    def _resolve_node(
-        self,
-        context: KeeperParams,
-        node_name: Optional[str]
-    ) -> Tuple[int, List]:
+    def _create_enterprise_user_manager(self, context: KeeperParams) -> EnterpriseUserManager:
         """
-        Resolve the node for user creation.
+        Create an EnterpriseUserManager instance from KeeperParams context.
         """
-        if not node_name:
-            return (
-                context.enterprise_data.root_node.node_id,
-                [context.enterprise_data.root_node]
-            )
-        
-        node = enterprise_utils.NodeUtils.resolve_single_node(
-            context.enterprise_data, node_name
+        return EnterpriseUserManager(
+            loader=context.enterprise_loader,
+            auth_context=context.auth
         )
-
-        return node.node_id, [node]
-
-    def _validate_email(self, email: str) -> bool:
-        """
-        Validate email format.
-        """
-        if not email:
-            self.logger.warning('Email parameter is required.')
-            return False
-        
-        email_pattern = re.compile(constants.EMAIL_PATTERN)
-        if not email_pattern.match(email):
-            self.logger.warning(
-                '"%s" appears not a valid email address. Skipping.',
-                email
-            )
-            return False
-        
-        return True
-
-    def _create_provision_request(
-        self,
-        context: KeeperParams,
-        email: str,
-        displayname: str,
-        node_id: int
-    ) -> Tuple:
-        """
-        Create and populate the user provision request.
-        """
-        tree_key = context.enterprise_data.enterprise_info.tree_key
-        
-        rq = enterprise_pb2.EnterpriseUsersProvisionRequest()  # type: ignore[attr-defined]  # noqa: E501
-        rq.clientVersion = context.auth.keeper_endpoint.client_version
-        
-        data = {'displayname': displayname or email}
-        user_data = json.dumps(data).encode('utf-8')
-        user_password = generator.KeeperPasswordGenerator(
-            length=20
-        ).generate()
-        user_data_key = utils.generate_aes_key()
-        enterprise_user_id = context.enterprise_loader.get_enterprise_id()
-        
-        user_rq = enterprise_pb2.EnterpriseUsersProvision()  # type: ignore[attr-defined]  # noqa: E501
-        user_rq.enterpriseUserId = enterprise_user_id
-        user_rq.username = email
-        user_rq.nodeId = node_id
-        user_rq.encryptedData = utils.base64_url_encode(
-            crypto.encrypt_aes_v1(user_data, tree_key)
-        )
-        user_rq.keyType = enterprise_pb2.ENCRYPTED_BY_DATA_KEY  # type: ignore[attr-defined]  # noqa: E501
-        
-        enterprise_ec_key = (
-            context.enterprise_data.enterprise_info.ec_public_key
-        )
-        if not enterprise_ec_key:
-            enterprise_ec_key = crypto.load_ec_public_key(
-                utils.base64_url_decode(
-                    context.auth.auth_context.enterprise_ec_public_key
-                )
-            )
-        
-        user_rq.enterpriseUsersDataKey = crypto.encrypt_ec(
-            user_data_key, enterprise_ec_key
-        )
-        user_rq.authVerifier = utils.create_auth_verifier(
-            user_password,
-            crypto.get_random_bytes(16),
-            constants.PBKDF2_ITERATIONS
-        )
-        user_rq.encryptionParams = utils.create_encryption_params(
-            user_password,
-            crypto.get_random_bytes(16),
-            constants.PBKDF2_ITERATIONS,
-            user_data_key
-        )
-        
-        if not context.auth.auth_context.forbid_rsa:
-            rsa_private_key, rsa_public_key = crypto.generate_rsa_key()
-            rsa_private = crypto.unload_rsa_private_key(rsa_private_key)
-            rsa_public = crypto.unload_rsa_public_key(rsa_public_key)
-            user_rq.rsaPublicKey = rsa_public
-            user_rq.rsaEncryptedPrivateKey = crypto.encrypt_aes_v1(
-                rsa_private, user_data_key
-            )
-        
-        ec_private_key, ec_public_key = crypto.generate_ec_key()
-        ec_private = crypto.unload_ec_private_key(ec_private_key)
-        ec_public = crypto.unload_ec_public_key(ec_public_key)
-        user_rq.eccPublicKey = ec_public
-        user_rq.eccEncryptedPrivateKey = crypto.encrypt_aes_v2(
-            ec_private, user_data_key
-        )
-        
-        user_rq.encryptedDeviceToken = (
-            context.auth.auth_context.device_token
-        )
-        user_rq.encryptedClientKey = crypto.encrypt_aes_v1(
-            utils.generate_aes_key(), user_data_key
-        )
-        
-        rq.users.append(user_rq)
-        return rq, user_password
-
-    def _provision_user(
-        self,
-        context: KeeperParams,
-        provision_request,
-        email: str
-    ) -> None:
-        """
-        Execute the user provision request.
-        """
-        rs = context.auth.execute_auth_rest(
-            'enterprise/enterprise_user_provision',
-            provision_request,
-            response_type=enterprise_pb2.EnterpriseUsersProvisionResponse  # type: ignore[attr-defined]  # noqa: E501
-        )
-        
-        for user_rs in rs.results:
-            if user_rs.code == "exists":
-                raise base.CommandError(
-                    f'User "{email}" already exists'
-                )
-            if user_rs.code and user_rs.code not in ['success', 'ok']:
-                doc_url = (
-                    'https://docs.keeper.io/enterprise-guide/'
-                    'user-and-team-provisioning/email-auto-provisioning'
-                )
-                raise base.CommandError(
-                    f'Failed to auto-create account "{email}".\n'
-                    'Creating user accounts without email verification is '
-                    'only permitted on reserved domains.\n'
-                    'To reserve a domain please contact Keeper support. '
-                    f'Learn more about domain reservation here:\n{doc_url}'
-                )
-
-    def _create_password_record(
-        self,
-        context: KeeperParams,
-        email: str,
-        user_password: str,
-        folder_name: Optional[str]
-    ) -> vault_record.TypedRecord:
-        """
-        Create a vault record with user credentials.
-        """
-        folder_uid: Optional[str] = None
-        if folder_name:
-            folder = context.vault.vault_data.get_folder(folder_name)
-            if folder:
-                folder_uid = folder.folder_uid
-            else:
-                self.logger.warning(
-                    'Folder "%s" not found. Using root folder.',
-                    folder_name
-                )
-        
-        keeper_url = urlunparse((
-            'https',
-            context.server,
-            '/vault',
-            None,
-            None,
-            f'email/{email}'
-        ))
-        
-        record = vault_record.TypedRecord()
-        login_facade = record_facades.LoginRecordFacade()
-        login_facade.record = record
-        login_facade.title = f'Keeper Account: {email}'
-        login_facade.login = email
-        login_facade.password = user_password
-        login_facade.url = keeper_url
-        login_facade.notes = (
-            'The user is required to change their Master Password '
-            'upon login.'
-        )
-        
-        record_management.add_record_to_folder(
-            context.vault, record, folder_uid=folder_uid
-        )
-        context.vault.sync_down()
-        
-        return record
 
     def _add_one_time_share(
         self,
         context: KeeperParams,
-        record: vault_record.TypedRecord,
+        record_uid: str,
         email: str
     ) -> Optional[str]:
         """
-        Create and add one-time share link to the record
+        Create and add one-time share link to the record.
+        
+        Args:
+            context: Keeper parameters context
+            record_uid: UID of the record to share
+            email: Email address for the share name
+            
+        Returns:
+            One-time share URL if successful, None otherwise
         """
-        ots_command = OneTimeShareCreateCommand()
-        ots_url = ots_command.execute(
-            context,
-            record=record.record_uid,
-            share_name=f'{email}: Master Password',
-            expire='7d'
-        )
-        
-        if ots_url:
-            ots_field = vault_record.TypedField()
-            ots_field.type = 'url'
-            ots_field.label = 'One-Time Share'
-            ots_field.value = [ots_url]
-            record.custom.append(ots_field)
-            record_management.update_record(context.vault, record)
-            context.vault.sync_down()
-        
-        return ots_url
+        try:
+            if not self._validate_record_exists(context, record_uid):
+                return None
+            
+            ots_url = self._create_one_time_share_url(context, record_uid, email)
+            if ots_url:
+                self._add_share_url_to_record(context, record_uid, ots_url)
+            
+            return ots_url
+        except Exception as e:
+            logger.warning(f"Could not create one-time share: {e}")
+            return None
 
-    def _print_results(
+    def _validate_record_exists(self, context: KeeperParams, record_uid: str) -> bool:
+        """Validate that the record exists in the vault."""
+        record_data = context.vault.vault_data.get_record(record_uid)
+        if not record_data:
+            logger.warning(f"Could not load record {record_uid} for one-time share")
+            return False
+        return True
+
+    def _create_one_time_share_url(
+        self, 
+        context: KeeperParams, 
+        record_uid: str, 
+        email: str
+    ) -> Optional[str]:
+        """Create one-time share URL for the record."""
+        ots_command = OneTimeShareCreateCommand()
+        return ots_command.execute(
+            context,
+            record=record_uid,
+            share_name=f'{email}: Master Password',
+            expire=DEFAULT_ONE_TIME_SHARE_EXPIRY
+        )
+
+    def _add_share_url_to_record(
+        self, 
+        context: KeeperParams, 
+        record_uid: str, 
+        ots_url: str
+    ) -> None:
+        """Add one-time share URL as a custom field to the record."""
+        from keepersdk.vault import record_management
+        
+        full_record = context.vault.vault_data.load_record(record_uid)
+        
+        if isinstance(full_record, vault_record.TypedRecord):
+            ots_field = vault_record.TypedField()
+            ots_field.type = ONE_TIME_SHARE_FIELD_TYPE
+            ots_field.label = ONE_TIME_SHARE_LABEL
+            ots_field.value = [ots_url]
+            full_record.custom.append(ots_field)
+            record_management.update_record(context.vault, full_record)
+            context.vault.sync_down()
+
+    def _log_results(
         self,
-        email: str,
+        result: CreateUserResponse,
         displayname: str,
-        user_password: str,
         keeper_url: str,
         notes: str,
-        nodes: List,
-        ots_url: Optional[str],
         verbose: bool
     ) -> None:
         """
-        Print the results of user creation.
+        Log the results of user creation.
+        
+        Args:
+            result: User creation response
+            displayname: User display name
+            keeper_url: Keeper vault URL
+            notes: Additional notes to display
+            verbose: Whether to show verbose output
         """
         if verbose:
-            print(
-                f'The account {email} has been created. '
-                'Login details below:'
-            )
-            print(f'{"Vault Login URL:":>24s} {keeper_url}')
-            print(f'{"Email:":>24s} {email}')
-            if displayname:
-                print(f'{"Name:":>24s} {displayname}')
-            if nodes and nodes[0] and nodes[0].name:
-                print(f'{"Node:":>24s} {nodes[0].name}')
-            print(f'{"Master Password:":>24s} {user_password}')
-            if ots_url:
-                print(f'{"One-Time Share Link:":>24s} {ots_url}')
-            print(f'{"Note:":>24s} {notes}')
+            self._log_verbose_results(result, displayname, keeper_url, notes)
         else:
-            self.logger.info(
-                'User "%s" credentials are stored to record "%s"',
-                email,
-                f'Keeper Account: {email}'
+            self._log_simple_results(result)
+
+    def _log_verbose_results(
+        self, 
+        result: CreateUserResponse, 
+        displayname: str, 
+        keeper_url: str, 
+        notes: str
+    ) -> None:
+        """Log verbose user creation results."""
+        logger.info(LOG_FORMAT_VERBOSE_HEADER.format(result.email))
+        
+        field_width = LOG_FORMAT_FIELD_WIDTH
+        logger.info(f'{"Vault Login URL:":>{field_width}s} {keeper_url}')
+        logger.info(f'{"Email:":>{field_width}s} {result.email}')
+        
+        if displayname:
+            logger.info(f'{"Name:":>{field_width}s} {displayname}')
+        if result.node_id:
+            logger.info(f'{"Node ID:":>{field_width}s} {result.node_id}')
+            
+        logger.info(f'{"Master Password:":>{field_width}s} {result.generated_password}')
+        logger.info(f'{"Note:":>{field_width}s} {notes}')
+
+    def _log_simple_results(self, result: CreateUserResponse) -> None:
+        """Log simple user creation results."""
+        logger.info(
+            LOG_FORMAT_VERBOSE_SUCCESS.format(
+                result.email, 
+                result.enterprise_user_id
             )
+        )
 
     def execute(self, context: KeeperParams, **kwargs):
         """
         Execute the create user command.
+        
+        Args:
+            context: Keeper parameters context
+            **kwargs: Command line arguments
+            
+        Returns:
+            Enterprise user ID if successful, None otherwise
+            
+        Raises:
+            CommandError: If user creation fails
         """
-        assert context.enterprise_data is not None
-        assert context.vault is not None
-        assert context.auth is not None
-        assert context.enterprise_loader is not None
+        self._validate_context(context)
         
         email = kwargs.get('email')
         displayname = kwargs.get('full_name', '')
         node_name = kwargs.get('node')
-        folder_name = kwargs.get('folder')
         verbose = kwargs.get('verbose', False)
         
-        if not self._validate_email(email):
+        try:
+            result = self._create_user(context, email, displayname, node_name)
+            keeper_url = self._build_keeper_url(context.server, email)
+            
+            self._log_results(
+                result, displayname, keeper_url, PASSWORD_CHANGE_NOTE, verbose
+            )
+            
+            return result.enterprise_user_id
+            
+        except ValueError as e:
+            logger.error(str(e))
             return None
-        
-        node_id, nodes = self._resolve_node(context, node_name)
+        except Exception as e:
+            if "already exists" in str(e):
+                raise base.CommandError(str(e))
+            else:
+                raise base.CommandError(f"Failed to create user: {str(e)}")
 
-        if len(nodes) == 0:
-            self.logger.warning('Node \"%s\" not found', node_name)
-            return None
-        if len(nodes) > 1:
-            self.logger.warning('More than one nodes \"%s\" are found', node_name)
-            return None
+    def _validate_context(self, context: KeeperParams) -> None:
+        """Validate that required context data is available."""
+        assert context.enterprise_data is not None
+        assert context.auth is not None
+
+    def _create_user(
+        self, 
+        context: KeeperParams, 
+        email: str, 
+        displayname: str, 
+        node_name: Optional[str]
+    ) -> CreateUserResponse:
+        """Create the enterprise user."""
+        user_manager = self._create_enterprise_user_manager(context)
         
-        provision_request, user_password = self._create_provision_request(
-            context, email, displayname, node_id
+        from keepersdk.enterprise.enterprise_user_management import CreateUserRequest
+        request = CreateUserRequest(
+            email=email,
+            display_name=displayname,
+            node_name=node_name
         )
-        
-        self._provision_user(context, provision_request, email)
-        
-        context.enterprise_loader.load()
-        
-        record = self._create_password_record(
-            context, email, user_password, folder_name
-        )
-        
-        ots_url = self._add_one_time_share(context, record, email)
-        
-        keeper_url = urlunparse((
+        return user_manager.create_user(request)
+
+    def _build_keeper_url(self, server: str, email: str) -> str:
+        """Build the Keeper vault URL for the user."""
+        return urlunparse((
             'https',
-            context.server,
-            '/vault',
+            server,
+            VAULT_URL_PATH,
             None,
             None,
             f'email/{email}'
         ))
-        notes = (
-            'The user is required to change their Master Password '
-            'upon login.'
-        )
-        
-        self._print_results(
-            email, displayname, user_password, keeper_url,
-            notes, nodes, ots_url, verbose
-        )
-        
-        return record.record_uid
