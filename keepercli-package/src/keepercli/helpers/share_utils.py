@@ -87,6 +87,7 @@ KEY_IS_ADMIN = 'is_admin'
 KEY_EXPIRATION = 'expiration'
 KEY_OWNER = 'owner'
 KEY_VIEW = 'view'
+KEY_TITLE = 'title'
 
 # Enterprise Keys
 KEY_ENTERPRISE = 'enterprise'
@@ -822,11 +823,11 @@ def get_shared_records(context: KeeperParams, record_uids, cache_only=False):
         from .share_record import SharedRecord
         
         shared_records = [
-            SharedRecord(record, sf_share_admins, team_members, restricted_role_members)
+            SharedRecord(context, record, sf_share_admins, team_members, restricted_role_members)
             for record in valid_records
         ]
 
-        return {shared_record.record_uid: shared_record for shared_record in shared_records}
+        return {shared_record.uid: shared_record for shared_record in shared_records}
 
     except Exception as e:
         logger.error(f"Error in get_shared_records: {e}")

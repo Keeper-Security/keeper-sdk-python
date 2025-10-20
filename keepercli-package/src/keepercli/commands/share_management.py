@@ -1808,13 +1808,13 @@ class FindDuplicateCommand(base.ArgparseCommand):
         """Generate hash for share permissions."""
         permissions = self._filter_share_permissions(shared_rec)
         if not permissions:
-            return None
-        
-        permissions_keys = sorted(permissions.keys())
-        to_hash = DICT_SEPARATOR.join(
-            f'{k}{PERMISSION_SEPARATOR}{permissions.get(k).permissions_text}' 
-            for k in permissions_keys)
-        to_hash = to_hash or NON_SHARED_DEFAULT
+            to_hash = NON_SHARED_DEFAULT
+        else:
+            permissions_keys = sorted(permissions.keys())
+            to_hash = DICT_SEPARATOR.join(
+                f'{k}{PERMISSION_SEPARATOR}{permissions.get(k).permissions_text}' 
+                for k in permissions_keys)
+            to_hash = to_hash or NON_SHARED_DEFAULT
         
         hasher = hashlib.sha256()
         hasher.update(to_hash.encode())

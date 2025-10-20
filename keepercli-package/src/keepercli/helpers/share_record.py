@@ -4,7 +4,7 @@ from typing import Dict
 from .. import api
 from .share_utils import (
     KEY_USERNAME, KEY_TEAM_UID, KEY_RECORD_UID, KEY_SHARED_FOLDER_UID,
-    KEY_USER_PERMISSIONS, KEY_TEAM_PERMISSIONS, KEY_SHARED_FOLDER_PERMISSIONS,
+    KEY_USER_PERMISSIONS, KEY_SHARED_FOLDER_PERMISSIONS,
     KEY_SHARES, KEY_UID, KEY_NAME, KEY_EDITABLE, KEY_SHAREABLE,
     KEY_MANAGE_RECORDS, KEY_MANAGE_USERS, KEY_SHARE_ADMIN, KEY_IS_ADMIN,
     KEY_EXPIRATION, KEY_OWNER, KEY_VIEW, KEY_ENTERPRISE, KEY_ENTERPRISE_USER_ID,
@@ -19,6 +19,14 @@ from .share_utils import (
 )
 
 logger = api.get_logger() 
+
+
+def _safe_get_attr(obj, attr_name, default=None):
+    """Safely get attribute from object or dict."""
+    if isinstance(obj, dict):
+        return obj.get(attr_name, default)
+    return getattr(obj, attr_name, default)
+
 
 class SharePermissions:
     SharePermissionsType = Enum('SharePermissionsType', ['USER', 'SF_USER', 'TEAM', 'TEAM_USER'])
@@ -128,7 +136,6 @@ class SharedRecord:
             self._initialize_folder_info(params)
             self.team_members = team_members or {}
 
-            # Initialize with defaults
             if sf_sharing_admins is None:
                 sf_sharing_admins = {}
             if role_restricted_members is None:
@@ -137,18 +144,18 @@ class SharedRecord:
             self.load(params, sf_sharing_admins, team_members, role_restricted_members)
         except Exception as e:
             logger.error(f"Failed to initialize SharedRecord: {e}")
-            raise ShareManagementError(f"Failed to initialize SharedRecord: {e}") from e
 
     def _determine_owner(self, params):
         """Determine the owner of the record."""
         try:
-            has_owner = (hasattr(params, KEY_RECORD_OWNER_CACHE) and 
-                        self.uid in params.record_owner_cache)
-            user_owned = has_owner and params.record_owner_cache.get(self.uid).owner
-            owner = getattr(params, 'user', '') if user_owned else ''
+            record_owner_cache = _safe_get_attr(params, KEY_RECORD_OWNER_CACHE)
+            has_owner = record_owner_cache and self.uid in record_owner_cache
+            user_owned = has_owner and record_owner_cache.get(self.uid).owner
+            owner = _safe_get_attr(params, 'user', '') if user_owned else ''
             if not owner:
-                owner = (params.auth.auth_context.username 
-                       if params.auth and params.auth.auth_context else '')
+                auth = _safe_get_attr(params, 'auth')
+                if auth and hasattr(auth, 'auth_context') and auth.auth_context:
+                    owner = auth.auth_context.username
             return owner
         except Exception as e:
             logger.debug(f"Failed to determine owner: {e}")
@@ -158,9 +165,9 @@ class SharedRecord:
         """Initialize folder information for the record."""
         try:
             from keepersdk.vault import vault_utils
-            if (hasattr(params, KEY_VAULT) and params.vault and 
-                hasattr(params.vault, KEY_VAULT_DATA)):
-                folders = vault_utils.get_folders_for_record(params.vault.vault_data, self.uid)
+            vault = _safe_get_attr(params, KEY_VAULT)
+            if vault and hasattr(vault, KEY_VAULT_DATA):
+                folders = vault_utils.get_folders_for_record(vault.vault_data, self.uid)
                 self.folder_uids = [f.folder_uid for f in folders]
         except Exception as e:
             logger.debug(f"Failed to initialize folder info: {e}")
@@ -218,7 +225,7 @@ class SharedRecord:
             self._load_shared_folder_permissions(params, shares, sf_sharing_admins, team_members)
             self._apply_role_restrictions(role_restricted_members)
         except Exception as e:
-            logger.error(f"Failed to load share information: {e}")
+            logger.debug(f"Failed to load share information: {e}")
 
     def _get_shares_data(self, params, share_info):
         """Get shares data from various sources."""
@@ -226,9 +233,9 @@ class SharedRecord:
             return share_info.get(KEY_SHARES, {})
         
         try:
-            if (hasattr(params, KEY_RECORD_CACHE) and 
-                self.uid in params.record_cache):
-                rec_cached = params.record_cache.get(self.uid, {})
+            record_cache = _safe_get_attr(params, KEY_RECORD_CACHE)
+            if record_cache and self.uid in record_cache:
+                rec_cached = record_cache.get(self.uid, {})
                 return rec_cached.get(KEY_SHARES, {})
         except Exception as e:
             logger.debug(f"Failed to get cached shares data: {e}")
@@ -318,13 +325,13 @@ class SharedRecord:
 
     def _load_from_vault_folders(self, params, sf_sharing_admins, team_members):
         """Load permissions from vault folders."""
-        if not (hasattr(params, KEY_VAULT) and params.vault and 
-                hasattr(params.vault, KEY_VAULT_DATA)):
+        vault = _safe_get_attr(params, KEY_VAULT)
+        if not vault or not hasattr(vault, KEY_VAULT_DATA):
             return False
 
         try:
             for folder_uid in self.folder_uids:
-                folder = params.vault.vault_data.get_folder(folder_uid)
+                folder = vault.vault_data.get_folder(folder_uid)
                 if folder and folder.folder_type == 'shared_folder':
                     self._load_shared_folder_permissions(folder_uid, params, sf_sharing_admins, team_members)
                     return True
@@ -340,17 +347,26 @@ class SharedRecord:
 
     def _load_shared_folder_permissions(self, folder_uid, params, sf_sharing_admins, team_members):
         """Load permissions for a specific shared folder."""
-        self.permissions.clear()
-        self.user_permissions.clear()
-        self.team_permissions.clear()
-        
-        sf = params.vault.vault_data.load_shared_folder(shared_folder_uid=folder_uid)
-        if sf:
-            if sf.user_permissions:
+        vault = _safe_get_attr(params, KEY_VAULT)
+        if not vault or not hasattr(vault, KEY_VAULT_DATA):
+            return
+            
+        sf = vault.vault_data.load_shared_folder(shared_folder_uid=folder_uid)
+        if sf and sf.user_permissions:
+            # Only clear if we're going to replace with shared folder permissions
+            self.permissions.clear()
+            self.user_permissions.clear()
+            self.team_permissions.clear()
+            
+            # Split permissions by user_type (1=User, 2=Team)
+            user_perms = [p for p in sf.user_permissions if p.user_type == 1]
+            team_perms = [p for p in sf.user_permissions if p.user_type == 2]
+            
+            if user_perms:
                 self._process_user_permissions_list(
-                    sf.user_permissions, folder_uid, SharePermissions.SharePermissionsType.SF_USER, sf_sharing_admins)
-            if sf.team_permissions:
-                self._process_team_permissions_list(sf.team_permissions, folder_uid, team_members, sf_sharing_admins)
+                    user_perms, folder_uid, SharePermissions.SharePermissionsType.SF_USER, sf_sharing_admins)
+            if team_perms:
+                self._process_team_permissions_list(team_perms, folder_uid, team_members, sf_sharing_admins)
 
     def _load_from_shared_folders(self, shared_folders, sf_sharing_admins, team_members):
         """Load permissions from shared folders data."""
@@ -425,7 +441,8 @@ class SharedRecord:
 
     def _apply_team_restrictions(self, team_perms):
         """Apply team restrictions to permissions."""
-        if not hasattr(self.params, KEY_ENTERPRISE) or not self.params.enterprise:
+        enterprise = _safe_get_attr(self.params, KEY_ENTERPRISE)
+        if not enterprise:
             return team_perms
 
         restriction_permission_lookup = {
@@ -434,7 +451,7 @@ class SharedRecord:
             KEY_RESTRICT_VIEW: KEY_VIEW
         }
 
-        teams_cache = self.params.enterprise.get(KEY_TEAMS, {})
+        teams_cache = enterprise.get(KEY_TEAMS, {}) if isinstance(enterprise, dict) else getattr(enterprise, KEY_TEAMS, {})
         perms = team_perms.copy()
         team_info = next((t for t in teams_cache 
                          if t.get(KEY_TEAM_UID) == perms.get(KEY_TEAM_UID)), {})
@@ -458,24 +475,35 @@ def get_shared_records(params, record_uids, cache_only=False):
     """Get shared records information with enterprise features."""
     try:
         from . import share_utils
-        share_infos = share_utils.get_record_shares(vault=params.vault, record_uids=record_uids) or []
+        vault = _safe_get_attr(params, KEY_VAULT)
+        share_infos = share_utils.get_record_shares(vault=vault, record_uids=record_uids) or [] if vault else []
     except Exception as e:
         logger.debug(f"Failed to get record shares: {e}")
         share_infos = []
 
     try:
-        if (hasattr(params, KEY_VAULT) and params.vault and 
-            hasattr(params.vault, KEY_VAULT_DATA)):
-            if not hasattr(params, KEY_SHARED_FOLDER_CACHE) or not params.shared_folder_cache:
-                params.shared_folder_cache = {}
-                for sf_info in params.vault.vault_data.shared_folders():
+        vault = _safe_get_attr(params, KEY_VAULT)
+        if vault and hasattr(vault, KEY_VAULT_DATA):
+            shared_folder_cache = _safe_get_attr(params, KEY_SHARED_FOLDER_CACHE)
+            if not shared_folder_cache:
+                shared_folder_cache = {}
+                # Set it back on params if possible
+                if isinstance(params, dict):
+                    params[KEY_SHARED_FOLDER_CACHE] = shared_folder_cache
+                else:
+                    setattr(params, KEY_SHARED_FOLDER_CACHE, shared_folder_cache)
+                    
+                for sf_info in vault.vault_data.shared_folders():
                     sf_uid = sf_info.shared_folder_uid
                     try:
-                        sf = params.vault.vault_data.load_shared_folder(shared_folder_uid=sf_uid)
+                        sf = vault.vault_data.load_shared_folder(shared_folder_uid=sf_uid)
                         if sf:
-                            params.shared_folder_cache[sf_uid] = {
-                                KEY_USERS: sf.user_permissions or [],
-                                KEY_TEAMS: sf.team_permissions or [],
+                            # Split permissions by user_type
+                            user_perms = [p for p in sf.user_permissions if p.user_type == 1] if sf.user_permissions else []
+                            team_perms = [p for p in sf.user_permissions if p.user_type == 2] if sf.user_permissions else []
+                            shared_folder_cache[sf_uid] = {
+                                KEY_USERS: user_perms,
+                                KEY_TEAMS: team_perms,
                                 KEY_NAME: sf.name
                             }
                     except Exception as e:
@@ -485,9 +513,10 @@ def get_shared_records(params, record_uids, cache_only=False):
 
     sf_teams = []
     try:
-        if hasattr(params, KEY_SHARED_FOLDER_CACHE):
+        shared_folder_cache = _safe_get_attr(params, KEY_SHARED_FOLDER_CACHE)
+        if shared_folder_cache:
             sf_teams = [shared_folder.get(KEY_TEAMS, []) 
-                       for shared_folder in params.shared_folder_cache.values()]
+                       for shared_folder in shared_folder_cache.values()]
     except Exception as e:
         logger.debug(f"Failed to get shared folder teams: {e}")
 
@@ -496,8 +525,9 @@ def get_shared_records(params, record_uids, cache_only=False):
     
     enterprise_users = []
     try:
-        if hasattr(params, KEY_ENTERPRISE) and params.enterprise:
-            enterprise_users = params.enterprise.get(KEY_USERS, [])
+        enterprise = _safe_get_attr(params, KEY_ENTERPRISE)
+        if enterprise:
+            enterprise_users = enterprise.get(KEY_USERS, []) if isinstance(enterprise, dict) else getattr(enterprise, KEY_USERS, [])
     except Exception as e:
         logger.debug(f"Failed to get enterprise users: {e}")
     
@@ -532,8 +562,9 @@ def _fetch_sf_admins(params):
     """Fetch shared folder administrators."""
     sf_admins = {}
     try:
-        if hasattr(params, KEY_SHARED_FOLDER_CACHE):
-            sf_uids = [uid for uid in params.shared_folder_cache]
+        shared_folder_cache = _safe_get_attr(params, KEY_SHARED_FOLDER_CACHE)
+        if shared_folder_cache:
+            sf_uids = [uid for uid in shared_folder_cache]
             for sf_uid in sf_uids:
                 sf_admins[sf_uid] = []
     except Exception as e:
@@ -544,19 +575,20 @@ def _fetch_sf_admins(params):
 def _get_restricted_role_members(params, username_lookup):
     """Get usernames with restricted sharing permissions."""
     members = set()
-    if not hasattr(params, KEY_ENTERPRISE) or not params.enterprise:
+    enterprise = _safe_get_attr(params, KEY_ENTERPRISE)
+    if not enterprise:
         return members
 
     try:
         restrict_key = KEY_RESTRICT_SHARING_ALL
         enf_key = KEY_ENFORCEMENTS
-        r_enforcements = params.enterprise.get(KEY_ROLE_ENFORCEMENTS, [])
+        r_enforcements = enterprise.get(KEY_ROLE_ENFORCEMENTS, []) if isinstance(enterprise, dict) else getattr(enterprise, KEY_ROLE_ENFORCEMENTS, [])
         no_share_roles = {re.get(KEY_ROLE_ID) for re in r_enforcements 
                          if re.get(enf_key, {}).get(restrict_key) == 'true'}
-        r_users = [u for u in params.enterprise.get(KEY_ROLE_USERS, []) 
-                  if u.get(KEY_ROLE_ID) in no_share_roles]
-        r_teams = [t for t in params.enterprise.get(KEY_ROLE_TEAMS, []) 
-                  if t.get(KEY_ROLE_ID) in no_share_roles]
+        r_users_data = enterprise.get(KEY_ROLE_USERS, []) if isinstance(enterprise, dict) else getattr(enterprise, KEY_ROLE_USERS, [])
+        r_users = [u for u in r_users_data if u.get(KEY_ROLE_ID) in no_share_roles]
+        r_teams_data = enterprise.get(KEY_ROLE_TEAMS, []) if isinstance(enterprise, dict) else getattr(enterprise, KEY_ROLE_TEAMS, [])
+        r_teams = [t for t in r_teams_data if t.get(KEY_ROLE_ID) in no_share_roles]
         no_share_users = {username_lookup.get(u.get(KEY_ENTERPRISE_USER_ID)) for u in r_users}
         no_share_teams = {t.get(KEY_TEAM_UID) for t in r_teams}
         cached_team_members = _get_cached_team_members(params, no_share_teams, username_lookup)
@@ -571,11 +603,13 @@ def _get_restricted_role_members(params, username_lookup):
 def _get_cached_team_members(params, t_uids, uname_lookup):
     """Get team members from cached enterprise data."""
     members = {}
-    if not hasattr(params, KEY_ENTERPRISE) or not params.enterprise:
+    enterprise = _safe_get_attr(params, KEY_ENTERPRISE)
+    if not enterprise:
         return members
 
     try:
-        team_users = params.enterprise.get(KEY_TEAM_USERS) or []
+        team_users_data = enterprise.get(KEY_TEAM_USERS) if isinstance(enterprise, dict) else getattr(enterprise, KEY_TEAM_USERS, [])
+        team_users = team_users_data or []
         team_users = [tu for tu in team_users 
                      if tu.get(KEY_USER_TYPE) != USER_TYPE_INACTIVE and 
                         tu.get(KEY_TEAM_UID) in t_uids]
@@ -597,15 +631,19 @@ def _get_cached_team_members(params, t_uids, uname_lookup):
 def _load_records_safely(params, record_uids):
     """Load records safely with error handling."""
     records = []
+    vault = _safe_get_attr(params, KEY_VAULT)
+    if not vault or not hasattr(vault, KEY_VAULT_DATA):
+        return records
+        
     try:
-        records = [params.vault.vault_data.load_record(uid) for uid in record_uids]
+        records = [vault.vault_data.load_record(uid) for uid in record_uids]
         records = [r for r in records if r]
     except Exception as e:
         logger.debug(f"Failed to load records in batch: {e}")
         records = []
         for uid in record_uids:
             try:
-                record = params.vault.vault_data.load_record(uid)
+                record = vault.vault_data.load_record(uid)
                 if record:
                     records.append(record)
             except Exception as e:
@@ -615,7 +653,12 @@ def _load_records_safely(params, record_uids):
 
 def _find_record_share_info(share_infos, uid):
     """Find share info for a specific record UID."""
+    # Normalize UID to handle different base64 encodings (URL-safe vs standard)
+    uid_normalized = uid.rstrip('=').replace('+', '-').replace('/', '_')
+    
     for share_info in share_infos:
-        if share_info.get(KEY_RECORD_UID) == uid:
+        info_uid = share_info.get(KEY_RECORD_UID, '')
+        info_uid_normalized = info_uid.rstrip('=').replace('+', '-').replace('/', '_')
+        if info_uid_normalized == uid_normalized:
             return share_info
     return None
