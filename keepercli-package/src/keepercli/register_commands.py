@@ -77,9 +77,10 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
 
 
     if not scopes or bool(scopes & base.CommandScope.Enterprise):
-        from .commands import (enterprise_info, enterprise_node, enterprise_role, enterprise_team, enterprise_user,
+        from .commands import (enterprise_info, enterprise_node, enterprise_role, enterprise_team, enterprise_user, enterprise_create_user,
                                importer_commands, audit_report, audit_alert, audit_log)
 
+        commands.register_command('create-user', enterprise_create_user.CreateEnterpriseUserCommand(), base.CommandScope.Enterprise, 'ecu')
         commands.register_command('enterprise-down', enterprise_info.EnterpriseDownCommand(), base.CommandScope.Enterprise, 'ed')
         commands.register_command('enterprise-info', enterprise_info.EnterpriseInfoCommand(), base.CommandScope.Enterprise, 'ei')
         commands.register_command('enterprise-node', enterprise_node.EnterpriseNodeCommand(), base.CommandScope.Enterprise, 'en')
