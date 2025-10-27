@@ -146,10 +146,6 @@ STATUS_GENERATED = 'Generated'
 logger = api.get_logger()
 
 
-# =============================================================================
-# CUSTOM EXCEPTIONS - Centralized exception handling for share management
-# =============================================================================
-
 class ShareManagementError(Exception):
     """Base exception for share management operations."""
     pass
@@ -429,13 +425,11 @@ def _handle_record_versions(vault: vault_online.VaultOnline, record: dict, recor
     else:
         record['data_unencrypted'] = crypto.decrypt_aes_v2(data_decoded, record_key)
 
-    # Handle extra data for v2 records
     if record_data.encryptedExtraData and version <= MAX_V2_VERSION:
         record['extra'] = record_data.encryptedExtraData
         extra_decoded = utils.base64_url_decode(record_data.encryptedExtraData)
         record['extra_unencrypted'] = crypto.decrypt_aes_v1(extra_decoded, record_key)
     
-    # Handle v3 typed records with references
     if version == V3_VERSION:
         v3_record = vault.vault_data.load_record(record_uid=record['record_uid'])
         if isinstance(v3_record, vault_record.TypedRecord):
@@ -443,14 +437,12 @@ def _handle_record_versions(vault: vault_online.VaultOnline, record: dict, recor
                 if ref.type.endswith('Ref') and isinstance(ref.value, list):
                     record_set.update(ref.value)
     
-    # Handle v4 records with file attachments
     elif version == V4_VERSION:
         if record_data.fileSize > 0:
             record['file_size'] = record_data.fileSize
         if record_data.thumbnailSize > 0:
             record['thumbnail_size'] = record_data.thumbnailSize
     
-    # Handle linked record metadata
     if record_data.recordUid and record_data.recordKey:
         record['owner_uid'] = utils.base64_url_encode(record_data.recordUid)
         record['link_key'] = utils.base64_url_encode(record_data.recordKey)
@@ -631,7 +623,6 @@ def enumerate_record_access_paths(
         can_share: bool, 
         team_uid: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Create a standardized access path dictionary."""
         path = {
             RECORD_UID_FIELD: record_uid,
             SHARED_FOLDER_UID_FIELD: shared_folder_uid,
@@ -648,7 +639,6 @@ def enumerate_record_access_paths(
         base_can_edit: bool, 
         base_can_share: bool
     ) -> Generator[Dict[str, Any], None, None]:
-        """Process team-based permissions for a shared folder."""
         if not context.enterprise_data:
             return
             
@@ -704,7 +694,6 @@ def get_shared_records(context: KeeperParams, record_uids, cache_only=False):
     """
     
     def _fetch_team_members_from_api(team_uids: Set[str]) -> Dict[str, Set[str]]:
-        """Fetch team members from the API for the given team UIDs."""
         members = {}
         
         if not context.vault.keeper_auth.auth_context.enterprise_ec_public_key:
@@ -731,7 +720,6 @@ def get_shared_records(context: KeeperParams, record_uids, cache_only=False):
         return members
 
     def _get_cached_team_members(team_uids: Set[str], username_lookup: Dict[str, str]) -> Dict[str, Set[str]]:
-        """Get team members from cached enterprise data."""
         members = {}
         
         if not context.enterprise_data:
@@ -755,7 +743,6 @@ def get_shared_records(context: KeeperParams, record_uids, cache_only=False):
         return members
 
     def _fetch_shared_folder_admins() -> Dict[str, List[str]]:
-        """Fetch share administrators for all shared folders."""
         sf_uids = list(context.vault.vault_data._shared_folders.keys())
         return {
             sf_uid: get_share_admins_for_shared_folder(context.vault, sf_uid) or []
@@ -763,7 +750,6 @@ def get_shared_records(context: KeeperParams, record_uids, cache_only=False):
         }
 
     def _get_restricted_role_members(username_lookup: Dict[str, str]) -> Set[str]:
-        """Get usernames with restricted sharing permissions."""
         if not context.enterprise_data:
             return set()
 
@@ -853,7 +839,6 @@ def get_share_admins_for_shared_folder(vault: vault_online.VaultOnline, shared_f
 
 
 def get_folder_uids(context: KeeperParams, name: str) -> set[str]:
-    """Get folder UIDs by name or path."""
     folder_uids = set()
     
     if not context.vault or not context.vault.vault_data:

@@ -8,6 +8,7 @@ from keepersdk.proto import enterprise_pb2
 from . import base
 from ..params import KeeperParams
 
+BUSINESS_TRIAL = 'business_trial'
 
 class NodeUtils:
     @staticmethod
@@ -506,7 +507,7 @@ def is_addon_enabled(context: KeeperParams, addon_name: str) -> bool:
         license.license_status
     if not keeper_licenses:
         raise base.CommandError('No licenses found')
-    if next(iter(keeper_licenses), {}).license_status == 'business_trial':
+    if next(iter(keeper_licenses), {}).license_status == BUSINESS_TRIAL:
         return True
     addons = [a for l in keeper_licenses for a in l.add_ons if a.name == addon_name]
     return any(a for a in addons if a.enabled or a.included_in_product)

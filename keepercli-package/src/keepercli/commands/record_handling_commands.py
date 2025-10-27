@@ -12,7 +12,7 @@ from keepersdk.proto import record_pb2
 from keepersdk.vault import (record_types, vault_record, vault_online, record_management)
 from keepersdk import crypto, utils
 
-from . import base, enterprise_utils
+from . import base
 from ..helpers import folder_utils, record_utils, report_utils, share_utils
 from .. import api, prompt_utils
 from ..params import KeeperParams
@@ -777,7 +777,6 @@ class FindDuplicateCommand(base.ArgparseCommand):
         parser.add_argument('-r', '--refresh-data', action='store_true', help=refresh_help)
     
     def execute(self, context: KeeperParams, **kwargs):
-        """Execute the find-duplicates command - main entry point."""
         self._validate_context(context)
         
         scope = kwargs.get('scope', 'vault')
@@ -787,49 +786,40 @@ class FindDuplicateCommand(base.ArgparseCommand):
         return self._process_vault_duplicates(context, kwargs)
     
     def _validate_context(self, context: KeeperParams):
-        """Validate that the vault is initialized."""
         if not context.vault:
-            raise base.CommandError(self.get_parser().prog, 'Vault is not initialized')
+            raise base.CommandError('Vault is not initialized')
     
     def _process_vault_duplicates(self, context: KeeperParams, kwargs: dict):
-        """Process duplicate detection for vault scope."""
         vault = context.vault
         match_fields = self._determine_match_fields(kwargs)
         
-        # Build hash groups for duplicate detection
         hashes = self._build_duplicate_hashes(vault, match_fields)
         
-        # Log which fields are being used for matching
         fields = self._build_field_list(match_fields)
         logging_fn = self._get_logging_function(kwargs)
         logging_fn('Find duplicated records by: %s', ', '.join(fields))
         
-        # Find partitions (groups of duplicates)
         partitions = [rec_uids for rec_uids in hashes.values() if len(rec_uids) > 1]
         
         if not partitions:
             logging_fn(NO_DUPLICATES_FOUND)
             return
         
-        # Partition by shares if needed
         partitions = self._apply_share_partitioning(context, partitions, match_fields)
         
         if not partitions:
             logging_fn(NO_DUPLICATES_FOUND)
             return
         
-        # Generate and display report
         return self._generate_duplicate_report(context, partitions, match_fields, kwargs)
     
     def _get_logging_function(self, kwargs):
-        """Get appropriate logging function based on quiet/dry-run flags."""
         quiet = kwargs.get('quiet', False)
         dry_run = kwargs.get('dry_run', False)
         quiet = quiet and not dry_run
         return logger.info if not quiet else logger.debug
     
     def _build_duplicate_hashes(self, vault, match_fields):
-        """Build hash groups to identify duplicate records."""
         hashes = {}
         for record_uid in vault.vault_data._records:
             record = vault.vault_data.load_record(record_uid)
@@ -845,18 +835,15 @@ class FindDuplicateCommand(base.ArgparseCommand):
         return hashes
     
     def _apply_share_partitioning(self, context, partitions, match_fields):
-        """Apply share-based partitioning if enabled."""
         if not match_fields['by_shares']:
             return partitions
         
-        # Get shared records lookup for all record UIDs in partitions
         r_uids = [rec_uid for duplicates in partitions for rec_uid in duplicates]
         shared_records_lookup = share_utils.get_shared_records(context, r_uids, cache_only=True)
         
         return self._partition_by_shares(partitions, shared_records_lookup)
     
     def _partition_by_shares(self, duplicate_sets, shared_recs_lookup):
-        """Partition duplicate sets by their share permissions."""
         result = []
         for duplicates in duplicate_sets:
             recs_by_hash = {}
@@ -864,14 +851,12 @@ class FindDuplicateCommand(base.ArgparseCommand):
                 shared_rec = shared_recs_lookup.get(rec_uid)
                 permissions = shared_rec.permissions
                 
-                # Filter out team user and owner permissions
                 permissions = self._filter_team_user_permissions(permissions)
                 permissions = {k: p for k, p in permissions.items() if p.to_name != shared_rec.owner}
                 
                 permissions_keys = list(permissions.keys())
                 permissions_keys.sort()
                 
-                # Create hash based on permissions
                 to_hash = ';'.join(f'{k}={permissions.get(k).permissions_text}' for k in permissions_keys)
                 to_hash = to_hash or NON_SHARED_LABEL
                 
@@ -888,18 +873,14 @@ class FindDuplicateCommand(base.ArgparseCommand):
         return result
     
     def _generate_duplicate_report(self, context, partitions, match_fields, kwargs):
-        """Generate and display the duplicate report."""
         vault = context.vault
         out_fmt = kwargs.get('format', 'table')
         out_dst = kwargs.get('output')
         
-        # Build headers
         headers = self._build_report_headers(match_fields, out_fmt)
         
-        # Build report data
         table, table_raw, to_remove = self._build_report_data(context, vault, partitions, match_fields)
         
-        # Handle consolidation or display
         if match_fields['consolidate']:
             return self._consolidate_duplicates(vault, headers, table_raw, to_remove, kwargs)
         else:
@@ -907,7 +888,6 @@ class FindDuplicateCommand(base.ArgparseCommand):
             return report_utils.dump_report_data(table, headers, title=title, fmt=out_fmt, filename=out_dst, group_by=0)
     
     def _build_report_headers(self, match_fields, out_fmt):
-        """Build report headers based on match fields."""
         headers = [FIELD_GROUP, 'title', 'login']
         if match_fields['by_url']:
             headers.append(FIELD_URL)
@@ -915,7 +895,6 @@ class FindDuplicateCommand(base.ArgparseCommand):
         return [report_utils.field_to_title(h) for h in headers] if out_fmt != 'json' else headers
     
     def _build_report_data(self, context, vault, partitions, match_fields):
-        """Build the report data tables."""
         shared_records_lookup = share_utils.get_shared_records(
             context,
             [rec_uid for duplicates in partitions for rec_uid in duplicates],
@@ -938,7 +917,6 @@ class FindDuplicateCommand(base.ArgparseCommand):
         return table, table_raw, to_remove
     
     def _build_report_row(self, vault, shared_records_lookup, group_index, record_uid, match_fields):
-        """Build a single row in the report."""
         record = vault.vault_data.load_record(record_uid)
         shared_record = shared_records_lookup[record_uid]
         
@@ -950,12 +928,10 @@ class FindDuplicateCommand(base.ArgparseCommand):
         return [group_index + 1, title, login] + url + [record_uid, owner, shares]
     
     def _get_record_owner(self, vault, record_uid):
-        """Get the owner of a record."""
         record_details = vault.vault_data.get_record(record_uid)
         return record_details.flags.IsOwner
     
     def _extract_share_info(self, shared_record, owner):
-        """Extract and format share information."""
         perms = {k: p for k, p in shared_record.permissions.items()}
         keys = list(perms.keys())
         keys.sort()
@@ -969,7 +945,7 @@ class FindDuplicateCommand(base.ArgparseCommand):
         record_uid_index = headers.index(uid_header) if uid_header in headers else None
         
         if not record_uid_index:
-            raise base.CommandError(self.get_parser().prog, 'Cannot find record UID for duplicate record')
+            raise base.CommandError('Cannot find record UID for duplicate record')
         
         dup_info = [r for r in table_raw for rec_uid in to_remove if r[record_uid_index] == rec_uid]
         return self._remove_duplicates(vault, dup_info, headers, to_remove, kwargs)
@@ -988,7 +964,6 @@ class FindDuplicateCommand(base.ArgparseCommand):
             record_management.delete_vault_objects(vault, list(dupe_uids))
     
     def _determine_match_fields(self, kwargs):
-        """Determine which fields to use for matching duplicates."""
         by_title = kwargs.get('title', False)
         by_login = kwargs.get('login', False)
         by_password = kwargs.get('password', False)
@@ -997,14 +972,12 @@ class FindDuplicateCommand(base.ArgparseCommand):
         by_shares = kwargs.get('shares', False)
         consolidate = kwargs.get('merge', False)
         
-        # If merge or full is specified, match by all fields
         if consolidate or by_custom:
             by_title = True
             by_login = True
             by_password = True
             by_url = True
             by_shares = not kwargs.get('ignore_shares_on_merge') if consolidate else True
-        # If no fields specified, use default fields
         elif not any([by_title, by_login, by_password, by_url]):
             by_title = True
             by_login = True
@@ -1021,7 +994,6 @@ class FindDuplicateCommand(base.ArgparseCommand):
         }
     
     def _build_field_list(self, match_fields):
-        """Build a human-readable list of fields being used for matching."""
         fields = []
         if match_fields['by_title']:
             fields.append(FIELD_TITLE)
@@ -1038,7 +1010,6 @@ class FindDuplicateCommand(base.ArgparseCommand):
         return fields
     
     def _filter_team_user_permissions(self, permissions):
-        """Filter out team user permissions from the permissions dict."""
         filtered_perms = {
             k: p for k, p in permissions.items()
             if TEAM_USER_TYPE not in p.types or len(p.types) > 1
@@ -1046,14 +1017,6 @@ class FindDuplicateCommand(base.ArgparseCommand):
         return filtered_perms
     
     def _create_record_hash(self, record, match_fields):
-        """
-        Create a hash for a record based on the specified match fields.
-        
-        Returns:
-            tuple: (hash_value, non_empty_count)
-                - hash_value: hex digest of the hash
-                - non_empty_count: number of non-empty fields processed
-        """
         tokens = []
         
         if match_fields['by_title']:
@@ -1081,14 +1044,12 @@ class FindDuplicateCommand(base.ArgparseCommand):
                 non_empty += 1
             hasher.update(token.encode())
         
-        # Process custom fields if needed
         if match_fields['by_custom'] and isinstance(record, vault_record.TypedRecord):
             non_empty += self._hash_custom_fields(record, hasher)
         
         return hasher.hexdigest(), non_empty
     
     def _hash_custom_fields(self, record, hasher):
-        """Hash custom fields for typed records."""
         customs = {}
         non_empty = 0
         
@@ -1099,7 +1060,6 @@ class FindDuplicateCommand(base.ArgparseCommand):
             if not name or not value:
                 continue
             
-            # Handle different value types
             if isinstance(value, list):
                 value = '|'.join(sorted(str(x) for x in value))
             elif isinstance(value, int):
@@ -1127,7 +1087,6 @@ class FindDuplicateCommand(base.ArgparseCommand):
         return non_empty
     
     def _extract_record_info(self, record, match_fields):
-        """Extract basic record information for display."""
         title = record.title or ''
         
         if isinstance(record, vault_record.PasswordRecord):
@@ -1143,431 +1102,7 @@ class FindDuplicateCommand(base.ArgparseCommand):
         return title, login, url
     
     def _format_url(self, url, include_in_output):
-        """Format URL for display, truncating if necessary."""
         parsed_url = urllib.parse.urlparse(url).hostname
         parsed_url = parsed_url[:URL_DISPLAY_LENGTH] if parsed_url else ''
         return [parsed_url] if include_in_output else []
 
-
-class RecordPermissionCommand(base.ArgparseCommand):
-    def __init__(self):
-        parser = argparse.ArgumentParser(prog='record-permission', description='Modify the permissions of a record')
-        RecordPermissionCommand.add_arguments_to_parser(parser)
-        super().__init__(parser)
-    
-    @staticmethod
-    def add_arguments_to_parser(parser: argparse.ArgumentParser):
-        parser.add_argument('--dry-run', dest='dry_run', action='store_true',
-                                            help='Display the permissions changes without committing them')
-        parser.add_argument('--force', dest='force', action='store_true',
-                                            help='Apply permission changes without any confirmation')
-        parser.add_argument('-R', '--recursive', dest='recursive', action='store_true',
-                                            help='Apply permission changes to all sub-folders')
-        parser.add_argument('--share-record', dest='share_record', action='store_true',
-                                            help='Change a records sharing permissions')
-        parser.add_argument('--share-folder', dest='share_folder', action='store_true',
-                                            help='Change a folders sharing permissions')
-        parser.add_argument('-a', '--action', dest='action', action='store', choices=['grant', 'revoke'],
-                                            required=True, help='The action being taken')
-        parser.add_argument('-s', '--can-share', dest='can_share', action='store_true',
-                                            help='Set record permission: can be shared')
-        parser.add_argument('-d', '--can-edit', dest='can_edit', action='store_true',
-                                            help='Set record permission: can be edited')
-        parser.add_argument('folder', nargs='?', type=str, action='store', help='folder path or folder UID')
-        parser.error = base.ArgparseCommand.raise_parse_exception
-        parser.exit = base.ArgparseCommand.suppress_exit
-    
-    def execute(self, context: KeeperParams, **kwargs):
-        if not context.vault:
-            raise base.CommandError('Vault is not initialized')
-        vault = context.vault
-
-        folder_name = kwargs['folder'] if 'folder' in kwargs else ''
-        folder_uid = None
-        if folder_name:
-            if folder_name in vault.vault_data._folders:
-                folder_uid = folder_name
-            else:
-                folder, path = folder_utils.try_resolve_path(context, folder_name)
-                if len(path) == 0:
-                    folder_uid = folder.folder_uid
-                else:
-                    raise base.CommandError('Folder {0} not found'.format(folder_name))
-
-        if folder_uid:
-            folder = vault.vault_data.get_folder(folder_uid)
-        else:
-            folder = vault.vault_data.root_folder
-
-        share_record = kwargs.get('share_record') or False
-        share_folder = kwargs.get('share_folder') or False
-        if not share_record and not share_folder:
-            share_record = True
-            share_folder = True
-
-        flat_subfolders = [folder]
-        if kwargs.get('recursive'):
-            fols = set()
-            fols.add(folder.folder_uid)
-            pos = 0
-            while pos < len(flat_subfolders):
-                subfolder = flat_subfolders[pos]
-                if subfolder.subfolders:
-                    for f_uid in subfolder.subfolders:
-                        if f_uid not in fols:
-                            f = vault.vault_data.get_folder(f_uid)
-                            if f:
-                                flat_subfolders.append(f)
-                            fols.add(f_uid)
-                pos += 1
-            logger.debug('Folder count: %s', len(flat_subfolders))
-
-        should_have = True if kwargs['action'] == 'grant' else False
-        change_share = kwargs['can_share'] or False
-        change_edit = kwargs['can_edit'] or False
-
-        if not change_share and not change_edit:
-            raise base.CommandError('Please choose at least one on the following options: can-edit, can-share')
-
-        if not kwargs.get('force'):
-            logger.info('\nRequest to {0} {1}{3}{2} permission(s) in "{4}" folder {5}'
-                         .format('GRANT' if should_have else 'REVOKE',
-                                 '"Can Edit"' if change_edit else '',
-                                 '"Can Share"' if change_share else '',
-                                 ' & ' if change_edit and change_share else '',
-                                 folder.name,
-                                 'recursively' if kwargs.get('recursive') else 'only'))
-
-        uids = set()
-
-        direct_shares_update = []
-        direct_shares_skip = []
-
-        # direct shares
-        if share_record:
-            uids.clear()
-            for folder in flat_subfolders:
-                folder_uid = folder.uid or ''
-                if folder_uid in params.subfolder_record_cache:
-                    uids.update(params.subfolder_record_cache[folder_uid])
-
-            if len(uids) > 0:
-                shared_records = share_utils.get_record_shares(vault, uids)
-                if shared_records:
-                    for shared_record in shared_records:
-                        if shared_record.user_permissions:
-                            for up in shared_record.user_permissions:
-                                if up['owner']:  # exclude record owners
-                                    continue
-                                username = up['username']
-                                if username == context.username:  # exclude self
-                                    continue
-                                if (change_edit and should_have != up['editable']) or \
-                                        (change_share and should_have != up['shareable']):
-                                    direct_shares_update.append(up)
-
-        shared_folder_update = {} 
-        shared_folder_skip = {}
-
-        if share_folder:
-            share_admin_in_folders = set()
-            for folder in flat_subfolders:
-                shared_folder_uid = None
-                if folder.folder_type == 'shared_folder':
-                    shared_folder_uid = folder.folder_uid
-                elif folder.folder_type == 'shared_folder_folder':
-                    shared_folder_uid = folder.folder_scope_uid
-                if shared_folder_uid:
-                    if shared_folder_uid not in share_admin_in_folders and shared_folder_uid in vault.vault_data._shared_folders:
-                        share_admin_in_folders.add(shared_folder_uid)
-            if len(share_admin_in_folders) > 0:
-                rq = record_pb2.AmIShareAdmin()
-                for shared_folder_uid in share_admin_in_folders:
-                    osa = record_pb2.IsObjectShareAdmin()
-                    osa.uid = utils.base64_url_decode(shared_folder_uid)
-                    osa.objectType = record_pb2.CHECK_SA_ON_SF
-                    rq.isObjectShareAdmin.append(osa)
-                share_admin_in_folders.clear()
-                try:
-                    rs = vault.keeper_auth.execute_auth_rest(rest_endpoint='vault/am_i_share_admin', request=rq, response_type=record_pb2.AmIShareAdmin)
-                    for osa in rs.isObjectShareAdmin:
-                        if osa.isAdmin:
-                            share_admin_in_folders.add(utils.base64_url_encode(osa.uid))
-                except:
-                    pass
-
-            for folder in flat_subfolders:
-                if folder.folder_type not in {'shared_folder', 'shared_folder_folder'}:
-                    continue
-                uids.clear()
-                if folder.folder_uid in params.subfolder_record_cache:
-                    uids.update(params.subfolder_record_cache[folder.uid])
-
-                shared_folder_uid = folder.uid
-                if type(folder) == SharedFolderFolderNode:
-                    shared_folder_uid = folder.shared_folder_uid
-
-                account_uid = context.auth.auth_context.account_uid
-                if shared_folder_uid in vault.vault_data._shared_folders:
-                    is_share_admin = shared_folder_uid in share_admin_in_folders
-                    shared_folder = vault.vault_data.get_shared_folder(shared_folder_uid)
-                    team_uid = None
-                    has_manage_records_permission = is_share_admin
-                    if not has_manage_records_permission:
-                        if 'owner_account_uid' in shared_folder:
-                            has_manage_records_permission = shared_folder['owner_account_uid'] == account_uid
-                    if not has_manage_records_permission:
-                        if 'users' in shared_folder:
-                            user = next((x for x in shared_folder['users'] if x.get('username') == context.username), None)
-                            if user and 'manage_records' in user:
-                                has_manage_records_permission = user['manage_records'] is True
-                    if not has_manage_records_permission:
-                        if 'teams' in shared_folder:
-                            for sft in shared_folder.teams:
-                                uid = sft
-                                if sft.get('manage_records') and uid in context.enterprise_data.teams:
-                                    team_uid = uid
-                                    has_manage_records_permission = True
-                                    break
-
-                    if 'records' in shared_folder:
-                        for rp in shared_folder['records']:
-                            record_uid = rp['record_uid']
-                            if is_share_admin or has_manage_records_permission:
-                                container = shared_folder_update
-                            else:
-                                container = shared_folder_skip
-
-                            if shared_folder_uid not in container:
-                                container[shared_folder_uid] = {}
-                            record_permissions = container[shared_folder_uid]
-
-                            if record_uid in uids and record_uid not in record_permissions:
-                                if (change_edit and should_have != rp['can_edit']) or \
-                                        (change_share and should_have != rp['can_share']):
-                                    cmd = folder_pb2.SharedFolderUpdateRecord()
-                                    cmd.recordUid = utils.base64_url_decode(record_uid)
-                                    cmd.sharedFolderUid = utils.base64_url_decode(shared_folder_uid)
-                                    if team_uid:
-                                        cmd.teamUid = utils.base64_url_decode(team_uid)
-                                    cmd.canEdit = (folder_pb2.BOOLEAN_TRUE if should_have else folder_pb2.BOOLEAN_FALSE) if change_edit else folder_pb2.BOOLEAN_NO_CHANGE
-                                    cmd.canShare = (folder_pb2.BOOLEAN_TRUE if should_have else folder_pb2.BOOLEAN_FALSE) if change_share else folder_pb2.BOOLEAN_NO_CHANGE
-                                    record_permissions[record_uid] = cmd
-
-        if len(shared_folder_update) > 0:
-            uids.clear()
-            uids.update(shared_folder_update.keys())
-            for shared_folder_uid in uids:
-                if len(shared_folder_update[shared_folder_uid]) == 0:
-                    del shared_folder_update[shared_folder_uid]
-
-        if len(shared_folder_skip) > 0:
-            uids.clear()
-            uids.update(shared_folder_skip.keys())
-            for shared_folder_uid in uids:
-                if len(shared_folder_skip[shared_folder_uid]) == 0:
-                    del shared_folder_skip[shared_folder_uid]
-
-        if len(direct_shares_skip) > 0:
-            if kwargs.get('dry_run'):
-                table = []
-                for cmd in direct_shares_skip:
-                    record_uid = cmd['record_uid']
-                    record = params.record_cache[record_uid]
-                    record_owners = [x['username'] for x in record['shares']['user_permissions'] if x['owner']]
-                    record_owner = record_owners[0] if len(record_owners) > 0 else ''
-                    rec = api.get_record(params, record_uid)
-                    row = [record_uid, rec.title[:32], record_owner, cmd['to_username']]
-                    table.append(row)
-                headers = ['Record UID', 'Title', 'Owner', 'Email']
-                title = bcolors.FAIL + ' SKIP ' + bcolors.ENDC + 'Direct Record Share permission(s). Not permitted'
-                dump_report_data(table, headers, title=title, row_number=True, group_by=0)
-                logging.info('')
-                logging.info('')
-
-        if len(shared_folder_skip) > 0:
-            if kwargs.get('dry_run'):
-                table = []
-                for shared_folder_uid in shared_folder_skip:
-                    shared_folder = api.get_shared_folder(params, shared_folder_uid)
-                    uid = shared_folder_uid
-                    name = shared_folder.name[:32]
-                    for record_uid in shared_folder_skip[shared_folder_uid]:
-                        record = api.get_record(params, record_uid)
-                        row = [uid, name, record_uid, record.title]
-                        uid = ''
-                        name = ''
-                        table.append(row)
-                if len(table) > 0:
-                    headers = ['Shared Folder UID', 'Shared Folder Name', 'Record UID', 'Record Title']
-                    title = (bcolors.FAIL + ' SKIP ' + bcolors.ENDC +
-                             'Shared Folder Record Share permission(s). Not permitted')
-                    dump_report_data(table, headers, title=title, row_number=True)
-                    logging.info('')
-                    logging.info('')
-
-        if len(direct_shares_update) > 0:
-            if not kwargs.get('force'):
-                table = []
-                for cmd in direct_shares_update:
-                    record_uid = cmd['record_uid']
-                    rec = api.get_record(params, record_uid)
-                    row = [record_uid, rec.title[:32], cmd['to_username']]
-                    if change_edit:
-                        row.append((bcolors.BOLD + '   ' + ('Y' if should_have else 'N') + bcolors.ENDC)
-                                   if 'editable' in cmd else '')
-                    if change_share:
-                        row.append((bcolors.BOLD + '   ' + ('Y' if should_have else 'N') + bcolors.ENDC)
-                                   if 'shareable' in cmd else '')
-                    table.append(row)
-
-                headers = ['Record UID', 'Title', 'Email']
-                if change_edit:
-                    headers.append('Can Edit')
-                if change_share:
-                    headers.append('Can Share')
-
-                title = (bcolors.OKGREEN + ' {0}' + bcolors.ENDC + ' Direct Record Share permission(s)') \
-                    .format('GRANT' if should_have else 'REVOKE')
-                dump_report_data(table, headers, title=title, row_number=True, group_by=0)
-                logging.info('')
-                logging.info('')
-
-        if len(shared_folder_update) > 0:
-            if not kwargs.get('force'):
-                table = []
-                for shared_folder_uid in shared_folder_update:
-                    commands = shared_folder_update[shared_folder_uid]
-                    shared_folder = api.get_shared_folder(params, shared_folder_uid)
-                    uid = shared_folder_uid
-                    name = shared_folder.name[:32]
-                    for record_uid in commands:
-                        cmd = commands[record_uid]
-                        record = api.get_record(params, record_uid)
-                        row = [uid, name, record_uid, record.title[:32]]
-                        if change_edit:
-                            row.append((bcolors.BOLD + '   ' + ('Y' if should_have else 'N') + bcolors.ENDC)
-                                       if cmd.canEdit else '')
-                        if change_share:
-                            row.append((bcolors.BOLD + '   ' + ('Y' if should_have else 'N') + bcolors.ENDC)
-                                       if cmd.canShare else '')
-                        table.append(row)
-                        uid = ''
-                        name = ''
-
-                if len(table) > 0:
-                    headers = ['Shared Folder UID', 'Shared Folder Name', 'Record UID', 'Record Title']
-                    if change_edit:
-                        headers.append('Can Edit')
-                    if change_share:
-                        headers.append('Can Share')
-                    title = (bcolors.OKGREEN + ' {0}' + bcolors.ENDC + ' Shared Folder Record Share permission(s)') \
-                        .format('GRANT' if should_have else 'REVOKE')
-                    dump_report_data(table, headers, title=title, row_number=True)
-                    logging.info('')
-                    logging.info('')
-
-        if not kwargs.get('dry_run') and (len(shared_folder_update) > 0 or len(direct_shares_update) > 0):
-            print('\n\n' + bcolors.WARNING + bcolors.BOLD + 'ALERT!!!' + bcolors.ENDC)
-            answer = base.user_choice("Do you want to proceed with these permission changes?", 'yn', 'n') \
-                if not kwargs.get('force') else 'Y'
-            if answer.lower() == 'y':
-                table = []
-
-                def to_share_record_proto(srd):   # type: (dict) -> record_pb2.SharedRecord
-                    srp = record_pb2.SharedRecord()
-                    srp.toUsername = srd['to_username']
-                    srp.recordUid = utils.base64_url_decode(srd['record_uid'])
-                    if 'shared_folder_uid' in srd:
-                        srp.sharedFolderUid = utils.base64_url_decode(srd['shared_folder_uid'])
-                    if 'team_uid' in srd:
-                        srp.teamUid = utils.base64_url_decode(srd['team_uid'])
-                    if 'record_key' in srd:
-                        srp.recordKey = utils.base64_url_decode(srd['record_key'])
-                    if 'use_ecc_key' in srd:
-                        srp.useEccKey = srd['use_ecc_key']
-                    if 'editable' in srd:
-                        srp.editable = srd['editable']
-                    if 'shareable' in srd:
-                        srp.shareable = srd['shareable']
-                    if 'transfer' in srd:
-                        srp.shareable = srd['transfer']
-
-                    return srp
-
-                while len(direct_shares_update) > 0:
-                    rsu_rq = record_pb2.RecordShareUpdateRequest()
-                    rsu_rq.updateSharedRecord.extend((to_share_record_proto(x) for x in direct_shares_update[:900]))
-                    direct_shares_update = direct_shares_update[900:]
-
-                    rsu_rs = api.communicate_rest(params, rsu_rq, 'vault/records_share_update',
-                                                  rs_type=record_pb2.RecordShareUpdateResponse)
-                    for status in rsu_rs.updateSharedRecordStatus:
-                        code = status.status.lower()
-                        if code != 'success':
-                            record_uid = utils.base64_url_encode(status.recordUid)
-                            table.append([record_uid, status.username, code, status.message])
-
-                if len(table) > 0:
-                    headers = ['Record UID', 'Email', 'Error Code', 'Message']
-                    title = (bcolors.WARNING + 'Failed to {0}' + bcolors.ENDC + ' Direct Record Share permission(s)') \
-                        .format('GRANT' if should_have else 'REVOKE')
-                    dump_report_data(table, headers, title=title, row_number=True)
-                    logging.info('')
-                    logging.info('')
-
-                table = []
-                requests = []
-                for shared_folder_uid in shared_folder_update:
-                    updates = list(shared_folder_update[shared_folder_uid].values())
-                    while len(updates) > 0:
-                        batch = updates[:490]
-                        updates = updates[490:]
-                        rq = folder_pb2.SharedFolderUpdateV3Request()
-                        rq.sharedFolderUid = utils.base64_url_decode(shared_folder_uid)
-                        rq.forceUpdate = True
-                        rq.sharedFolderUpdateRecord.extend(batch)
-                        rq.fromTeamUid = batch[0].teamUid
-                        requests.append(rq)
-
-                chunks = []         # type: List[Dict[bytes, folder_pb2.SharedFolderUpdateV3Request]]
-                current_rq = {}     # type: Dict[bytes, folder_pb2.SharedFolderUpdateV3Request]
-                total_elements = 0
-                for rq in requests:
-                    if rq.sharedFolderUid in current_rq:
-                        chunks.append(current_rq)
-                        current_rq = {}
-                        total_elements = 0
-                    if total_elements + len(rq.sharedFolderUpdateRecord) > 500:
-                        chunks.append(current_rq)
-                        current_rq = {}
-                        total_elements = 0
-
-                    current_rq[rq.sharedFolderUid] = rq
-                    total_elements += len(rq.sharedFolderUpdateRecord)
-                if len(current_rq) > 0:
-                    chunks.append(current_rq)
-
-                for chunk in chunks:
-                    rqs = folder_pb2.SharedFolderUpdateV3RequestV2()
-                    rqs.sharedFoldersUpdateV3.extend(chunk.values())
-                    rss = api.communicate_rest(params, rqs, 'vault/shared_folder_update_v3', payload_version=1,
-                                               rs_type=folder_pb2.SharedFolderUpdateV3ResponseV2)
-                    for rs in rss.sharedFoldersUpdateV3Response:
-                        shared_folder_uid = utils.base64_url_encode(rs.sharedFolderUid)
-                        for status in rs.sharedFolderUpdateRecordStatus:
-                            record_uid = utils.base64_url_encode(status.recordUid)
-                            code = status.status
-                            if code != 'success':
-                                table.append([shared_folder_uid, record_uid, code])
-
-                if len(table) > 0:
-                    headers = ['Shared Folder UID', 'Record UID', 'Error Code']
-                    title = (
-                                bcolors.WARNING + 'Failed to {0}' + bcolors.ENDC +
-                                ' Shared Folder Record Share permission(s)').format('GRANT' if should_have else 'REVOKE')
-                    dump_report_data(table, headers, title=title)
-                    logging.info('')
-                    logging.info('')
-
-                params.sync_data = True
