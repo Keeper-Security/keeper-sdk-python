@@ -4,9 +4,11 @@ import logging
 from typing import Optional, Dict, Set
 
 from keepersdk.enterprise.account_transfer import AccountTransferManager
-from keepercli import api
-from keepercli.commands import base
-from keepercli.params import KeeperParams
+from keepersdk.authentication import keeper_auth
+from keepersdk.enterprise import enterprise_types
+
+from . import base
+from ..params import KeeperParams
 
 logger = logging.getLogger(__name__)
 
@@ -58,23 +60,24 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
             context: Keeper parameters with auth and enterprise data
             **kwargs: Command arguments (force, target_user, email)
         """
+        if not context.vault:
+            raise ValueError('Vault not available. Please ensure you are logged in.')
+
         # Verify we have enterprise context
         try:
             enterprise_loader = context.enterprise_loader
             if not enterprise_loader:
-                raise ValueError('Enterprise data not available. Please ensure you are logged in as an enterprise admin.')
+                raise ValueError('Enterprise loader not available. Please ensure you are logged in as an enterprise admin.')
         except (AttributeError, AssertionError):
-            raise ValueError('Enterprise data not available. Please ensure you are logged in as an enterprise admin.')
+            raise ValueError('Enterprise loader not available. Please ensure you are logged in as an enterprise admin.')
         
-        if not context.auth:
-            raise ValueError('Authentication context not available.')
         
-        # Ensure enterprise data is loaded
+        # Load enterprise data
         logger.info('Loading enterprise data...')
         enterprise_loader.load()
         
         # Build user lookup
-        user_lookup = self._build_user_lookup(context)
+        user_lookup = self._build_user_lookup(enterprise_loader.enterprise_data)
         logger.debug(f'Loaded {len(user_lookup)} entries in user lookup table')
         
         # Parse transfer map from arguments
@@ -97,10 +100,11 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
             return
         
         # Lock source users
-        self._lock_source_users(context, transfer_map, user_lookup)
+        auth_context = context.auth
+        self._lock_source_users(auth_context, transfer_map, user_lookup)
         
         # Load target public keys
-        target_keys = self._load_target_keys(context, transfer_map)
+        target_keys = self._load_target_keys(auth_context, transfer_map)
         
         # Execute transfers
         self._execute_transfers(context, transfer_map, target_keys)
@@ -109,18 +113,16 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
         logger.info('Reloading enterprise data...')
         context.enterprise_loader.load(reset=True)
     
-    def _build_user_lookup(self, context: KeeperParams) -> Dict:
+    def _build_user_lookup(self, enterprise_data: enterprise_types.IEnterpriseData) -> Dict:
         """Build lookup dictionary of enterprise users
         
         Args:
-            context: Keeper parameters
+            enterprise_data: Enterprise data
             
         Returns:
             Dictionary mapping user IDs and emails to user objects
         """
         user_lookup = {}
-        
-        enterprise_data = context.enterprise_loader.enterprise_data
         
         for user in enterprise_data.users.get_all_entities():
             user_dict = {
@@ -347,13 +349,13 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
         return answer == 'y'
     
     def _lock_source_users(self,
-                          context: KeeperParams,
+                          auth: keeper_auth.KeeperAuth,
                           transfer_map: Dict,
                           user_lookup: Dict):
         """Lock source users before transfer
         
         Args:
-            context: Keeper parameters
+            auth: Authentication context
             transfer_map: Transfer map
             user_lookup: User lookup dictionary
         """
@@ -373,15 +375,15 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
         
         if lock_requests:
             logger.info('Locking active users.')
-            context.auth.execute_batch(lock_requests)
+            auth.execute_batch(lock_requests)
     
     def _load_target_keys(self,
-                         context: KeeperParams,
+                         auth: keeper_auth.KeeperAuth,
                          transfer_map: Dict) -> Dict:
         """Load public keys for all target users
         
         Args:
-            context: Keeper parameters
+            auth: Authentication context
             transfer_map: Transfer map
             
         Returns:
@@ -392,12 +394,12 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
         logger.info(f'Loading public keys for {len(target_users)} target user(s)...')
         
         # Load public keys
-        context.auth.load_user_public_keys(target_users, send_invites=False)
+        auth.load_user_public_keys(target_users, send_invites=False)
         
         # Collect loaded keys
         target_keys = {}
         for target_user in target_users:
-            user_keys = context.auth.get_user_keys(target_user)
+            user_keys = auth.get_user_keys(target_user)
             if user_keys:
                 target_keys[target_user] = user_keys
                 logger.debug(f'Loaded keys for {target_user}')
