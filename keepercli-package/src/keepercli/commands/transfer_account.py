@@ -69,8 +69,13 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
         if not context.auth:
             raise ValueError('Authentication context not available.')
         
+        # Ensure enterprise data is loaded
+        logger.info('Loading enterprise data...')
+        enterprise_loader.load()
+        
         # Build user lookup
         user_lookup = self._build_user_lookup(context)
+        logger.debug(f'Loaded {len(user_lookup)} entries in user lookup table')
         
         # Parse transfer map from arguments
         transfer_map = self._parse_transfer_arguments(kwargs, user_lookup)
@@ -125,8 +130,12 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
                 'lock': user.lock
             }
             
+            # Store by user ID
             user_lookup[str(user.enterprise_user_id)] = user_dict
+            
+            # Store by username (both original case and lowercase)
             if user.username:
+                user_lookup[user.username] = user_dict
                 user_lookup[user.username.lower()] = user_dict
             else:
                 logger.debug(f'Username missing from user id={user.enterprise_user_id}')
@@ -227,15 +236,34 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
         Returns:
             Verified username or None if invalid
         """
-        username = username.lower().strip()
+        username_clean = username.strip()
+        username_lower = username_clean.lower()
         
-        if username not in user_lookup:
+        # Try to find user by original case first, then lowercase
+        enterprise_user = None
+        if username_clean in user_lookup:
+            enterprise_user = user_lookup[username_clean]
+        elif username_lower in user_lookup:
+            enterprise_user = user_lookup[username_lower]
+        
+        if not enterprise_user:
             logger.warning(f'"{username}" is not a known user account. Skipping...')
+            logger.debug(f'Available users in lookup: {list(user_lookup.keys())}')
             return None
         
-        enterprise_user = user_lookup[username]
-        if enterprise_user['status'] != 'active':
-            logger.warning(f'"{username}" is not an active account (status: {enterprise_user["status"]}). Skipping...')
+        # Check if user is effectively active (active status + not locked)
+        status = enterprise_user['status']
+        lock = enterprise_user.get('lock', 0)
+        
+        if status == 'invited':
+            logger.warning(f'"{username}" is a pending account. Skipping...')
+            return None
+        elif status != 'active':
+            logger.warning(f'"{username}" is not an active account (status: {status}). Skipping...')
+            return None
+        elif lock > 0:
+            lock_text = 'Locked' if lock == 1 else 'Disabled'
+            logger.warning(f'"{username}" account is {lock_text}. Skipping...')
             return None
         
         return enterprise_user['username']
@@ -398,6 +426,9 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
         total_transfers = sum(len(sources) for sources in transfer_map.values())
         completed = 0
         failed = 0
+        
+        # Log transfer map for debugging
+        logger.debug(f'Transfer map contents: {dict(transfer_map)}')
         
         for target_user, source_users in transfer_map.items():
             if target_user not in target_keys:

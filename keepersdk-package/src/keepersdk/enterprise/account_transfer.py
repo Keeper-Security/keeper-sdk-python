@@ -139,7 +139,8 @@ class AccountTransferManager:
                 user_data_key,
                 user_rsa_private_key,
                 user_ecc_private_key,
-                target_public_keys
+                target_public_keys,
+                from_username  # Pass source username for correct folder name
             )
             
             # Step 5: Execute transfer
@@ -359,7 +360,8 @@ class AccountTransferManager:
                                user_data_key: bytes,
                                user_rsa_private_key: Optional[Any],
                                user_ecc_private_key: Optional[Any],
-                               target_keys: keeper_auth.UserKeys) -> Dict:
+                               target_keys: keeper_auth.UserKeys,
+                               from_username: str) -> Dict:
         """Prepare all encrypted keys for target user
         
         Args:
@@ -368,6 +370,7 @@ class AccountTransferManager:
             user_rsa_private_key: Source user's RSA private key
             user_ecc_private_key: Source user's ECC private key
             target_keys: Target user's public keys
+            from_username: Source username for transfer folder name
             
         Returns:
             Dictionary with re-encrypted keys ready for API call
@@ -416,7 +419,8 @@ class AccountTransferManager:
             user_data_key,
             user_rsa_private_key,
             user_ecc_private_key,
-            target_keys
+            target_keys,
+            from_username
         )
         if uf_keys:
             transfer_data['user_folder_keys'] = uf_keys
@@ -563,7 +567,8 @@ class AccountTransferManager:
                                    user_data_key: bytes,
                                    user_rsa_key: Optional[Any],
                                    user_ecc_key: Optional[Any],
-                                   target_keys: keeper_auth.UserKeys) -> Tuple[List[Dict], List[Dict], Dict]:
+                                   target_keys: keeper_auth.UserKeys,
+                                   from_username: str) -> Tuple[List[Dict], List[Dict], Dict]:
         """Re-encrypt user folder keys and create transfer folder"""
         reencrypted = []
         corrupted = []
@@ -571,7 +576,7 @@ class AccountTransferManager:
         
         # Create transfer folder
         folder_key = utils.generate_aes_key()
-        folder_name = f'Transfer from {self.auth.auth_context.username}'
+        folder_name = f'Transfer from {from_username}'
         folder_data = json.dumps({'name': folder_name}).encode('utf-8')
         folder_data = crypto.encrypt_aes_v1(folder_data, folder_key)
         
@@ -745,6 +750,11 @@ class AccountTransferManager:
                 rq[key] = transfer_data[key]
         
         # Execute API call
+        logger.info(f'Executing transfer_and_delete_user API: from={from_username} to={to_username}')
+        if 'user_folder_transfer' in transfer_data:
+            folder_transfer = transfer_data['user_folder_transfer']
+            logger.info(f'Creating transfer folder: {folder_transfer.get("transfer_folder_uid", "unknown_uid")}')
+        
         self.auth.execute_auth_command(rq)
         
         # Build result
