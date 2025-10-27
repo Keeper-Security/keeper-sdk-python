@@ -5,9 +5,11 @@ from typing import Optional, Dict, Set
 from enum import Enum
 
 from keepersdk.enterprise.account_transfer import AccountTransferManager
-from keepercli import api
-from keepercli.commands import base
-from keepercli.params import KeeperParams
+from keepersdk.authentication import keeper_auth
+from keepersdk.enterprise import enterprise_types
+
+from . import base
+from ..params import KeeperParams
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +65,6 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
         
     @staticmethod
     def add_arguments_to_parser(parser: argparse.ArgumentParser):
-        """Add command-line arguments"""
         parser.add_argument(
             '-f', '--force',
             dest='force',
@@ -81,7 +82,7 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
             type=str,
             nargs='+',
             metavar="user@company.com OR @filename",
-            help='User account email/ID (list of strings) or File containing account mappings. '
+            help='User account email/ID (list of strings["user1@company.com", "user2@company.com"]) or File containing account mappings. '
                  'Use @filename to indicate using mapping file. '
                  f'File format examples:{SAMPLE_MAPPING_FILE_CONTENT}'
         )
@@ -93,69 +94,49 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
             context: Keeper parameters with auth and enterprise data
             **kwargs: Command arguments (force, target_user, email)
         """
-        # Verify we have enterprise context
-        try:
-            enterprise_loader = context.enterprise_loader
-            if not enterprise_loader:
-                raise ValueError('Enterprise data not available. Please ensure you are logged in as an enterprise admin.')
-        except (AttributeError, AssertionError):
+        if not context.vault:
+            raise ValueError('Vault not available. Please ensure you are logged in.')
+
+        enterprise_loader = context.enterprise_loader
+        if not enterprise_loader:
             raise ValueError('Enterprise data not available. Please ensure you are logged in as an enterprise admin.')
-        
-        if not context.auth:
-            raise ValueError('Authentication context not available.')
         
         # Ensure enterprise data is loaded
         logger.info('Loading enterprise data...')
         enterprise_loader.load()
         
-        # Build user lookup
-        user_lookup = self._build_user_lookup(context)
+        user_lookup = self._build_user_lookup(enterprise_loader.enterprise_data)
         logger.debug(f'Loaded {len(user_lookup)} entries in user lookup table')
         
-        # Parse transfer map from arguments
         transfer_map = self._parse_transfer_arguments(kwargs, user_lookup)
         
         if not transfer_map:
             logger.warning('No user accounts to transfer')
             return
         
-        # Validate transfer map
         transfer_map = self._validate_transfer_map(transfer_map)
         
         if not transfer_map:
             logger.warning('No valid user accounts to transfer after validation')
             return
         
-        # Get confirmation
         if not self._confirm_transfer(kwargs, transfer_map):
             logger.info('Transfer cancelled by user')
             return
         
-        # Lock source users
-        self._lock_source_users(context, transfer_map, user_lookup)
+        auth_context = context.auth
+        self._lock_source_users(auth_context, transfer_map, user_lookup)
         
-        # Load target public keys
-        target_keys = self._load_target_keys(context, transfer_map)
+        target_keys = self._load_target_keys(auth_context, transfer_map)
         
-        # Execute transfers
-        self._execute_transfers(context, transfer_map, target_keys)
+        self._execute_transfers(context, transfer_map, target_keys, user_lookup)
         
-        # Reload enterprise data
         logger.info('Reloading enterprise data...')
-        context.enterprise_loader.load(reset=True)
+        enterprise_loader.load(reset=True)
     
-    def _build_user_lookup(self, context: KeeperParams) -> Dict:
-        """Build lookup dictionary of enterprise users
+    def _build_user_lookup(self, enterprise_data: enterprise_types.IEnterpriseData) -> Dict:
         
-        Args:
-            context: Keeper parameters
-            
-        Returns:
-            Dictionary mapping user IDs and emails to user objects
-        """
         user_lookup = {}
-        
-        enterprise_data = context.enterprise_loader.enterprise_data
         
         for user in enterprise_data.users.get_all_entities():
             user_dict = {
@@ -180,15 +161,6 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
     def _parse_transfer_arguments(self,
                                   kwargs,
                                   user_lookup: Dict) -> Dict[str, Set[str]]:
-        """Parse transfer arguments into transfer map
-        
-        Args:
-            kwargs: Command arguments
-            user_lookup: User lookup dictionary
-            
-        Returns:
-            Dictionary mapping target users to sets of source users
-        """
         transfer_map = {}
         target_user = kwargs.get('target_user')
         
@@ -271,18 +243,10 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
                     username: str,
                     user_lookup: Dict) -> Optional[str]:
         """Verify user exists and is active
-        
-        Args:
-            username: Username or user ID to verify
-            user_lookup: User lookup dictionary
-            
-        Returns:
-            Verified username or None if invalid
         """
         username_clean = username.strip()
         username_lower = username_clean.lower()
         
-        # Try to find user by original case first, then lowercase
         enterprise_user = None
         if username_clean in user_lookup:
             enterprise_user = user_lookup[username_clean]
@@ -312,14 +276,7 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
         return enterprise_user['username']
     
     def _validate_transfer_map(self, transfer_map: Dict) -> Dict:
-        """Validate transfer map for circular dependencies and duplicates
         
-        Args:
-            transfer_map: Transfer map to validate
-            
-        Returns:
-            Validated transfer map
-        """
         # Check for users that appear as both source and target (circular)
         targets = set(transfer_map.keys())
         sources = set()
@@ -336,13 +293,11 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
                 if email in transfer_map:
                     del transfer_map[email]
             
-            # Clean up sources that were removed as targets
             for target in list(transfer_map.keys()):
                 transfer_map[target].difference_update(circular)
                 if not transfer_map[target]:
                     del transfer_map[target]
         
-        # Check for users with multiple targets
         sources.clear()
         duplicates = set()
         for target in transfer_map:
@@ -365,15 +320,6 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
         return transfer_map
     
     def _confirm_transfer(self, kwargs, transfer_map: Dict) -> bool:
-        """Get user confirmation for transfer
-        
-        Args:
-            kwargs: Command arguments
-            transfer_map: Transfer map
-            
-        Returns:
-            True if confirmed, False otherwise
-        """
         if kwargs.get('force'):
             return True
         
@@ -386,15 +332,10 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
         return answer == 'y'
     
     def _lock_source_users(self,
-                          context: KeeperParams,
+                          auth: keeper_auth.KeeperAuth,
                           transfer_map: Dict,
                           user_lookup: Dict):
         """Lock source users before transfer
-        
-        Args:
-            context: Keeper parameters
-            transfer_map: Transfer map
-            user_lookup: User lookup dictionary
         """
         sources = set()
         for target in transfer_map:
@@ -412,31 +353,23 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
         
         if lock_requests:
             logger.info('Locking active users.')
-            context.auth.execute_batch(lock_requests)
+            auth.execute_batch(lock_requests)
     
     def _load_target_keys(self,
-                         context: KeeperParams,
+                         auth: keeper_auth.KeeperAuth,
                          transfer_map: Dict) -> Dict:
         """Load public keys for all target users
-        
-        Args:
-            context: Keeper parameters
-            transfer_map: Transfer map
-            
-        Returns:
-            Dictionary mapping target usernames to their public keys
         """
         target_users = list(transfer_map.keys())
         
         logger.info(f'Loading public keys for {len(target_users)} target user(s)...')
         
-        # Load public keys
-        context.auth.load_user_public_keys(target_users, send_invites=False)
+        auth.load_user_public_keys(target_users, send_invites=False)
         
         # Collect loaded keys
         target_keys = {}
         for target_user in target_users:
-            user_keys = context.auth.get_user_keys(target_user)
+            user_keys = auth.get_user_keys(target_user)
             if user_keys:
                 target_keys[target_user] = user_keys
                 logger.debug(f'Loaded keys for {target_user}')
@@ -449,14 +382,9 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
     def _execute_transfers(self,
                           context: KeeperParams,
                           transfer_map: Dict,
-                          target_keys: Dict):
-        """Execute all account transfers
-        
-        Args:
-            context: Keeper parameters
-            transfer_map: Transfer map
-            target_keys: Dictionary of target user public keys
-        """
+                          target_keys: Dict,
+                          user_lookup: Dict):
+                          
         transfer_manager = AccountTransferManager(
             context.enterprise_loader,
             context.auth
@@ -466,7 +394,6 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
         completed = 0
         failed = 0
         
-        # Log transfer map for debugging
         logger.debug(f'Transfer map contents: {dict(transfer_map)}')
         
         for target_user, source_users in transfer_map.items():
@@ -489,7 +416,6 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
                         completed += 1
                         logger.info(f'{source_user}: Account transferred successfully')
                         
-                        # Show statistics
                         if result.records_transferred > 0:
                             logger.info(f'Records: {result.records_transferred}')
                         if result.shared_folders_transferred > 0:
@@ -512,6 +438,36 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
                 except Exception as e:
                     failed += 1
                     logger.error(f'Failed to transfer {source_user}: {e}')
+                    # Unlock source user if transfer fails
+                    self._unlock_source_users(context.auth, source_user, user_lookup)
         
         if failed > 0:
             logger.error(f'Failed transfers: {failed}')
+
+    def _unlock_source_users(self,
+                            auth: keeper_auth.KeeperAuth,
+                            source_user: str,
+                            user_lookup: Dict):
+        """Unlock source user if transfer fails
+        """
+        if source_user not in user_lookup:
+            logger.warning(f'Cannot unlock {source_user}: user not found in lookup')
+            return
+        
+        user_data = user_lookup[source_user]
+        enterprise_user_id = user_data.get('enterprise_user_id')
+        
+        if not enterprise_user_id:
+            logger.warning(f'Cannot unlock {source_user}: enterprise_user_id not found')
+            return
+        
+        unlock_requests = [
+            {
+                'command': 'enterprise_user_lock',
+                'enterprise_user_id': enterprise_user_id,
+                'lock': 'unlocked'
+            }
+        ]
+        
+        logger.info(f'Unlocking {source_user}...')
+        auth.execute_batch(unlock_requests)
