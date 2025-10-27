@@ -1,21 +1,18 @@
 import argparse
 import datetime
-import hashlib
 import json
 import math
 import re
-import urllib.parse
 from enum import Enum
 from typing import Optional
-from tabulate import tabulate
 
 from keepersdk import crypto, utils
 from keepersdk.proto import folder_pb2, record_pb2, APIRequest_pb2
 from keepersdk.vault import ksm_management, vault_online, vault_utils
 
-from . import base, record_edit
+from . import base
 from .. import api, prompt_utils, constants
-from ..helpers import folder_utils, record_utils, report_utils, share_utils, timeout_utils, share_record
+from ..helpers import folder_utils, record_utils, report_utils, share_utils, timeout_utils
 from ..params import KeeperParams
 
 
@@ -41,40 +38,6 @@ class ManagePermission(Enum):
 
 logger = api.get_logger()
 
-
-def get_record_share_info(context, record_uids):
-    """Get actual share information for records using share_utils"""
-    if not context.vault or not record_uids:
-        return {}
-    
-    try:
-        share_infos = share_utils.get_record_shares(vault=context.vault, record_uids=record_uids)
-        if not share_infos:
-            return {}
-    except Exception:
-        # If share_utils.get_record_shares fails, return empty result
-        return {}
-    
-    result = {}
-    for share_info in (share_infos or []):
-        record_uid = share_info.get('record_uid')
-        if record_uid:
-            shares = share_info.get('shares', {})
-            user_permissions = shares.get('user_permissions', [])
-            
-            # Get usernames that this record is shared with
-            shared_users = []
-            for up in user_permissions:
-                username = up.get('username', '')
-                if username:
-                    shared_users.append(username)
-            
-            result[record_uid] = {
-                'shared_users': shared_users,
-                'owner': context.auth.auth_context.username if context.auth and context.auth.auth_context else ''
-            }
-    
-    return result
 
 TIMESTAMP_MILLISECONDS_FACTOR = 1000
 TRUNCATE_SUFFIX = '...'
@@ -763,10 +726,7 @@ class ShareFolderCommand(base.ArgparseCommand):
                     all_records = True
                 else:
                     r_uids = get_record_uids(context, r)
-                    if r_uids:
-                        record_uids.update(r_uids)
-                    else:
-                        unresolved_names.append(r)
+                    record_uids.update(r_uids) if r_uids else unresolved_names.append(r)
 
             if unresolved_names:
                 sa_record_uids = get_share_admin_obj_uids(vault=vault, obj_names=unresolved_names, obj_type=record_pb2.CHECK_SA_ON_RECORD)
