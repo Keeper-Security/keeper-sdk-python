@@ -11,44 +11,45 @@ from keepersdk.enterprise import enterprise_types
 logger = logging.getLogger(__name__)
 
 
-# ============================================
-# TYPE DEFINITIONS
-# ============================================
+# Constants for encryption types
+class EncryptionType(Enum):
+    ENCRYPTED_BY_DATA_KEY = 'encrypted_by_data_key'
+    ENCRYPTED_BY_PUBLIC_KEY = 'encrypted_by_public_key'
+    ENCRYPTED_BY_DATA_KEY_GCM = 'encrypted_by_data_key_gcm'
+    ENCRYPTED_BY_PUBLIC_KEY_ECC = 'encrypted_by_public_key_ecc'
+
+
+# Transfer data keys
+class TransferDataKeys(Enum):
+    RECORD_KEYS = 'record_keys'
+    CORRUPTED_RECORD_KEYS = 'corrupted_record_keys'
+    SHARED_FOLDER_KEYS = 'shared_folder_keys'
+    CORRUPTED_SHARED_FOLDER_KEYS = 'corrupted_shared_folder_keys'
+    TEAM_KEYS = 'team_keys'
+    CORRUPTED_TEAM_KEYS = 'corrupted_team_keys'
+    USER_FOLDER_KEYS = 'user_folder_keys'
+    CORRUPTED_USER_FOLDER_KEYS = 'corrupted_user_folder_keys'
+    USER_FOLDER_TRANSFER = 'user_folder_transfer'
 
 class TransferKeyType(Enum):
-    """Key type identifiers for account transfer encryption"""
-    RAW_DATA_KEY = 0                     # Unencrypted (user data key itself)
-    ENCRYPTED_BY_DATA_KEY = 1            # AES v1
-    ENCRYPTED_BY_RSA = 2                 # RSA
-    ENCRYPTED_BY_DATA_KEY_GCM = 3        # AES v2 (GCM)
-    ENCRYPTED_BY_ECC = 4                 # ECC
+    RAW_DATA_KEY = 0
+    ENCRYPTED_BY_DATA_KEY = 1
+    ENCRYPTED_BY_RSA = 2
+    ENCRYPTED_BY_DATA_KEY_GCM = 3
+    ENCRYPTED_BY_ECC = 4
 
 
 @dataclass
 class PreTransferResponse:
-    """Response from pre_account_transfer API call
-    
-    Contains encrypted transfer keys and user data needed to decrypt
-    and re-encrypt vault objects for the target user.
-    """
-    # Transfer keys (new format - preferred)
     transfer_key2: Optional[bytes] = None
     transfer_key2_type_id: Optional[int] = None
-    
-    # Legacy transfer keys (role-based)
     transfer_key: Optional[bytes] = None
     transfer_key_type_id: Optional[int] = None
-    
-    # Role keys for legacy transfer
     role_key: Optional[bytes] = None
     role_key_id: Optional[int] = None
     role_private_key: Optional[bytes] = None
-    
-    # User private keys
-    user_private_key: Optional[bytes] = None      # RSA private key (encrypted)
-    user_ecc_private_key: Optional[bytes] = None  # ECC private key (encrypted)
-    
-    # Encrypted keys to transfer
+    user_private_key: Optional[bytes] = None
+    user_ecc_private_key: Optional[bytes] = None
     record_keys: List[Dict[str, Any]] = field(default_factory=list)
     shared_folder_keys: List[Dict[str, Any]] = field(default_factory=list)
     team_keys: List[Dict[str, Any]] = field(default_factory=list)
@@ -176,27 +177,28 @@ class AccountTransferManager:
     
     def _parse_pre_transfer_response(self, rs: Dict) -> PreTransferResponse:
         """Parse pre_account_transfer response into dataclass"""
-        return PreTransferResponse(
-            transfer_key2=utils.base64_url_decode(rs['transfer_key2'])
-                if 'transfer_key2' in rs else None,
-            transfer_key2_type_id=rs.get('transfer_key2_type_id'),
-            transfer_key=utils.base64_url_decode(rs['transfer_key'])
-                if 'transfer_key' in rs else None,
-            transfer_key_type_id=rs.get('transfer_key_type_id'),
-            role_key=utils.base64_url_decode(rs['role_key'])
-                if 'role_key' in rs else None,
-            role_key_id=rs.get('role_key_id'),
-            role_private_key=utils.base64_url_decode(rs['role_private_key'])
-                if 'role_private_key' in rs else None,
-            user_private_key=utils.base64_url_decode(rs['user_private_key'])
-                if 'user_private_key' in rs else None,
-            user_ecc_private_key=utils.base64_url_decode(rs['user_ecc_private_key'])
-                if 'user_ecc_private_key' in rs else None,
-            record_keys=rs.get('record_keys', []),
-            shared_folder_keys=rs.get('shared_folder_keys', []),
-            team_keys=rs.get('team_keys', []),
-            user_folder_keys=rs.get('user_folder_keys', [])
-        )
+        # Keys that need base64 decoding
+        base64_keys = ['transfer_key2', 'transfer_key', 'role_key', 'role_private_key', 
+                      'user_private_key', 'user_ecc_private_key']
+        
+        # Decode base64 values
+        decoded_data = {
+            key: utils.base64_url_decode(rs[key]) if key in rs else None
+            for key in base64_keys
+        }
+        
+        # Add other fields
+        decoded_data.update({
+            'transfer_key2_type_id': rs.get('transfer_key2_type_id'),
+            'transfer_key_type_id': rs.get('transfer_key_type_id'),
+            'role_key_id': rs.get('role_key_id'),
+            'record_keys': rs.get('record_keys', []),
+            'shared_folder_keys': rs.get('shared_folder_keys', []),
+            'team_keys': rs.get('team_keys', []),
+            'user_folder_keys': rs.get('user_folder_keys', [])
+        })
+        
+        return PreTransferResponse(**decoded_data)
     
     # ============================================
     # STEP 2: DECRYPT USER DATA KEY
@@ -362,58 +364,27 @@ class AccountTransferManager:
                                user_ecc_private_key: Optional[Any],
                                target_keys: keeper_auth.UserKeys,
                                from_username: str) -> Dict:
-        """Prepare all encrypted keys for target user
-        
-        Args:
-            pre_transfer: Pre-transfer response with encrypted keys
-            user_data_key: Source user's data key
-            user_rsa_private_key: Source user's RSA private key
-            user_ecc_private_key: Source user's ECC private key
-            target_keys: Target user's public keys
-            from_username: Source username for transfer folder name
-            
-        Returns:
-            Dictionary with re-encrypted keys ready for API call
-        """
+        """Prepare all encrypted keys for target user"""
         transfer_data = {}
         
-        # Process record keys
-        if pre_transfer.record_keys:
-            record_keys, corrupted = self._reencrypt_record_keys(
-                pre_transfer.record_keys,
-                user_data_key,
-                user_rsa_private_key,
-                user_ecc_private_key,
-                target_keys
-            )
-            transfer_data['record_keys'] = record_keys
-            transfer_data['corrupted_record_keys'] = corrupted
+        # Define key processing configuration
+        key_processors = [
+            ('record_keys', self._reencrypt_record_keys),
+            ('shared_folder_keys', self._reencrypt_shared_folder_keys),
+            ('team_keys', self._reencrypt_team_keys)
+        ]
         
-        # Process shared folder keys
-        if pre_transfer.shared_folder_keys:
-            sf_keys, corrupted = self._reencrypt_shared_folder_keys(
-                pre_transfer.shared_folder_keys,
-                user_data_key,
-                user_rsa_private_key,
-                user_ecc_private_key,
-                target_keys
-            )
-            transfer_data['shared_folder_keys'] = sf_keys
-            transfer_data['corrupted_shared_folder_keys'] = corrupted
+        # Process each key type
+        for key_attr, processor_func in key_processors:
+            keys = getattr(pre_transfer, key_attr, None)
+            if keys:
+                reencrypted, corrupted = processor_func(
+                    keys, user_data_key, user_rsa_private_key, user_ecc_private_key, target_keys
+                )
+                transfer_data[key_attr] = reencrypted
+                transfer_data[f'corrupted_{key_attr}'] = corrupted
         
-        # Process team keys
-        if pre_transfer.team_keys:
-            team_keys, corrupted = self._reencrypt_team_keys(
-                pre_transfer.team_keys,
-                user_data_key,
-                user_rsa_private_key,
-                user_ecc_private_key,
-                target_keys
-            )
-            transfer_data['team_keys'] = team_keys
-            transfer_data['corrupted_team_keys'] = corrupted
-        
-        # Process user folder keys - always create transfer folder
+        # Process user folder keys with transfer folder creation
         uf_keys, corrupted, transfer_folder = self._reencrypt_user_folder_keys(
             pre_transfer.user_folder_keys,
             user_data_key,
@@ -423,11 +394,10 @@ class AccountTransferManager:
             from_username
         )
         if uf_keys:
-            transfer_data['user_folder_keys'] = uf_keys
+            transfer_data[TransferDataKeys.USER_FOLDER_KEYS.value] = uf_keys
         if corrupted:
-            transfer_data['corrupted_user_folder_keys'] = corrupted
-        # Transfer folder is always required
-        transfer_data['user_folder_transfer'] = transfer_folder
+            transfer_data[TransferDataKeys.CORRUPTED_USER_FOLDER_KEYS.value] = corrupted
+        transfer_data[TransferDataKeys.USER_FOLDER_TRANSFER.value] = transfer_folder
         
         return transfer_data
     
@@ -496,11 +466,11 @@ class AccountTransferManager:
                     # Legacy encryption for shared folders
                     if target_keys.aes:
                         encrypted_key = crypto.encrypt_aes_v1(sf_key, target_keys.aes)
-                        key_type = 'encrypted_by_data_key'
+                        key_type = EncryptionType.ENCRYPTED_BY_DATA_KEY.value
                     elif target_keys.rsa:
                         rsa_key = crypto.load_rsa_public_key(target_keys.rsa)
                         encrypted_key = crypto.encrypt_rsa(sf_key, rsa_key)
-                        key_type = 'encrypted_by_public_key'
+                        key_type = EncryptionType.ENCRYPTED_BY_PUBLIC_KEY.value
                     else:
                         raise Exception('No valid target key for shared folder')
                 
@@ -543,11 +513,11 @@ class AccountTransferManager:
                 else:
                     if target_keys.aes:
                         encrypted_key = crypto.encrypt_aes_v1(team_key, target_keys.aes)
-                        key_type = 'encrypted_by_data_key'
+                        key_type = EncryptionType.ENCRYPTED_BY_DATA_KEY.value
                     elif target_keys.rsa:
                         rsa_key = crypto.load_rsa_public_key(target_keys.rsa)
                         encrypted_key = crypto.encrypt_rsa(team_key, rsa_key)
-                        key_type = 'encrypted_by_public_key'
+                        key_type = EncryptionType.ENCRYPTED_BY_PUBLIC_KEY.value
                     else:
                         raise Exception('No valid target key for team')
                 
@@ -584,21 +554,21 @@ class AccountTransferManager:
         if forbid_rsa:
             if target_keys.aes:
                 encrypted_folder_key = crypto.encrypt_aes_v2(folder_key, target_keys.aes)
-                folder_key_type = 'encrypted_by_data_key_gcm'
+                folder_key_type = EncryptionType.ENCRYPTED_BY_DATA_KEY_GCM.value
             elif target_keys.ec:
                 ec_key = crypto.load_ec_public_key(target_keys.ec)
                 encrypted_folder_key = crypto.encrypt_ec(folder_key, ec_key)
-                folder_key_type = 'encrypted_by_public_key_ecc'
+                folder_key_type = EncryptionType.ENCRYPTED_BY_PUBLIC_KEY_ECC.value
             else:
                 raise Exception('No valid target key for transfer folder')
         else:
             if target_keys.aes:
                 encrypted_folder_key = crypto.encrypt_aes_v1(folder_key, target_keys.aes)
-                folder_key_type = 'encrypted_by_data_key'
+                folder_key_type = EncryptionType.ENCRYPTED_BY_DATA_KEY.value
             elif target_keys.rsa:
                 rsa_key = crypto.load_rsa_public_key(target_keys.rsa)
                 encrypted_folder_key = crypto.encrypt_rsa(folder_key, rsa_key)
-                folder_key_type = 'encrypted_by_public_key'
+                folder_key_type = EncryptionType.ENCRYPTED_BY_PUBLIC_KEY.value
             else:
                 raise Exception('No valid target key for transfer folder')
         
@@ -625,11 +595,11 @@ class AccountTransferManager:
                 else:
                     if target_keys.aes:
                         encrypted_key = crypto.encrypt_aes_v1(uf_key, target_keys.aes)
-                        key_type = 'encrypted_by_data_key'
+                        key_type = EncryptionType.ENCRYPTED_BY_DATA_KEY.value
                     elif target_keys.rsa:
                         rsa_key = crypto.load_rsa_public_key(target_keys.rsa)
                         encrypted_key = crypto.encrypt_rsa(uf_key, rsa_key)
-                        key_type = 'encrypted_by_public_key'
+                        key_type = EncryptionType.ENCRYPTED_BY_PUBLIC_KEY.value
                     else:
                         raise Exception('No valid target key for user folder')
                 
@@ -685,34 +655,18 @@ class AccountTransferManager:
     def _encrypt_for_target(self,
                            key: bytes,
                            target_keys: keeper_auth.UserKeys) -> Tuple[bytes, str]:
-        """Encrypt a key for the target user
-        
-        Priority order:
-        1. AES data key (preferred)
-        2. ECC public key
-        3. RSA public key (if not forbidden)
-        
-        Args:
-            key: Key bytes to encrypt
-            target_keys: Target user's public keys
-            
-        Returns:
-            Tuple of (encrypted_key_bytes, key_type_string)
-            
-        Raises:
-            Exception: If no valid target key available
-        """
+        """Encrypt a key for the target user"""
         if target_keys.aes:
             return (crypto.encrypt_aes_v2(key, target_keys.aes),
-                   'encrypted_by_data_key_gcm')
+                   EncryptionType.ENCRYPTED_BY_DATA_KEY_GCM.value)
         elif target_keys.ec:
             ec_key = crypto.load_ec_public_key(target_keys.ec)
             return (crypto.encrypt_ec(key, ec_key),
-                   'encrypted_by_public_key_ecc')
+                   EncryptionType.ENCRYPTED_BY_PUBLIC_KEY_ECC.value)
         elif target_keys.rsa and not self.auth.auth_context.forbid_rsa:
             rsa_key = crypto.load_rsa_public_key(target_keys.rsa)
             return (crypto.encrypt_rsa(key, rsa_key),
-                   'encrypted_by_public_key')
+                   EncryptionType.ENCRYPTED_BY_PUBLIC_KEY.value)
         else:
             raise Exception('No valid target public key available')
     
@@ -741,11 +695,8 @@ class AccountTransferManager:
         }
         
         # Add all transfer data
-        for key in ['record_keys', 'corrupted_record_keys',
-                   'shared_folder_keys', 'corrupted_shared_folder_keys',
-                   'team_keys', 'corrupted_team_keys',
-                   'user_folder_keys', 'corrupted_user_folder_keys',
-                   'user_folder_transfer']:
+        transfer_keys = [key.value for key in TransferDataKeys]
+        for key in transfer_keys:
             if key in transfer_data:
                 rq[key] = transfer_data[key]
         

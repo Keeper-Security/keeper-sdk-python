@@ -2,15 +2,48 @@ import argparse
 import os
 import logging
 from typing import Optional, Dict, Set
+from enum import Enum
 
 from keepersdk.enterprise.account_transfer import AccountTransferManager
-from keepersdk.authentication import keeper_auth
-from keepersdk.enterprise import enterprise_types
-
-from . import base
-from ..params import KeeperParams
+from keepercli import api
+from keepercli.commands import base
+from keepercli.params import KeeperParams
 
 logger = logging.getLogger(__name__)
+
+
+# Enums for user status and lock states
+class UserStatus(Enum):
+    ACTIVE = 'active'
+    INVITED = 'invited'
+    INACTIVE = 'inactive'
+
+
+class UserLockState(Enum):
+    UNLOCKED = 0
+    LOCKED = 1
+    DISABLED = 2
+
+
+class UserLockText(Enum):
+    LOCKED = 'Locked'
+    DISABLED = 'Disabled'
+
+
+# ANSI color codes - reusable across the application
+class Colors(Enum):
+    RED = '\033[91m'
+    RESET = '\033[0m'
+
+
+# Sample mapping file content for documentation
+SAMPLE_MAPPING_FILE_CONTENT = """
+# Lines starting with #, ;, or - are comments
+john.doe@company.com -> admin@company.com
+jane.smith@company.com <- admin@company.com  
+old.user@company.com = new.admin@company.com
+user1@company.com user2@company.com
+"""
 
 
 class EnterpriseTransferAccountCommand(base.ArgparseCommand):
@@ -48,9 +81,9 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
             type=str,
             nargs='+',
             metavar="user@company.com OR @filename",
-            help='User account email/ID or File containing account mappings. '
+            help='User account email/ID (list of strings) or File containing account mappings. '
                  'Use @filename to indicate using mapping file. '
-                 'File content: from_account -> to_account'
+                 f'File format examples:{SAMPLE_MAPPING_FILE_CONTENT}'
         )
     
     def execute(self, context: KeeperParams, **kwargs):
@@ -60,24 +93,23 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
             context: Keeper parameters with auth and enterprise data
             **kwargs: Command arguments (force, target_user, email)
         """
-        if not context.vault:
-            raise ValueError('Vault not available. Please ensure you are logged in.')
-
         # Verify we have enterprise context
         try:
             enterprise_loader = context.enterprise_loader
             if not enterprise_loader:
-                raise ValueError('Enterprise loader not available. Please ensure you are logged in as an enterprise admin.')
+                raise ValueError('Enterprise data not available. Please ensure you are logged in as an enterprise admin.')
         except (AttributeError, AssertionError):
-            raise ValueError('Enterprise loader not available. Please ensure you are logged in as an enterprise admin.')
+            raise ValueError('Enterprise data not available. Please ensure you are logged in as an enterprise admin.')
         
+        if not context.auth:
+            raise ValueError('Authentication context not available.')
         
-        # Load enterprise data
+        # Ensure enterprise data is loaded
         logger.info('Loading enterprise data...')
         enterprise_loader.load()
         
         # Build user lookup
-        user_lookup = self._build_user_lookup(enterprise_loader.enterprise_data)
+        user_lookup = self._build_user_lookup(context)
         logger.debug(f'Loaded {len(user_lookup)} entries in user lookup table')
         
         # Parse transfer map from arguments
@@ -100,11 +132,10 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
             return
         
         # Lock source users
-        auth_context = context.auth
-        self._lock_source_users(auth_context, transfer_map, user_lookup)
+        self._lock_source_users(context, transfer_map, user_lookup)
         
         # Load target public keys
-        target_keys = self._load_target_keys(auth_context, transfer_map)
+        target_keys = self._load_target_keys(context, transfer_map)
         
         # Execute transfers
         self._execute_transfers(context, transfer_map, target_keys)
@@ -113,16 +144,18 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
         logger.info('Reloading enterprise data...')
         context.enterprise_loader.load(reset=True)
     
-    def _build_user_lookup(self, enterprise_data: enterprise_types.IEnterpriseData) -> Dict:
+    def _build_user_lookup(self, context: KeeperParams) -> Dict:
         """Build lookup dictionary of enterprise users
         
         Args:
-            enterprise_data: Enterprise data
+            context: Keeper parameters
             
         Returns:
             Dictionary mapping user IDs and emails to user objects
         """
         user_lookup = {}
+        
+        enterprise_data = context.enterprise_loader.enterprise_data
         
         for user in enterprise_data.users.get_all_entities():
             user_dict = {
@@ -181,6 +214,14 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
                             transfer_map: Dict,
                             user_lookup: Dict):
         """Parse transfer mapping file
+        
+        Sample mapping file content:
+        # Lines starting with #, ;, or - are comments
+        john.doe@company.com -> admin@company.com
+        jane.smith@company.com <- admin@company.com  
+        old.user@company.com = new.admin@company.com
+        user1@company.com user2@company.com
+        
         Args:
             filename: Path to mapping file
             transfer_map: Transfer map to populate
@@ -255,16 +296,16 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
         
         # Check if user is effectively active (active status + not locked)
         status = enterprise_user['status']
-        lock = enterprise_user.get('lock', 0)
+        lock = enterprise_user.get('lock', UserLockState.UNLOCKED.value)
         
-        if status == 'invited':
+        if status == UserStatus.INVITED.value:
             logger.warning(f'"{username}" is a pending account. Skipping...')
             return None
-        elif status != 'active':
+        elif status != UserStatus.ACTIVE.value:
             logger.warning(f'"{username}" is not an active account (status: {status}). Skipping...')
             return None
-        elif lock > 0:
-            lock_text = 'Locked' if lock == 1 else 'Disabled'
+        elif lock > UserLockState.UNLOCKED.value:
+            lock_text = UserLockText.LOCKED.value if lock == UserLockState.LOCKED.value else UserLockText.DISABLED.value
             logger.warning(f'"{username}" account is {lock_text}. Skipping...')
             return None
         
@@ -338,24 +379,20 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
         
         source_count = sum(len(sources) for sources in transfer_map.values())
         
-        # ANSI color codes
-        RED = '\033[91m'
-        RESET = '\033[0m'
-        
-        logger.info(f'\n{RED}ALERT!{RESET}')
+        logger.info(f'\n{Colors.RED.value}ALERT!{Colors.RESET.value}')
         logger.info('This action cannot be undone.')
         logger.info(f'Do you want to proceed with transferring {source_count} account(s)? [y/n]: ')
         answer = input().strip().lower()
         return answer == 'y'
     
     def _lock_source_users(self,
-                          auth: keeper_auth.KeeperAuth,
+                          context: KeeperParams,
                           transfer_map: Dict,
                           user_lookup: Dict):
         """Lock source users before transfer
         
         Args:
-            auth: Authentication context
+            context: Keeper parameters
             transfer_map: Transfer map
             user_lookup: User lookup dictionary
         """
@@ -363,27 +400,27 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
         for target in transfer_map:
             sources.update(transfer_map[target])
         
-        lock_requests = []
-        for email in sources:
-            user = user_lookup[email]
-            if user.get('lock', 0) != 1:
-                lock_requests.append({
-                    'command': 'enterprise_user_lock',
-                    'enterprise_user_id': user['enterprise_user_id'],
-                    'lock': 'locked'
-                })
+        lock_requests = [
+            {
+                'command': 'enterprise_user_lock',
+                'enterprise_user_id': user_lookup[email]['enterprise_user_id'],
+                'lock': 'locked'
+            }
+            for email in sources
+            if user_lookup[email].get('lock', UserLockState.UNLOCKED.value) != UserLockState.LOCKED.value
+        ]
         
         if lock_requests:
             logger.info('Locking active users.')
-            auth.execute_batch(lock_requests)
+            context.auth.execute_batch(lock_requests)
     
     def _load_target_keys(self,
-                         auth: keeper_auth.KeeperAuth,
+                         context: KeeperParams,
                          transfer_map: Dict) -> Dict:
         """Load public keys for all target users
         
         Args:
-            auth: Authentication context
+            context: Keeper parameters
             transfer_map: Transfer map
             
         Returns:
@@ -394,12 +431,12 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
         logger.info(f'Loading public keys for {len(target_users)} target user(s)...')
         
         # Load public keys
-        auth.load_user_public_keys(target_users, send_invites=False)
+        context.auth.load_user_public_keys(target_users, send_invites=False)
         
         # Collect loaded keys
         target_keys = {}
         for target_user in target_users:
-            user_keys = auth.get_user_keys(target_user)
+            user_keys = context.auth.get_user_keys(target_user)
             if user_keys:
                 target_keys[target_user] = user_keys
                 logger.debug(f'Loaded keys for {target_user}')
