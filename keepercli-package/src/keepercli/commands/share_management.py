@@ -38,8 +38,22 @@ class ManagePermission(Enum):
 
 logger = api.get_logger()
 
+
 TIMESTAMP_MILLISECONDS_FACTOR = 1000
 TRUNCATE_SUFFIX = '...'
+
+# Constants for FindDuplicatesCommand
+URL_TRUNCATE_LENGTH = 30
+NON_SHARED_DEFAULT = 'non-shared'
+CUSTOM_FIELD_TYPE_PREFIX = 'type:'
+TOTP_FIELD_NAME = 'totp'
+LIST_SEPARATOR = '|'
+DICT_SEPARATOR = ';'
+KEY_VALUE_SEPARATOR = '='
+PERMISSION_SEPARATOR = '='
+SHARE_NAMES_SEPARATOR = ', '
+SUPPORTED_RECORD_VERSIONS = {2, 3}
+DEFAULT_SEARCH_FIELDS = ['by_title', 'by_login', 'by_password']
 
 def set_expiration_fields(obj, expiration):
     """Set expiration and timerNotificationType fields on proto object if expiration is provided."""
@@ -130,10 +144,14 @@ class ShareRecordCommand(base.ArgparseCommand):
             shared_objects = share_utils.get_share_objects(vault=vault)
             known_users = shared_objects.get('users', {})
             known_emails = [u.casefold() for u in known_users.keys()]
-            is_unknown = lambda e: e.casefold() not in known_emails and utils.is_email(e)
+            def is_unknown(e):
+                return e.casefold() not in known_emails and utils.is_email(e)
             unknowns = [e for e in emails if is_unknown(e)]
             if unknowns:
-                username_map = {e: ShareRecordCommand.get_contact(e, known_users) for e in unknowns}
+                username_map = {
+                    e: ShareRecordCommand.get_contact(e, known_users) 
+                    for e in unknowns
+                }
                 table = [[k, v] for k, v in username_map.items()]
                 logger.info(f'{len(unknowns)} unrecognized share recipient(s) and closest matching contact(s)')
                 report_utils.dump_report_data(table, ['Username', 'From Contacts'])
@@ -364,7 +382,7 @@ class ShareRecordCommand(base.ArgparseCommand):
                         data = json.loads(rec['data_unencrypted'].decode())
                         if isinstance(data, dict) and 'title' in data:
                             record_titles[record_uid] = data['title']
-                    except Exception:
+                    except (ValueError, AttributeError):
                         pass
 
             record_path = share_utils.resolve_record_share_path(context=context, record_uid=record_uid)
@@ -604,8 +622,8 @@ class ShareFolderCommand(base.ArgparseCommand):
                         sa_obj_uids = {sa_obj.uid for sa_obj in rs.isObjectShareAdmin if sa_obj.isAdmin}
                         sa_obj_uids = {utils.base64_url_encode(uid) for uid in sa_obj_uids}
                         return sa_obj_uids
-            except Exception as e:
-                raise ValueError(f'get_share_admin: msg = {e}')
+            except (ValueError, AttributeError) as e:
+                raise ValueError(f'get_share_admin: msg = {e}') from e
 
         def get_record_uids(context: KeeperParams, name: str) -> set[str]:
             """Get record UIDs by name or UID."""
@@ -639,7 +657,8 @@ class ShareFolderCommand(base.ArgparseCommand):
         if all_folders:
             shared_folder_uids.update(shared_folder_cache.keys())
         else:
-            get_folder_by_uid = lambda uid: folder_cache.get(uid)
+            def get_folder_by_uid(uid):
+                return folder_cache.get(uid)
             folder_uids = {
                 uid 
                 for name in names if name 

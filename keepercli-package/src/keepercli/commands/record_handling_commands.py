@@ -1,24 +1,56 @@
 import argparse
 import datetime
+import hashlib
 import json
 import re
 from typing import Optional, List
+import urllib
 
 from colorama import Fore, Back, Style
 
 from keepersdk.proto import record_pb2
-from keepersdk.vault import (record_types, vault_record, vault_online)
+from keepersdk.vault import (record_types, vault_record, vault_online, record_management)
 from keepersdk import crypto, utils
 
 from . import base
-from ..helpers import folder_utils, record_utils, report_utils
-from .. import api
+from ..helpers import folder_utils, record_utils, report_utils, share_utils
+from .. import api, prompt_utils
 from ..params import KeeperParams
 
 
 logger = api.get_logger()
 MAX_VERSION_COUNT = 5
 TRUNCATE_LENGTH = 52
+
+# Constants for FindDuplicateCommand
+TEAM_USER_TYPE = '(Team User)'
+NON_SHARED_LABEL = 'non-shared'
+ENTERPRISE_COMPLIANCE_DAYS = 1
+URL_DISPLAY_LENGTH = 30
+ENTERPRISE_UPDATE_FLOOR_DAYS = 1
+
+# Default field mappings for duplicate detection
+DEFAULT_MATCH_FIELDS = ['title', 'login', 'password']
+ENTERPRISE_FIELD_KEYS = ['title', 'url', 'record_type']
+
+# Report field names
+FIELD_TITLE = 'Title'
+FIELD_LOGIN = 'Login'
+FIELD_PASSWORD = 'Password'
+FIELD_WEBSITE_ADDRESS = 'Website Address'
+FIELD_CUSTOM_FIELDS = 'Custom Fields'
+FIELD_SHARES = 'Shares'
+FIELD_RECORD_UID = 'record_uid'
+FIELD_GROUP = 'group'
+FIELD_URL = 'url'
+FIELD_RECORD_OWNER = 'record_owner'
+FIELD_SHARED_TO = 'shared_to'
+FIELD_SHARED_FOLDER_UID = 'shared_folder_uid'
+
+# Report titles
+ENTERPRISE_DUPLICATE_TITLE = 'Duplicate Search Results (Enterprise Scope):'
+VAULT_DUPLICATE_TITLE = 'Duplicates Found:'
+NO_DUPLICATES_FOUND = 'No duplicates found.'
 
 
 class ClipboardCommand(base.ArgparseCommand):
@@ -699,4 +731,378 @@ class RecordHistoryCommand(base.ArgparseCommand):
         ros = next((x for x in rs.records if x.record_uid == r_uid), None)
         if ros and ros.status != record_pb2.RS_SUCCESS:
             raise base.CommandError(f'Failed to restore record "{record_uid}": {ros.message}')
+
+
+class FindDuplicateCommand(base.ArgparseCommand):
+    """
+    Command to find and optionally merge duplicate records in a vault.
+    
+    This command can identify duplicates based on various field combinations
+    (title, login, password, URL, custom fields, shares) and optionally
+    consolidate them by removing the duplicate entries.
+    """
+    
+    def __init__(self):
+        self.parser = argparse.ArgumentParser(
+            prog='find-duplicates',
+            description='List duplicated records.',
+            parents=[base.report_output_parser]
+        )
+        self.add_arguments_to_parser(self.parser)
+        super().__init__(self.parser)
+    
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
+        parser.add_argument('--title', dest='title', action='store_true', help='Match duplicates by title.')
+        parser.add_argument('--login', dest='login', action='store_true', help='Match duplicates by login.')
+        parser.add_argument('--password', dest='password', action='store_true', help='Match duplicates by password.')
+        parser.add_argument('--url', dest='url', action='store_true', help='Match duplicates by URL.')
+        parser.add_argument('--shares', action='store_true', help='Match duplicates by share permissions')
+        parser.add_argument('--full', dest='full', action='store_true', help='Match duplicates by all fields.')
+        merge_help = 'Consolidate duplicate records (matched by all fields, including shares)'
+        parser.add_argument('-m', '--merge', action='store_true', help=merge_help)
+        ignore_shares_txt = 'ignore share permissions when grouping duplicate records to merge'
+        parser.add_argument('--ignore-shares-on-merge', action='store_true', help=ignore_shares_txt)
+        force_help = 'Delete duplicates w/o being prompted for confirmation (valid only w/ --merge option)'
+        parser.add_argument('-f', '--force', action='store_true', help=force_help)
+        dry_run_help = 'Simulate removing duplicates (with this flog, no records are ever removed or modified). ' \
+                    'Valid only w/ --merge flag'
+        parser.add_argument('-n', '--dry-run', action='store_true', help=dry_run_help)
+        parser.add_argument('-q', '--quiet', action='store_true',
+                                        help='Suppress screen output, valid only w/ --force flag')
+        scope_help = 'The scope of the search (limited to current vault if not specified)'
+        parser.add_argument('-s', '--scope', action='store', choices=['vault', 'enterprise'], default='vault',
+                                        help=scope_help)
+        refresh_help = 'Populate local cache with latest compliance data . Valid only w/ --scope=enterprise option.'
+        parser.add_argument('-r', '--refresh-data', action='store_true', help=refresh_help)
+    
+    def execute(self, context: KeeperParams, **kwargs):
+        self._validate_context(context)
+        
+        scope = kwargs.get('scope', 'vault')
+        if scope == 'enterprise':
+            raise base.CommandError('Enterprise scope not yet implemented')
+        
+        return self._process_vault_duplicates(context, kwargs)
+    
+    def _validate_context(self, context: KeeperParams):
+        if not context.vault:
+            raise base.CommandError('Vault is not initialized')
+    
+    def _process_vault_duplicates(self, context: KeeperParams, kwargs: dict):
+        vault = context.vault
+        match_fields = self._determine_match_fields(kwargs)
+        
+        hashes = self._build_duplicate_hashes(vault, match_fields)
+        
+        fields = self._build_field_list(match_fields)
+        logging_fn = self._get_logging_function(kwargs)
+        logging_fn('Find duplicated records by: %s', ', '.join(fields))
+        
+        partitions = [rec_uids for rec_uids in hashes.values() if len(rec_uids) > 1]
+        
+        if not partitions:
+            logging_fn(NO_DUPLICATES_FOUND)
+            return
+        
+        partitions = self._apply_share_partitioning(context, partitions, match_fields)
+        
+        if not partitions:
+            logging_fn(NO_DUPLICATES_FOUND)
+            return
+        
+        return self._generate_duplicate_report(context, partitions, match_fields, kwargs)
+    
+    def _get_logging_function(self, kwargs):
+        quiet = kwargs.get('quiet', False)
+        dry_run = kwargs.get('dry_run', False)
+        quiet = quiet and not dry_run
+        return logger.info if not quiet else logger.debug
+    
+    def _build_duplicate_hashes(self, vault, match_fields):
+        hashes = {}
+        for record_uid in vault.vault_data._records:
+            record = vault.vault_data.load_record(record_uid)
+            if not record or not isinstance(record, (vault_record.PasswordRecord, vault_record.TypedRecord)):
+                continue
+            
+            hash_value, non_empty = self._create_record_hash(record, match_fields)
+            
+            if non_empty > 0:
+                rec_uids = hashes.get(hash_value, set())
+                rec_uids.add(record_uid)
+                hashes[hash_value] = rec_uids
+        return hashes
+    
+    def _apply_share_partitioning(self, context, partitions, match_fields):
+        if not match_fields['by_shares']:
+            return partitions
+        
+        r_uids = [rec_uid for duplicates in partitions for rec_uid in duplicates]
+        shared_records_lookup = share_utils.get_shared_records(context, r_uids, cache_only=True)
+        
+        return self._partition_by_shares(partitions, shared_records_lookup)
+    
+    def _partition_by_shares(self, duplicate_sets, shared_recs_lookup):
+        result = []
+        for duplicates in duplicate_sets:
+            recs_by_hash = {}
+            for rec_uid in duplicates:
+                shared_rec = shared_recs_lookup.get(rec_uid)
+                permissions = shared_rec.permissions
+                
+                permissions = self._filter_team_user_permissions(permissions)
+                permissions = {k: p for k, p in permissions.items() if p.to_name != shared_rec.owner}
+                
+                permissions_keys = list(permissions.keys())
+                permissions_keys.sort()
+                
+                to_hash = ';'.join(f'{k}={permissions.get(k).permissions_text}' for k in permissions_keys)
+                to_hash = to_hash or NON_SHARED_LABEL
+                
+                h = hashlib.sha256()
+                h.update(to_hash.encode())
+                h_val = h.hexdigest()
+                
+                r_uids = recs_by_hash.get(h_val, set())
+                r_uids.add(rec_uid)
+                recs_by_hash[h_val] = r_uids
+            
+            result.extend([r for r in recs_by_hash.values() if len(r) > 1])
+        
+        return result
+    
+    def _generate_duplicate_report(self, context, partitions, match_fields, kwargs):
+        vault = context.vault
+        out_fmt = kwargs.get('format', 'table')
+        out_dst = kwargs.get('output')
+        
+        headers = self._build_report_headers(match_fields, out_fmt)
+        
+        table, table_raw, to_remove = self._build_report_data(context, vault, partitions, match_fields)
+        
+        if match_fields['consolidate']:
+            return self._consolidate_duplicates(vault, headers, table_raw, to_remove, kwargs)
+        else:
+            title = VAULT_DUPLICATE_TITLE
+            return report_utils.dump_report_data(table, headers, title=title, fmt=out_fmt, filename=out_dst, group_by=0)
+    
+    def _build_report_headers(self, match_fields, out_fmt):
+        headers = [FIELD_GROUP, 'title', 'login']
+        if match_fields['by_url']:
+            headers.append(FIELD_URL)
+        headers.extend(['uid', FIELD_RECORD_OWNER, FIELD_SHARED_TO])
+        return [report_utils.field_to_title(h) for h in headers] if out_fmt != 'json' else headers
+    
+    def _build_report_data(self, context, vault, partitions, match_fields):
+        shared_records_lookup = share_utils.get_shared_records(
+            context,
+            [rec_uid for duplicates in partitions for rec_uid in duplicates],
+            cache_only=True
+        )
+        
+        table = []
+        table_raw = []
+        to_remove = set()
+        
+        for i, partition in enumerate(partitions):
+            for j, record_uid in enumerate(partition):
+                row = self._build_report_row(vault, shared_records_lookup, i, record_uid, match_fields)
+                table.append(row)
+                
+                if j != 0:  # Mark for removal (all except first in each partition)
+                    to_remove.add(record_uid)
+                    table_raw.append(row)
+        
+        return table, table_raw, to_remove
+    
+    def _build_report_row(self, vault, shared_records_lookup, group_index, record_uid, match_fields):
+        record = vault.vault_data.load_record(record_uid)
+        shared_record = shared_records_lookup[record_uid]
+        
+        owner = self._get_record_owner(vault, record_uid)
+        title, login, url = self._extract_record_info(record, match_fields)
+        url = self._format_url(url, match_fields['by_url'])
+        shares = self._extract_share_info(shared_record, owner)
+        
+        return [group_index + 1, title, login] + url + [record_uid, owner, shares]
+    
+    def _get_record_owner(self, vault, record_uid):
+        record_details = vault.vault_data.get_record(record_uid)
+        return record_details.flags.IsOwner
+    
+    def _extract_share_info(self, shared_record, owner):
+        perms = {k: p for k, p in shared_record.permissions.items()}
+        keys = list(perms.keys())
+        keys.sort()
+        perms = [perms.get(k) for k in keys]
+        perms = [p for p in perms if TEAM_USER_TYPE not in p.types or len(p.types) > 1]
+        return '\n'.join([p.to_name for p in perms if owner != p.to_name])
+    
+    def _consolidate_duplicates(self, vault, headers, table_raw, to_remove, kwargs):
+        """Consolidate (remove) duplicate records."""
+        uid_header = report_utils.field_to_title('uid')
+        record_uid_index = headers.index(uid_header) if uid_header in headers else None
+        
+        if not record_uid_index:
+            raise base.CommandError('Cannot find record UID for duplicate record')
+        
+        dup_info = [r for r in table_raw for rec_uid in to_remove if r[record_uid_index] == rec_uid]
+        return self._remove_duplicates(vault, dup_info, headers, to_remove, kwargs)
+    
+    def _remove_duplicates(self, vault, dupe_info, col_headers, dupe_uids, kwargs):
+        """Remove duplicate records with confirmation."""
+        def confirm_removal(cols):
+            prompt_title = f'\nThe following duplicate {"records have" if len(dupe_uids) > 1 else "record has"}' \
+                    f' been marked for removal:\n'
+            indices = (idx + 1 for idx in range(len(dupe_info)))
+            prompt_report = prompt_title + '\n' + report_utils.tabulate(dupe_info, col_headers, showindex=indices)
+            prompt_msg = prompt_report + '\n\nDo you wish to proceed?'
+            return prompt_utils.user_choice(prompt_msg, 'yn', default='n') in ('y', 'yes')
+        
+        if kwargs.get('force') or confirm_removal(col_headers):
+            record_management.delete_vault_objects(vault, list(dupe_uids))
+    
+    def _determine_match_fields(self, kwargs):
+        by_title = kwargs.get('title', False)
+        by_login = kwargs.get('login', False)
+        by_password = kwargs.get('password', False)
+        by_url = kwargs.get('url', False)
+        by_custom = kwargs.get('full', False)
+        by_shares = kwargs.get('shares', False)
+        consolidate = kwargs.get('merge', False)
+        
+        if consolidate or by_custom:
+            by_title = True
+            by_login = True
+            by_password = True
+            by_url = True
+            by_shares = not kwargs.get('ignore_shares_on_merge') if consolidate else True
+        elif not any([by_title, by_login, by_password, by_url]):
+            by_title = True
+            by_login = True
+            by_password = True
+        
+        return {
+            'by_title': by_title,
+            'by_login': by_login,
+            'by_password': by_password,
+            'by_url': by_url,
+            'by_custom': consolidate or by_custom,
+            'by_shares': by_shares,
+            'consolidate': consolidate
+        }
+    
+    def _build_field_list(self, match_fields):
+        fields = []
+        if match_fields['by_title']:
+            fields.append(FIELD_TITLE)
+        if match_fields['by_login']:
+            fields.append(FIELD_LOGIN)
+        if match_fields['by_password']:
+            fields.append(FIELD_PASSWORD)
+        if match_fields['by_url']:
+            fields.append(FIELD_WEBSITE_ADDRESS)
+        if match_fields['by_custom']:
+            fields.append(FIELD_CUSTOM_FIELDS)
+        if match_fields['by_shares']:
+            fields.append(FIELD_SHARES)
+        return fields
+    
+    def _filter_team_user_permissions(self, permissions):
+        filtered_perms = {
+            k: p for k, p in permissions.items()
+            if TEAM_USER_TYPE not in p.types or len(p.types) > 1
+        }
+        return filtered_perms
+    
+    def _create_record_hash(self, record, match_fields):
+        tokens = []
+        
+        if match_fields['by_title']:
+            tokens.append((record.title or '').lower())
+        
+        if match_fields['by_login']:
+            if isinstance(record, vault_record.PasswordRecord):
+                tokens.append((record.login or '').lower())
+            elif isinstance(record, vault_record.TypedRecord):
+                login_field = record.get_typed_field('login')
+                if login_field:
+                    tokens.append((login_field.get_default_value(str) or '').lower())
+        
+        if match_fields['by_password']:
+            tokens.append(record.extract_password() or '')
+        
+        if match_fields['by_url']:
+            tokens.append(record.extract_url() or '')
+        
+        hasher = hashlib.sha256()
+        non_empty = 0
+        
+        for token in tokens:
+            if token:
+                non_empty += 1
+            hasher.update(token.encode())
+        
+        if match_fields['by_custom'] and isinstance(record, vault_record.TypedRecord):
+            non_empty += self._hash_custom_fields(record, hasher)
+        
+        return hasher.hexdigest(), non_empty
+    
+    def _hash_custom_fields(self, record, hasher):
+        customs = {}
+        non_empty = 0
+        
+        for field in record.custom:
+            name = field.label if field.label != '' else field.type
+            value = field.value
+            
+            if not name or not value:
+                continue
+            
+            if isinstance(value, list):
+                value = '|'.join(sorted(str(x) for x in value))
+            elif isinstance(value, int):
+                value = str(value) if value != 0 else None
+            elif isinstance(value, dict):
+                keys = sorted(value.keys())
+                value = ';'.join(f'{k}:{value[k]}' for k in keys if value.get(k))
+            elif not isinstance(value, str):
+                value = None
+            
+            if value:
+                customs[name] = value
+        
+        if record.get_typed_field('totp'):
+            customs['totp'] = record.get_typed_field('totp').get_default_value(str)
+        
+        if record.record_type:
+            customs['type:'] = record.record_type
+        
+        for key in sorted(customs.keys()):
+            non_empty += 1
+            for_hash = f'{key}={customs[key]}'
+            hasher.update(for_hash.encode('utf-8'))
+        
+        return non_empty
+    
+    def _extract_record_info(self, record, match_fields):
+        title = record.title or ''
+        
+        if isinstance(record, vault_record.PasswordRecord):
+            url = record.link or ''
+            login = record.login or ''
+        elif isinstance(record, vault_record.TypedRecord):
+            login = record.get_typed_field('login').get_default_value(str) or ''
+            url = record.extract_url() or ''
+        else:
+            login = ''
+            url = ''
+        
+        return title, login, url
+    
+    def _format_url(self, url, include_in_output):
+        parsed_url = urllib.parse.urlparse(url).hostname
+        parsed_url = parsed_url[:URL_DISPLAY_LENGTH] if parsed_url else ''
+        return [parsed_url] if include_in_output else []
 
