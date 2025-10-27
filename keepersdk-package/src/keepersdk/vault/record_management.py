@@ -300,13 +300,16 @@ def delete_vault_objects(vault: vault_online.VaultOnline,
                 objects.append(obj)
             else:
                 record = vault.vault_data.get_record(to_delete)
-                # TODO resolve folder
+                folders = vault_utils.get_folders_for_record(vault.vault_data, record.record_uid)
+                if folders:
+                    folder = folders[0]
                 if record:
                     obj = {
                         'object_uid': record.record_uid,
                         'object_type': 'record',
                         'delete_resolution': 'unlink',
                         'from_type': 'user_folder',
+                        'from_uid': folder.folder_uid,
                     }
                     objects.append(obj)
         elif isinstance(to_delete, vault_types.RecordPath):
