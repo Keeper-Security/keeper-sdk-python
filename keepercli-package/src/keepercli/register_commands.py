@@ -45,7 +45,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('search', record_edit.RecordSearchCommand(), base.CommandScope.Vault, 's')
         commands.register_command('record-history', record_handling_commands.RecordHistoryCommand(), base.CommandScope.Vault, 'rh')
         commands.register_command('clipboard-copy', record_handling_commands.ClipboardCommand(), base.CommandScope.Vault, 'cc')
-        commands.register_command('find-duplicate', share_management.FindDuplicateCommand(), base.CommandScope.Vault)
+        commands.register_command('find-duplicate', record_handling_commands.FindDuplicateCommand(), base.CommandScope.Vault)
         commands.register_command('find-password', record_handling_commands.ClipboardCommand(), base.CommandScope.Vault)
         commands.register_command('find-ownerless', register.FindOwnerlessCommand(), base.CommandScope.Vault)
         commands.register_command('record-add', record_edit.RecordAddCommand(), base.CommandScope.Vault, 'ra')

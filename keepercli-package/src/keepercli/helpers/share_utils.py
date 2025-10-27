@@ -795,7 +795,8 @@ def get_shared_records(context: KeeperParams, record_uids, cache_only=False):
         return restricted_members
 
     try:
-        shares = get_record_shares(context.vault, record_uids)
+        vault = context.vault
+        shares = get_record_shares(vault, record_uids)
         
         sf_teams = [share.get('teams', []) for share in shares] if shares else []
         team_uids = {
@@ -817,7 +818,7 @@ def get_shared_records(context: KeeperParams, record_uids, cache_only=False):
         else:
             team_members = _fetch_team_members_from_api(team_uids)
 
-        records = [context.vault.vault_data.get_record(uid) for uid in record_uids]
+        records = [vault.vault_data.get_record(uid) for uid in record_uids]
         valid_records = [record for record in records if record is not None]
 
         from .share_record import SharedRecord

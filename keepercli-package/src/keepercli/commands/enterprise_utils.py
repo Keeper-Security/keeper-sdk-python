@@ -6,6 +6,7 @@ from keepersdk.authentication import keeper_auth
 from keepersdk.enterprise import enterprise_types, enterprise_constants
 from keepersdk.proto import enterprise_pb2
 from . import base
+from ..params import KeeperParams
 
 
 class NodeUtils:
@@ -497,6 +498,18 @@ class EnterpriseMixin:
                 if x.cascade_node_management:
                     result[x.managed_node_id] = x.cascade_node_management
         return result
+
+
+def is_addon_enabled(context: KeeperParams, addon_name: str) -> bool:
+    keeper_licenses = context.enterprise_data.licenses.get_all_entities()
+    for license in keeper_licenses:
+        license.license_status
+    if not keeper_licenses:
+        raise base.CommandError('No licenses found')
+    if next(iter(keeper_licenses), {}).license_status == 'business_trial':
+        return True
+    addons = [a for l in keeper_licenses for a in l.add_ons if a.name == addon_name]
+    return any(a for a in addons if a.enabled or a.included_in_product)
 
 '''
     def _load_managed_nodes(self, context: KeeperParams) -> None:
