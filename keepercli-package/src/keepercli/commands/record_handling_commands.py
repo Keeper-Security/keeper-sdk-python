@@ -8,7 +8,7 @@ import urllib
 
 from colorama import Fore, Back, Style
 
-from keepersdk.proto import record_pb2
+from keepersdk.proto import record_pb2, folder_pb2
 from keepersdk.vault import (record_types, vault_record, vault_online, record_management)
 from keepersdk import crypto, utils
 
@@ -1106,3 +1106,664 @@ class FindDuplicateCommand(base.ArgparseCommand):
         parsed_url = parsed_url[:URL_DISPLAY_LENGTH] if parsed_url else ''
         return [parsed_url] if include_in_output else []
 
+
+class _PermissionConfig:
+    """Configuration for permission changes.
+    
+    Attributes:
+        should_have: True if granting permissions, False if revoking
+        change_share: Whether to change share permissions
+        change_edit: Whether to change edit permissions
+        force: Skip confirmation prompts
+        dry_run: Only display changes without applying them
+        recursive: Apply to subfolders
+    """
+    def __init__(self, action: str, can_share: bool, can_edit: bool, 
+                 force: bool, dry_run: bool, recursive: bool):
+        self.should_have = action == 'grant'
+        self.change_share = can_share
+        self.change_edit = can_edit
+        self.force = force
+        self.dry_run = dry_run
+        self.recursive = recursive
+        
+        if not self.change_share and not self.change_edit:
+            raise base.CommandError(
+                'Please choose at least one of the following options: can-edit, can-share'
+            )
+
+
+class _PermissionProcessor:
+    """Handles processing of permission changes for records."""
+    
+    def __init__(self, config: _PermissionConfig, context: KeeperParams):
+        self.config = config
+        self.context = context
+        self.vault = context.vault
+        
+    def process_direct_shares(self, folders):
+        """Process direct record shares and return commands to update."""
+        updates = []
+        skipped = []
+        
+        record_uids = set()
+        for folder in folders:
+            if folder.records:
+                record_uids.update(folder.records)
+        
+        if not record_uids:
+            return updates, skipped
+            
+        shared_records = share_utils.get_record_shares(self.vault, record_uids)
+        if not shared_records:
+            return updates, skipped
+            
+        for shared_record in shared_records:
+            shares = shared_record.get('shares', {})
+            user_permissions = shares.get('user_permissions', [])
+            
+            for up in user_permissions:
+                if up.get('owner'):  # Skip record owners
+                    continue
+                    
+                username = up.get('username')
+                if username == self.context.username:  # Skip self
+                    continue
+                
+                needs_update = self._needs_permission_update(
+                    up, self.config.should_have, self.config.change_share, self.config.change_edit
+                )
+                
+                if needs_update:
+                    updates.append({
+                        'record_uid': shared_record.get('record_uid'),
+                        'to_username': username,
+                        'editable': self.config.should_have if self.config.change_edit else up.get('editable'),
+                        'shareable': self.config.should_have if self.config.change_share else up.get('shareable'),
+                    })
+        
+        return updates, skipped
+    
+    def process_shared_folder_permissions(self, folders):
+        """Process shared folder record permissions and return commands to update."""
+        updates = {}
+        skipped = {}
+        
+        share_admin_folders = self._get_share_admin_folders(folders)
+        
+        account_uid = self.context.auth.auth_context.account_uid
+        
+        for folder in folders:
+            if folder.folder_type not in ['shared_folder', 'shared_folder_folder']:
+                continue
+                
+            shared_folder_uid = self._get_shared_folder_uid(folder)
+            if not shared_folder_uid or shared_folder_uid not in self.vault.vault_data._shared_folders:
+                continue
+                
+            is_share_admin = shared_folder_uid in share_admin_folders
+            shared_folder = self.vault.vault_data.load_shared_folder(shared_folder_uid)
+            
+            has_manage_records = self._has_manage_records_permission(
+                shared_folder, shared_folder_uid, is_share_admin, account_uid
+            )
+            
+            container = updates if (is_share_admin or has_manage_records) else skipped
+            
+            if shared_folder.record_permissions:
+                record_uids = folder.records if folder.records else set()
+                for rp in shared_folder.record_permissions:
+                    record_uid = rp.record_uid
+                    if record_uid in record_uids and record_uid not in container.get(shared_folder_uid, {}):
+                        if self._needs_shared_folder_update(rp):
+                            container.setdefault(shared_folder_uid, {})
+                            container[shared_folder_uid][record_uid] = self._build_update_command(
+                                record_uid, shared_folder_uid
+                            )
+        
+        return self._clean_empty_dicts(updates), self._clean_empty_dicts(skipped)
+    
+    def _needs_permission_update(self, user_perm, should_have, change_share, change_edit):
+        """Check if user permission needs updating."""
+        if change_edit and should_have != user_perm.get('editable'):
+            return True
+        if change_share and should_have != user_perm.get('shareable'):
+            return True
+        return False
+    
+    def _needs_shared_folder_update(self, record_permission):
+        """Check if shared folder record permission needs updating."""
+        should_have = self.config.should_have
+        if self.config.change_edit and should_have != record_permission.can_edit:
+            return True
+        if self.config.change_share and should_have != record_permission.can_share:
+            return True
+        return False
+    
+    def _get_share_admin_folders(self, folders):
+        """Get set of shared folder UIDs where user is share admin."""
+        share_admin_folders = set()
+        shared_folder_uids = set()
+        
+        for folder in folders:
+            shared_folder_uid = None
+            if folder.folder_type == 'shared_folder':
+                shared_folder_uid = folder.folder_uid
+            elif folder.folder_type == 'shared_folder_folder':
+                shared_folder_uid = folder.folder_scope_uid
+                
+            if shared_folder_uid and shared_folder_uid not in shared_folder_uids:
+                if shared_folder_uid in self.vault.vault_data._shared_folders:
+                    shared_folder_uids.add(shared_folder_uid)
+        
+        if not shared_folder_uids:
+            return share_admin_folders
+        
+        try:
+            rq = record_pb2.AmIShareAdmin()
+            for shared_folder_uid in shared_folder_uids:
+                osa = record_pb2.IsObjectShareAdmin()
+                osa.uid = utils.base64_url_decode(shared_folder_uid)
+                osa.objectType = record_pb2.CHECK_SA_ON_SF
+                rq.isObjectShareAdmin.append(osa)
+            
+            rs = self.vault.keeper_auth.execute_auth_rest(
+                rest_endpoint='vault/am_i_share_admin',
+                request=rq,
+                response_type=record_pb2.AmIShareAdmin
+            )
+            
+            for osa in rs.isObjectShareAdmin:
+                if osa.isAdmin:
+                    share_admin_folders.add(utils.base64_url_encode(osa.uid))
+        except Exception:
+            pass
+            
+        return share_admin_folders
+    
+    def _get_shared_folder_uid(self, folder):
+        """Get the shared folder UID from a folder object."""
+        if folder.folder_type == 'shared_folder':
+            return folder.folder_uid
+        elif folder.folder_type == 'shared_folder_folder':
+            return folder.folder_scope_uid
+        return None
+    
+    def _has_manage_records_permission(self, shared_folder, shared_folder_uid, is_share_admin, account_uid):
+        """Check if user has permission to manage records in shared folder."""
+        if is_share_admin:
+            return True
+            
+        if shared_folder.user_permissions:
+            if shared_folder.user_permissions[0].user_uid == account_uid:
+                return True
+            
+            user = next(
+                (x for x in shared_folder.user_permissions if x.name == self.context.username),
+                None
+            )
+            if user and user.manage_records:
+                return True
+                
+        return False
+    
+    def _build_update_command(self, record_uid, shared_folder_uid):
+        """Build a protobuf command to update record permissions."""
+        cmd = folder_pb2.SharedFolderUpdateRecord()
+        cmd.recordUid = utils.base64_url_decode(record_uid)
+        cmd.sharedFolderUid = utils.base64_url_decode(shared_folder_uid)
+        
+        cmd.canEdit = (
+            folder_pb2.BOOLEAN_TRUE if self.config.should_have else folder_pb2.BOOLEAN_FALSE
+        ) if self.config.change_edit else folder_pb2.BOOLEAN_NO_CHANGE
+        
+        cmd.canShare = (
+            folder_pb2.BOOLEAN_TRUE if self.config.should_have else folder_pb2.BOOLEAN_FALSE
+        ) if self.config.change_share else folder_pb2.BOOLEAN_NO_CHANGE
+        
+        return cmd
+    
+    @staticmethod
+    def _clean_empty_dicts(data):
+        """Remove empty dictionaries from nested structure."""
+        cleaned = {}
+        for key, value in data.items():
+            if isinstance(value, dict) and value:
+                cleaned[key] = value
+        return cleaned
+
+
+class _PermissionReporter:
+    """Handles reporting of permission changes."""
+    
+    def __init__(self, config: _PermissionConfig, context: KeeperParams):
+        self.config = config
+        self.context = context
+        self.vault = context.vault
+    
+    def report_direct_shares(self, updates, skipped):
+        """Report on direct share updates and skipped items."""
+        if skipped and self.config.dry_run:
+            self._report_skipped_direct_shares(skipped)
+        
+        if updates and not self.config.force:
+            self._report_direct_share_updates(updates)
+    
+    def report_shared_folder_changes(self, updates, skipped):
+        """Report on shared folder updates and skipped items."""
+        if skipped and self.config.dry_run:
+            self._report_skipped_shared_folder(skipped)
+        
+        if updates and not self.config.force:
+            self._report_shared_folder_updates(updates)
+    
+    def _report_skipped_direct_shares(self, skipped):
+        """Report records that couldn't be updated due to insufficient permissions."""
+        table = []
+        for cmd in skipped:
+            record_uid = utils.base64_url_encode(cmd['recordUid'])
+            record = self.vault.vault_data.get_record(record_uid=record_uid)
+            record_owners = [x['username'] for x in record['shares']['user_permissions'] if x['owner']]
+            record_owner = record_owners[0] if len(record_owners) > 0 else ''
+            rec = self.vault.vault_data.get_record(record_uid=record_uid)
+            row = [record_uid, rec.title[:32], record_owner, cmd['to_username']]
+            table.append(row)
+        
+        headers = ['Record UID', 'Title', 'Owner', 'Email']
+        title = 'SKIP Direct Record Share permission(s). Not permitted'
+        report_utils.dump_report_data(table, headers, title=title, row_number=True, group_by=0)
+        logger.info('\n')
+    
+    def _report_direct_share_updates(self, updates):
+        """Report direct share updates that will be made."""
+        table = []
+        for cmd in updates:
+            record_uid = cmd['record_uid']
+            rec = self.vault.vault_data.get_record(record_uid=record_uid)
+            row = [record_uid, rec.title[:32], cmd['to_username']]
+            
+            if self.config.change_edit:
+                row.append('Y' if cmd['editable'] else 'N')
+            if self.config.change_share:
+                row.append('Y' if cmd['shareable'] else 'N')
+                
+            table.append(row)
+        
+        headers = ['Record UID', 'Title', 'Email']
+        if self.config.change_edit:
+            headers.append('Can Edit')
+        if self.config.change_share:
+            headers.append('Can Share')
+        
+        action = 'GRANT' if self.config.should_have else 'REVOKE'
+        title = f'{action} Direct Record Share permission(s)'
+        report_utils.dump_report_data(table, headers, title=title, row_number=True, group_by=0)
+        logger.info('\n')
+    
+    def _report_skipped_shared_folder(self, skipped):
+        """Report shared folder records that couldn't be updated."""
+        table = []
+        for shared_folder_uid in skipped:
+            shared_folder = self.vault.vault_data.get_shared_folder(shared_folder_uid=shared_folder_uid)
+            uid = shared_folder_uid
+            name = shared_folder.name[:32]
+            
+            for record_uid in skipped[shared_folder_uid]:
+                record = self.vault.vault_data.get_record(record_uid=record_uid)
+                row = [uid, name, record_uid, record.title[:32]]
+                uid = ''
+                name = ''
+                table.append(row)
+        
+        if table:
+            headers = ['Shared Folder UID', 'Shared Folder Name', 'Record UID', 'Record Title']
+            title = 'SKIP Shared Folder Record Share permission(s). Not permitted'
+            report_utils.dump_report_data(table, headers, title=title, row_number=True)
+            logger.info('\n')
+    
+    def _report_shared_folder_updates(self, updates):
+        """Report shared folder updates that will be made."""
+        table = []
+        for shared_folder_uid in updates:
+            commands = updates[shared_folder_uid]
+            shared_folder = self.vault.vault_data.get_shared_folder(shared_folder_uid=shared_folder_uid)
+            uid = shared_folder_uid
+            name = shared_folder.name[:32]
+            
+            for record_uid in commands:
+                cmd = commands[record_uid]
+                record = self.vault.vault_data.get_record(record_uid=record_uid)
+                row = [uid, name, record_uid, record.title[:32]]
+                
+                if self.config.change_edit:
+                    edit_val = 'Y' if cmd.canEdit == folder_pb2.BOOLEAN_TRUE else 'N'
+                    row.append(edit_val)
+                if self.config.change_share:
+                    share_val = 'Y' if cmd.canShare == folder_pb2.BOOLEAN_TRUE else 'N'
+                    row.append(share_val)
+                    
+                table.append(row)
+                uid = ''
+                name = ''
+        
+        if table:
+            headers = ['Shared Folder UID', 'Shared Folder Name', 'Record UID', 'Record Title']
+            if self.config.change_edit:
+                headers.append('Can Edit')
+            if self.config.change_share:
+                headers.append('Can Share')
+            
+            action = 'GRANT' if self.config.should_have else 'REVOKE'
+            title = f'{action} Shared Folder Record Share permission(s)'
+            report_utils.dump_report_data(table, headers, title=title, row_number=True)
+            logger.info('\n')
+
+
+class _PermissionExecutor:
+    """Handles execution of permission changes."""
+    
+    def __init__(self, config: _PermissionConfig, context: KeeperParams):
+        self.config = config
+        self.context = context
+        self.vault = context.vault
+    
+    def execute_direct_share_updates(self, updates):
+        """Execute direct share permission updates."""
+        if not updates:
+            return []
+        
+        errors = []
+        batch_size = 900
+        
+        while updates:
+            batch = updates[:batch_size]
+            updates = updates[batch_size:]
+            
+            rsu_rq = record_pb2.RecordShareUpdateRequest()
+            rsu_rq.updateSharedRecord.extend((self._to_share_record_proto(x) for x in batch))
+            
+            rsu_rs = self.vault.keeper_auth.execute_auth_rest(
+                rest_endpoint='vault/records_share_update',
+                request=rsu_rq,
+                response_type=record_pb2.RecordShareUpdateResponse
+            )
+            
+            for status in rsu_rs.updateSharedRecordStatus:
+                if status.status.lower() != 'success':
+                    record_uid = utils.base64_url_encode(status.recordUid)
+                    errors.append([record_uid, status.username, status.status.lower(), status.message])
+        
+        return errors
+    
+    def execute_shared_folder_updates(self, updates):
+        """Execute shared folder permission updates."""
+        if not updates:
+            return []
+        
+        errors = []
+        requests = self._build_shared_folder_requests(updates)
+        chunks = self._chunk_requests(requests)
+        
+        for chunk in chunks:
+            rqs = folder_pb2.SharedFolderUpdateV3RequestV2()
+            rqs.sharedFoldersUpdateV3.extend(chunk.values())
+            
+            rss = self.vault.keeper_auth.execute_auth_rest(
+                rest_endpoint='vault/shared_folder_update_v3',
+                request=rqs,
+                response_type=folder_pb2.SharedFolderUpdateV3ResponseV2,
+                payload_version=1
+            )
+            
+            for rs in rss.sharedFoldersUpdateV3Response:
+                shared_folder_uid = utils.base64_url_encode(rs.sharedFolderUid)
+                for status in rs.sharedFolderUpdateRecordStatus:
+                    if status.status != 'success':
+                        record_uid = utils.base64_url_encode(status.recordUid)
+                        errors.append([shared_folder_uid, record_uid, status.status])
+        
+        return errors
+    
+    def _build_shared_folder_requests(self, updates):
+        """Build protobuf requests for shared folder updates."""
+        requests = []
+        
+        for shared_folder_uid in updates:
+            update_commands = list(updates[shared_folder_uid].values())
+            batch_size = 490
+            
+            while update_commands:
+                batch = update_commands[:batch_size]
+                update_commands = update_commands[batch_size:]
+                
+                rq = folder_pb2.SharedFolderUpdateV3Request()
+                rq.sharedFolderUid = utils.base64_url_decode(shared_folder_uid)
+                rq.forceUpdate = True
+                rq.sharedFolderUpdateRecord.extend(batch)
+                if batch:
+                    rq.fromTeamUid = batch[0].teamUid
+                requests.append(rq)
+        
+        return requests
+    
+    def _chunk_requests(self, requests):
+        """Chunk requests to stay within size limits."""
+        chunks = []
+        current_chunk = {}
+        total_elements = 0
+        
+        for rq in requests:
+            if rq.sharedFolderUid in current_chunk:
+                chunks.append(current_chunk)
+                current_chunk = {}
+                total_elements = 0
+            
+            batch_size = len(rq.sharedFolderUpdateRecord)
+            if total_elements + batch_size > 500:
+                chunks.append(current_chunk)
+                current_chunk = {}
+                total_elements = 0
+            
+            current_chunk[rq.sharedFolderUid] = rq
+            total_elements += batch_size
+        
+        if current_chunk:
+            chunks.append(current_chunk)
+        
+        return chunks
+    
+    def _to_share_record_proto(self, srd):
+        """Convert dictionary to SharedRecord protobuf."""
+        srp = record_pb2.SharedRecord()
+        srp.toUsername = srd['to_username']
+        srp.recordUid = utils.base64_url_decode(srd['record_uid'])
+        
+        if 'shared_folder_uid' in srd:
+            srp.sharedFolderUid = utils.base64_url_decode(srd['shared_folder_uid'])
+        if 'team_uid' in srd:
+            srp.teamUid = utils.base64_url_decode(srd['team_uid'])
+        if 'record_key' in srd:
+            srp.recordKey = utils.base64_url_decode(srd['record_key'])
+        if 'use_ecc_key' in srd:
+            srp.useEccKey = srd['use_ecc_key']
+        if 'editable' in srd:
+            srp.editable = srd['editable']
+        if 'shareable' in srd:
+            srp.shareable = srd['shareable']
+        if 'transfer' in srd:
+            srp.transfer = srd['transfer']
+        
+        return srp
+
+
+class RecordPermissionCommand(base.ArgparseCommand):
+    """Command to modify record permissions in folders and shared folders."""
+
+    SHARED_FOLDER = 'shared_folder'
+    SHARED_FOLDER_FOLDER = 'shared_folder_folder'
+    SHARED_FOLDER_TYPES = [SHARED_FOLDER, SHARED_FOLDER_FOLDER]
+
+    def __init__(self):
+        parser = argparse.ArgumentParser(prog='record-permission', description='Modify the permissions of a record')
+        RecordPermissionCommand.add_arguments_to_parser(parser)
+        super().__init__(parser)
+    
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
+        parser.add_argument('--dry-run', dest='dry_run', action='store_true',
+                                            help='Display the permissions changes without committing them')
+        parser.add_argument('--force', dest='force', action='store_true',
+                                            help='Apply permission changes without any confirmation')
+        parser.add_argument('-R', '--recursive', dest='recursive', action='store_true',
+                                            help='Apply permission changes to all sub-folders')
+        parser.add_argument('--share-record', dest='share_record', action='store_true',
+                                            help='Change a records sharing permissions')
+        parser.add_argument('--share-folder', dest='share_folder', action='store_true',
+                                            help='Change a folders sharing permissions')
+        parser.add_argument('-a', '--action', dest='action', action='store', choices=['grant', 'revoke'],
+                                            required=True, help='The action being taken')
+        parser.add_argument('-s', '--can-share', dest='can_share', action='store_true',
+                                            help='Set record permission: can be shared')
+        parser.add_argument('-d', '--can-edit', dest='can_edit', action='store_true',
+                                            help='Set record permission: can be edited')
+        parser.add_argument('folder', nargs='?', type=str, action='store', help='folder path or folder UID')
+        parser.error = base.ArgparseCommand.raise_parse_exception
+        parser.exit = base.ArgparseCommand.suppress_exit
+    
+    def _resolve_folder(self, context, folder_name):
+        """Resolve folder from name or UID."""
+        vault = context.vault
+        
+        if not folder_name:
+            return vault.vault_data.root_folder
+            
+        if folder_name in vault.vault_data._folders:
+            return vault.vault_data.get_folder(folder_name)
+        
+        folder, path = folder_utils.try_resolve_path(context, folder_name)
+        if len(path) == 0:
+            return folder
+            
+        raise base.CommandError(f'Folder {folder_name} not found')
+    
+    def _get_folders_to_process(self, start_folder, recursive):
+        """Get list of folders to process, optionally recursively."""
+        folders = [start_folder]
+        
+        if not recursive:
+            return folders
+        
+        visited = {start_folder.folder_uid}
+        pos = 0
+        
+        while pos < len(folders):
+            folder = folders[pos]
+            if folder.subfolders:
+                for subfolder_uid in folder.subfolders:
+                    if subfolder_uid not in visited:
+                        subfolder = self.vault.vault_data.get_folder(subfolder_uid)
+                        if subfolder:
+                            folders.append(subfolder)
+                        visited.add(subfolder_uid)
+            pos += 1
+        
+        logger.debug('Folder count: %s', len(folders))
+        return folders
+    
+    def _determine_scope(self, kwargs):
+        """Determine if processing share_record, share_folder, or both."""
+        share_record = kwargs.get('share_record', False)
+        share_folder = kwargs.get('share_folder', False)
+        
+        if not share_record and not share_folder:
+            return True, True
+        
+        return share_record, share_folder
+    
+    def _log_permission_request(self, folder, config):
+        """Log the permission change request."""
+        if config.force:
+            return
+        
+        action = 'GRANT' if config.should_have else 'REVOKE'
+        scope = ['recursively' if config.recursive else 'only']
+        
+        permissions = []
+        if config.change_edit:
+            permissions.append('"Can Edit"')
+        if config.change_share:
+            permissions.append('"Can Share"')
+        
+        permission_str = ' & '.join(permissions)
+        logger.info(
+            f'\nRequest to {action} {permission_str} permission(s) in "{folder.name}" folder {scope[0]}'
+        )
+    
+    def execute(self, context: KeeperParams, **kwargs):
+        """Execute record permission changes."""
+        if not context.vault:
+            raise base.CommandError('Vault is not initialized')
+        
+        self.vault = context.vault
+        
+        config = _PermissionConfig(
+            action=kwargs.get('action', ''),
+            can_share=kwargs.get('can_share', False),
+            can_edit=kwargs.get('can_edit', False),
+            force=kwargs.get('force', False),
+            dry_run=kwargs.get('dry_run', False),
+            recursive=kwargs.get('recursive', False)
+        )
+        
+        folder = self._resolve_folder(context, kwargs.get('folder', ''))
+        folders = self._get_folders_to_process(folder, config.recursive)
+        
+        share_record, share_folder = self._determine_scope(kwargs)
+        
+        self._log_permission_request(folder, config)
+        
+        processor = _PermissionProcessor(config, context)
+        reporter = _PermissionReporter(config, context)
+        executor = _PermissionExecutor(config, context)
+        
+        direct_share_updates = []
+        direct_share_skipped = []
+        shared_folder_updates = {}
+        shared_folder_skipped = {}
+        
+        if share_record:
+            direct_share_updates, direct_share_skipped = processor.process_direct_shares(folders)
+        
+        if share_folder:
+            shared_folder_updates, shared_folder_skipped = processor.process_shared_folder_permissions(folders)
+        
+        reporter.report_direct_shares(direct_share_updates, direct_share_skipped)
+        reporter.report_shared_folder_changes(shared_folder_updates, shared_folder_skipped)
+        
+        if not config.dry_run and (direct_share_updates or shared_folder_updates):
+            if not config.force:
+                answer = prompt_utils.user_choice(
+                    "Do you want to proceed with these permission changes?", 'yn', 'n'
+                )
+                if answer.lower() != 'y':
+                    return
+            
+            if direct_share_updates:
+                direct_errors = executor.execute_direct_share_updates(direct_share_updates)
+                if direct_errors:
+                    headers = ['Record UID', 'Email', 'Error Code', 'Message']
+                    action = 'GRANT' if config.should_have else 'REVOKE'
+                    title = f'Failed to {action} Direct Record Share permission(s)'
+                    report_utils.dump_report_data(direct_errors, headers, title=title, row_number=True)
+                    logger.info('\n')
+            
+            if shared_folder_updates:
+                shared_folder_errors = executor.execute_shared_folder_updates(shared_folder_updates)
+                if shared_folder_errors:
+                    headers = ['Shared Folder UID', 'Record UID', 'Error Code']
+                    action = 'GRANT' if config.should_have else 'REVOKE'
+                    title = f'Failed to {action} Shared Folder Record Share permission(s)'
+                    report_utils.dump_report_data(shared_folder_errors, headers, title=title)
+                    logger.info('\n')
+            
+            self.vault.sync_down(True)
