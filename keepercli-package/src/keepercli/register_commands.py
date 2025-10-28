@@ -74,6 +74,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('share-list', share_management.OneTimeShareListCommand(), base.CommandScope.Vault)
         commands.register_command('share-create', share_management.OneTimeShareCreateCommand(), base.CommandScope.Vault)
         commands.register_command('share-remove', share_management.OneTimeShareRemoveCommand(), base.CommandScope.Vault)
+        commands.register_command('record-permission', record_handling_commands.RecordPermissionCommand(), base.CommandScope.Vault)
         commands.register_command('trash', trash.TrashCommand(), base.CommandScope.Vault)
 
 
