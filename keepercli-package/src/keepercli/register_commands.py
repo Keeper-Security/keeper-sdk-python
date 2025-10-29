@@ -94,3 +94,4 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('audit-log', audit_log.AuditLogCommand(), base.CommandScope.Enterprise, 'al')
         commands.register_command('download-membership', importer_commands.DownloadMembershipCommand(), base.CommandScope.Enterprise)
         commands.register_command('apply-membership', importer_commands.ApplyMembershipCommand(), base.CommandScope.Enterprise)
+        commands.register_command('device-approve', enterprise_user.EnterpriseDeviceApprovalCommand(), base.CommandScope.Enterprise)

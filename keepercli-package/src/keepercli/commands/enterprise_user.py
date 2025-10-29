@@ -1,13 +1,71 @@
 import argparse
 import json
-from typing import Dict, List, Optional, Any, Set
+import datetime
+from keepersdk.enterprise.enterprise_types import DeviceApprovalRequest
+import time
+from typing import Dict, List, Optional, Any, Set, TypedDict
 
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes, serialization
+from keepersdk import utils
 from keepersdk.enterprise import batch_management, enterprise_management
-from keepersdk.proto import APIRequest_pb2
+from keepersdk.proto import APIRequest_pb2,enterprise_pb2
 from . import base, enterprise_utils
 from .. import api, prompt_utils
 from ..helpers import report_utils
 from ..params import KeeperParams
+
+from cryptography.hazmat.primitives.asymmetric import ec
+
+
+logger = api.get_logger()
+
+# Constants for EnterpriseDeviceApprovalCommand
+GET_ENTERPRISE_USER_DATA_KEY_ENDPOINT = 'enterprise/get_enterprise_user_data_key'
+GET_USER_DATA_KEY_SHARED_TO_ENTERPRISE_ENDPOINT = 'enterprise/get_user_data_key_shared_to_enterprise'
+APPROVE_USER_DEVICES_ENDPOINT = 'enterprise/approve_user_devices'
+
+AUDIT_REPORT_COMMAND = 'get_audit_event_reports'
+AUDIT_REPORT_TYPE = 'span'
+AUDIT_REPORT_SCOPE = 'enterprise'
+AUDIT_REPORT_COLUMNS = ['ip_address', 'username']
+AUDIT_EVENT_TYPE_LOGIN = 'login'
+AUDIT_EVENT_LIMIT = 1000
+
+TRUSTED_IP_LOOKBACK_DAYS = 365
+TOKEN_PREFIX_LENGTH = 10
+ECC_PUBLIC_KEY_LENGTH = 65
+TIMESTAMP_MILLISECONDS_TO_SECONDS = 1000.0
+
+DEVICE_REPORT_HEADERS = [
+    'Date',
+    'Email',
+    'Device ID',
+    'Device Name',
+    'Device Type',
+    'IP Address',
+    'Client Version',
+    'Location'
+]
+
+
+class AuditEventCreatedFilter(TypedDict):
+    min: int
+
+
+class AuditEventFilter(TypedDict):
+    audit_event_type: str
+    created: AuditEventCreatedFilter
+    username: List[str]
+
+
+class AuditEventReportRequest(TypedDict):
+    command: str
+    report_type: str
+    scope: str
+    columns: List[str]
+    filter: AuditEventFilter
+    limit: int
 
 
 class EnterpriseUserCommand(base.GroupCommand):
@@ -19,6 +77,7 @@ class EnterpriseUserCommand(base.GroupCommand):
         self.register_command(EnterpriseUserDeleteCommand(), 'delete')
         self.register_command(EnterpriseUserActionCommand(), 'action')
         self.register_command(EnterpriseUserAliasCommand(), 'alias')
+        self.register_command(EnterpriseDeviceApprovalCommand(), 'device-approve')
 
 
 class EnterpriseUserViewCommand(base.ArgparseCommand):
@@ -535,3 +594,394 @@ class EnterpriseUserAliasCommand(base.ArgparseCommand):
         context.enterprise_loader.load()
 
 
+class EnterpriseDeviceApprovalCommand(base.ArgparseCommand, enterprise_management.IEnterpriseManagementLogger):
+    def __init__(self):
+        parser = argparse.ArgumentParser(
+            prog='device-approve', parents=[base.report_output_parser],
+            description='Approve Cloud SSO Devices.',
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        )
+        EnterpriseDeviceApprovalCommand.add_arguments_to_parser(parser)
+        super().__init__(parser)
+    
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser) -> None:
+        parser.add_argument('--reload', '-r', dest='reload', action='store_true',
+                                        help='reload list of pending approval requests')
+        parser.add_argument('--approve', '-a', dest='approve', action='store_true',
+                                        help='approve user devices')
+        parser.add_argument('--deny', '-d', dest='deny', action='store_true', help='deny user devices')
+        parser.add_argument('--trusted-ip', dest='check_ip', action='store_true',
+                                        help='approve only devices coming from a trusted IP address')
+        parser.add_argument('device', type=str, nargs='?', action="append", help='User email or device ID')
+
+    def warning(self, message: str) -> None:
+        logger.warning(message)
+
+    @staticmethod
+    def token_to_string(token: bytes) -> str:
+        """Convert device token bytes to hexadecimal string representation."""
+        src = token[0:TOKEN_PREFIX_LENGTH]
+        if src.hex:
+            return src.hex()
+        return ''.join('{:02x}'.format(x) for x in src)
+        
+    def execute(self, context: KeeperParams, **kwargs) -> None:
+        """Main execution method for device approval command."""
+        assert context.enterprise_data is not None
+        assert context.auth
+        assert context.enterprise_loader is not None
+
+        if kwargs.get('reload') is True:
+            context.enterprise_loader.load()
+        
+        enterprise_data = context.enterprise_data
+        
+        approval_requests = self._load_approval_requests(enterprise_data)
+        if not approval_requests:
+            return
+
+        if kwargs.get('approve') is True and kwargs.get('deny') is True:
+            raise base.CommandError('Cannot approve and deny devices at the same time')
+
+        matching_devices = self._filter_matching_devices(approval_requests, enterprise_data, kwargs.get('device'))
+        if not matching_devices:
+            return
+
+        if kwargs.get('approve') and kwargs.get('check_ip') is True:
+            matching_devices = self._filter_trusted_ip_devices(context, enterprise_data, matching_devices)
+            if not matching_devices:
+                return
+
+        if kwargs.get('approve') or kwargs.get('deny'):
+            self._process_approval_denial(context, enterprise_data, matching_devices, kwargs)
+        else:
+            self._display_report(enterprise_data, matching_devices, kwargs)
+
+    def _load_approval_requests(self, enterprise_data) -> List[DeviceApprovalRequest]:
+        """Load and return all pending device approval requests."""
+        approval_requests: List[DeviceApprovalRequest] = list(enterprise_data.device_approval_requests.get_all_entities())
+        if len(approval_requests) == 0:
+            logger.info('No pending approval requests')
+            return []
+        return approval_requests
+
+    def _filter_matching_devices(self, approval_requests: List[DeviceApprovalRequest], 
+                                  enterprise_data, device_filters) -> Dict[str, DeviceApprovalRequest]:
+        """Filter devices based on device ID or user email filters."""
+        matching_devices = {}
+        
+        for device in approval_requests:
+            device_id = device.encrypted_device_token
+            if not device_id:
+                continue
+            device_id = EnterpriseDeviceApprovalCommand.token_to_string(utils.base64_url_decode(device_id))
+            
+            if self._device_matches_filter(device, device_id, enterprise_data, device_filters):
+                matching_devices[device_id] = device
+
+        if len(matching_devices) == 0:
+            logger.info('No matching devices found')
+        return matching_devices
+
+    def _device_matches_filter(self, device: DeviceApprovalRequest, device_id: str,
+                               enterprise_data, device_filters) -> bool:
+        """Check if a device matches any of the provided filters."""
+        if not isinstance(device_filters, (list, tuple)):
+            return True
+        
+        for name in device_filters:
+            if not name:
+                return True
+            if device_id.startswith(name):
+                return True
+            ent_user_id = device.enterprise_user_id
+            user = next((x for x in enterprise_data.users.get_all_entities() 
+                        if x.enterprise_user_id == ent_user_id), None)
+            if user and user.username == name:
+                return True
+        return False
+
+    def _filter_trusted_ip_devices(self, context: KeeperParams, enterprise_data,
+                                   matching_devices: Dict[str, DeviceApprovalRequest]) -> Dict[str, DeviceApprovalRequest]:
+        """Filter devices to only include those from trusted IP addresses."""
+        user_ids = set([x.enterprise_user_id for x in matching_devices.values()])
+        emails = self._get_user_emails(enterprise_data, user_ids)
+        
+        ip_map = self._get_trusted_ip_map(context, list(emails.values()))
+        
+        trusted_devices = {}
+        for device_id, device in matching_devices.items():
+            username = emails.get(device.enterprise_user_id)
+            ip_address = device.ip_address
+            is_trusted = username and ip_address and username in ip_map and ip_address in ip_map[username]
+            
+            if is_trusted:
+                trusted_devices[device_id] = device
+            else:
+                logger.warning("The user %s attempted to login from an unstrusted IP (%s). "
+                              "To force the approval, run the same command without the --trusted-ip argument", 
+                              username, ip_address)
+
+        if len(trusted_devices) == 0:
+            logger.info('No matching devices found')
+        return trusted_devices
+
+    def _get_user_emails(self, enterprise_data, user_ids: Set[int]) -> Dict[int, str]:
+        """Build a mapping of user IDs to usernames."""
+        emails = {}
+        for user in enterprise_data.users.get_all_entities():
+            user_id = user.enterprise_user_id
+            if user_id in user_ids:
+                emails[user_id] = user.username
+        return emails
+
+    def _get_trusted_ip_map(self, context: KeeperParams, emails: List[str]) -> Dict[str, Set[str]]:
+        """Get mapping of usernames to their trusted IP addresses from audit logs."""
+        last_year = datetime.datetime.now() - datetime.timedelta(days=TRUSTED_IP_LOOKBACK_DAYS)
+        audit_request: AuditEventReportRequest = {
+            'command': AUDIT_REPORT_COMMAND,
+            'report_type': AUDIT_REPORT_TYPE,
+            'scope': AUDIT_REPORT_SCOPE,
+            'columns': AUDIT_REPORT_COLUMNS,
+            'filter': {
+                'audit_event_type': AUDIT_EVENT_TYPE_LOGIN,
+                'created': {
+                    'min': int(last_year.timestamp())
+                },
+                'username': emails
+            },
+            'limit': AUDIT_EVENT_LIMIT
+        }
+
+        response = context.auth.execute_auth_command(audit_request)
+        ip_map = {}
+        
+        if response.get('audit_event_overview_report_rows'):
+            for row in response.get('audit_event_overview_report_rows'):
+                username = row.get('username')
+                if username:
+                    if username not in ip_map:
+                        ip_map[username] = set()
+                    ip_map[username].add(row.get('ip_address'))
+        
+        return ip_map
+
+    def _process_approval_denial(self, context: KeeperParams, enterprise_data,
+                                 matching_devices: Dict[str, DeviceApprovalRequest], kwargs: Dict[str, Any]) -> None:
+        """Process device approval or denial requests."""
+        approve_rq = enterprise_pb2.ApproveUserDevicesRequest()
+        data_keys = {}
+        
+        if kwargs.get('approve'):
+            data_keys = self._collect_user_data_keys(context, enterprise_data, matching_devices)
+        
+        device_requests = self._build_device_requests(matching_devices, data_keys, kwargs)
+        if not device_requests:
+            return
+        
+        approve_rq.deviceRequests.extend(device_requests)
+        context.auth.execute_auth_rest(APPROVE_USER_DEVICES_ENDPOINT, approve_rq, 
+                                       response_type=enterprise_pb2.ApproveUserDevicesResponse)
+        context.enterprise_loader.load()
+
+    def _collect_user_data_keys(self, context: KeeperParams, enterprise_data,
+                                matching_devices: Dict[str, DeviceApprovalRequest]) -> Dict[int, bytes]:
+        """Collect user data keys using ECC and RSA methods."""
+        data_keys: Dict[int, bytes] = {}
+        user_ids = set([x.enterprise_user_id for x in matching_devices.values()])
+        
+        # Try ECC method first
+        ecc_user_ids = user_ids.copy()
+        ecc_user_ids.difference_update(data_keys.keys())
+        if ecc_user_ids:
+            ecc_keys = self._get_ecc_data_keys(context, enterprise_data, ecc_user_ids)
+            data_keys.update(ecc_keys)
+        
+        # Try RSA method for remaining users (Account Transfer)
+        rsa_user_ids = user_ids.copy()
+        rsa_user_ids.difference_update(data_keys.keys())
+        if rsa_user_ids and not context.auth.auth_context.forbid_rsa:
+            rsa_keys = self._get_rsa_data_keys(context, enterprise_data, rsa_user_ids)
+            data_keys.update(rsa_keys)
+        
+        return data_keys
+
+    def _get_ecc_data_keys(self, context: KeeperParams, enterprise_data, user_ids: Set[int]) -> Dict[int, bytes]:
+        """Get user data keys using ECC encryption."""
+        data_keys: Dict[int, bytes] = {}
+        curve = ec.SECP256R1()
+        ecc_private_key = self._get_ecc_private_key(enterprise_data, curve)
+        
+        if not ecc_private_key:
+            return data_keys
+        
+        data_key_rq = APIRequest_pb2.UserDataKeyRequest()
+        data_key_rq.enterpriseUserId.extend(user_ids)
+        data_key_rs = context.auth.execute_auth_rest(
+            GET_ENTERPRISE_USER_DATA_KEY_ENDPOINT, data_key_rq, 
+            response_type=APIRequest_pb2.EnterpriseUserDataKeys)
+        
+        for key in data_key_rs.keys:
+            enc_data_key = key.userEncryptedDataKey
+            if enc_data_key:
+                try:
+                    ephemeral_public_key = ec.EllipticCurvePublicKey.from_encoded_point(
+                        curve, enc_data_key[:ECC_PUBLIC_KEY_LENGTH])
+                    shared_key = ecc_private_key.exchange(ec.ECDH(), ephemeral_public_key)
+                    digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
+                    digest.update(shared_key)
+                    enc_key = digest.finalize()
+                    data_key = utils.crypto.decrypt_aes_v2(enc_data_key[ECC_PUBLIC_KEY_LENGTH:], enc_key)
+                    data_keys[key.enterpriseUserId] = data_key
+                except Exception as e:
+                    logger.debug(e)
+        
+        return data_keys
+
+    def _get_ecc_private_key(self, enterprise_data, curve) -> Optional[Any]:
+        """Extract and decrypt the ECC private key from enterprise data."""
+        if not enterprise_data.enterprise_info.keys:
+            return None
+        if not enterprise_data.enterprise_info.keys.ecc_encrypted_private_key:
+            return None
+        
+        try:
+            keys = enterprise_data.get_enterprise_data_keys()
+            ecc_private_key_data = utils.base64_url_decode(keys.ecc_encrypted_private_key)
+            ecc_private_key_data = utils.crypto.decrypt_aes_v2(
+                ecc_private_key_data, enterprise_data.enterprise_info.tree_key)
+            private_value = int.from_bytes(ecc_private_key_data, byteorder='big', signed=False)
+            return ec.derive_private_key(private_value, curve, default_backend())
+        except Exception as e:
+            logger.debug(e)
+            return None
+
+    def _get_rsa_data_keys(self, context: KeeperParams, enterprise_data, user_ids: Set[int]) -> Dict[int, bytes]:
+        """Get user data keys from Account Transfer using RSA encryption."""
+        data_keys: Dict[int, bytes] = {}
+        data_key_rq = APIRequest_pb2.UserDataKeyRequest()
+        data_key_rq.enterpriseUserId.extend(user_ids)
+        data_key_rs = context.auth.execute_auth_rest(
+            GET_USER_DATA_KEY_SHARED_TO_ENTERPRISE_ENDPOINT, data_key_rq,
+            response_type=APIRequest_pb2.UserDataKeyResponse)
+        
+        if data_key_rs.noEncryptedDataKey:
+            user_ids_without_key = set(data_key_rs.noEncryptedDataKey)
+            usernames = [x.username for x in enterprise_data.users.get_all_entities() 
+                        if x.enterprise_user_id in user_ids_without_key]
+            if usernames:
+                logger.info('User(s) \"%s\" have no accepted account transfers or did not share encryption key', 
+                           ', '.join(usernames))
+        
+        if data_key_rs.accessDenied:
+            denied_user_ids = set(data_key_rs.accessDenied)
+            usernames = [x.username for x in enterprise_data.users.get_all_entities() 
+                        if x.enterprise_user_id in denied_user_ids]
+            if usernames:
+                logger.info('You cannot manage these user(s): %s', ', '.join(usernames))
+        
+        if data_key_rs.userDataKeys:
+            for dk in data_key_rs.userDataKeys:
+                try:
+                    role_key = utils.crypto.decrypt_aes_v2(dk.roleKey, enterprise_data.enterprise_info.tree_key)
+                    encrypted_private_key = utils.base64_url_decode(dk.privateKey)
+                    decrypted_private_key = utils.crypto.decrypt_aes_v1(encrypted_private_key, role_key)
+                    private_key = utils.crypto.load_rsa_private_key(decrypted_private_key)
+                    
+                    for user_dk in dk.enterpriseUserIdDataKeyPairs:
+                        if user_dk.enterpriseUserId not in data_keys:
+                            if user_dk.keyType in (enterprise_pb2.KT_NO_KEY, enterprise_pb2.KT_ENCRYPTED_BY_PUBLIC_KEY):
+                                data_key = utils.crypto.decrypt_rsa(user_dk.encryptedDataKey, private_key)
+                                data_keys[user_dk.enterpriseUserId] = data_key
+                except Exception as ex:
+                    logger.debug(ex)
+        
+        return data_keys
+
+    def _build_device_requests(self, matching_devices: Dict[str, DeviceApprovalRequest],
+                               data_keys: Dict[int, bytes], kwargs: Dict[str, Any]) -> List[Any]:
+        """Build device approval/denial request messages."""
+        device_requests = []
+        curve = ec.SECP256R1()
+        is_denial = kwargs.get('deny')
+        is_approval = kwargs.get('approve')
+        
+        for device in matching_devices.values():
+            device_rq = enterprise_pb2.ApproveUserDeviceRequest()
+            device_rq.enterpriseUserId = device.enterprise_user_id
+            device_rq.encryptedDeviceToken = utils.base64_url_decode(device.encrypted_device_token)
+            device_rq.denyApproval = is_denial
+            
+            if is_approval:
+                if not device.device_public_key or len(device.device_public_key) == 0:
+                    continue
+                
+                data_key = data_keys.get(device.enterprise_user_id)
+                if not data_key:
+                    continue
+                
+                encrypted_data_key = self._encrypt_device_data_key(device, data_key, curve)
+                if not encrypted_data_key:
+                    continue
+                
+                device_rq.encryptedDeviceDataKey = encrypted_data_key
+            
+            device_requests.append(device_rq)
+        
+        return device_requests
+
+    def _encrypt_device_data_key(self, device: DeviceApprovalRequest, data_key: bytes, curve) -> Optional[bytes]:
+        """Encrypt data key for device using ECDH key exchange."""
+        try:
+            ephemeral_key = ec.generate_private_key(curve, default_backend())
+            device_public_key = ec.EllipticCurvePublicKey.from_encoded_point(
+                curve, utils.base64_url_decode(device.device_public_key))
+            shared_key = ephemeral_key.exchange(ec.ECDH(), device_public_key)
+            
+            digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
+            digest.update(shared_key)
+            enc_key = digest.finalize()
+            
+            encrypted_data_key = utils.crypto.encrypt_aes_v2(data_key, enc_key)
+            ephemeral_public_key = ephemeral_key.public_key().public_bytes(
+                serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)
+            
+            return ephemeral_public_key + encrypted_data_key
+        except Exception as e:
+            logger.info(e)
+            return None
+
+    def _display_report(self, enterprise_data, matching_devices: Dict[str, DeviceApprovalRequest],
+                       kwargs: Dict[str, Any]) -> None:
+        """Display device approval request report."""
+        logger.info('')
+        headers = DEVICE_REPORT_HEADERS.copy()
+        
+        if kwargs.get('format') == 'json':
+            headers = [x.replace(' ', '_').lower() for x in headers]
+
+        rows = []
+        for device_id, device in matching_devices.items():
+            user = next((x for x in enterprise_data.users.get_all_entities()
+                        if x.enterprise_user_id == device.enterprise_user_id), None)
+            if not user:
+                continue
+
+            date_formatted = time.strftime('%Y-%m-%d %H:%M:%S', 
+                                          time.gmtime(device.date / TIMESTAMP_MILLISECONDS_TO_SECONDS))
+
+            rows.append([
+                date_formatted,
+                user.username,
+                device_id,
+                device.device_name,
+                device.device_type,
+                device.ip_address,
+                device.client_version,
+                device.location
+            ])
+        
+        rows.sort(key=lambda x: x[0])
+        return report_utils.dump_report_data(rows, headers, fmt=kwargs.get('format'), 
+                                            filename=kwargs.get('output'))

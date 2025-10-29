@@ -64,6 +64,24 @@ IUser: Type[User] = attrs.make_class('IUser', [], (User,), frozen=True)
 
 
 @attrs.define(kw_only=True)
+class DeviceApprovalRequest:
+    enterprise_user_id: int
+    device_id: int
+    encrypted_device_token: str
+    device_public_key: str
+    device_name: str
+    client_version: str
+    device_type: str
+    date: int
+    ip_address: str
+    location: str
+    email: str
+    account_uid: Optional[bytes] = None
+# noinspection PyTypeChecker
+IDeviceApprovalRequest: Type[DeviceApprovalRequest] = attrs.make_class('IDeviceApprovalRequest', [], (DeviceApprovalRequest,), frozen=True)
+
+
+@attrs.define(kw_only=True)
 class Team:
     team_uid: str
     name: str
@@ -520,6 +538,11 @@ class IEnterpriseData(abc.ABC):
     @property
     @abc.abstractmethod
     def managed_companies(self) -> IEntity[ManagedCompany, int]:
+        pass
+
+    @property
+    @abc.abstractmethod
+    def device_approval_requests(self) -> IEntity[DeviceApprovalRequest, str]:
         pass
 
     @property
