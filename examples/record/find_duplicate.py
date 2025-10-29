@@ -301,21 +301,8 @@ if __name__ == '__main__':
         description='Find duplicate records in the vault using Keeper SDK',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
-Examples:
-  # Find duplicates by title only
-  python find_duplicate.py --title
-  
-  # Find duplicates by login and password
-  python find_duplicate.py --login --password
-  
-  # Find duplicates by all fields
-  python find_duplicate.py --full
-  
-  # Output results in JSON format
-  python find_duplicate.py --full --format json
-  
-  # Find duplicates quietly (suppress warnings)
-  python find_duplicate.py --title --quiet
+Example:
+  python find_duplicate.py
         '''
     )
     
@@ -324,20 +311,6 @@ Examples:
         default='myconfig.json',
         help='Configuration file (default: myconfig.json)'
     )
-    
-    # Match criteria options
-    parser.add_argument('--title', action='store_true', help='Match duplicates by title')
-    parser.add_argument('--login', action='store_true', help='Match duplicates by login')
-    parser.add_argument('--password', action='store_true', help='Match duplicates by password')
-    parser.add_argument('--url', action='store_true', help='Match duplicates by URL')
-    parser.add_argument('--shares', action='store_true', help='Match duplicates by share permissions')
-    parser.add_argument('--full', action='store_true', help='Match duplicates by all fields')
-    
-    # Output format options
-    parser.add_argument('--format', choices=['table', 'csv', 'json'], default='table',
-                       help='Output format (default: table)')
-    parser.add_argument('-q', '--quiet', action='store_true',
-                       help='Suppress warning messages during processing')
 
     args = parser.parse_args()
 
@@ -345,9 +318,19 @@ Examples:
         print(f'Config file {args.config} not found')
         sys.exit(1)
 
+    # Configuration constants - modify these values as needed
+    match_by_title = True  # Match duplicates by title
+    match_by_login = False  # Match duplicates by login
+    match_by_password = False  # Match duplicates by password
+    match_by_url = False  # Match duplicates by URL
+    match_by_shares = False  # Match duplicates by share permissions
+    match_full = False  # Match duplicates by all fields (overrides individual settings)
+    output_format = 'table'  # Options: 'table', 'csv', 'json'
+    quiet = False  # Set to True to suppress warning messages during processing
+
     # Validate arguments
-    if not any([args.title, args.login, args.password, args.url, args.shares, args.full]):
-        print('Error: At least one match criterion must be specified (--title, --login, --password, --url, --shares, or --full)')
+    if not any([match_by_title, match_by_login, match_by_password, match_by_url, match_by_shares, match_full]):
+        print('Error: At least one match criterion must be enabled (match_by_title, match_by_login, match_by_password, match_by_url, match_by_shares, or match_full)')
         sys.exit(1)
 
     context = None
@@ -355,14 +338,14 @@ Examples:
         context = login_to_keeper_with_config(args.config)
         success = find_duplicate_records(
             context=context,
-            match_by_title=args.title,
-            match_by_login=args.login,
-            match_by_password=args.password,
-            match_by_url=args.url,
-            match_by_shares=args.shares,
-            match_full=args.full,
-            quiet=args.quiet,
-            output_format=args.format
+            match_by_title=match_by_title,
+            match_by_login=match_by_login,
+            match_by_password=match_by_password,
+            match_by_url=match_by_url,
+            match_by_shares=match_by_shares,
+            match_full=match_full,
+            quiet=quiet,
+            output_format=output_format
         )
         
         if not success:

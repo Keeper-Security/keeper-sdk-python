@@ -120,21 +120,8 @@ if __name__ == '__main__':
         description='Create an enterprise user using Keeper SDK',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
-Examples:
-  # Create user with default settings (testuser@example.com in TestNode)
+Example:
   python create_user.py
-  
-  # Create user with custom email
-  python create_user.py --email user@example.com
-  
-  # Create user with full name and job title
-  python create_user.py --email user@example.com --name "John Doe" --job-title "Developer"
-  
-  # Create user with roles and teams
-  python create_user.py --email user@example.com --add-role "Admin" --add-team "IT Team"
-  
-  # Create user with hidden shared folders
-  python create_user.py --email user@example.com --hide-shared-folders on
         '''
     )
     
@@ -143,46 +130,6 @@ Examples:
         default='myconfig.json',
         help='Configuration file (default: myconfig.json)'
     )
-    
-    parser.add_argument(
-        '--email',
-        default='testuser@example.com',
-        help='User email address (default: testuser@example.com)'
-    )
-    
-    parser.add_argument(
-        '--name',
-        help='User full name'
-    )
-    
-    parser.add_argument(
-        '--parent',
-        default='TestNode',
-        help='Parent node name or node ID (default: TestNode)'
-    )
-    
-    parser.add_argument(
-        '--job-title',
-        help='User job title'
-    )
-    
-    parser.add_argument(
-        '--add-role',
-        action='append',
-        help='Role name or role ID (can be repeated)'
-    )
-    
-    parser.add_argument(
-        '--add-team',
-        action='append',
-        help='Team name or team UID (can be repeated)'
-    )
-    
-    parser.add_argument(
-        '--hide-shared-folders',
-        choices=['on', 'off'],
-        help='User does not see shared folders (only valid with --add-team)'
-    )
 
     args = parser.parse_args()
 
@@ -190,14 +137,28 @@ Examples:
         print(f'Config file {args.config} not found')
         sys.exit(1)
 
+    # Configuration constants - modify these values as needed
+    email = 'testuser@example.com'
+    full_name = 'Test User'
+    parent_node = 'TestNode'
+    job_title = 'Test Employee'
+    add_roles = None  # Example: ['Admin', 'Manager']
+    add_teams = None  # Example: ['IT Team', 'Security Team']
+    hide_shared_folders = None  # Options: 'on', 'off', or None
+
     # Validate email format (basic check)
-    if '@' not in args.email:
+    if '@' not in email:
         print('Error: Invalid email address format')
         sys.exit(1)
     
     # Validate hide-shared-folders usage
-    if args.hide_shared_folders and not args.add_team:
-        print('Warning: --hide-shared-folders only works with --add-team')
+    if hide_shared_folders and not add_teams:
+        print('Warning: hide_shared_folders only works with add_teams')
+
+    print(f'Using test email: {email}')
+    print(f'Using parent node: {parent_node}')
+    print(f'Using full name: {full_name}')
+    print(f'Using job title: {job_title}')
 
     context = None
     try:
@@ -208,24 +169,15 @@ Examples:
             print('Loading enterprise data...')
             context.enterprise_loader.load()
         
-        # Set defaults for test example
-        full_name = args.name or "Test User"
-        job_title = getattr(args, 'job_title', None) or "Test Employee"
-        
-        print(f'Using test email: {args.email}')
-        print(f'Using parent node: {args.parent}')
-        print(f'Using full name: {full_name}')
-        print(f'Using job title: {job_title}')
-        
         success = create_enterprise_user(
             context=context,
-            email=args.email,
+            email=email,
             full_name=full_name,
-            parent_node=args.parent,
+            parent_node=parent_node,
             job_title=job_title,
-            add_roles=getattr(args, 'add_role', None),
-            add_teams=getattr(args, 'add_team', None),
-            hide_shared_folders=getattr(args, 'hide_shared_folders', None)
+            add_roles=add_roles,
+            add_teams=add_teams,
+            hide_shared_folders=hide_shared_folders
         )
         
         if not success:

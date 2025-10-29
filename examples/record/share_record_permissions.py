@@ -127,30 +127,8 @@ if __name__ == '__main__':
         description='Manage record sharing permissions using Keeper SDK',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
-Examples:
-  # Share record with default permissions (read-only)
-  python share_record_permissions.py --record "Test Record" --email user@example.com
-  
-  # Share record with edit permissions
-  python share_record_permissions.py --record "Test Record" --email user@example.com --can-edit
-  
-  # Share record with full permissions (edit + share)
-  python share_record_permissions.py --record "Test Record" --email user@example.com --can-edit --can-share
-  
-  # Remove sharing permissions
-  python share_record_permissions.py --record "Test Record" --email user@example.com --action remove
-  
-  # Share with multiple users
-  python share_record_permissions.py --record "Test Record" --email user1@example.com user2@example.com --can-edit
-  
-  # Dry run to preview changes
-  python share_record_permissions.py --record "Test Record" --email user@example.com --can-edit --dry-run
-  
-  # Share with expiration
-  python share_record_permissions.py --record "Test Record" --email user@example.com --expire-in "7d"
-  
-  # Force share without confirmation
-  python share_record_permissions.py --record "Test Record" --email user@example.com --can-edit --force
+Example:
+  python share_record_permissions.py
         '''
     )
     
@@ -159,72 +137,6 @@ Examples:
         default='myconfig.json',
         help='Configuration file (default: myconfig.json)'
     )
-    
-    parser.add_argument(
-        '--record',
-        default='Test Record',
-        help='Record name, path, or UID (default: Test Record)'
-    )
-    
-    parser.add_argument(
-        '--email',
-        nargs='+',
-        default=['testuser@example.com'],
-        help='Account email addresses to share with (default: testuser@example.com)'
-    )
-    
-    parser.add_argument(
-        '--action',
-        choices=['grant', 'remove'],
-        default='grant',
-        help='Share action: grant or remove permissions (default: grant)'
-    )
-    
-    parser.add_argument(
-        '--can-edit',
-        action='store_true',
-        help='Allow users to modify the record'
-    )
-    
-    parser.add_argument(
-        '--can-share',
-        action='store_true',
-        help='Allow users to re-share the record'
-    )
-    
-    parser.add_argument(
-        '--contacts-only',
-        action='store_true',
-        help='Share only to known contacts/targets'
-    )
-    
-    parser.add_argument(
-        '--force',
-        action='store_true',
-        help='Skip confirmation prompts'
-    )
-    
-    parser.add_argument(
-        '--dry-run',
-        action='store_true',
-        help='Display permission changes without committing them'
-    )
-    
-    parser.add_argument(
-        '--recursive',
-        action='store_true',
-        help='Apply command to shared folder hierarchy'
-    )
-    
-    expiration = parser.add_mutually_exclusive_group()
-    expiration.add_argument(
-        '--expire-at',
-        help='Share expiration: never or UTC datetime'
-    )
-    expiration.add_argument(
-        '--expire-in',
-        help='Share expiration: never or period (e.g., 7d, 1h, 30m)'
-    )
 
     args = parser.parse_args()
 
@@ -232,47 +144,60 @@ Examples:
         print(f'Config file {args.config} not found')
         sys.exit(1)
 
+    # Configuration constants - modify these values as needed
+    record_uid_or_title = 'Test Record'  # Record name, path, or UID
+    email_addresses = ['testuser@example.com']  # List of email addresses to share with
+    action = 'grant'  # Options: 'grant', 'remove'
+    can_edit = False  # Allow users to modify the record
+    can_share = False  # Allow users to re-share the record
+    contacts_only = False  # Share only to known contacts/targets
+    force = False  # Skip confirmation prompts
+    dry_run = False  # Display permission changes without committing them
+    recursive = False  # Apply command to shared folder hierarchy
+    expire_at = None  # Share expiration: never or UTC datetime
+    expire_in = None  # Share expiration: never or period (e.g., 7d, 1h, 30m)
+
     # Validate email formats (basic check)
-    for email in args.email:
+    for email in email_addresses:
         if '@' not in email:
             print(f'Error: Invalid email address format: {email}')
             sys.exit(1)
+
+    # Display test configuration
+    print(f'Using record: {record_uid_or_title}')
+    print(f'Using email addresses: {", ".join(email_addresses)}')
+    print(f'Action: {action}')
+    
+    permission_summary = []
+    if can_edit:
+        permission_summary.append("edit")
+    if can_share:
+        permission_summary.append("share")
+    if not permission_summary:
+        permission_summary.append("read-only")
+    
+    print(f'Permissions: {", ".join(permission_summary)}')
+    
+    if dry_run:
+        print('Mode: DRY RUN (no changes will be made)')
 
     context = None
     try:
         context = login_to_keeper_with_config(args.config)
         
-        # Display test configuration
-        print(f'Using record: {args.record}')
-        print(f'Using email addresses: {", ".join(args.email)}')
-        print(f'Action: {args.action}')
-        
-        permission_summary = []
-        if args.can_edit:
-            permission_summary.append("edit")
-        if args.can_share:
-            permission_summary.append("share")
-        if not permission_summary:
-            permission_summary.append("read-only")
-        
-        print(f'Permissions: {", ".join(permission_summary)}')
-        
-        if args.dry_run:
-            print('Mode: DRY RUN (no changes will be made)')
-        
         success = manage_record_permissions(
             context=context,
-            record_uid_or_title=args.record,
-            email_addresses=args.email,
-            action=args.action,
-            can_edit=args.can_edit,
-            can_share=args.can_share,
-            contacts_only=args.contacts_only,
-            force=args.force,
-            dry_run=args.dry_run,
-            recursive=args.recursive,
-            expire_at=args.expire_at,
-            expire_in=args.expire_in
+            record_uid_or_title=record_uid_or_title,
+            email_addresses=email_addresses,
+            action=action,
+            can_edit=can_edit,
+            can_share=can_share,
+            contacts_only=contacts_only,
+            force=force,
+            dry_run=dry_run,
+            recursive=recursive,
+            expire_at=expire_at,
+            expire_in=expire_in
         )
         
         if not success:

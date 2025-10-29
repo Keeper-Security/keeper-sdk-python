@@ -164,28 +164,8 @@ if __name__ == '__main__':
         description='Transfer user accounts using Keeper SDK',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
-Examples:
-  # Transfer single user with default settings
-  python transfer_user.py --source-user testuser1@example.com
-  
-  # Transfer multiple users to specific target
-  python transfer_user.py --source-user testuser1@example.com testuser2@example.com --target-user admin@example.com
-  
-  # Transfer using mapping file approach
-  python transfer_user.py --source-user testuser1@example.com --target-user admin@example.com --use-mapping-file
-  
-  # Force transfer without confirmation
-  python transfer_user.py --source-user testuser1@example.com --target-user admin@example.com --force
-  
-  # Load mapping from external file
-  python transfer_user.py --mapping-file my_mappings.txt
-  
-Mapping file format:
-  # Lines starting with # are comments
-  user1@example.com -> admin@example.com
-  user2@example.com <- admin@example.com  
-  old.user@example.com = new.admin@example.com
-  source@example.com target@example.com
+Example:
+  python transfer_user.py
         '''
     )
     
@@ -194,36 +174,6 @@ Mapping file format:
         default='myconfig.json',
         help='Configuration file (default: myconfig.json)'
     )
-    
-    parser.add_argument(
-        '--source-user',
-        nargs='+',
-        default=['testuser1@example.com'],
-        help='Source user email(s) to transfer from (default: testuser1@example.com)'
-    )
-    
-    parser.add_argument(
-        '--target-user',
-        default='admin@example.com',
-        help='Target user email to transfer to (default: admin@example.com)'
-    )
-    
-    parser.add_argument(
-        '--use-mapping-file',
-        action='store_true',
-        help='Create and use a temporary mapping file for the transfer'
-    )
-    
-    parser.add_argument(
-        '--mapping-file',
-        help='Use existing mapping file (overrides other user options)'
-    )
-    
-    parser.add_argument(
-        '-f', '--force',
-        action='store_true',
-        help='Do not prompt for confirmation (DANGEROUS - cannot be undone!)'
-    )
 
     args = parser.parse_args()
 
@@ -231,17 +181,30 @@ Mapping file format:
         print(f'Config file {args.config} not found')
         sys.exit(1)
 
+    # Configuration constants - modify these values as needed
+    source_users = ['testuser@example.com']  # List of source user emails
+    target_user = 'admin@example.com'  # Target user email
+    use_mapping_file = False  # Set to True to create and use a temporary mapping file
+    mapping_file = None  # Path to existing mapping file (overrides other options if set)
+    force = False  # Set to True to skip confirmation prompts (DANGEROUS!)
+
     # Validate email formats (basic check)
-    all_emails = args.source_user + [args.target_user] if args.target_user else args.source_user
+    all_emails = source_users + [target_user] if target_user else source_users
     for email in all_emails:
         if '@' not in email:
             print(f'Error: Invalid email address format: {email}')
             sys.exit(1)
     
     # Check for self-transfer
-    if args.target_user and args.target_user in args.source_user:
+    if target_user and target_user in source_users:
         print('Error: Target user cannot be the same as source user')
         sys.exit(1)
+
+    # Display test configuration
+    print(f'Using source users: {", ".join(source_users)}')
+    print(f'Using target user: {target_user}')
+    print(f'Force mode: {force}')
+    print(f'Use mapping file: {use_mapping_file}')
 
     context = None
     try:
@@ -252,34 +215,28 @@ Mapping file format:
             print('Loading enterprise data...')
             context.enterprise_loader.load()
         
-        # Display test configuration
-        print(f'Using source users: {", ".join(args.source_user)}')
-        print(f'Using target user: {args.target_user}')
-        print(f'Force mode: {args.force}')
-        print(f'Use mapping file: {args.use_mapping_file}')
-        
-        if args.mapping_file:
+        if mapping_file:
             # Use external mapping file
-            if not os.path.exists(args.mapping_file):
-                print(f'Error: Mapping file {args.mapping_file} not found')
+            if not os.path.exists(mapping_file):
+                print(f'Error: Mapping file {mapping_file} not found')
                 sys.exit(1)
             
-            print(f'Using external mapping file: {args.mapping_file}')
+            print(f'Using external mapping file: {mapping_file}')
             
             transfer_command = EnterpriseTransferAccountCommand()
             success = transfer_command.execute(
                 context=context,
-                email=[f'@{args.mapping_file}'],
-                force=args.force
+                email=[f'@{mapping_file}'],
+                force=force
             )
         else:
             # Use source/target user parameters
             success = transfer_user_accounts(
                 context=context,
-                source_users=args.source_user,
-                target_user=args.target_user,
-                force=args.force,
-                use_mapping_file=args.use_mapping_file
+                source_users=source_users,
+                target_user=target_user,
+                force=force,
+                use_mapping_file=use_mapping_file
             )
         
         if not success:
