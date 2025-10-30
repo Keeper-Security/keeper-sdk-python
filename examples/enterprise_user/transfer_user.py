@@ -72,10 +72,11 @@ Example:
         sys.exit(1)
 
     # Configuration constants - modify these values as needed
+    # Bool flags can be set to True or None (to be sent as False)
     source_users = ['testuser@example.com']  # List of source user emails
-    target_user = 'dhananjay.tayade@metronlabs.com'  # Target user email
+    target_user = 'admin@example.com'  # Target user email
     mapping_file = None  # Path to existing mapping file (overrides other options if set)
-    force = None  # Set to True to skip confirmation prompts (DANGEROUS!)
+    force = None  # Set to True to skip confirmation prompts
 
     # Validate email formats (basic check)
     all_emails = source_users + [target_user] if target_user else source_users
