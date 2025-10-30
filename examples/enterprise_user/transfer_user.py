@@ -18,8 +18,6 @@ import json
 import os
 import sys
 import logging
-from typing import Optional, List
-import tempfile
 
 from keepercli.commands.transfer_account import EnterpriseTransferAccountCommand
 from keepercli.params import KeeperParams
@@ -30,11 +28,7 @@ logger = logging.getLogger(__name__)
 
 def login_to_keeper_with_config(filename: str) -> KeeperParams:
     """
-    Login to Keeper with a configuration file.
-    
-    This function logs in to Keeper using the provided configuration file.
-    It reads the configuration file, extracts the username,
-    and returns a Authenticated KeeperParams Context object.
+    Login to Keeper with a configuration file and return an authenticated context.
     """
     if not os.path.exists(filename):
         raise FileNotFoundError(f'Config file {filename} not found')
@@ -53,110 +47,6 @@ def login_to_keeper_with_config(filename: str) -> KeeperParams:
     if not logged_in:
         raise Exception('Failed to authenticate with Keeper')
     return context
-
-def create_mapping_file(source_users: List[str], target_user: str) -> str:
-    """
-    Create a temporary mapping file for user transfers.
-    
-    This creates a mapping file with the format:
-    source_user@example.com -> target_user@example.com
-    """
-    # Create temporary file
-    temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8')
-    
-    try:
-        # Write header comment
-        temp_file.write("# Transfer mapping file - automatically generated\n")
-        temp_file.write("# Format: source_user -> target_user\n")
-        temp_file.write("# Lines starting with # are comments\n\n")
-        
-        # Write mappings
-        for source_user in source_users:
-            temp_file.write(f"{source_user} -> {target_user}\n")
-        
-        temp_file.flush()
-        return temp_file.name
-    finally:
-        temp_file.close()
-
-def transfer_user_accounts(
-    context: KeeperParams,
-    source_users: List[str],
-    target_user: Optional[str] = None,
-    force: bool = False,
-    use_mapping_file: bool = False
-):
-    """
-    Transfer user accounts from source users to target user.
-    
-    This function transfers all vault data (records, shared folders, teams,
-    user folders) from source users to the target user using the Keeper CLI
-    `EnterpriseTransferAccountCommand`.
-    """
-    try:
-        transfer_command = EnterpriseTransferAccountCommand()
-
-        # Prepare arguments
-        kwargs = {
-            'force': force
-        }
-        
-        if use_mapping_file:
-            # Create and use mapping file
-            if not target_user:
-                raise ValueError("Target user is required when using mapping file")
-            
-            mapping_file = create_mapping_file(source_users, target_user)
-            print(f'Created mapping file: {mapping_file}')
-            
-            # Read and display mapping file contents
-            with open(mapping_file, 'r') as f:
-                print("Mapping file contents:")
-                print("-" * 40)
-                for line in f:
-                    if not line.startswith('#'):
-                        print(line.strip())
-                print("-" * 40)
-            
-            kwargs['email'] = [f'@{mapping_file}']
-            
-            try:
-                print(f'Transferring accounts using mapping file...')
-                if not force:
-                    print('WARNING: This action cannot be undone!')
-                    print('Source users will be locked during transfer.')
-                
-                transfer_command.execute(context=context, **kwargs)
-                print(f'\nUser account transfer completed successfully!')
-                return True
-                
-            finally:
-                # Clean up temporary file
-                try:
-                    os.unlink(mapping_file)
-                    print(f'Cleaned up mapping file: {mapping_file}')
-                except OSError:
-                    print(f'Warning: Could not delete temporary file: {mapping_file}')
-        else:
-            # Use command line arguments
-            if not target_user:
-                raise ValueError("Target user is required")
-            
-            kwargs['target_user'] = target_user
-            kwargs['email'] = source_users
-            
-            print(f'Transferring accounts from {", ".join(source_users)} to {target_user}...')
-            if not force:
-                print('WARNING: This action cannot be undone!')
-                print('Source users will be locked during transfer.')
-            
-            transfer_command.execute(context=context, **kwargs)
-            print(f'\nUser account transfer completed successfully!')
-            return True
-        
-    except Exception as e:
-        print(f'Error transferring user accounts: {str(e)}')
-        return False
 
 
 if __name__ == '__main__':
@@ -183,10 +73,9 @@ Example:
 
     # Configuration constants - modify these values as needed
     source_users = ['testuser@example.com']  # List of source user emails
-    target_user = 'admin@example.com'  # Target user email
-    use_mapping_file = False  # Set to True to create and use a temporary mapping file
+    target_user = 'dhananjay.tayade@metronlabs.com'  # Target user email
     mapping_file = None  # Path to existing mapping file (overrides other options if set)
-    force = False  # Set to True to skip confirmation prompts (DANGEROUS!)
+    force = None  # Set to True to skip confirmation prompts (DANGEROUS!)
 
     # Validate email formats (basic check)
     all_emails = source_users + [target_user] if target_user else source_users
@@ -204,7 +93,6 @@ Example:
     print(f'Using source users: {", ".join(source_users)}')
     print(f'Using target user: {target_user}')
     print(f'Force mode: {force}')
-    print(f'Use mapping file: {use_mapping_file}')
 
     context = None
     try:
@@ -214,33 +102,26 @@ Example:
         if not context.enterprise_data:
             print('Loading enterprise data...')
             context.enterprise_loader.load()
-        
+
+        # Prepare command invocation
+        transfer_command = EnterpriseTransferAccountCommand()
         if mapping_file:
-            # Use external mapping file
             if not os.path.exists(mapping_file):
                 print(f'Error: Mapping file {mapping_file} not found')
                 sys.exit(1)
-            
             print(f'Using external mapping file: {mapping_file}')
-            
-            transfer_command = EnterpriseTransferAccountCommand()
-            success = transfer_command.execute(
+            transfer_command.execute(
                 context=context,
                 email=[f'@{mapping_file}'],
                 force=force
             )
         else:
-            # Use source/target user parameters
-            success = transfer_user_accounts(
+            transfer_command.execute(
                 context=context,
-                source_users=source_users,
+                email=source_users,
                 target_user=target_user,
-                force=force,
-                use_mapping_file=use_mapping_file
+                force=force
             )
-        
-        if not success:
-            sys.exit(1)
         
     except Exception as e:
         print(f'Error: {str(e)}')

@@ -18,14 +18,11 @@ import json
 import os
 import sys
 import logging
-import hashlib
-from typing import Optional, Dict, Set, List
-from collections import defaultdict
+from typing import Optional
 
-from keepersdk.vault import vault_record
 from keepercli.params import KeeperParams
 from keepercli.login import LoginFlow
-from keepercli.helpers import report_utils
+from keepercli.commands.record_handling_commands import FindDuplicateCommand
 
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
@@ -56,244 +53,61 @@ def login_to_keeper_with_config(filename: str) -> KeeperParams:
         raise Exception('Failed to authenticate with Keeper')
     return context
 
-def create_record_hash(record, match_fields: Dict[str, bool]) -> str:
-    """Create a hash for a record based on the specified match fields."""
-    hash_components = []
-    
-    if match_fields.get('title', False):
-        hash_components.append(getattr(record, 'title', '') or '')
-    
-    if match_fields.get('login', False):
-        login = ''
-        if isinstance(record, vault_record.PasswordRecord):
-            login = getattr(record, 'login', '') or ''
-        elif isinstance(record, vault_record.TypedRecord):
-            # For typed records, look for login field
-            for field in record.fields:
-                if field.type == 'login':
-                    login = str(field.value[0]) if field.value else ''
-                    break
-        hash_components.append(login)
-    
-    if match_fields.get('password', False):
-        password = ''
-        if isinstance(record, vault_record.PasswordRecord):
-            password = getattr(record, 'password', '') or ''
-        elif isinstance(record, vault_record.TypedRecord):
-            # For typed records, look for password field
-            for field in record.fields:
-                if field.type == 'password':
-                    password = str(field.value[0]) if field.value else ''
-                    break
-        hash_components.append(password)
-    
-    if match_fields.get('url', False):
-        url = ''
-        if isinstance(record, vault_record.PasswordRecord):
-            url = getattr(record, 'link', '') or ''
-        elif isinstance(record, vault_record.TypedRecord):
-            # For typed records, look for url field
-            for field in record.fields:
-                if field.type == 'url':
-                    url = str(field.value[0]) if field.value else ''
-                    break
-        hash_components.append(url)
-    
-    # Join all components and create hash
-    to_hash = '|'.join(hash_components)
-    if not to_hash.strip('|'):  # If all components are empty, return empty hash
-        return ''
-    
-    h = hashlib.sha256()
-    h.update(to_hash.encode('utf-8'))
-    return h.hexdigest()
-
 def find_duplicate_records(
     context: KeeperParams,
-    match_by_title: bool = False,
-    match_by_login: bool = False,
-    match_by_password: bool = False,
-    match_by_url: bool = False,
-    match_by_shares: bool = False,
-    match_full: bool = False,
-    quiet: bool = False,
-    output_format: str = 'table'
+    match_by_title: Optional[bool] = None,
+    match_by_login: Optional[bool] = None,
+    match_by_password: Optional[bool] = None,
+    match_by_url: Optional[bool] = None,
+    match_by_shares: Optional[bool] = None,
+    match_full: Optional[bool] = None,
+    quiet: Optional[bool] = None,
+    output_format: Optional[str] = None,
+    merge: Optional[bool] = None,
+    ignore_shares_on_merge: Optional[bool] = None,
+    force: Optional[bool] = None,
+    dry_run: Optional[bool] = None,
+    scope: Optional[str] = None,
+    refresh_data: Optional[bool] = None,
+    output: Optional[str] = None
 ):
     """
-    Find duplicate records in the vault based on specified criteria.
-    
-    This function uses Keeper SDK functions directly to identify
-    duplicate records based on various field combinations.
+    Find duplicate records in the vault based on specified criteria using
+    the Keeper CLI FindDuplicateCommand implementation.
     """
     try:
-        vault = context.vault
-        if not vault:
+        if not context.vault:
             raise Exception('Vault is not initialized')
 
-        # Determine match fields
-        match_fields = {
-            'title': match_by_title or match_full,
-            'login': match_by_login or match_full,
-            'password': match_by_password or match_full,
-            'url': match_by_url or match_full,
-            'shares': match_by_shares or match_full
+        print('Finding duplicate records via FindDuplicateCommand...')
+
+        
+        kwargs = {
+            'title': match_by_title,
+            'login': match_by_login,
+            'password': match_by_password,
+            'url': match_by_url,
+            'shares': match_by_shares,
+            'full': match_full,
+            'merge': merge,
+            'ignore_shares_on_merge': ignore_shares_on_merge,
+            'force': force,
+            'dry_run': dry_run,
+            'quiet': quiet,
+            'scope': scope,
+            'refresh_data': refresh_data,
+            'format': output_format,
+            'output': output,
         }
 
-        print('Finding duplicate records...')
-        criteria_list = [k for k, v in match_fields.items() if v and k != 'shares']  # Note: shares matching not fully implemented
-        print(f'Match criteria: {", ".join(criteria_list)}')
-        
-        if match_fields.get('shares', False):
-            print('Note: Share-based matching is not fully implemented in this example')
-
-        # Build hash table of records
-        record_hashes: Dict[str, List[str]] = defaultdict(list)
-        total_records = 0
-        processed_records = 0
-
-        for record_uid in vault.vault_data._records:
-            total_records += 1
-            try:
-                record = vault.vault_data.load_record(record_uid)
-                if not record or not isinstance(record, (vault_record.PasswordRecord, vault_record.TypedRecord)):
-                    continue
-
-                record_hash = create_record_hash(record, match_fields)
-                if record_hash:  # Only add if hash is not empty
-                    record_hashes[record_hash].append(record_uid)
-                    processed_records += 1
-
-            except Exception as e:
-                if not quiet:
-                    print(f'Warning: Could not process record {record_uid}: {str(e)}')
-                continue
-
-        # Find duplicates (hash groups with more than 1 record)
-        duplicate_groups = [(hash_val, uids) for hash_val, uids in record_hashes.items() if len(uids) > 1]
-
-        print(f'Processed {processed_records} of {total_records} records')
-        
-        if not duplicate_groups:
-            print('No duplicate records found.')
-            return True
-
-        print(f'Found {len(duplicate_groups)} duplicate groups with {sum(len(uids) for _, uids in duplicate_groups)} total records')
-
-        # Display results
-        if output_format == 'table':
-            display_duplicates_table(vault, duplicate_groups)
-        elif output_format == 'json':
-            display_duplicates_json(vault, duplicate_groups)
-        elif output_format == 'csv':
-            display_duplicates_csv(vault, duplicate_groups)
-
+        cmd = FindDuplicateCommand()
+        cmd.execute(context, **kwargs)
         print('\nFind duplicate operation completed successfully')
         return True
-        
+
     except Exception as e:
         print(f'Error finding duplicate records: {str(e)}')
         return False
-
-def display_duplicates_table(vault, duplicate_groups):
-    """Display duplicates in table format."""
-    print('\nDuplicate Records Found:')
-    print('=' * 80)
-    
-    for i, (hash_val, record_uids) in enumerate(duplicate_groups, 1):
-        print(f'\nDuplicate Group {i} ({len(record_uids)} records):')
-        print('-' * 60)
-        
-        table_data = []
-        headers = ['Record UID', 'Title', 'Login', 'URL', 'Type']
-        
-        for record_uid in record_uids:
-            try:
-                record = vault.vault_data.load_record(record_uid)
-                title = getattr(record, 'title', '') or 'N/A'
-                login = 'N/A'
-                url = 'N/A'
-                record_type = type(record).__name__
-                
-                if isinstance(record, vault_record.PasswordRecord):
-                    login = getattr(record, 'login', '') or 'N/A'
-                    url = getattr(record, 'link', '') or 'N/A'
-                elif isinstance(record, vault_record.TypedRecord):
-                    # Extract login and URL from typed record fields
-                    for field in record.fields:
-                        if field.type == 'login' and field.value:
-                            login = str(field.value[0])
-                        elif field.type == 'url' and field.value:
-                            url = str(field.value[0])
-                
-                # Truncate long values for display
-                title = title[:30] + '...' if len(title) > 30 else title
-                login = login[:20] + '...' if len(login) > 20 else login
-                url = url[:30] + '...' if len(url) > 30 else url
-                
-                table_data.append([record_uid[:8] + '...', title, login, url, record_type])
-                
-            except Exception as e:
-                table_data.append([record_uid[:8] + '...', 'Error loading', str(e)[:20], '', 'Unknown'])
-        
-        report_utils.dump_report_data(table_data, headers=headers, fmt='table')
-
-def display_duplicates_json(vault, duplicate_groups):
-    """Display duplicates in JSON format."""
-    result = []
-    
-    for hash_val, record_uids in duplicate_groups:
-        group = {
-            'hash': hash_val,
-            'count': len(record_uids),
-            'records': []
-        }
-        
-        for record_uid in record_uids:
-            try:
-                record = vault.vault_data.load_record(record_uid)
-                record_info = {
-                    'uid': record_uid,
-                    'title': getattr(record, 'title', '') or '',
-                    'type': type(record).__name__
-                }
-                
-                if isinstance(record, vault_record.PasswordRecord):
-                    record_info['login'] = getattr(record, 'login', '') or ''
-                    record_info['url'] = getattr(record, 'link', '') or ''
-                
-                group['records'].append(record_info)
-                
-            except Exception as e:
-                group['records'].append({
-                    'uid': record_uid,
-                    'error': str(e)
-                })
-        
-        result.append(group)
-    
-    print(json.dumps(result, indent=2))
-
-def display_duplicates_csv(vault, duplicate_groups):
-    """Display duplicates in CSV format."""
-    print('Group,Record_UID,Title,Login,URL,Type')
-    
-    for group_num, (hash_val, record_uids) in enumerate(duplicate_groups, 1):
-        for record_uid in record_uids:
-            try:
-                record = vault.vault_data.load_record(record_uid)
-                title = (getattr(record, 'title', '') or '').replace(',', ';')
-                login = 'N/A'
-                url = 'N/A'
-                record_type = type(record).__name__
-                
-                if isinstance(record, vault_record.PasswordRecord):
-                    login = (getattr(record, 'login', '') or '').replace(',', ';')
-                    url = (getattr(record, 'link', '') or '').replace(',', ';')
-                
-                print(f'{group_num},{record_uid},{title},{login},{url},{record_type}')
-                
-            except Exception as e:
-                print(f'{group_num},{record_uid},Error loading,{str(e).replace(",", ";")},,')
 
 
 if __name__ == '__main__':
@@ -319,19 +133,22 @@ Example:
         sys.exit(1)
 
     # Configuration constants - modify these values as needed
+    # Boolean flags can be set to True or None (to be sent as False)
     match_by_title = True  # Match duplicates by title
-    match_by_login = False  # Match duplicates by login
-    match_by_password = False  # Match duplicates by password
-    match_by_url = False  # Match duplicates by URL
-    match_by_shares = False  # Match duplicates by share permissions
-    match_full = False  # Match duplicates by all fields (overrides individual settings)
-    output_format = 'table'  # Options: 'table', 'csv', 'json'
-    quiet = False  # Set to True to suppress warning messages during processing
-
-    # Validate arguments
-    if not any([match_by_title, match_by_login, match_by_password, match_by_url, match_by_shares, match_full]):
-        print('Error: At least one match criterion must be enabled (match_by_title, match_by_login, match_by_password, match_by_url, match_by_shares, or match_full)')
-        sys.exit(1)
+    match_by_login = None  # Match duplicates by login
+    match_by_password = None  # Match duplicates by password
+    match_by_url = None  # Match duplicates by URL
+    match_by_shares = None  # Match duplicates by share permissions
+    match_full = None  # Match duplicates by all fields (overrides individual settings)
+    output_format = None  # Options: 'table', 'csv', 'json'
+    quiet = None  # Set to True to suppress warning messages during processing
+    merge = None  # Set to True to merge duplicates
+    ignore_shares_on_merge = None  # Set to True to ignore share permissions when merging duplicates
+    force = None  # Set to True to force the operation
+    dry_run = None  # Set to True to simulate the operation
+    scope = None  # Set the scope of the search
+    refresh_data = None  # Set to True to refresh the data
+    output = None  # Set the output format
 
     context = None
     try:
@@ -345,7 +162,14 @@ Example:
             match_by_shares=match_by_shares,
             match_full=match_full,
             quiet=quiet,
-            output_format=output_format
+            output_format=output_format,
+            merge=merge,
+            ignore_shares_on_merge=ignore_shares_on_merge,
+            force=force,
+            dry_run=dry_run,
+            scope=scope,
+            refresh_data=refresh_data,
+            output=output,
         )
         
         if not success:
