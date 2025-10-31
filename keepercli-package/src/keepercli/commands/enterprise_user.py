@@ -632,7 +632,7 @@ class EnterpriseDeviceApprovalCommand(base.ArgparseCommand, enterprise_managemen
         assert context.auth
         assert context.enterprise_loader is not None
 
-        if kwargs.get('reload') is True:
+        if kwargs.get('reload'):
             context.enterprise_loader.load()
         
         enterprise_data = context.enterprise_data
@@ -641,14 +641,14 @@ class EnterpriseDeviceApprovalCommand(base.ArgparseCommand, enterprise_managemen
         if not approval_requests:
             return
 
-        if kwargs.get('approve') is True and kwargs.get('deny') is True:
+        if kwargs.get('approve') and kwargs.get('deny'):
             raise base.CommandError('Cannot approve and deny devices at the same time')
 
         matching_devices = self._filter_matching_devices(approval_requests, enterprise_data, kwargs.get('device'))
         if not matching_devices:
             return
 
-        if kwargs.get('approve') and kwargs.get('check_ip') is True:
+        if kwargs.get('approve') and kwargs.get('check_ip'):
             matching_devices = self._filter_trusted_ip_devices(context, enterprise_data, matching_devices)
             if not matching_devices:
                 return

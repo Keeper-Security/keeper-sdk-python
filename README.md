@@ -139,6 +139,7 @@ Below is a complete example demonstrating authentication, vault synchronization,
 
 ```python
 import sqlite3
+import getpass
 
 from keepersdk.authentication import login_auth, configuration, endpoint
 from keepersdk.vault import sqlite_storage, vault_online, vault_record
