@@ -46,7 +46,7 @@ jobs:
   publish-pypi:
     name: Publish Keeper CLI to PyPi
     runs-on: ubuntu-latest
-    needs: [build-wheel]
+    needs: [build-n-publish]
     environment: prod
 
     steps:
