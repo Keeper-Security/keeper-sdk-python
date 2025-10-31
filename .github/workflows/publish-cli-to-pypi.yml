@@ -9,7 +9,7 @@ on:
 
 jobs:
   build-n-publish:
-    name: Build and publish Keeper CLI for Python 📦 to TestPyPI
+    name: Build and publish Keeper CLI for Python to TestPyPI
     runs-on: ubuntu-latest
     timeout-minutes: 25     # To keep builds from running too long
 
