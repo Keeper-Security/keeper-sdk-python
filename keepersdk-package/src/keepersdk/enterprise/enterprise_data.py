@@ -28,6 +28,7 @@ class EnterpriseData(enterprise_types.IEnterpriseData):
         self._scims = private_data.ScimEntity()
         self._sso_services = private_data.SsoServiceEntity()
         self._email_provision = private_data.EmailProvisionEntity()
+        self._device_approval_requests = private_data.DeviceApprovalRequestEntity()
         self._logger = utils.get_logger()
 
         self._entities: Dict[int, enterprise_types.IEnterpriseDataPlugin] = {
@@ -50,6 +51,7 @@ class EnterpriseData(enterprise_types.IEnterpriseData):
             enterprise_pb2.SCIMS: self._scims,
             enterprise_pb2.SSO_SERVICES: self._sso_services,
             enterprise_pb2.EMAIL_PROVISION: self._email_provision,
+            enterprise_pb2.DEVICES_REQUEST_FOR_ADMIN_APPROVAL: self._device_approval_requests,
         }
 
     def get_plugin(self, entity_id: int) -> Optional[enterprise_types.IEnterpriseDataPlugin]:
@@ -166,3 +168,7 @@ class EnterpriseData(enterprise_types.IEnterpriseData):
     @property
     def email_provision(self):
         return self._email_provision
+
+    @property
+    def device_approval_requests(self):
+        return self._device_approval_requests
