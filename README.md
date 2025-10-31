@@ -139,12 +139,15 @@ Below is a complete example demonstrating authentication, vault synchronization,
 
 ```python
 import sqlite3
+import getpass
+
 from keepersdk.authentication import login_auth, configuration, endpoint
 from keepersdk.vault import sqlite_storage, vault_online, vault_record
 
 # Initialize configuration and authentication context
 config = configuration.JsonConfigurationStorage()
-keeper_endpoint = endpoint.KeeperEndpoint(config)
+server = 'keepersecurity.com' # can be set to keepersecurity.com, keepersecurity.com.au, keepersecurity.jp, keepersecurity.eu, keepersecurity.ca, govcloud.keepersecurity.us
+keeper_endpoint = endpoint.KeeperEndpoint(config, keeper_server=server)
 login_auth_context = login_auth.LoginAuth(keeper_endpoint)
 
 # Authenticate user
@@ -158,11 +161,11 @@ while not login_auth_context.login_step.is_final():
     if isinstance(login_auth_context.login_step, login_auth.LoginStepDeviceApproval):
         login_auth_context.login_step.send_push(login_auth.DeviceApprovalChannel.KeeperPush)
     elif isinstance(login_auth_context.login_step, login_auth.LoginStepPassword):
-        password = PromptSession().prompt('Enter password: ', is_password=True)
+        password = getpass.getpass('Enter password: ')
         login_auth_context.login_step.verify_password(password)
     elif isinstance(login_auth_context.login_step, login_auth.LoginStepTwoFactor):
         channel = login_auth_context.login_step.get_channels()[0]
-        code = PromptSession().prompt(f'Enter 2FA code for {channel.channel_name}: ', is_password=True)
+        code = getpass.getpass(f'Enter 2FA code for {channel.channel_name}: ')
         login_auth_context.login_step.send_code(channel.channel_uid, code)
     else:
         raise NotImplementedError()
@@ -201,6 +204,8 @@ if isinstance(login_auth_context.login_step, login_auth.LoginStepConnected):
             print(f'Record Type: {record.record_type}')
         
         print("-" * 50)
+    vault.close()
+    keeper_auth.close()
 ```
 
 **Important Security Notes:**

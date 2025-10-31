@@ -451,6 +451,35 @@ class ManagedCompanyEntity(_IEnterpriseEntity[enterprise_types.ManagedCompany, i
             tree_key_role=proto_entity.tree_key_role, file_plan_type=proto_entity.filePlanType, add_ons=license_add_on)
 
 
+class DeviceApprovalRequestEntity(_IEnterpriseEntity[enterprise_types.DeviceApprovalRequest, str]):
+    
+    def get_entity_key(self, entity: enterprise_types.DeviceApprovalRequest) -> str:
+        return f'{entity.enterprise_user_id}:{entity.device_id}'
+    
+    def convert_entity(self, data) -> enterprise_types.DeviceApprovalRequest:
+        proto_entity = enterprise_pb2.DeviceRequestForAdminApproval()
+        proto_entity.ParseFromString(data)
+        
+        return enterprise_types.DeviceApprovalRequest(
+            enterprise_user_id=proto_entity.enterpriseUserId,
+            device_id=proto_entity.deviceId,
+            encrypted_device_token=utils.base64_url_encode(proto_entity.encryptedDeviceToken),
+            device_public_key=utils.base64_url_encode(proto_entity.devicePublicKey),
+            device_name=proto_entity.deviceName,
+            client_version=proto_entity.clientVersion,
+            device_type=proto_entity.deviceType,
+            date=proto_entity.date,
+            ip_address=proto_entity.ipAddress,
+            location=proto_entity.location,
+            email=proto_entity.email,
+            account_uid=proto_entity.accountUid
+        )
+
+    @classmethod
+    def frozen_entity_type(cls) -> Type[enterprise_types.DeviceApprovalRequest]:
+        return enterprise_types.IDeviceApprovalRequest
+
+
 class QueuedTeamUserLink(enterprise_types.ILink[enterprise_types.QueuedTeamUser, str, int], enterprise_types.IEnterpriseDataPlugin):
     def __init__(self) -> None:
         super().__init__()
