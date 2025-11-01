@@ -10,6 +10,6 @@
 #
 from . import background
 
-__version__ = '0.9.10'
+__version__ = '0.9.11'
 
 background.init()

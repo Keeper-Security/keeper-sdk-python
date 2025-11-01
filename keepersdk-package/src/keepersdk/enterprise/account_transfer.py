@@ -187,9 +187,8 @@ class AccountTransferManager:
         raise AccountTransferError(f'Unsupported transfer key type: {key_type}')
     
     def _decrypt_legacy_transfer_key(self, pre_transfer: PreTransferResponse) -> bytes:
-        enterprise_data = self.loader.enterprise_data
-        tree_key = enterprise_data.enterprise_info.tree_key
-        
+        loader = self.loader
+
         role_key = None
         if pre_transfer.role_key:
             rsa_private_key = self.auth.auth_context.rsa_private_key
@@ -200,12 +199,9 @@ class AccountTransferManager:
                 rsa_private_key)
         elif pre_transfer.role_key_id:
             role_key_id = pre_transfer.role_key_id
-            role_keys2 = enterprise_data.role_keys.get_all_entities()
-            key_entry = next((x for x in role_keys2 if x.role_id == role_key_id), None)
-            if key_entry:
-                role_key = utils.base64_url_decode(key_entry.encrypted_key)
-                role_key = crypto.decrypt_aes_v2(role_key, tree_key)
-        
+            loader.load_role_keys([role_key_id])
+            role_key = loader.get_role_keys(role_key_id)
+
         if not role_key:
             raise AccountTransferError('Cannot decrypt role key')
         

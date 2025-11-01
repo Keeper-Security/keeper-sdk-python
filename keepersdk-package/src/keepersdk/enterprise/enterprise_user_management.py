@@ -351,6 +351,7 @@ class EnterpriseUserManager:
                 provision_request,
                 response_type=enterprise_pb2.EnterpriseUsersProvisionResponse
             )
+            assert rs is not None
             
             self._validate_provision_response(rs, email)
             return rs

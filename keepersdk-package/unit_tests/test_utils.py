@@ -28,8 +28,8 @@ class UtilsTestCase(unittest.TestCase):
         _ = ne.store_data(data, tree_key)
         ee: enterprise_types.IEnterpriseEntity[enterprise_types.Node, int] = ne
         for n in ee.get_all_entities():
-            print(n)
+            pass  # Test that iteration works
 
     def test_ore(self):
         a: Dict[Tuple[str, int], Any] = {('eeee', 33): 'rrrrr'}
-        print(a)
+        self.assertIsNotNone(a)

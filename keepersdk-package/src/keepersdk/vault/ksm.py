@@ -1,6 +1,6 @@
-import datetime
+from datetime import datetime
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, List
 
 
 @dataclass(frozen=True)
@@ -31,5 +31,5 @@ class SecretsManagerApp:
     folders: int
     count: int
     last_access: datetime
-    client_devices: Optional[list[ClientDevice]] = None
-    shared_secrets: Optional[list[SharedSecretsInfo]] = None
+    client_devices: Optional[List[ClientDevice]] = None
+    shared_secrets: Optional[List[SharedSecretsInfo]] = None

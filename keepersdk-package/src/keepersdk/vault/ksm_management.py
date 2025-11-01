@@ -1,6 +1,6 @@
 import datetime
 import json
-from typing import Optional
+from typing import Optional, List, Union
 
 from . import vault_online, ksm, record_management, vault_types
 from ..proto.APIRequest_pb2 import GetApplicationsSummaryResponse, ApplicationShareType, GetAppInfoRequest, GetAppInfoResponse
@@ -14,7 +14,7 @@ URL_CREATE_APP_API = 'vault/application_add'
 CLIENT_SHORT_ID_LENGTH = 8
 
 
-def list_secrets_manager_apps(vault: vault_online.VaultOnline) -> list[ksm.SecretsManagerApp]:
+def list_secrets_manager_apps(vault: vault_online.VaultOnline) -> List[ksm.SecretsManagerApp]:
     response = vault.keeper_auth.execute_auth_rest(
         URL_GET_SUMMARY_API,
         request=None,
@@ -139,7 +139,7 @@ def remove_secrets_manager_app(vault: vault_online.VaultOnline, uid_or_name: str
     return app.uid
 
 
-def get_app_info(vault: vault_online.VaultOnline, app_uid: str | list[str]) -> list:
+def get_app_info(vault: vault_online.VaultOnline, app_uid: Union[str, List[str]]) -> List:
     rq = GetAppInfoRequest()
     
     if isinstance(app_uid, str):
