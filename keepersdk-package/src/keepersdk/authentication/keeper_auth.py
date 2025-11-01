@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import abc
-import asyncio
 import enum
 import json
 import logging
@@ -14,7 +13,7 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPubl
 from google.protobuf.json_format import MessageToJson
 
 from . import endpoint, notifications
-from .. import errors, utils, crypto, background
+from .. import errors, utils, crypto
 from ..proto import APIRequest_pb2
 
 
@@ -51,8 +50,8 @@ class UserKeys:
 class AuthContext:
     def __init__(self) -> None:
         self.username = ''
-        self.account_uid = b''
-        self.session_token = b''
+        self.account_uid: bytes = b''
+        self.session_token: bytes = b''
         self.session_token_restriction: SessionTokenRestriction = SessionTokenRestriction.Unrestricted
         self.data_key: bytes = b''
         self.client_key: bytes = b''
@@ -70,7 +69,6 @@ class AuthContext:
         self.device_token: bytes = b''
         self.device_private_key: Optional[EllipticCurvePrivateKey] = None
         self.forbid_rsa: bool = False
-        self.session_token: bytes = b''
         self.message_session_uid: bytes = b''
 
 
@@ -100,13 +98,13 @@ class TimeToKeepalive:
 
 
 class KeeperAuth:
-    def __init__(self, keeper_endpoint: endpoint.KeeperEndpoint, auth_context: AuthContext) -> None:
+    def __init__(self, keeper_endpoint: endpoint.KeeperEndpoint, auth_context: AuthContext,
+                 push_notifications: Optional[notifications.FanOut[Dict[str, Any]]] = None) -> None:
         self.keeper_endpoint = keeper_endpoint
         self.auth_context = auth_context
-        self._push_notifications = notifications.KeeperPushNotifications()
+        self._push_notifications: Optional[notifications.FanOut[Dict[str, Any]]] = push_notifications
         self._ttk: Optional[TimeToKeepalive] = None
         self._key_cache: Optional[Dict[str, UserKeys]] = None
-        self._use_pushes = False
 
     def __enter__(self):
         return self
@@ -115,12 +113,12 @@ class KeeperAuth:
         self.close()
 
     @property
-    def push_notifications(self) -> notifications.FanOut[Dict[str, Any]]:
+    def push_notifications(self) -> Optional[notifications.FanOut[Dict[str, Any]]]:
         return self._push_notifications
 
     def close(self) -> None:
-        if self.push_notifications and not self.push_notifications.is_completed:
-            self.stop_pushes()
+        if self._push_notifications and not self._push_notifications.is_completed:
+            self._push_notifications.shutdown()
 
     def _update_ttk(self):
         if self._ttk:
@@ -315,28 +313,3 @@ class KeeperAuth:
     def get_team_keys(self, team_uid: str) -> Optional[UserKeys]:
         if self._key_cache:
             return self._key_cache.get(team_uid)
-
-    async def _push_server_guard(self):
-        transmission_key = utils.generate_aes_key()
-        self._use_pushes = True
-        try:
-            while self._use_pushes:
-                url = self.keeper_endpoint.get_push_url(
-                    transmission_key, self.auth_context.device_token, self.auth_context.message_session_uid)
-                await self._push_notifications.main_loop(url, transmission_key, self.auth_context.session_token)
-                self.execute_auth_rest('keep_alive', None)
-        except Exception as e:
-            utils.get_logger().debug(e)
-        finally:
-            self._use_pushes = False
-            
-    @property
-    def use_pushes(self) -> bool:
-        return self._use_pushes
-
-    def start_pushes(self):
-        asyncio.run_coroutine_threadsafe(self._push_server_guard(), loop=background.get_loop())
-
-    def stop_pushes(self):
-        self._use_pushes = False
-        self._push_notifications.shutdown()

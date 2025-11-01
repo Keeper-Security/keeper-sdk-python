@@ -448,7 +448,7 @@ def get_trash_record(vault: vault_online.VaultOnline, record_uid: str) -> Tuple[
     return record, is_shared
 
 
-def restore_trash_records(vault: vault_online.VaultOnline, records: List[str], confirm: Optional[Callable[[str], bool]] = None) -> None:
+def restore_trash_records(vault: vault_online.VaultOnline, records: List[str], confirm: Optional[Callable[[str], str]] = None) -> None:
     """Restore deleted records from trash.
     
     Args:
@@ -658,7 +658,7 @@ def _is_restore_plan_empty(restore_plan: Dict[str, Any]) -> bool:
     return record_count == 0 and folder_count == 0
 
 
-def _confirm_restoration(restore_plan: Dict[str, Any], confirm_func: Callable[[str], bool]) -> bool:
+def _confirm_restoration(restore_plan: Dict[str, Any], confirm_func: Callable[[str], str]) -> bool:
     """Confirm restoration with the user."""
     record_count = len(restore_plan['records_to_restore'])
     for folder_records in restore_plan['folder_records_to_restore'].values():
