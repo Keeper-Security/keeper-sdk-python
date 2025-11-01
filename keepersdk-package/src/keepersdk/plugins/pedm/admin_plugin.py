@@ -81,12 +81,12 @@ class IPedmAdmin(abc.ABC):
 
     @property
     @abc.abstractmethod
-    def deployments(self) -> storage_types.IEntity[admin_types.PedmDeployment, str]:
+    def deployments(self) -> storage_types.IEntityReader[admin_types.PedmDeployment, str]:
         pass
 
     @property
     @abc.abstractmethod
-    def agents(self) -> storage_types.IEntity[admin_types.PedmAgent, str]:
+    def agents(self) -> storage_types.IEntityReader[admin_types.PedmAgent, str]:
         pass
 
 
@@ -176,27 +176,27 @@ class PedmPlugin(IPedmAdmin):
         self.disconnect_pushes()
 
     @property
-    def deployments(self) -> storage_types.IEntity[admin_types.PedmDeployment, str]:
+    def deployments(self) -> storage_types.IEntityReader[admin_types.PedmDeployment, str]:
         return self._deployments
 
     @property
-    def agents(self) -> storage_types.IEntity[admin_types.PedmAgent, str]:
+    def agents(self) -> storage_types.IEntityReader[admin_types.PedmAgent, str]:
         return self._agents
 
     @property
-    def policies(self) -> storage_types.IEntity[admin_types.PedmPolicy, str]:
+    def policies(self) -> storage_types.IEntityReader[admin_types.PedmPolicy, str]:
         return self._policies
 
     @property
-    def collections(self) -> storage_types.IEntity[admin_types.PedmCollection, str]:
+    def collections(self) -> storage_types.IEntityReader[admin_types.PedmCollection, str]:
         return self._collections
 
     @property
-    def deployment_agents(self) -> storage_types.ILink[admin_types.PedmDeploymentAgent, str, str]:
+    def deployment_agents(self) -> storage_types.ILinkReader[admin_types.PedmDeploymentAgent, str, str]:
         return self._deployment_agents
 
     @property
-    def approvals(self) -> storage_types.IEntity[admin_types.PedmApproval, str]:
+    def approvals(self) -> storage_types.IEntityReader[admin_types.PedmApproval, str]:
         return self._approvals
 
     @property
@@ -221,7 +221,6 @@ class PedmPlugin(IPedmAdmin):
         return self._all_agents
 
     def build_data(self, task: RebuildTask) -> None:
-        logger = utils.get_logger()
         tree_key = self.loader.enterprise_data.enterprise_info.tree_key
 
         self._deployments.clear()
@@ -231,7 +230,7 @@ class PedmPlugin(IPedmAdmin):
                 pd = self.load_deployment(dep, tree_key)
                 deps.append(pd)
             except Exception as e:
-                logger.debug('Deployment "%s" decryption error: %s', dep.deployment_uid, e)
+                self.logger.debug('Deployment "%s" decryption error: %s', dep.deployment_uid, e)
         self._deployments.put_entities(deps)
 
         if task.full_rebuild:
@@ -266,7 +265,7 @@ class PedmPlugin(IPedmAdmin):
                     decrypted_data = crypto.decrypt_aes_v2(agent_dto.data, self.agent_key)
                     properties = json.loads(decrypted_data)
                 except Exception as e:
-                    utils.get_logger().debug('Agent "%s" decryption error: %s', agent_dto.agent_uid, e)
+                    self.logger.debug('Agent "%s" decryption error: %s', agent_dto.agent_uid, e)
             agent = admin_types.PedmAgent(
                 agent_uid=agent_dto.agent_uid, machine_id=agent_dto.machine_id, created=agent_dto.created,
                 deployment_uid=agent_dto.deployment_uid, disabled=agent_dto.disabled, public_key=agent_dto.public_key,
@@ -301,7 +300,7 @@ class PedmPlugin(IPedmAdmin):
                                                 admin_data=admin_data, disabled=policy_dto.disabled)
                 policies.append(policy)
             except Exception as e:
-                utils.get_logger().debug('Policy load error: %s', e)
+                self.logger.debug('Policy load error: %s', e)
         if len(policies) > 0:
             self._policies.put_entities(policies)
 
@@ -323,7 +322,7 @@ class PedmPlugin(IPedmAdmin):
                     collection_uid=collection_dto.collection_uid, collection_type=collection_dto.collection_type,
                     collection_data=collection_data, created=collection_dto.created)
             except Exception as e:
-                utils.get_logger().info('Collection "%s" load error: %s', collection_dto.collection_uid, e)
+                self.logger.info('Collection "%s" load error: %s', collection_dto.collection_uid, e)
                 collection = admin_types.PedmCollection(
                     collection_uid=collection_dto.collection_uid, collection_type=collection_dto.collection_type,
                     collection_data={}, created=collection_dto.created)
@@ -356,7 +355,7 @@ class PedmPlugin(IPedmAdmin):
                 )
                 approvals.append(approval)
             except Exception as e:
-                utils.get_logger().warning('Approval "%s" load error: %s', approval_dto.approval_uid, e)
+                self.logger.warning('Approval "%s" load error: %s', approval_dto.approval_uid, e)
         if len(approvals) > 0:
             self._approvals.put_entities(approvals)
 

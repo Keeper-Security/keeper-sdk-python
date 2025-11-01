@@ -34,7 +34,7 @@ class SqliteSoxStorage:
         self._sox_record_storage = sqlite.SqliteEntityStorage(self.get_connection, sox_record_schema, owner=enterprise_id)
 
     @property
-    def sox_record_storage(self) -> storage_types.IEntityStorage[StorageSoxRecord, str]:
+    def sox_record_storage(self) -> storage_types.IEntityReaderStorage[StorageSoxRecord, str]:
         return self._sox_record_storage
 
     def get_owned_records(self, user_id: int) -> Iterator[StorageSoxRecord]:

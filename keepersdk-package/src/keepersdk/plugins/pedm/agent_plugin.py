@@ -184,7 +184,7 @@ class PedmAgentPlugin:
         return self.peer_public_key is not None
 
     @property
-    def policies(self) -> storage_types.IEntity[PolicyInformation, str]:
+    def policies(self) -> storage_types.IEntityReader[PolicyInformation, str]:
         return self._policies
 
     def store_agent_configuration(self) -> None:

@@ -15,9 +15,9 @@ class EnterpriseData(enterprise_types.IEnterpriseData):
         self._teams = private_data.TeamEntity()
         self._queued_teams = private_data.QueuedTeamEntity()
         self._team_users = private_data.TeamUserLink()
-        self._queued_team_users = private_data.QueuedTeamUserLink()
+        self._queued_team_users = private_data.QueuedTeamUserLinkReader()
         self._role_users = private_data.RoleUserLink()
-        self._role_privileges = private_data.RolePrivilegeLink()
+        self._role_privileges = private_data.RolePrivilegeLinkReader()
         self._role_enforcements = private_data.RoleEnforcementLink()
         self._role_teams = private_data.RoleTeamLink()
         self._licenses = private_data.LicenseEntity()
@@ -76,7 +76,7 @@ class EnterpriseData(enterprise_types.IEnterpriseData):
         return self._role_enforcements
 
     @property
-    def role_privilege_plugin(self) -> private_data.RolePrivilegeLink:
+    def role_privilege_plugin(self) -> private_data.RolePrivilegeLinkReader:
         return self._role_privileges
 
     def get_supported_entities(self) -> Iterable[int]:

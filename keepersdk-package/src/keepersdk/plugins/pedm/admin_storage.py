@@ -103,42 +103,42 @@ class PedmStorageApprovalStatus(storage_types.IUid[str]):
 class IPedmStorage(abc.ABC):
     @property
     @abc.abstractmethod
-    def settings(self) -> storage_types.IEntityStorage[PedmAdminSettings, str]:
+    def settings(self) -> storage_types.IEntityReaderStorage[PedmAdminSettings, str]:
         pass
 
     @property
     @abc.abstractmethod
-    def deployments(self) -> storage_types.IEntityStorage[PedmStorageDeployment, str]:
+    def deployments(self) -> storage_types.IEntityReaderStorage[PedmStorageDeployment, str]:
         pass
 
     @property
     @abc.abstractmethod
-    def agents(self) -> storage_types.IEntityStorage[PedmStorageAgent, str]:
+    def agents(self) -> storage_types.IEntityReaderStorage[PedmStorageAgent, str]:
         pass
 
     @property
     @abc.abstractmethod
-    def policies(self) -> storage_types.IEntityStorage[PedmStoragePolicy, str]:
+    def policies(self) -> storage_types.IEntityReaderStorage[PedmStoragePolicy, str]:
         pass
 
     @property
     @abc.abstractmethod
-    def collections(self) -> storage_types.IEntityStorage[PedmStorageCollection, str]:
+    def collections(self) -> storage_types.IEntityReaderStorage[PedmStorageCollection, str]:
         pass
 
     @property
     @abc.abstractmethod
-    def collection_links(self) -> storage_types.ILinkStorage[PedmStorageCollectionLink, str, str]:
+    def collection_links(self) -> storage_types.ILinkReaderStorage[PedmStorageCollectionLink, str, str]:
         pass
 
     @property
     @abc.abstractmethod
-    def approvals(self) -> storage_types.IEntityStorage[PedmStorageApproval, str]:
+    def approvals(self) -> storage_types.IEntityReaderStorage[PedmStorageApproval, str]:
         pass
 
     @property
     @abc.abstractmethod
-    def approval_status(self) -> storage_types.IEntityStorage[PedmStorageApprovalStatus, str]:
+    def approval_status(self) -> storage_types.IEntityReaderStorage[PedmStorageApprovalStatus, str]:
         pass
 
     @abc.abstractmethod
@@ -158,35 +158,35 @@ class MemoryPedmStorage(IPedmStorage):
         self._approval_status = in_memory.InMemoryEntityStorage[PedmStorageApprovalStatus, str]()
 
     @property
-    def settings(self) -> storage_types.IEntityStorage[PedmAdminSettings, str]:
+    def settings(self) -> storage_types.IEntityReaderStorage[PedmAdminSettings, str]:
         return self._settings
 
     @property
-    def deployments(self) -> storage_types.IEntityStorage[PedmStorageDeployment, str]:
+    def deployments(self) -> storage_types.IEntityReaderStorage[PedmStorageDeployment, str]:
         return self._deployments
 
     @property
-    def agents(self) -> storage_types.IEntityStorage[PedmStorageAgent, str]:
+    def agents(self) -> storage_types.IEntityReaderStorage[PedmStorageAgent, str]:
         return self._agents
 
     @property
-    def policies(self) -> storage_types.IEntityStorage[PedmStoragePolicy, str]:
+    def policies(self) -> storage_types.IEntityReaderStorage[PedmStoragePolicy, str]:
         return self._policies
 
     @property
-    def collections(self) -> storage_types.IEntityStorage[PedmStorageCollection, str]:
+    def collections(self) -> storage_types.IEntityReaderStorage[PedmStorageCollection, str]:
         return self._collections
 
     @property
-    def collection_links(self) -> storage_types.ILinkStorage[PedmStorageCollectionLink, str, str]:
+    def collection_links(self) -> storage_types.ILinkReaderStorage[PedmStorageCollectionLink, str, str]:
         return self._collection_links
 
     @property
-    def approvals(self) -> storage_types.IEntityStorage[PedmStorageApproval, str]:
+    def approvals(self) -> storage_types.IEntityReaderStorage[PedmStorageApproval, str]:
         return self._approvals
 
     @property
-    def approval_status(self) -> storage_types.IEntityStorage[PedmStorageApprovalStatus, str]:
+    def approval_status(self) -> storage_types.IEntityReaderStorage[PedmStorageApprovalStatus, str]:
         return self._approval_status
 
     def reset(self):
@@ -237,35 +237,35 @@ class SqlitePedmStorage(IPedmStorage):
         self._approval_status = sqlite.SqliteEntityStorage(self.get_connection, approval_status_schema, owner=self.enterprise_id)
 
     @property
-    def settings(self) -> storage_types.IEntityStorage[PedmAdminSettings, str]:
+    def settings(self) -> storage_types.IEntityReaderStorage[PedmAdminSettings, str]:
         return self._settings
 
     @property
-    def deployments(self) -> storage_types.IEntityStorage[PedmStorageDeployment, str]:
+    def deployments(self) -> storage_types.IEntityReaderStorage[PedmStorageDeployment, str]:
         return self._deployments
 
     @property
-    def agents(self) -> storage_types.IEntityStorage[PedmStorageAgent, str]:
+    def agents(self) -> storage_types.IEntityReaderStorage[PedmStorageAgent, str]:
         return self._agents
 
     @property
-    def policies(self) -> storage_types.IEntityStorage[PedmStoragePolicy, str]:
+    def policies(self) -> storage_types.IEntityReaderStorage[PedmStoragePolicy, str]:
         return self._policies
 
     @property
-    def collections(self) -> storage_types.IEntityStorage[PedmStorageCollection, str]:
+    def collections(self) -> storage_types.IEntityReaderStorage[PedmStorageCollection, str]:
         return self._collections
 
     @property
-    def collection_links(self) -> storage_types.ILinkStorage[PedmStorageCollectionLink, str, str]:
+    def collection_links(self) -> storage_types.ILinkReaderStorage[PedmStorageCollectionLink, str, str]:
         return self._collection_links
 
     @property
-    def approvals(self) -> storage_types.IEntityStorage[PedmStorageApproval, str]:
+    def approvals(self) -> storage_types.IEntityReaderStorage[PedmStorageApproval, str]:
         return self._approvals
 
     @property
-    def approval_status(self) -> storage_types.IEntityStorage[PedmStorageApprovalStatus, str]:
+    def approval_status(self) -> storage_types.IEntityReaderStorage[PedmStorageApprovalStatus, str]:
         return self._approval_status
 
     def reset(self):

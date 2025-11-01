@@ -34,7 +34,7 @@ class SqliteEnterpriseStorage(enterprise_types.IEnterpriseStorage):
         return self._id_range_storage
 
     @property
-    def entity_data(self) -> storage_types.ILinkStorage[enterprise_types.EnterpriseEntityData, int, str]:
+    def entity_data(self) -> storage_types.ILinkReaderStorage[enterprise_types.EnterpriseEntityData, int, str]:
         return self._data_storage
 
     def clear(self):

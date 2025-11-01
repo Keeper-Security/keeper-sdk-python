@@ -27,7 +27,7 @@ class TestSqliteDao(TestCase):
         queries = sqlite_dao.verify_database(connection, (settings_table,), apply_changes=True)
         self.assertTrue(len(queries) == 0)
 
-        settings_storage: storage_types.IEntityStorage[enterprise_pb2.Node, int] = \
+        settings_storage: storage_types.IEntityReaderStorage[enterprise_pb2.Node, int] = \
             sqlite.SqliteEntityStorage(lambda: connection, settings_table, 191)
         s = enterprise_pb2.Node()
         s.nodeId = 3432423432
@@ -80,9 +80,9 @@ class TestSqliteDao(TestCase):
 
         sqlite_dao.verify_database(connection, (record_table, record_key_table, settings_table), apply_changes=True)
 
-        record_storage: storage_types.IEntityStorage[vault_storage_types.StorageRecord, str] = \
+        record_storage: storage_types.IEntityReaderStorage[vault_storage_types.StorageRecord, str] = \
             sqlite.SqliteEntityStorage(lambda: connection, record_table, 'user@company.com')
-        record_key_storage: storage_types.ILinkStorage[vault_storage_types.StorageRecordKey, str, str] = \
+        record_key_storage: storage_types.ILinkReaderStorage[vault_storage_types.StorageRecordKey, str, str] = \
             sqlite.SqliteLinkStorage(lambda: connection, record_key_table, 'user@company.com')
         settings_storage: storage_types.IRecordStorage[Settings] = \
             sqlite.SqliteRecordStorage(lambda: connection, settings_table, 'user@company.com')
@@ -139,7 +139,7 @@ class TestSqliteDao(TestCase):
             owner_column=owner_column, owner_type=int)
         sqlite_dao.verify_database(connection, (collection_link_schema,), apply_changes=True)
 
-        link_storage: storage_types.ILinkStorage[admin_storage.PedmStorageCollectionLink, str, str] = \
+        link_storage: storage_types.ILinkReaderStorage[admin_storage.PedmStorageCollectionLink, str, str] = \
             sqlite.SqliteLinkStorage(lambda: connection, collection_link_schema, 1000)
 
         link_storage.put_links([admin_storage.PedmStorageCollectionLink(

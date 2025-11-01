@@ -8,7 +8,6 @@ import fnmatch
 import json
 import os.path
 import re
-from email import policy
 from typing import Any, List, Optional, Dict, Union, Tuple, Set, Pattern
 
 from cryptography import x509
@@ -16,9 +15,7 @@ from cryptography.hazmat.primitives import serialization
 
 from keepersdk import crypto, constants
 from keepersdk import utils
-from keepersdk.plugins.pedm import admin_plugin, pedm_shared, admin_types
-from keepersdk.plugins.pedm.admin_storage import PedmStorageCollectionLink
-from keepersdk.plugins.pedm.admin_types import EntityStatus, LinkStatus, PedmCollection
+from keepersdk.plugins.pedm import admin_plugin, pedm_shared, admin_types, admin_storage
 from keepersdk.plugins.pedm.pedm_shared import CollectionType
 from keepersdk.proto import NotificationCenter_pb2, pedm_pb2
 from . import base, pedm_aram
@@ -273,7 +270,7 @@ class PedmDeploymentAddCommand(base.ArgparseCommand):
         rs = plugin.modify_deployments(add_deployments=[add_rq])
         if len(rs.remove) > 0:
             status = rs.remove[0]
-            if isinstance(status, EntityStatus) and not status.success:
+            if isinstance(status, admin_types.EntityStatus) and not status.success:
                 raise base.CommandError(f'Failed to add deployment "{status.entity_uid}": {status.message}')
 
 
@@ -318,7 +315,7 @@ class PedmDeploymentUpdateCommand(base.ArgparseCommand):
         rs = plugin.modify_deployments(update_deployments=[update_rq])
         if len(rs.remove) > 0:
             status = rs.remove[0]
-            if isinstance(status, EntityStatus) and not status.success:
+            if isinstance(status, admin_types.EntityStatus) and not status.success:
                 raise base.CommandError(f'Failed to update policy "{status.entity_uid}": {status.message}')
 
 
@@ -364,7 +361,7 @@ class PedmDeploymentDeleteCommand(base.ArgparseCommand):
 
         rs = plugin.modify_deployments(remove_deployments=deployments)
         for status in rs.remove:
-            if isinstance(status, EntityStatus) and not status.success:
+            if isinstance(status, admin_types.EntityStatus) and not status.success:
                 raise base.CommandError(f'Failed to delete deployment "{status.entity_uid}": {status.message}')
 
 
@@ -423,14 +420,14 @@ class PedmAgentCollectionCommand(base.ArgparseCommand):
         resource_uids = {x.collection_uid for x in plugin.storage.collection_links.get_links_by_object(agent.agent_uid)}
         collections = [plugin.collections.get_entity(x) or x for x in resource_uids]
         if isinstance(collection_type, int):
-            collections = [x for x in collections if isinstance(x, PedmCollection) and x.collection_type == collection_type]
+            collections = [x for x in collections if isinstance(x, admin_types.PedmCollection) and x.collection_type == collection_type]
 
         table: List[List[Any]] = []
         headers = ['collection_type']
         if verbose:
             headers.extend(['collection_uid', 'value'])
             for collection in collections:
-                if isinstance(collection, PedmCollection):
+                if isinstance(collection, admin_types.PedmCollection):
                     col_type_name = pedm_shared.collection_type_to_name(collection.collection_type)
                     col_type_name += f' ({col_type_name})'
                     collection_value = [f'{k}={v}' for k, v in collection.collection_data.items()]
@@ -442,7 +439,7 @@ class PedmAgentCollectionCommand(base.ArgparseCommand):
             headers.extend(['count'])
             r_map: Dict[int, int] = {}
             for collection in collections:
-                if not isinstance(collection, PedmCollection):
+                if not isinstance(collection, admin_types.PedmCollection):
                     continue
                 if collection.collection_type not in r_map:
                     r_map[collection.collection_type] = 0
@@ -486,7 +483,7 @@ class PedmAgentDeleteCommand(base.ArgparseCommand):
         statuses = plugin.modify_agents( remove_agents=agent_uid_list)
         if isinstance(statuses.remove, list):
             for status in statuses.remove:
-                if isinstance(status, EntityStatus) and not status.success:
+                if isinstance(status, admin_types.EntityStatus) and not status.success:
                     utils.get_logger().warning(f'Failed to remove agent "{status.entity_uid}": {status.message}')
 
 
@@ -540,7 +537,7 @@ class PedmAgentEditCommand(base.ArgparseCommand):
             statuses = plugin.modify_agents(update_agents=update_agents)
             if isinstance(statuses.update, list):
                 for status in statuses.update:
-                    if isinstance(status, EntityStatus) and not status.success:
+                    if isinstance(status, admin_types.EntityStatus) and not status.success:
                         utils.get_logger().warning(f'Failed to update agent "{status.entity_uid}": {status.message}')
 
 
@@ -1030,7 +1027,7 @@ class PedmPolicyAddCommand(base.ArgparseCommand, PedmPolicyMixin):
         rs = plugin.modify_policies(add_policies=[add_policy])
         if len(rs.remove) > 0:
             status = rs.remove[0]
-            if isinstance(status, EntityStatus) and not status.success:
+            if isinstance(status, admin_types.EntityStatus) and not status.success:
                 raise base.CommandError(f'Failed to add policy "{status.entity_uid}": {status.message}')
 
 
@@ -1090,7 +1087,7 @@ class PedmPolicyEditCommand(base.ArgparseCommand, PedmPolicyMixin):
         rs = plugin.modify_policies(update_policies=[pu])
         if len(rs.update) > 0:
             status = rs.update[0]
-            if isinstance(status, EntityStatus) and not status.success:
+            if isinstance(status, admin_types.EntityStatus) and not status.success:
                 raise base.CommandError(f'Failed to update policy "{status.entity_uid}": {status.message}')
 
 
@@ -1129,7 +1126,7 @@ class PedmPolicyDeleteCommand(base.ArgparseCommand):
         rs = plugin.modify_policies(remove_policies=to_delete)
         if len(rs.remove) > 0:
             status = rs.remove[0]
-            if isinstance(status, EntityStatus) and not status.success:
+            if isinstance(status, admin_types.EntityStatus) and not status.success:
                 raise base.CommandError(f'Failed to delete policy "{status.entity_uid}": {status.message}')
 
 
@@ -1290,7 +1287,7 @@ class PedmCollectionAddCommand(base.ArgparseCommand):
         status = plugin.modify_collections(add_collections=collections.values())
         if len(status.add) > 0:
             for st in status.add:
-                if isinstance(st, EntityStatus) and not st.success:
+                if isinstance(st, admin_types.EntityStatus) and not st.success:
                     raise base.CommandError(f'Failed to add collection "{st.entity_uid}": {st.message}')
 
 
@@ -1328,7 +1325,7 @@ class PedmCollectionUpdateCommand(base.ArgparseCommand):
             status = plugin.modify_collections(update_collections=[collection_data])
             if len(status.update) > 0:
                 for st in status.update:
-                    if isinstance(st, EntityStatus) and not st.success:
+                    if isinstance(st, admin_types.EntityStatus) and not st.success:
                         raise base.CommandError(f'Failed to update collection "{st.entity_uid}": {st.message}')
 
 
@@ -1379,7 +1376,7 @@ class PedmCollectionDeleteCommand(base.ArgparseCommand):
         status = plugin.modify_collections(remove_collections=unique_collections)
         if len(status.remove) > 0:
             for st in status.remove:
-                if isinstance(st, EntityStatus) and not st.success:
+                if isinstance(st, admin_types.EntityStatus) and not st.success:
                     raise base.CommandError(f'Failed to remove collection "{st.entity_uid}": {st.message}')
 
 
@@ -1427,7 +1424,7 @@ class PedmCollectionConnectCommand(base.ArgparseCommand):
         status = plugin.set_collection_links(set_links=to_add)
         if len(status.add) > 0:
             for st in status.add:
-                if isinstance(st, LinkStatus) and not st.success:
+                if isinstance(st, admin_types.LinkStatus) and not st.success:
                     raise base.CommandError(f'Failed to set collection link "{st.object_uid}": {st.message}')
 
 
@@ -1481,7 +1478,7 @@ class PedmCollectionDisconnectCommand(base.ArgparseCommand):
         status = plugin.set_collection_links(unset_links=to_remove)
         if len(status.remove) > 0:
             for st in status.remove:
-                if isinstance(st, LinkStatus) and not st.success:
+                if isinstance(st, admin_types.LinkStatus) and not st.success:
                     raise base.CommandError(f'Failed to unset collection link "{st.object_uid}": {st.message}')
 
 
@@ -1508,7 +1505,7 @@ class PedmCollectionListCommand(base.ArgparseCommand):
         pattern = kwargs.get('pattern')
 
         if isinstance(collection_type, int):
-            col_dict: Dict[str, List[PedmStorageCollectionLink]] = {}
+            col_dict: Dict[str, List[admin_storage.PedmStorageCollectionLink]] = {}
             for col in plugin.collections.get_all_entities():
                 if col.collection_type != collection_type:
                     continue
@@ -1532,7 +1529,7 @@ class PedmCollectionListCommand(base.ArgparseCommand):
                     row.append(len(links))
                 table.append(row)
         else:
-            type_dict: Dict[int, List[PedmCollection]] = {}
+            type_dict: Dict[int, List[admin_types.PedmCollection]] = {}
             for col in plugin.collections.get_all_entities():
                 if col.collection_type not in type_dict:
                     type_dict[col.collection_type] = []
@@ -1787,17 +1784,17 @@ class PedmApprovalStatusCommand(base.ArgparseCommand):
         if status_rs.add:
             for status in status_rs.add:
                 if not status.success:
-                    if isinstance(status, EntityStatus):
+                    if isinstance(status, admin_types.EntityStatus):
                         logger.warning(f'Failed to approved "{status.entity_uid}": {status.message}')
         if status_rs.update:
             for status in status_rs.update:
                 if not status.success:
-                    if isinstance(status, EntityStatus):
+                    if isinstance(status, admin_types.EntityStatus):
                         logger.warning(f'Failed to deny "{status.entity_uid}": {status.message}')
         if status_rs.remove:
             for status in status_rs.remove:
                 if not status.success:
-                    if isinstance(status, EntityStatus):
+                    if isinstance(status, admin_types.EntityStatus):
                         logger.warning(f'Failed to remove "{status.entity_uid}": {status.message}')
 
 

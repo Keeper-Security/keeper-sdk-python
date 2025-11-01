@@ -9,7 +9,7 @@ import attrs
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
 
 from ..authentication import keeper_auth
-from ..storage.storage_types import T, IRecordStorage, ILinkStorage, IEntity, ILink
+from ..storage.storage_types import T, IRecordStorage, ILinkReaderStorage, IEntityReader, ILinkReader
 
 
 @attrs.define(kw_only=True)
@@ -434,97 +434,97 @@ class IEnterpriseData(abc.ABC):
 
     @property
     @abc.abstractmethod
-    def nodes(self) -> IEntity[Node, int]:
+    def nodes(self) -> IEntityReader[Node, int]:
         pass
 
     @property
     @abc.abstractmethod
-    def roles(self) -> IEntity[Role, int]:
+    def roles(self) -> IEntityReader[Role, int]:
         pass
 
     @property
     @abc.abstractmethod
-    def users(self) -> IEntity[User, int]:
+    def users(self) -> IEntityReader[User, int]:
         pass
 
     @property
     @abc.abstractmethod
-    def teams(self) -> IEntity[Team, str]:
+    def teams(self) -> IEntityReader[Team, str]:
         pass
 
     @property
     @abc.abstractmethod
-    def team_users(self) -> ILink[TeamUser, str, int]:
+    def team_users(self) -> ILinkReader[TeamUser, str, int]:
         pass
 
     @property
     @abc.abstractmethod
-    def queued_teams(self) -> IEntity[QueuedTeam, str]:
+    def queued_teams(self) -> IEntityReader[QueuedTeam, str]:
         pass
 
     @property
     @abc.abstractmethod
-    def queued_team_users(self) -> ILink[QueuedTeamUser, str, int]:
+    def queued_team_users(self) -> ILinkReader[QueuedTeamUser, str, int]:
         pass
 
     @property
     @abc.abstractmethod
-    def role_users(self) -> ILink[RoleUser, int, int]:
+    def role_users(self) -> ILinkReader[RoleUser, int, int]:
         pass
 
     @property
     @abc.abstractmethod
-    def role_teams(self) -> ILink[RoleTeam, int, str]:
+    def role_teams(self) -> ILinkReader[RoleTeam, int, str]:
         pass
 
     @property
     @abc.abstractmethod
-    def managed_nodes(self) -> ILink[ManagedNode, int, int]:
+    def managed_nodes(self) -> ILinkReader[ManagedNode, int, int]:
         pass
 
     @property
     @abc.abstractmethod
-    def role_privileges(self) -> ILink[RolePrivileges, int, int]:
+    def role_privileges(self) -> ILinkReader[RolePrivileges, int, int]:
         pass
 
     @property
     @abc.abstractmethod
-    def role_enforcements(self) -> ILink[RoleEnforcement, int, str]:
+    def role_enforcements(self) -> ILinkReader[RoleEnforcement, int, str]:
         pass
 
     @property
     @abc.abstractmethod
-    def licenses(self) -> IEntity[License, int]:
+    def licenses(self) -> IEntityReader[License, int]:
         pass
 
     @property
     @abc.abstractmethod
-    def sso_services(self) -> IEntity[SsoService, int]:
+    def sso_services(self) -> IEntityReader[SsoService, int]:
         pass
 
     @property
     @abc.abstractmethod
-    def bridges(self) -> IEntity[Bridge, int]:
+    def bridges(self) -> IEntityReader[Bridge, int]:
         pass
 
     @property
     @abc.abstractmethod
-    def scims(self) -> IEntity[Scim, int]:
+    def scims(self) -> IEntityReader[Scim, int]:
         pass
 
     @property
     @abc.abstractmethod
-    def email_provision(self) -> IEntity[EmailProvision, int]:
+    def email_provision(self) -> IEntityReader[EmailProvision, int]:
         pass
 
     @property
     @abc.abstractmethod
-    def managed_companies(self) -> IEntity[ManagedCompany, int]:
+    def managed_companies(self) -> IEntityReader[ManagedCompany, int]:
         pass
 
     @property
     @abc.abstractmethod
-    def user_aliases(self) -> ILink[UserAlias, int, str]:
+    def user_aliases(self) -> ILinkReader[UserAlias, int, str]:
         pass
 
 
@@ -558,7 +558,7 @@ class IEnterpriseStorage(abc.ABC):
 
     @property
     @abc.abstractmethod
-    def entity_data(self) -> ILinkStorage[EnterpriseEntityData, int, str]:
+    def entity_data(self) -> ILinkReaderStorage[EnterpriseEntityData, int, str]:
         pass
 
     @abc.abstractmethod

@@ -5,7 +5,7 @@ from typing import Generic, Dict, Optional, Tuple, Iterable, Any, List, Iterator
 from . import enterprise_types
 from .. import utils, crypto
 from ..proto import enterprise_pb2
-from ..storage.storage_types import T, K, KS, KO, IEntity, ILink
+from ..storage.storage_types import T, K, KS, KO, IEntityReader, ILinkReader
 
 def to_storage_key(value: Any) -> str:
     if isinstance(value, str):
@@ -18,7 +18,7 @@ def to_storage_key(value: Any) -> str:
 def get_storage_key(*comps: Any) -> str:
     return '|'.join((to_storage_key(x) for x in comps))
 
-class _IEnterpriseEntity(Generic[T, K], IEntity[T, K], enterprise_types.IEnterprisePlugin[T], abc.ABC):
+class _IEnterpriseEntityReader(Generic[T, K], IEntityReader[T, K], enterprise_types.IEnterprisePlugin[T], abc.ABC):
     def __init__(self) -> None:
         super().__init__()
         self._data: Optional[Dict[K, T]] = None
@@ -55,7 +55,7 @@ class _IEnterpriseEntity(Generic[T, K], IEntity[T, K], enterprise_types.IEnterpr
             return self._data.get(key)
 
 
-class _IEnterpriseLink(Generic[T, KS, KO], ILink[T, KS, KO], enterprise_types.IEnterprisePlugin[T], abc.ABC):
+class _IEnterpriseLinkReader(Generic[T, KS, KO], ILinkReader[T, KS, KO], enterprise_types.IEnterprisePlugin[T], abc.ABC):
     def __init__(self) -> None:
         super().__init__()
         self._data: Optional[Dict[Tuple[KS, KO], T]] = None
@@ -118,7 +118,7 @@ def _decrypt_encrypted_data(data: str, key_type: str, tree_key: bytes) -> Dict[s
     return json.loads(ed.decode())
 
 
-class NodeEntity(_IEnterpriseEntity[enterprise_types.Node, int]):
+class NodeEntity(_IEnterpriseEntityReader[enterprise_types.Node, int]):
     def get_entity_key(self, entity: enterprise_types.Node) -> int:
         return entity.node_id
 
@@ -151,7 +151,7 @@ class NodeEntity(_IEnterpriseEntity[enterprise_types.Node, int]):
         return enterprise_types.INode
 
 
-class RoleEntity(_IEnterpriseEntity[enterprise_types.Role, int]):
+class RoleEntity(_IEnterpriseEntityReader[enterprise_types.Role, int]):
     def __init__(self):
         super().__init__()
 
@@ -183,7 +183,7 @@ class RoleEntity(_IEnterpriseEntity[enterprise_types.Role, int]):
         return enterprise_types.IRole
 
 
-class UserEntity(_IEnterpriseEntity[enterprise_types.User, int]):
+class UserEntity(_IEnterpriseEntityReader[enterprise_types.User, int]):
     def get_entity_key(self, entity: enterprise_types.User) -> int:
         return entity.enterprise_user_id
 
@@ -210,7 +210,7 @@ class UserEntity(_IEnterpriseEntity[enterprise_types.User, int]):
         return user
 
 
-class TeamEntity(_IEnterpriseEntity[enterprise_types.Team, str]):
+class TeamEntity(_IEnterpriseEntityReader[enterprise_types.Team, str]):
     def get_entity_key(self, entity: enterprise_types.Team) -> str:
         return entity.team_uid
 
@@ -223,7 +223,7 @@ class TeamEntity(_IEnterpriseEntity[enterprise_types.Team, str]):
                  encrypted_team_key=utils.base64_url_decode(proto_entity.encryptedTeamKey))
 
 
-class QueuedTeamEntity(_IEnterpriseEntity[enterprise_types.QueuedTeam, str]):
+class QueuedTeamEntity(_IEnterpriseEntityReader[enterprise_types.QueuedTeam, str]):
     def get_entity_key(self, entity: enterprise_types.QueuedTeam) -> str:
         return entity.team_uid
 
@@ -238,7 +238,7 @@ class QueuedTeamEntity(_IEnterpriseEntity[enterprise_types.QueuedTeam, str]):
         return enterprise_types.IQueuedTeam
 
 
-class TeamUserLink(_IEnterpriseLink[enterprise_types.TeamUser, str, int]):
+class TeamUserLink(_IEnterpriseLinkReader[enterprise_types.TeamUser, str, int]):
     def get_subject_key(self, entity: enterprise_types.TeamUser) -> str:
         return entity.team_uid
 
@@ -253,7 +253,7 @@ class TeamUserLink(_IEnterpriseLink[enterprise_types.TeamUser, str, int]):
         return tu
 
 
-class RoleUserLink(_IEnterpriseLink[enterprise_types.RoleUser, int, int]):
+class RoleUserLink(_IEnterpriseLinkReader[enterprise_types.RoleUser, int, int]):
     def get_subject_key(self, entity: enterprise_types.RoleUser) -> int:
         return entity.role_id
 
@@ -267,7 +267,7 @@ class RoleUserLink(_IEnterpriseLink[enterprise_types.RoleUser, int, int]):
         return rul
 
 
-class RolePrivilegeLink(ILink[enterprise_types.RolePrivileges, int, int], enterprise_types.IEnterpriseDataPlugin):
+class RolePrivilegeLinkReader(ILinkReader[enterprise_types.RolePrivileges, int, int], enterprise_types.IEnterpriseDataPlugin):
     def __init__(self) -> None:
         super().__init__()
         self._data: Optional[Dict[Tuple[int, int], enterprise_types.RolePrivileges]] = None
@@ -329,7 +329,7 @@ class RolePrivilegeLink(ILink[enterprise_types.RolePrivileges, int, int], enterp
                 yield v
 
 
-class RoleEnforcementLink(_IEnterpriseLink[enterprise_types.RoleEnforcement, int, str]):
+class RoleEnforcementLink(_IEnterpriseLinkReader[enterprise_types.RoleEnforcement, int, str]):
     def get_subject_key(self, entity: enterprise_types.RoleEnforcement) -> int:
         return entity.role_id
 
@@ -344,7 +344,7 @@ class RoleEnforcementLink(_IEnterpriseLink[enterprise_types.RoleEnforcement, int
         return rel
 
 
-class RoleTeamLink(_IEnterpriseLink[enterprise_types.RoleTeam, int, str]):
+class RoleTeamLink(_IEnterpriseLinkReader[enterprise_types.RoleTeam, int, str]):
     def get_subject_key(self, entity: enterprise_types.RoleTeam) -> int:
         return entity.role_id
 
@@ -358,7 +358,7 @@ class RoleTeamLink(_IEnterpriseLink[enterprise_types.RoleTeam, int, str]):
         return rt
 
 
-class LicenseEntity(_IEnterpriseEntity[enterprise_types.License, int]):
+class LicenseEntity(_IEnterpriseEntityReader[enterprise_types.License, int]):
     def get_entity_key(self, entity: enterprise_types.License) -> int:
         return entity.enterprise_license_id
 
@@ -412,7 +412,7 @@ class LicenseEntity(_IEnterpriseEntity[enterprise_types.License, int]):
             distributor=proto_entity.distributor, msp_permits=msp_permits, managed_by=managed_by)
 
 
-class ManagedNodeLink(_IEnterpriseLink[enterprise_types.ManagedNode, int, int]):
+class ManagedNodeLink(_IEnterpriseLinkReader[enterprise_types.ManagedNode, int, int]):
     def get_subject_key(self, entity: enterprise_types.ManagedNode) -> int:
         return entity.role_id
 
@@ -427,7 +427,7 @@ class ManagedNodeLink(_IEnterpriseLink[enterprise_types.ManagedNode, int, int]):
         return mn
 
 
-class ManagedCompanyEntity(_IEnterpriseEntity[enterprise_types.ManagedCompany, int]):
+class ManagedCompanyEntity(_IEnterpriseEntityReader[enterprise_types.ManagedCompany, int]):
     def get_entity_key(self, entity: enterprise_types.ManagedCompany) -> int:
         return entity.mc_enterprise_id
 
@@ -451,7 +451,7 @@ class ManagedCompanyEntity(_IEnterpriseEntity[enterprise_types.ManagedCompany, i
             tree_key_role=proto_entity.tree_key_role, file_plan_type=proto_entity.filePlanType, add_ons=license_add_on)
 
 
-class QueuedTeamUserLink(enterprise_types.ILink[enterprise_types.QueuedTeamUser, str, int], enterprise_types.IEnterpriseDataPlugin):
+class QueuedTeamUserLinkReader(enterprise_types.ILinkReader[enterprise_types.QueuedTeamUser, str, int], enterprise_types.IEnterpriseDataPlugin):
     def __init__(self) -> None:
         super().__init__()
         self._data: Optional[Dict[Tuple[str, int], enterprise_types.QueuedTeamUser]] = None
@@ -505,7 +505,7 @@ class QueuedTeamUserLink(enterprise_types.ILink[enterprise_types.QueuedTeamUser,
                 yield v
 
 
-class UserAliasLink(_IEnterpriseLink[enterprise_types.UserAlias, int, str]):
+class UserAliasLink(_IEnterpriseLinkReader[enterprise_types.UserAlias, int, str]):
     def get_subject_key(self, entity: enterprise_types.UserAlias) -> int:
         return entity.enterprise_user_id
 
@@ -518,7 +518,7 @@ class UserAliasLink(_IEnterpriseLink[enterprise_types.UserAlias, int, str]):
         return enterprise_types.UserAlias(enterprise_user_id=proto_entity.enterpriseUserId, username=proto_entity.username)
 
 
-class BridgeEntity(_IEnterpriseEntity[enterprise_types.Bridge, int]):
+class BridgeEntity(_IEnterpriseEntityReader[enterprise_types.Bridge, int]):
     def get_entity_key(self, entity):
         return entity.bridge_id
 
@@ -530,7 +530,7 @@ class BridgeEntity(_IEnterpriseEntity[enterprise_types.Bridge, int]):
             lan_ip_enforcement=proto_entity.lanIpEnforcement, status=proto_entity.status)
 
 
-class ScimEntity(_IEnterpriseEntity[enterprise_types.Scim, int]):
+class ScimEntity(_IEnterpriseEntityReader[enterprise_types.Scim, int]):
     def get_entity_key(self, entity):
         return entity.scim_id
 
@@ -542,7 +542,7 @@ class ScimEntity(_IEnterpriseEntity[enterprise_types.Scim, int]):
             role_prefix=proto_entity.rolePrefix, unique_groups=proto_entity.uniqueGroups)
 
 
-class SsoServiceEntity(_IEnterpriseEntity[enterprise_types.SsoService, int]):
+class SsoServiceEntity(_IEnterpriseEntityReader[enterprise_types.SsoService, int]):
     def get_entity_key(self, entity):
         return entity.sso_service_provider_id
 
@@ -555,7 +555,7 @@ class SsoServiceEntity(_IEnterpriseEntity[enterprise_types.SsoService, int]):
             is_cloud=proto_entity.isCloud)
 
 
-class EmailProvisionEntity(_IEnterpriseEntity[enterprise_types.EmailProvision, int]):
+class EmailProvisionEntity(_IEnterpriseEntityReader[enterprise_types.EmailProvision, int]):
     def get_entity_key(self, entity):
         return entity.id
 

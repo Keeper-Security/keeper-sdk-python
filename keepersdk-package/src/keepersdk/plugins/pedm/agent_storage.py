@@ -58,22 +58,22 @@ class IPedmAgentStorage(abc.ABC):
 
     @property
     @abc.abstractmethod
-    def policies(self) -> storage_types.IEntityStorage[PedmAgentPolicy, str]:
+    def policies(self) -> storage_types.IEntityReaderStorage[PedmAgentPolicy, str]:
         pass
 
     @property
     @abc.abstractmethod
-    def collections(self) -> storage_types.IEntityStorage[PedmAgentCollection, str]:
+    def collections(self) -> storage_types.IEntityReaderStorage[PedmAgentCollection, str]:
         pass
 
     @property
     @abc.abstractmethod
-    def approvals(self) -> storage_types.IEntityStorage[PedmAgentApproval, str]:
+    def approvals(self) -> storage_types.IEntityReaderStorage[PedmAgentApproval, str]:
         pass
 
     @property
     @abc.abstractmethod
-    def approval_status(self) -> storage_types.IEntityStorage[PedmAgentApprovalStatus, str]:
+    def approval_status(self) -> storage_types.IEntityReaderStorage[PedmAgentApprovalStatus, str]:
         pass
 
     @abc.abstractmethod
@@ -94,19 +94,19 @@ class MemoryPedmAgentStorage(IPedmAgentStorage):
         return self._settings
 
     @property
-    def policies(self) -> storage_types.IEntityStorage[PedmAgentPolicy, str]:
+    def policies(self) -> storage_types.IEntityReaderStorage[PedmAgentPolicy, str]:
         return self._policies
 
     @property
-    def collections(self) -> storage_types.IEntityStorage[PedmAgentCollection, str]:
+    def collections(self) -> storage_types.IEntityReaderStorage[PedmAgentCollection, str]:
         return self._collections
 
     @property
-    def approvals(self) -> storage_types.IEntityStorage[PedmAgentApproval, str]:
+    def approvals(self) -> storage_types.IEntityReaderStorage[PedmAgentApproval, str]:
         return self._approvals
 
     @property
-    def approval_status(self) -> storage_types.IEntityStorage[PedmAgentApprovalStatus, str]:
+    def approval_status(self) -> storage_types.IEntityReaderStorage[PedmAgentApprovalStatus, str]:
         return self._approval_status
 
     def reset(self):
@@ -147,11 +147,11 @@ class SqlitePedmAgentStorage(IPedmAgentStorage):
         return self._settings
 
     @property
-    def policies(self) -> storage_types.IEntityStorage[PedmAgentPolicy, str]:
+    def policies(self) -> storage_types.IEntityReaderStorage[PedmAgentPolicy, str]:
         return self._policies
 
     @property
-    def collections(self) -> storage_types.IEntityStorage[PedmAgentCollection, str]:
+    def collections(self) -> storage_types.IEntityReaderStorage[PedmAgentCollection, str]:
         return self._collections
 
     # @property
@@ -159,11 +159,11 @@ class SqlitePedmAgentStorage(IPedmAgentStorage):
     #     return self._collection_links
 
     @property
-    def approvals(self) -> storage_types.IEntityStorage[PedmAgentApproval, str]:
+    def approvals(self) -> storage_types.IEntityReaderStorage[PedmAgentApproval, str]:
         return self._approvals
 
     @property
-    def approval_status(self) -> storage_types.IEntityStorage[PedmAgentApprovalStatus, str]:
+    def approval_status(self) -> storage_types.IEntityReaderStorage[PedmAgentApprovalStatus, str]:
         return self._approval_status
 
     def reset(self):
