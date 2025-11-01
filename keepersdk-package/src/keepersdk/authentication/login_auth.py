@@ -8,7 +8,7 @@ from urllib.parse import urlparse, urlunparse, quote_plus
 from cryptography.hazmat.primitives.asymmetric import ec
 from google.protobuf.json_format import MessageToDict
 
-from . import endpoint, configuration, notifications, keeper_auth, auth_utils
+from . import endpoint, configuration, keeper_auth, auth_utils, notifications, push_notifications
 from .. import crypto, utils, errors
 from ..proto import APIRequest_pb2, breachwatch_pb2, ssocloud_pb2
 
@@ -624,7 +624,7 @@ def _ensure_push_notifications(login: LoginAuth) -> None:
     if login.push_notifications:
         return
 
-    keeper_pushes = notifications.KeeperPushNotifications()
+    keeper_pushes = push_notifications.KeeperPushNotifications()
     transmission_key = utils.generate_aes_key()
     url = login.keeper_endpoint.get_push_url(transmission_key, login.context.device_token, login.context.message_session_uid)
     keeper_pushes.connect_to_push_channel(url, transmission_key)
@@ -754,11 +754,15 @@ def _on_logged_in(login: LoginAuth, response: APIRequest_pb2.LoginResponse,
     auth_context.message_session_uid = login.context.message_session_uid
 
     keeper_endpoint = login.keeper_endpoint
-    logged_auth = keeper_auth.KeeperAuth(keeper_endpoint, auth_context)
+    # Create push_notifications if not provided (for testing or custom implementations)
+    push_notif = login.push_notifications if login.push_notifications is not None else push_notifications.KeeperPushNotifications()
+    logged_auth = keeper_auth.KeeperAuth(keeper_endpoint, auth_context, push_notifications=push_notif)
     _post_login(logged_auth)
 
+    # Start push notifications if unrestricted and using KeeperPushNotifications
     if auth_context.session_token_restriction == keeper_auth.SessionTokenRestriction.Unrestricted:
-        logged_auth.start_pushes()
+        if isinstance(push_notif, push_notifications.KeeperPushNotifications):
+            push_notif.start_push_server(logged_auth)
 
     login.login_step = _ConnectedLoginStep(logged_auth)
     logged_auth.on_idle()

@@ -226,7 +226,7 @@ class CreateSecretsManagerAppTestCase(unittest.TestCase):
         self.vault.vault_data.records.return_value = [mock_record]
         with self.assertRaises(ValueError) as cm:
             ksm_management.create_secrets_manager_app(self.vault, 'TestApp')
-        self.assertEqual(str(cm.exception), 'Application with the same name TestApp already exists.')
+        self.assertEqual(str(cm.exception), 'Application with the same name TestApp already exists. Set force to true to add Application with same name')
 
     def test_create_app_duplicate_force_add(self):
         mock_record = MagicMock(title='TestApp')

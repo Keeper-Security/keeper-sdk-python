@@ -148,16 +148,9 @@ class TestLogin(TestCase):
                                                session_token=session_token,
                                                payload_version=payload_version)
 
-        def connect_to_push_server(session_uid, device_token, data=None):
-            return notifications.FanOut()
-
         mock = MagicMock()
         mock.side_effect = execute_rest
         keeper_endpoint.execute_rest = mock
-
-        mock = MagicMock()
-        mock.side_effect = connect_to_push_server
-        keeper_endpoint.connect_to_push_server = mock
 
         mock = MagicMock()
         mock.side_effect = Exception
@@ -167,7 +160,9 @@ class TestLogin(TestCase):
         mock.side_effect = Exception
         keeper_endpoint._communicate_keeper = mock
 
-        return login_auth.LoginAuth(keeper_endpoint)
+        auth = login_auth.LoginAuth(keeper_endpoint)
+        auth.push_notifications = notifications.FanOut()
+        return auth
 
     @staticmethod
     def reset_stops():
