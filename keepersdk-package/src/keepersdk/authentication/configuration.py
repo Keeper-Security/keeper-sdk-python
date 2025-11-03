@@ -704,7 +704,7 @@ class JsonFileLoader(IJsonLoader):
     def __init__(self, file_name: Optional[str]=None) -> None:
         IJsonLoader.__init__(self)
         if not file_name:
-            file_name = 'authentication.json'
+            file_name = 'config.json'
         if os.path.isfile(file_name):
             self.file_path = os.path.abspath(file_name)
         else:
@@ -712,6 +712,11 @@ class JsonFileLoader(IJsonLoader):
             if not os.path.exists(keeper_dir):
                 os.mkdir(keeper_dir)
             self.file_path = os.path.join(keeper_dir, file_name)
+        
+        # Create the file if it doesn't exist with a blank JSON object
+        if not os.path.exists(self.file_path):
+            with open(self.file_path, 'w') as f:
+                json.dump({}, f)
 
     def load_json(self):
         with open(self.file_path, 'rb') as f:
