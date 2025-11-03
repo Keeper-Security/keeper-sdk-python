@@ -131,7 +131,44 @@ The Keeper SDK uses a configuration storage system to manage authentication sett
 - **InMemoryConfigurationStorage**: Temporary in-memory storage for testing
 - **Custom implementations**: Implement your own configuration storage
 
-No additional configuration files are required for basic usage. Authentication settings are managed programmatically through the SDK.
+#### **Requirement for client**
+
+If you are accessing keepersdk from a new device, you need to ensure that there is a config.json file present from which the sdk reads credentials. This ensures that the client doesn't contain any hardcoded credentials. Create the .json file in .keeper folder of current user, you might need to create a .keeper folder. A sample showing the structure of the config.json needed is shown below:
+
+```
+{
+  "users": [
+    {
+      "user": "username@yourcompany.com",
+      "password":"yourpassword",
+      "server": "keepersecurity.com",
+      "last_device": {
+        "device_token": ""
+      }
+    }
+  ],
+  "servers": [
+    {
+      "server": "keepersecurity.com",
+      "server_key_id": 10
+    }
+  ],
+  "devices": [
+    {
+      "device_token": "",
+      "private_key": "",
+      "server_info": [
+        {
+          "server": "keepersecurity.com",
+          "clone_code": ""
+        }
+      ]
+    }
+  ],
+  "last_login": "username@yourcompany.com",
+  "last_server": "keepersecurity.com"
+}
+```
 
 ### SDK Usage Example
 
@@ -146,20 +183,17 @@ from keepersdk.vault import sqlite_storage, vault_online, vault_record
 
 # Initialize configuration and authentication context
 config = configuration.JsonConfigurationStorage()
-server = 'keepersecurity.com' # can be set to keepersecurity.com, keepersecurity.com.au, keepersecurity.jp, keepersecurity.eu, keepersecurity.ca, govcloud.keepersecurity.us
-keeper_endpoint = endpoint.KeeperEndpoint(config, keeper_server=server)
+keeper_endpoint = endpoint.KeeperEndpoint(config)
 login_auth_context = login_auth.LoginAuth(keeper_endpoint)
 
 # Authenticate user
-login_auth_context.login('username@company.com')
-
-# Complete password verification
-# Note: In case 2fa and device approval flows fail, we can use verify password
-# login_auth_context.login_step.verify_password('your_secure_password')
+login_auth_context.login(config.get().users()[0].username, config.get().users()[0].password)
 
 while not login_auth_context.login_step.is_final():
     if isinstance(login_auth_context.login_step, login_auth.LoginStepDeviceApproval):
         login_auth_context.login_step.send_push(login_auth.DeviceApprovalChannel.KeeperPush)
+        print("Device approval request sent. Login to existing vault/console or ask admin to approve this device and then press return/enter to resume")
+        input()
     elif isinstance(login_auth_context.login_step, login_auth.LoginStepPassword):
         password = getpass.getpass('Enter password: ')
         login_auth_context.login_step.verify_password(password)
