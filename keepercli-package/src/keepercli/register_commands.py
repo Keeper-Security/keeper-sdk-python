@@ -27,7 +27,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
     if not scopes or bool(scopes & base.CommandScope.Vault):
         from .commands import (vault_folder, vault, vault_record, record_edit, importer_commands, breachwatch, 
                                record_type, secrets_manager, share_management, password_report, trash, record_file_report,
-                               record_handling_commands, register)
+                               record_handling_commands, register, password_generate)
         
         commands.register_command('sync-down', vault.SyncDownCommand(), base.CommandScope.Vault, 'd')
         commands.register_command('cd', vault_folder.FolderCdCommand(), base.CommandScope.Vault)
@@ -58,6 +58,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('file-report', record_file_report.RecordFileReportCommand(), base.CommandScope.Vault)
         commands.register_command('import', importer_commands.ImportCommand(), base.CommandScope.Vault)
         commands.register_command('export', importer_commands.ExportCommand(), base.CommandScope.Vault)
+        commands.register_command('generate', password_generate.PasswordGenerateCommand(), base.CommandScope.Vault, 'gen')
         commands.register_command('breachwatch', breachwatch.BreachWatchCommand(), base.CommandScope.Vault, 'bw')
         commands.register_command('password-report', password_report.PasswordReportCommand(), base.CommandScope.Vault)
         commands.register_command('record-type-add', record_type.RecordTypeAddCommand(), base.CommandScope.Vault)
