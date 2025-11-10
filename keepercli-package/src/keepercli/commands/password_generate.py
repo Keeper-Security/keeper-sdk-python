@@ -9,11 +9,7 @@ import argparse
 import json
 from typing import Any, Optional, List, Dict
 
-try:
-    import pyperclip
-    CLIPBOARD_AVAILABLE = True
-except ImportError:
-    CLIPBOARD_AVAILABLE = False
+import pyperclip
 
 # Constants
 MAX_PASSWORD_COUNT = 1000
@@ -108,9 +104,13 @@ class PasswordGenerateCommand(base.ArgparseCommand):
     
     def execute(self, context: KeeperParams, **kwargs) -> Any:
         """Execute the password generation command."""
+        # Verify vault is initialized
+        if not context.vault:
+            raise base.CommandError('Vault is not initialized. Please log in to initialize the vault.')
+        
         try:
             request = self._create_generation_request(**kwargs)
-            service = self._create_password_service(context, request)
+            service = self._create_password_service(context.vault, request)
             passwords = self._generate_passwords(service, request)
             self._output_results(passwords, **kwargs)
             
@@ -118,18 +118,18 @@ class PasswordGenerateCommand(base.ArgparseCommand):
             logger.error(f"Password generation failed: {e}")
             raise base.CommandError(f"Password generation failed: {e}")
     
-    def _create_password_service(self, context: KeeperParams, request: GenerationRequest) -> PasswordGenerationService:
+    def _create_password_service(self, vault, request: GenerationRequest) -> PasswordGenerationService:
         """Create password generation service with optional BreachWatch."""
         breach_watch = None
         
         if not request.enable_breach_scan:
             logger.debug("BreachWatch scanning disabled by user")
-        elif context.vault and context.vault.breach_watch_plugin():
-            breach_watch_plugin = context.vault.breach_watch_plugin()
+        elif vault.breach_watch_plugin():
+            breach_watch_plugin = vault.breach_watch_plugin()
             breach_watch = breach_watch_plugin.breach_watch
             logger.debug("Using BreachWatch for password scanning")
         else:
-            logger.debug("BreachWatch not available (vault not initialized or feature not enabled)")
+            logger.warning("BreachWatch plugin not available, enable it to use")
             request.enable_breach_scan = False
         
         return PasswordGenerationService(breach_watch)
@@ -262,14 +262,11 @@ class PasswordGenerateCommand(base.ArgparseCommand):
         
         # Handle clipboard
         if clipboard:
-            if CLIPBOARD_AVAILABLE:
-                try:
-                    pyperclip.copy(output)
-                    logger.info("Generated passwords copied to clipboard")
-                except Exception as e:
-                    logger.warning(f"Failed to copy to clipboard: {e}")
-            else:
-                logger.warning("Clipboard functionality not available. Install 'pyperclip' package.")
+            try:
+                pyperclip.copy(output)
+                logger.info("Generated passwords copied to clipboard")
+            except Exception as e:
+                logger.warning(f"Failed to copy to clipboard: {e}")
         
         # Output to file or console
         if output_file:
