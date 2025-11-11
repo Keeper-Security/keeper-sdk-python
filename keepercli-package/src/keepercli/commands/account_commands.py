@@ -2,7 +2,7 @@ import argparse
 import datetime
 from typing import Tuple, Optional, List, Any
 
-from keepersdk.authentication import auth_utils
+from keepersdk.authentication import keeper_auth
 from keepersdk.proto import AccountSummary_pb2
 from . import base
 from .. import params, login, api
@@ -25,9 +25,12 @@ class LoginCommand(base.ArgparseCommand):
         username = kwargs.get('email') or ''
         password = kwargs.get('password') or ''
         resume_session = kwargs.get('resume_session') is True
-        login.LoginFlow.login(context, username=username, password=password, resume_session=resume_session,
-                              sso_master_password=kwargs.get('sso_password') is True)
-
+        auth = login.LoginFlow.login(
+            context.keeper_config, username=username, password=password, server=context.keeper_config.server,
+            resume_session=resume_session, sso_master_password=kwargs.get('sso_password') is True)
+        if auth is None:
+            raise base.CommandError("Login failed")
+        context.set_auth(auth)
         # TODO check enforcements
 
 
@@ -78,11 +81,11 @@ class ThisDeviceCommand(base.ArgparseCommand):
 
         if action == 'rename' or action == 'ren':
             value = ops[1]
-            auth_utils.rename_device(context.auth, value)
+            keeper_auth.rename_device(context.auth, value)
             logger.info(f'Successfully renamed device to {value}')
 
         elif action == 'register':
-            is_device_registered = auth_utils.register_data_key_for_device(context.auth)
+            is_device_registered = keeper_auth.register_data_key_for_device(context.auth)
             if is_device_registered:
                 logger.info('Successfully registered device')
             else:
@@ -96,12 +99,12 @@ class ThisDeviceCommand(base.ArgparseCommand):
             value = ops[1]
 
             value_extracted = '1' if parse_utils.as_boolean(value) else '0'
-            auth_utils.set_user_setting(context.auth, 'persistent_login', value_extracted)
+            keeper_auth.set_user_setting(context.auth, 'persistent_login', value_extracted)
             msg = 'ENABLED' if value_extracted == '1' else 'DISABLED'
             logger.info(f'Successfully {msg} Persistent Login on this account')
 
             if value_extracted == '1':
-                auth_utils.register_data_key_for_device(context.auth)
+                keeper_auth.register_data_key_for_device(context.auth)
                 _, this_device = ThisDeviceCommand.get_account_summary_and_this_device(context)
 
                 if this_device and not this_device.encryptedDataKeyPresent:
@@ -115,14 +118,14 @@ class ThisDeviceCommand(base.ArgparseCommand):
             msg = 'ENABLED' if value_extracted == '1' else 'DISABLED'
             # invert ip_auto_approve value before passing it to ip_disable_auto_approve
             value_extracted = '0' if value_extracted == '1' else '1' if value_extracted == '0' else value_extracted
-            auth_utils.set_user_setting(context.auth, 'ip_disable_auto_approve', value_extracted)
+            keeper_auth.set_user_setting(context.auth, 'ip_disable_auto_approve', value_extracted)
             logger.info(f'Successfully {msg} `ip_auto_approve`')
 
         elif action == 'no-yubikey-pin':
             value = ops[1]
             value_extracted = '1' if parse_utils.as_boolean(value) else '0'
             msg = 'ENABLED' if value_extracted == '0' else 'DISABLED'
-            auth_utils.set_user_setting(context.auth, 'security_keys_no_user_verify', value_extracted)
+            keeper_auth.set_user_setting(context.auth, 'security_keys_no_user_verify', value_extracted)
             logger.info(f'Successfully {msg} Security Key PIN verification')
 
         elif action == 'timeout' or action == 'to':
@@ -131,7 +134,7 @@ class ThisDeviceCommand(base.ArgparseCommand):
             timeout_in_minutes = delta.seconds // 60
             if timeout_in_minutes < 3:
                 timeout_in_minutes = 0
-            auth_utils.set_user_setting(context.auth, 'logout_timer', str(timeout_in_minutes))
+            keeper_auth.set_user_setting(context.auth, 'logout_timer', str(timeout_in_minutes))
             display_value = 'default value' if delta == datetime.timedelta(0) else \
                 timeout_utils.format_timeout(delta)
             logger.info('Successfully set "logout_timer" to %s.', display_value)
@@ -154,7 +157,7 @@ class ThisDeviceCommand(base.ArgparseCommand):
     def get_account_summary_and_this_device(context: params.KeeperParams) \
             -> Tuple[AccountSummary_pb2.AccountSummaryElements, AccountSummary_pb2.DeviceInfo]:
         assert context.auth is not None
-        acct_summary = auth_utils.load_account_summary(context.auth)
+        acct_summary = keeper_auth.load_account_summary(context.auth)
         devices = acct_summary.devices
         current_device_token = context.auth.auth_context.device_token
         this_device = next((x for x in devices if x.encryptedDeviceToken == current_device_token), None)

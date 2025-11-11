@@ -89,6 +89,7 @@ class VaultOnline(vault_plugins.IVaultData, keeper_auth.IKeeperAuth):
                     with self._lock:
                         self.sync_requested = True
             return False
+        return None
 
     def sync_down(self, force=False):
         if force:

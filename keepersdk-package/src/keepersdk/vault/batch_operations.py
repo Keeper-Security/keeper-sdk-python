@@ -326,7 +326,7 @@ class BatchVaultOperations(IBatchVaultOperation):
                    folder: Optional[FolderNode] = None,
                    ) -> Optional[Union[vault_record.TypedRecord, vault_record.PasswordRecord]]:
         if not isinstance(record, (vault_record.TypedRecord, vault_record.PasswordRecord)):
-            self._batch_logger.record_status (record.title, BatchStatus.Failed, f'Record type is not supported')
+            self._batch_logger.record_status (record.title, BatchStatus.Failed, 'Record type is not supported')
             return None
 
         hasher = hashlib.sha256()
@@ -334,7 +334,7 @@ class BatchVaultOperations(IBatchVaultOperation):
             hasher.update(token.encode('utf-8', errors='ignore'))
         full_hash = hasher.digest()
         if full_hash in self._record_full_hashes:
-            self._batch_logger.record_status(record.title, BatchStatus.Skipped , f'A full record match already exists')
+            self._batch_logger.record_status(record.title, BatchStatus.Skipped , 'A full record match already exists')
             record_uids: Optional[Set[str]] = self._record_full_hashes[full_hash]
             if record_uids and len(record_uids) > 0:
                 record_uid = next(iter(record_uids))

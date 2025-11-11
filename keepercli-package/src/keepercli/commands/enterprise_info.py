@@ -32,7 +32,7 @@ class EnterpriseDownCommand(base.ArgparseCommand):
         reset: Optional[bool] = None
         if kwargs.get('reset') is True:
             reset = True
-        enterprise_loader.load(reset)
+        enterprise_loader.load(reset=reset or False)
 
 
 class EnterpriseInfoCommand(base.GroupCommand):
@@ -43,6 +43,7 @@ class EnterpriseInfoCommand(base.GroupCommand):
         self.register_command(EnterpriseInfoUserCommand(), 'user', 'u')
         self.register_command(EnterpriseInfoTeamCommand(), 'team', 't')
         self.register_command(EnterpriseInfoRoleCommand(), 'role', 'r')
+        self.register_command(EnterpriseInfoManagedCompanyCommand(), 'managed-company', 'mc')
         self.default_verb = 'tree'
 
 
@@ -63,7 +64,13 @@ class EnterpriseInfoTreeCommand(base.ArgparseCommand):
         logger = api.get_logger()
 
         subnodes =  enterprise_utils.NodeUtils.get_subnodes(enterprise_data)
-        root_nodes: Dict[int, bool] = enterprise_utils.EnterpriseMixin.get_managed_nodes_for_user(enterprise_data, context.auth.auth_context.username)
+        root_nodes: Dict[int, bool]
+        if context.auth.auth_context.is_mc_superadmin:
+            root_nodes = {
+                enterprise_data.root_node.node_id: True
+            }
+        else:
+            root_nodes = enterprise_utils.EnterpriseMixin.get_managed_nodes_for_user(enterprise_data, context.auth.auth_context.username)
         managed_nodes = enterprise_utils.EnterpriseMixin.expand_managed_nodes(root_nodes, subnodes)
 
         accessible_nodes: Set[int] = set()
@@ -699,4 +706,60 @@ class EnterpriseInfoRoleCommand(base.ArgparseCommand, enterprise_utils.Enterpris
         if kwargs.get('format') != 'json':
             headers = [report_utils.field_to_title(x) for x in headers]
 
+        return report_utils.dump_report_data(rows, headers, fmt=kwargs.get('format'), filename=kwargs.get('output'))
+
+
+class EnterpriseInfoManagedCompanyCommand(base.ArgparseCommand, enterprise_utils.EnterpriseMixin):
+    def __init__(self):
+        parser = argparse.ArgumentParser(prog='enterprise-info mc', parents=[base.report_output_parser],
+                                         description='Display managed company information.',
+                                         formatter_class=argparse.RawTextHelpFormatter)
+        parser.add_argument('pattern', nargs='?', type=str, help='search pattern')
+        super().__init__(parser)
+
+    def execute(self, context: KeeperParams, **kwargs):
+        assert context.enterprise_data is not None
+        enterprise_data = context.enterprise_data
+        
+        pattern = (kwargs.get('pattern') or '').lower()
+        
+        rows = []
+        for idx, mc in enumerate(enterprise_data.managed_companies.get_all_entities(), 1):
+            # Map product IDs to plan names
+            plan_name = mc.product_id
+            if mc.product_id == 'enterprise':
+                plan_name = 'Enterprise'
+            elif mc.product_id == 'enterprise_plus':
+                plan_name = 'Enterprise Plus'
+            elif mc.product_id == 'business':
+                plan_name = 'Business'
+            elif mc.product_id == 'businessPlus':
+                plan_name = 'Business Plus'
+            
+            # Get storage info from file_plan_type
+            storage = mc.file_plan_type if mc.file_plan_type else ''
+            
+            # Count add-ons
+            addon_count = len(mc.add_ons) if mc.add_ons else 0
+            
+            # Get node name
+            node_name = enterprise_utils.NodeUtils.get_node_path(enterprise_data, mc.msp_node_id, omit_root=True)
+
+            allocated: Optional[int] = mc.number_of_seats
+            if allocated == 2147483647:
+                allocated = None
+            
+            # Get active users
+            active = mc.number_of_users if mc.number_of_users else 0
+            
+            row = [mc.mc_enterprise_id, mc.mc_enterprise_name, node_name, plan_name, storage, addon_count, allocated, active]
+            
+            if pattern:
+                if not any(1 for x in self.tokenize_row(row) if x and str(x).lower().find(pattern) >= 0):
+                    continue
+            rows.append(row)
+        
+        headers = ['company_id', 'company_name', 'node', 'plan', 'storage', 'addons', 'allocated', 'active']
+        if kwargs.get('format') != 'json':
+            headers = [report_utils.field_to_title(x) for x in headers]
         return report_utils.dump_report_data(rows, headers, fmt=kwargs.get('format'), filename=kwargs.get('output'))
