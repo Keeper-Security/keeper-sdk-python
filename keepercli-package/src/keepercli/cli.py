@@ -142,8 +142,6 @@ def loop(keeper_config: KeeperConfig, commands: base.CliCommands):
         if command.startswith("@"):
             suppress_errno = True
             command = command[1:]
-        if keeper_config.batch_mode:
-            logger.info('> %s', command)
         error_no = 1
         try:
             if context.vault and context.vault.sync_requested:
