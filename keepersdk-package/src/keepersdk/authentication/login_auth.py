@@ -1,16 +1,18 @@
+from __future__ import annotations
+
 import abc
 import dataclasses
 import enum
 import json
-from typing import Type, Optional, List, Callable, Dict, Any, Sequence
+from typing import Type, Optional, List, Callable, Dict, Any, Sequence, Union
 from urllib.parse import urlparse, urlunparse, quote_plus
 
 from cryptography.hazmat.primitives.asymmetric import ec
-from google.protobuf.json_format import MessageToDict
 
-from . import endpoint, configuration, keeper_auth, auth_utils, notifications, push_notifications
+from . import endpoint, configuration, keeper_auth, notifications
+from .notifications import PushConnectionParameters
 from .. import crypto, utils, errors
-from ..proto import APIRequest_pb2, breachwatch_pb2, ssocloud_pb2
+from ..proto import APIRequest_pb2, ssocloud_pb2, push_pb2
 
 
 class ILoginStep(abc.ABC):
@@ -624,10 +626,8 @@ def _ensure_push_notifications(login: LoginAuth) -> None:
     if login.push_notifications:
         return
 
-    keeper_pushes = push_notifications.KeeperPushNotifications()
-    transmission_key = utils.generate_aes_key()
-    url = login.keeper_endpoint.get_push_url(transmission_key, login.context.device_token, login.context.message_session_uid)
-    keeper_pushes.connect_to_push_channel(url, transmission_key)
+    keeper_pushes = LoginPushNotifications(login)
+    keeper_pushes.connect_to_push_channel()
     login.push_notifications = keeper_pushes
 
 
@@ -684,58 +684,6 @@ def _on_requires_2fa(login: LoginAuth, response: APIRequest_pb2.LoginResponse):
     login.login_step = _TwoFactorStep(login, response.encryptedLoginToken, list(response.channels))
 
 
-def _post_login(logged_auth: keeper_auth.KeeperAuth) -> None:
-    rs = auth_utils.load_account_summary(logged_auth)
-
-    assert rs is not None
-    if rs.license.enterpriseId:
-        logged_auth.auth_context.enterprise_id = rs.license.enterpriseId
-    logged_auth.auth_context.forbid_rsa = rs.forbidKeyType2
-    logged_auth.auth_context.settings.update(MessageToDict(rs.settings))
-    logged_auth.auth_context.license.update(MessageToDict(rs.license))
-    enf = MessageToDict(rs.Enforcements)
-    if 'strings' in enf:
-        strs = {x['key']: x['value'] for x in enf['strings'] if 'key' in x and 'value' in x}
-        logged_auth.auth_context.enforcements.update(strs)
-    if 'booleans' in enf:
-        bools = {x['key']: x.get('value', False) for x in enf['booleans'] if 'key' in x}
-        logged_auth.auth_context.enforcements.update(bools)
-    if 'longs' in enf:
-        longs = {x['key']: x['value'] for x in enf['longs'] if 'key' in x and 'value' in x}
-        logged_auth.auth_context.enforcements.update(longs)
-    if 'jsons' in enf:
-        jsons = {x['key']: x['value'] for x in enf['jsons'] if 'key' in x and 'value' in x}
-        logged_auth.auth_context.enforcements.update(jsons)
-    logged_auth.auth_context.is_enterprise_admin = rs.isEnterpriseAdmin
-    if rs.clientKey:
-        logged_auth.auth_context.client_key = crypto.decrypt_aes_v1(rs.clientKey, logged_auth.auth_context.data_key)
-    if rs.keysInfo.encryptedPrivateKey:
-        rsa_private_key = crypto.decrypt_aes_v1(rs.keysInfo.encryptedPrivateKey, logged_auth.auth_context.data_key)
-        logged_auth.auth_context.rsa_private_key = crypto.load_rsa_private_key(rsa_private_key)
-    if rs.keysInfo.encryptedEccPrivateKey:
-        ec_private_key = crypto.decrypt_aes_v2(rs.keysInfo.encryptedEccPrivateKey, logged_auth.auth_context.data_key)
-        logged_auth.auth_context.ec_private_key = crypto.load_ec_private_key(ec_private_key)
-    if rs.keysInfo.eccPublicKey:
-        logged_auth.auth_context.ec_public_key = crypto.load_ec_public_key(rs.keysInfo.eccPublicKey)
-
-    if logged_auth.auth_context.session_token_restriction == keeper_auth.SessionTokenRestriction.Unrestricted:
-        if logged_auth.auth_context.license.get('accountType', 0) == 2:
-            try:
-                e_rs = logged_auth.execute_auth_rest('enterprise/get_enterprise_public_key', None,
-                                                     response_type=breachwatch_pb2.EnterprisePublicKeyResponse)
-                assert e_rs is not None
-                if e_rs.enterpriseECCPublicKey:
-                    logged_auth.auth_context.enterprise_ec_public_key = \
-                        crypto.load_ec_public_key(e_rs.enterpriseECCPublicKey)
-                if e_rs.enterprisePublicKey:
-                    logged_auth.auth_context.enterprise_rsa_public_key = \
-                        crypto.load_rsa_public_key(e_rs.enterprisePublicKey)
-
-            except Exception as e:
-                logger = utils.get_logger()
-                logger.debug('Get enterprise public key error: %s', e)
-
-
 def _on_logged_in(login: LoginAuth, response: APIRequest_pb2.LoginResponse,
                   on_decrypt_data_key: Callable[[bytes], bytes]) -> None:
     login.context.username = response.primaryUsername
@@ -754,15 +702,14 @@ def _on_logged_in(login: LoginAuth, response: APIRequest_pb2.LoginResponse,
     auth_context.message_session_uid = login.context.message_session_uid
 
     keeper_endpoint = login.keeper_endpoint
-    # Create push_notifications if not provided (for testing or custom implementations)
-    push_notif = login.push_notifications if login.push_notifications is not None else push_notifications.KeeperPushNotifications()
-    logged_auth = keeper_auth.KeeperAuth(keeper_endpoint, auth_context, push_notifications=push_notif)
-    _post_login(logged_auth)
+    logged_auth = keeper_auth.KeeperAuth(keeper_endpoint, auth_context)
+    logged_auth.post_login()
 
     # Start push notifications if unrestricted and using KeeperPushNotifications
     if auth_context.session_token_restriction == keeper_auth.SessionTokenRestriction.Unrestricted:
-        if isinstance(push_notif, push_notifications.KeeperPushNotifications):
-            push_notif.start_push_server(logged_auth)
+        push_notif = keeper_auth.KeeperPushNotifications(logged_auth)
+        push_notif.connect_to_push_channel()
+        logged_auth.push_notifications = push_notif
 
     login.login_step = _ConnectedLoginStep(logged_auth)
     logged_auth.on_idle()
@@ -1126,3 +1073,32 @@ class _TwoFactorStep(LoginStepTwoFactor):
     def close(self):
         if self._login.push_notifications:
             self._login.push_notifications.remove_all()
+
+
+class LoginPushNotifications(notifications.BasePushNotifications):
+    def __init__(self, login: LoginAuth) -> None:
+        super().__init__()
+        self.login: Optional[LoginAuth] = login
+        self.transmission_key = utils.generate_aes_key()
+
+    def on_messaged_received(self, message: Union[str, bytes]):
+        if isinstance(message, bytes):
+            if self.transmission_key:
+                decrypted_data = crypto.decrypt_aes_v2(message, self.transmission_key)
+            else:
+                decrypted_data = message
+            rs = push_pb2.WssClientResponse()
+            rs.ParseFromString(decrypted_data)
+            self.push(json.loads(rs.message))
+
+    async def on_connected(self):
+        pass
+
+    def get_connection_parameters(self) -> Optional[PushConnectionParameters]:
+        if self.login:
+            url = self.login.keeper_endpoint.get_push_url(
+                self.transmission_key, self.login.context.device_token, self.login.context.message_session_uid)
+            self.login = None
+            return notifications.PushConnectionParameters(url=url)
+        return None
+

@@ -10,12 +10,16 @@ from . import vault_types, record_types
 
 
 def sanitize_str_field_value(value: Any) -> str:
+    if not value:
+        return ''
     if not isinstance(value, str):
         value = str(value) if value else ''
     return value
 
 
 def sanitize_int_field_value(value: Any, *, default:int=0) -> int:
+    if not value:
+        return default
     if not isinstance(value, int):
         try:
             value = int(value)
@@ -28,6 +32,8 @@ def sanitize_int_field_value(value: Any, *, default:int=0) -> int:
 
 
 def sanitize_bool_field_value(value: Any) -> bool:
+    if not value:
+        return False
     if not isinstance(value, bool):
         if isinstance(value, int):
             value = value != 0
@@ -42,6 +48,7 @@ class RecordFlags(enum.IntFlag):
     HasAttachments = 1 << 2
     HasPassword = 1 << 3
     HasUrl = 1 << 4
+
 
 @dataclass(frozen=True)
 class KeeperRecordInfo:

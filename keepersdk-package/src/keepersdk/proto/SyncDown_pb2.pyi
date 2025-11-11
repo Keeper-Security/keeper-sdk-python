@@ -412,12 +412,14 @@ class UserAuth(_message.Message):
     def __init__(self, uid: _Optional[bytes] = ..., loginType: _Optional[_Union[_APIRequest_pb2.LoginType, str]] = ..., deleted: bool = ..., iterations: _Optional[int] = ..., salt: _Optional[bytes] = ..., encryptedClientKey: _Optional[bytes] = ..., revision: _Optional[int] = ..., name: _Optional[str] = ...) -> None: ...
 
 class BreachWatchSecurityData(_message.Message):
-    __slots__ = ("recordUid", "revision")
+    __slots__ = ("recordUid", "revision", "removed")
     RECORDUID_FIELD_NUMBER: _ClassVar[int]
     REVISION_FIELD_NUMBER: _ClassVar[int]
+    REMOVED_FIELD_NUMBER: _ClassVar[int]
     recordUid: bytes
     revision: int
-    def __init__(self, recordUid: _Optional[bytes] = ..., revision: _Optional[int] = ...) -> None: ...
+    removed: bool
+    def __init__(self, recordUid: _Optional[bytes] = ..., revision: _Optional[int] = ..., removed: bool = ...) -> None: ...
 
 class ReusedPasswords(_message.Message):
     __slots__ = ("count", "revision")

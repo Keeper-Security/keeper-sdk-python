@@ -8,7 +8,8 @@ from ..proto import enterprise_pb2
 
 
 class EnterpriseLoader(enterprise_types.IEnterpriseLoader):
-    def __init__(self, auth: keeper_auth.KeeperAuth, storage: Optional[enterprise_types.IEnterpriseStorage]=None):
+    def __init__(self, auth: keeper_auth.KeeperAuth, storage: enterprise_types.IEnterpriseStorage, *,
+                 tree_key: Optional[bytes]=None):
         super().__init__()
         self._keeper_auth = auth
         self._storage = storage
@@ -18,6 +19,7 @@ class EnterpriseLoader(enterprise_types.IEnterpriseLoader):
         self._id_start: int = 0
         self._id_count: int = 0
         self._id_rq_no = 0
+        self.load(tree_key=tree_key)
 
     @property
     def storage(self) -> enterprise_types.IEnterpriseStorage:
@@ -104,8 +106,9 @@ class EnterpriseLoader(enterprise_types.IEnterpriseLoader):
     def get_role_keys(self, role_id: int) -> Optional[bytes]:
         if self._role_keys:
             return self._role_keys[role_id]
+        return None
 
-    def load(self, reset: Optional[bool] = False) -> Set[int]:
+    def load(self, *, reset: bool = False, tree_key: Optional[bytes] = None) -> Set[int]:
         if self._enterprise_data is None:
             self._enterprise_data = EnterpriseData()
             enterprise_info = self._enterprise_data.enterprise_info
@@ -113,24 +116,26 @@ class EnterpriseLoader(enterprise_types.IEnterpriseLoader):
             auth_context = self._keeper_auth.auth_context
 
             rq_keys = enterprise_pb2.GetEnterpriseDataKeysRequest()
-            rs_keys = self._keeper_auth.execute_auth_rest(
-                'enterprise/get_enterprise_data_keys', rq_keys,
-                response_type=enterprise_pb2.GetEnterpriseDataKeysResponse)
+            rs_keys = self._keeper_auth.execute_auth_rest('enterprise/get_enterprise_data_keys', rq_keys,
+                                                          response_type=enterprise_pb2.GetEnterpriseDataKeysResponse)
             assert rs_keys is not None
-            encrypted_tree_key = utils.base64_url_decode(rs_keys.treeKey.treeKey)
-            if rs_keys.treeKey.keyTypeId == enterprise_pb2.ENCRYPTED_BY_DATA_KEY:
-                enterprise_info._tree_key = crypto.decrypt_aes_v1(encrypted_tree_key, auth_context.data_key)
-            elif rs_keys.treeKey.keyTypeId == enterprise_pb2.ENCRYPTED_BY_PUBLIC_KEY:
-                if len(encrypted_tree_key) == 60:
+            if tree_key:
+                enterprise_info._tree_key = tree_key
+            else:
+                encrypted_tree_key = utils.base64_url_decode(rs_keys.treeKey.treeKey)
+                if rs_keys.treeKey.keyTypeId == enterprise_pb2.ENCRYPTED_BY_DATA_KEY:
+                    enterprise_info._tree_key = crypto.decrypt_aes_v1(encrypted_tree_key, auth_context.data_key)
+                elif rs_keys.treeKey.keyTypeId == enterprise_pb2.ENCRYPTED_BY_PUBLIC_KEY:
+                    if len(encrypted_tree_key) == 60:
+                        enterprise_info._tree_key = crypto.decrypt_aes_v2(encrypted_tree_key, auth_context.data_key)
+                    else:
+                        assert auth_context.rsa_private_key is not None
+                        enterprise_info._tree_key = crypto.decrypt_rsa(encrypted_tree_key, auth_context.rsa_private_key)
+                elif rs_keys.treeKey.keyTypeId == enterprise_pb2.ENCRYPTED_BY_DATA_KEY_GCM:
                     enterprise_info._tree_key = crypto.decrypt_aes_v2(encrypted_tree_key, auth_context.data_key)
-                else:
-                    assert auth_context.rsa_private_key is not None
-                    enterprise_info._tree_key = crypto.decrypt_rsa(encrypted_tree_key, auth_context.rsa_private_key)
-            elif rs_keys.treeKey.keyTypeId == enterprise_pb2.ENCRYPTED_BY_DATA_KEY_GCM:
-                enterprise_info._tree_key = crypto.decrypt_aes_v2(encrypted_tree_key, auth_context.data_key)
-            elif rs_keys.treeKey.keyTypeId == enterprise_pb2.ENCRYPTED_BY_PUBLIC_KEY_ECC:
-                assert auth_context.ec_private_key is not None
-                enterprise_info._tree_key = crypto.decrypt_ec(encrypted_tree_key, auth_context.ec_private_key)
+                elif rs_keys.treeKey.keyTypeId == enterprise_pb2.ENCRYPTED_BY_PUBLIC_KEY_ECC:
+                    assert auth_context.ec_private_key is not None
+                    enterprise_info._tree_key = crypto.decrypt_ec(encrypted_tree_key, auth_context.ec_private_key)
 
             if rs_keys.enterpriseKeys.rsaEncryptedPrivateKey:
                 decrypted_key = crypto.decrypt_aes_v2(rs_keys.enterpriseKeys.rsaEncryptedPrivateKey, enterprise_info.tree_key)
@@ -169,13 +174,14 @@ class EnterpriseLoader(enterprise_types.IEnterpriseLoader):
                 enterprise_info._ec_private_key = ec_private
                 enterprise_info._ec_public_key = ec_public
 
-        if reset is True:
+        if reset:
             if self._storage is not None:
                 self._storage.settings.delete()
             self._continuation_token = None
 
         enterprise_data = self._enterprise_data
         tree_key = enterprise_data.enterprise_info.tree_key
+        assert tree_key is not None
         if self._continuation_token is None:
             if self._storage is not None:
                 settings = self._storage.settings.load()

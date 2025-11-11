@@ -110,7 +110,7 @@ class Ref:
             ref_type = RefType.parse(value.get('type')) or RefType.GENERAL
             ref_value: Optional[str] = value.get('value')
             if not ref_value:
-                raise ValueError(f'Parse DAG "Ref": value is empty')
+                raise ValueError('Parse DAG "Ref": value is empty')
             return Ref(type=ref_type, value=ref_value, name=value.get('name'))
 
         raise ValueError(f'Parse DAG "Ref": value is invalid: {value}')
@@ -181,11 +181,11 @@ class DagActor:
         if isinstance(data, dict):
             a_type = ActorType.parse(data.get('type'))
             if a_type is None:
-                raise ValueError(f'Parse DAG "DagActor": "type" is empty')
+                raise ValueError('Parse DAG "DagActor": "type" is empty')
 
             actor_id: Optional[str] = data.get('id')
             if not actor_id:
-                raise ValueError(f'Parse DAG "DagActor": "id" is empty')
+                raise ValueError('Parse DAG "DagActor": "id" is empty')
             if not isinstance(actor_id, str):
                 raise ValueError(f'Parse DAG "DagActor": "id" is invalid: {actor_id}')
 

@@ -21,6 +21,8 @@ class RoleUserModifyStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     INVALID_NODE_ID: _ClassVar[RoleUserModifyStatus]
     MAY_NOT_REMOVE_SELF_FROM_ROLE: _ClassVar[RoleUserModifyStatus]
     MUST_HAVE_ONE_USER_ADMIN: _ClassVar[RoleUserModifyStatus]
+    INVALID_ROLE_ID: _ClassVar[RoleUserModifyStatus]
+    PAM_LICENSE_SEAT_EXCEEDED: _ClassVar[RoleUserModifyStatus]
 
 class EnterpriseType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -61,7 +63,6 @@ class EnterpriseDataEntity(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     USER_ALIASES: _ClassVar[EnterpriseDataEntity]
     COMPLIANCE_REPORT_CRITERIA_AND_FILTER: _ClassVar[EnterpriseDataEntity]
     COMPLIANCE_REPORTS: _ClassVar[EnterpriseDataEntity]
-    QUEUED_TEAM_USERS_INCLUDING_PENDING: _ClassVar[EnterpriseDataEntity]
 
 class CacheStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -151,6 +152,8 @@ PENDING_ENTERPRISE_USER: RoleUserModifyStatus
 INVALID_NODE_ID: RoleUserModifyStatus
 MAY_NOT_REMOVE_SELF_FROM_ROLE: RoleUserModifyStatus
 MUST_HAVE_ONE_USER_ADMIN: RoleUserModifyStatus
+INVALID_ROLE_ID: RoleUserModifyStatus
+PAM_LICENSE_SEAT_EXCEEDED: RoleUserModifyStatus
 ENTERPRISE_STANDARD: EnterpriseType
 ENTERPRISE_MSP: EnterpriseType
 UNDEFINED: TransferAcceptanceStatus
@@ -182,7 +185,6 @@ DEVICES_REQUEST_FOR_ADMIN_APPROVAL: EnterpriseDataEntity
 USER_ALIASES: EnterpriseDataEntity
 COMPLIANCE_REPORT_CRITERIA_AND_FILTER: EnterpriseDataEntity
 COMPLIANCE_REPORTS: EnterpriseDataEntity
-QUEUED_TEAM_USERS_INCLUDING_PENDING: EnterpriseDataEntity
 KEEP: CacheStatus
 CLEAR: CacheStatus
 NO_KEY: BackupKeyType
@@ -345,6 +347,22 @@ class RoleTeams(_message.Message):
     ROLE_TEAM_FIELD_NUMBER: _ClassVar[int]
     role_team: _containers.RepeatedCompositeFieldContainer[RoleTeam]
     def __init__(self, role_team: _Optional[_Iterable[_Union[RoleTeam, _Mapping]]] = ...) -> None: ...
+
+class TeamsByRole(_message.Message):
+    __slots__ = ("role_id", "teamUid")
+    ROLE_ID_FIELD_NUMBER: _ClassVar[int]
+    TEAMUID_FIELD_NUMBER: _ClassVar[int]
+    role_id: int
+    teamUid: _containers.RepeatedScalarFieldContainer[bytes]
+    def __init__(self, role_id: _Optional[int] = ..., teamUid: _Optional[_Iterable[bytes]] = ...) -> None: ...
+
+class ManagedNodesByRole(_message.Message):
+    __slots__ = ("role_id", "managedNodeId")
+    ROLE_ID_FIELD_NUMBER: _ClassVar[int]
+    MANAGEDNODEID_FIELD_NUMBER: _ClassVar[int]
+    role_id: int
+    managedNodeId: _containers.RepeatedScalarFieldContainer[int]
+    def __init__(self, role_id: _Optional[int] = ..., managedNodeId: _Optional[_Iterable[int]] = ...) -> None: ...
 
 class RoleUserAddKeys(_message.Message):
     __slots__ = ("enterpriseUserId", "treeKey", "roleAdminKey")
@@ -1821,6 +1839,40 @@ class TeamsEnterpriseUsersAddUserResponse(_message.Message):
     resultCode: str
     additionalInfo: str
     def __init__(self, enterpriseUserId: _Optional[int] = ..., revision: _Optional[int] = ..., success: bool = ..., message: _Optional[str] = ..., resultCode: _Optional[str] = ..., additionalInfo: _Optional[str] = ...) -> None: ...
+
+class TeamEnterpriseUserRemove(_message.Message):
+    __slots__ = ("teamUid", "enterpriseUserId")
+    TEAMUID_FIELD_NUMBER: _ClassVar[int]
+    ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
+    teamUid: bytes
+    enterpriseUserId: int
+    def __init__(self, teamUid: _Optional[bytes] = ..., enterpriseUserId: _Optional[int] = ...) -> None: ...
+
+class TeamEnterpriseUserRemovesRequest(_message.Message):
+    __slots__ = ("teamEnterpriseUserRemove",)
+    TEAMENTERPRISEUSERREMOVE_FIELD_NUMBER: _ClassVar[int]
+    teamEnterpriseUserRemove: _containers.RepeatedCompositeFieldContainer[TeamEnterpriseUserRemove]
+    def __init__(self, teamEnterpriseUserRemove: _Optional[_Iterable[_Union[TeamEnterpriseUserRemove, _Mapping]]] = ...) -> None: ...
+
+class TeamEnterpriseUserRemovesResponse(_message.Message):
+    __slots__ = ("teamEnterpriseUserRemoveResponse",)
+    TEAMENTERPRISEUSERREMOVERESPONSE_FIELD_NUMBER: _ClassVar[int]
+    teamEnterpriseUserRemoveResponse: _containers.RepeatedCompositeFieldContainer[TeamEnterpriseUserRemoveResponse]
+    def __init__(self, teamEnterpriseUserRemoveResponse: _Optional[_Iterable[_Union[TeamEnterpriseUserRemoveResponse, _Mapping]]] = ...) -> None: ...
+
+class TeamEnterpriseUserRemoveResponse(_message.Message):
+    __slots__ = ("teamEnterpriseUserRemove", "success", "resultCode", "message", "additionalInfo")
+    TEAMENTERPRISEUSERREMOVE_FIELD_NUMBER: _ClassVar[int]
+    SUCCESS_FIELD_NUMBER: _ClassVar[int]
+    RESULTCODE_FIELD_NUMBER: _ClassVar[int]
+    MESSAGE_FIELD_NUMBER: _ClassVar[int]
+    ADDITIONALINFO_FIELD_NUMBER: _ClassVar[int]
+    teamEnterpriseUserRemove: TeamEnterpriseUserRemove
+    success: bool
+    resultCode: str
+    message: str
+    additionalInfo: str
+    def __init__(self, teamEnterpriseUserRemove: _Optional[_Union[TeamEnterpriseUserRemove, _Mapping]] = ..., success: bool = ..., resultCode: _Optional[str] = ..., message: _Optional[str] = ..., additionalInfo: _Optional[str] = ...) -> None: ...
 
 class DomainAlias(_message.Message):
     __slots__ = ("domain", "alias", "status", "message")

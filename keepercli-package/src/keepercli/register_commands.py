@@ -14,6 +14,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
     if not scopes or bool(scopes & base.CommandScope.Account):
         from .commands import account_commands
         from .biometric import BiometricCommand
+        from .commands import account_commands
         commands.register_command('server',
                                   base.GetterSetterCommand('server', 'Sets or displays current Keeper region'),
                                   base.CommandScope.Account)
@@ -25,10 +26,10 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
 
 
     if not scopes or bool(scopes & base.CommandScope.Vault):
-        from .commands import (vault_folder, vault, vault_record, record_edit, importer_commands, breachwatch, 
+        from .commands import (vault_folder, vault, vault_record, record_edit, importer_commands, breachwatch,
                                record_type, secrets_manager, share_management, password_report, trash, record_file_report,
                                record_handling_commands, register)
-        
+
         commands.register_command('sync-down', vault.SyncDownCommand(), base.CommandScope.Vault, 'd')
         commands.register_command('cd', vault_folder.FolderCdCommand(), base.CommandScope.Vault)
         commands.register_command('ls', vault_folder.FolderListCommand(), base.CommandScope.Vault)
@@ -80,7 +81,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
 
     if not scopes or bool(scopes & base.CommandScope.Enterprise):
         from .commands import (enterprise_info, enterprise_node, enterprise_role, enterprise_team, enterprise_user, enterprise_create_user,
-                               importer_commands, audit_report, audit_alert, audit_log, transfer_account)
+                               importer_commands, audit_report, audit_alert, audit_log, transfer_account, pedm_admin, msp)
 
         commands.register_command('create-user', enterprise_create_user.CreateEnterpriseUserCommand(), base.CommandScope.Enterprise, 'ecu')
         commands.register_command('enterprise-down', enterprise_info.EnterpriseDownCommand(), base.CommandScope.Enterprise, 'ed')
@@ -96,3 +97,5 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('download-membership', importer_commands.DownloadMembershipCommand(), base.CommandScope.Enterprise)
         commands.register_command('apply-membership', importer_commands.ApplyMembershipCommand(), base.CommandScope.Enterprise)
         commands.register_command('device-approve', enterprise_user.EnterpriseDeviceApprovalCommand(), base.CommandScope.Enterprise)
+        commands.register_command('pedm', pedm_admin.PedmCommand(), base.CommandScope.Enterprise)
+        commands.register_command('switch-to-mc', msp.SwitchToManagedCompanyCommand(), base.CommandScope.Enterprise)
