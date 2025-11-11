@@ -11,7 +11,6 @@ from typing import Any, Optional, List, Dict
 
 import pyperclip
 
-# Constants
 MAX_PASSWORD_COUNT = 1000
 MAX_PASSWORD_LENGTH = 256
 MAX_DICE_ROLLS = 40
@@ -47,7 +46,6 @@ class PasswordGenerateCommand(base.ArgparseCommand):
     @staticmethod
     def add_arguments_to_parser(parser: argparse.ArgumentParser) -> None:
         """Add password generation arguments to parser."""
-        # Output options
         parser.add_argument('--clipboard', '-cc', dest='clipboard', action='store_true',
                           help='Copy generated passwords to clipboard')
         parser.add_argument('--quiet', '-q', dest='quiet', action='store_true',
@@ -62,13 +60,11 @@ class PasswordGenerateCommand(base.ArgparseCommand):
         parser.add_argument('--json-indent', '-i', dest='json_indent', action='store', type=int, default=DEFAULT_JSON_INDENT,
                           help='JSON format indent level (default: 2)')
         
-        # Generation options
         parser.add_argument('--number', '-n', dest='number', type=int, default=1,
                           help='Number of passwords to generate (default: 1)')
         parser.add_argument('--no-breachwatch', '-nb', dest='no_breachwatch', action='store_true',
                           help='Skip BreachWatch scanning')
         
-        # Random password options
         random_group = parser.add_argument_group('Random Password Options')
         random_group.add_argument('--length', dest='length', type=int, default=20,
                                 help='Password length (default: 20)')
@@ -85,14 +81,12 @@ class PasswordGenerateCommand(base.ArgparseCommand):
         random_group.add_argument('--lowercase', '-l', dest='lowercase', type=int,
                                 help='Minimum number of lowercase characters')
         
-        # Special password types
         special_group = parser.add_argument_group('Special Password Types')
         special_group.add_argument('--crypto', dest='crypto', action='store_true',
                                  help='Generate crypto-style strong password')
         special_group.add_argument('--recoveryphrase', dest='recoveryphrase', action='store_true',
                                  help='Generate 24-word recovery phrase')
         
-        # Diceware options
         diceware_group = parser.add_argument_group('Diceware Options')
         diceware_group.add_argument('--dice-rolls', '-dr', dest='dice_rolls', type=int,
                                   help='Number of dice rolls for diceware generation')
@@ -104,7 +98,6 @@ class PasswordGenerateCommand(base.ArgparseCommand):
     
     def execute(self, context: KeeperParams, **kwargs) -> Any:
         """Execute the password generation command."""
-        # Verify vault is initialized
         if not context.vault:
             raise base.CommandError('Vault is not initialized. Please log in to initialize the vault.')
         
@@ -248,19 +241,16 @@ class PasswordGenerateCommand(base.ArgparseCommand):
         output_file = kwargs.get('output_file')
         clipboard = kwargs.get('clipboard', False)
         
-        # Generate output
         if quiet:
             output = self._format_password_list(passwords)
         elif output_format == 'json':
             output = self._format_json(passwords, kwargs.get('json_indent', DEFAULT_JSON_INDENT))
-        else:  # table format
+        else:
             output = self._format_table(passwords)
         
-        # Add password list if requested
         if password_list and not quiet:
             output += '\n\n' + self._format_password_list(passwords)
         
-        # Handle clipboard
         if clipboard:
             try:
                 pyperclip.copy(output)
@@ -268,7 +258,6 @@ class PasswordGenerateCommand(base.ArgparseCommand):
             except Exception as e:
                 logger.warning(f"Failed to copy to clipboard: {e}")
         
-        # Output to file or console
         if output_file:
             try:
                 with open(output_file, 'w', encoding='utf-8') as f:
@@ -287,23 +276,18 @@ class PasswordGenerateCommand(base.ArgparseCommand):
         
         lines = []
         
-        # Determine if BreachWatch column is needed
         has_breach_info = any(pwd.breach_status is not None for pwd in passwords)
         
-        # Add BreachWatch scan header if applicable
         if has_breach_info:
             scan_count = len([pwd for pwd in passwords if pwd.breach_status != BreachStatus.SKIPPED])
             if scan_count > 0:
                 lines.append(f"Breachwatch: {scan_count} password{'s' if scan_count != 1 else ''} to scan")
         
-        # Column headers
         if has_breach_info:
             header = f"     {'Strength(%)':<12} {'BreachWatch':<12} {'Password'}"
         else:
             header = f"     {'Strength(%)':<12} {'Password'}"
         lines.append(header)
-        
-        # Password rows
         for i, pwd in enumerate(passwords, 1):
             strength_display = str(pwd.strength_score)
             

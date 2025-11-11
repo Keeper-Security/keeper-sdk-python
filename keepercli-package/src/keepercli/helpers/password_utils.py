@@ -13,7 +13,6 @@ import secrets
 
 from keepersdk import generator, utils
 
-# Constants
 BREACHWATCH_MAX = 5
 DEFAULT_PASSWORD_LENGTH = 20
 DEFAULT_DICEWARE_ROLLS = 5
@@ -21,7 +20,7 @@ RECOVERY_PHRASE_WORDS = 24
 STRENGTH_WEAK_THRESHOLD = 40
 STRENGTH_FAIR_THRESHOLD = 60
 STRENGTH_GOOD_THRESHOLD = 80
-CRYPTO_MIN_CHAR_RATIO = 6  # Minimum 1/6th of password length for each character type
+CRYPTO_MIN_CHAR_RATIO = 6
 DEFAULT_DICEWARE_FILE = 'diceware.wordlist.asc.txt'
 RECOVERY_WORDLIST_FILE = 'bip-39.english.txt'
 
@@ -113,24 +112,20 @@ class GeneratedPassword:
 @dataclasses.dataclass
 class GenerationRequest:
     """Configuration for password generation request."""
-    # Generation parameters
     length: int = 20
     count: int = 1
-    algorithm: str = 'random'  # 'random', 'diceware', 'crypto', 'recovery'
+    algorithm: str = 'random'
     
-    # Random password parameters
     symbols: Optional[int] = None
     digits: Optional[int] = None
     uppercase: Optional[int] = None
     lowercase: Optional[int] = None
     rules: Optional[str] = None
     
-    # Diceware parameters
     dice_rolls: Optional[int] = None
     delimiter: str = ' '
     word_list_file: Optional[str] = None
     
-    # BreachWatch parameters
     enable_breach_scan: bool = True
     max_breach_attempts: int = BREACHWATCH_MAX
 
@@ -173,7 +168,7 @@ class PasswordGenerationService:
             return self._generate_passwords_with_breach_scan(password_generator, request)
     
     def _generate_passwords_without_breach_scan(self, generator: generator.PasswordGenerator, count: int) -> List[GeneratedPassword]:
-        """Generate passwords with strength analysis only (no BreachWatch)."""
+        """Generate passwords with strength analysis only."""
         new_passwords = [generator.generate() for _ in range(count)]
         return [self._analyze_password(p, enable_breach_scan=False) for p in new_passwords]
     
@@ -191,7 +186,6 @@ class PasswordGenerationService:
                 scanned_passwords = self._scan_passwords_for_breaches(new_passwords, breachwatch_maxed)
                 passwords.extend(scanned_passwords)
             except Exception:
-                # BreachWatch failed - fallback to strength-only analysis
                 fallback_passwords = [self._analyze_password(p, enable_breach_scan=False) for p in new_passwords]
                 passwords.extend(fallback_passwords)
                 break
@@ -204,21 +198,17 @@ class PasswordGenerationService:
         euids_to_cleanup = []
         
         try:
-            # Perform batch scan
             for breach_result in self.breach_watch.scan_passwords(passwords_to_scan):
                 password = breach_result[0]
                 status = breach_result[1] if len(breach_result) > 1 else None
                 
-                # Collect EUIDs for cleanup
                 if status and hasattr(status, 'euid') and status.euid:
                     euids_to_cleanup.append(status.euid)
                 
-                # Process scan result
                 analyzed_password = self._process_breach_scan_result(password, status, accept_breached)
                 if analyzed_password:
                     scanned_passwords.append(analyzed_password)
         finally:
-            # Always attempt cleanup (security requirement)
             self._cleanup_breach_scan_euids(euids_to_cleanup)
         
         return scanned_passwords
@@ -230,7 +220,6 @@ class PasswordGenerationService:
         
         if status and hasattr(status, 'breachDetected'):
             if status.breachDetected:
-                # Password failed BreachWatch - only accept if maxed out attempts
                 if accept_breached:
                     return GeneratedPassword(
                         password=password,
@@ -238,9 +227,8 @@ class PasswordGenerationService:
                         strength_level=strength_level,
                         breach_status=BreachStatus.FAILED
                     )
-                return None  # Reject breached password, retry
+                return None
             else:
-                # Password passed BreachWatch
                 return GeneratedPassword(
                     password=password,
                     strength_score=strength_score,
@@ -248,7 +236,6 @@ class PasswordGenerationService:
                     breach_status=BreachStatus.PASSED
                 )
         else:
-            # BreachWatch error - treat as passed if maxed, otherwise retry
             if accept_breached:
                 return GeneratedPassword(
                     password=password,
@@ -256,24 +243,22 @@ class PasswordGenerationService:
                     strength_level=strength_level,
                     breach_status=BreachStatus.ERROR
                 )
-            return None  # Retry on error unless maxed out
+            return None
     
     def _cleanup_breach_scan_euids(self, euids: List[str]) -> None:
-        """Clean up BreachWatch scan EUIDs (security requirement)."""
+        """Clean up BreachWatch scan EUIDs."""
         if euids and self.breach_watch:
             try:
                 self.breach_watch.delete_euids(euids)
             except Exception:
-                pass  # Best effort cleanup
+                pass
     
     def _create_generator(self, request: GenerationRequest) -> generator.PasswordGenerator:
         """Create appropriate password generator based on request."""
         algorithm = request.algorithm.lower()
         
         if algorithm == 'crypto':
-            # Generate crypto-style strong password (high complexity)
             crypto_length = request.length or DEFAULT_PASSWORD_LENGTH
-            # Distribute characters for high security (minimum 1 of each type)
             min_each = max(1, crypto_length // CRYPTO_MIN_CHAR_RATIO)
             return generator.KeeperPasswordGenerator(
                 length=crypto_length,
@@ -293,16 +278,13 @@ class PasswordGenerationService:
                 word_list_file=request.word_list_file,
                 delimiter=request.delimiter
             )
-        else:  # 'random' or default
-            # Handle rules-based generation (from original code)
+        else:
             if request.rules and all(i is None for i in (request.symbols, request.digits, request.uppercase, request.lowercase)):
                 kpg = generator.KeeperPasswordGenerator.create_from_rules(request.rules, request.length)
                 if kpg is None:
-                    # Log warning and fall back to default (from original code)
                     return generator.KeeperPasswordGenerator(length=request.length)
                 return kpg
             else:
-                # If rules provided with individual params, ignore rules (from original code)
                 return generator.KeeperPasswordGenerator(
                     length=request.length,
                     symbols=request.symbols,
@@ -313,27 +295,21 @@ class PasswordGenerationService:
     
     def _analyze_password(self, password: str, enable_breach_scan: bool = True) -> GeneratedPassword:
         """Analyze a single password for strength and breaches."""
-        # Calculate strength
         strength_score = utils.password_score(password)
         strength_level = self._get_strength_level(strength_score)
         
-        # Initialize breach status
         breach_status = None
         breach_details = None
-        
-        # Perform breach scan if enabled and available
         if enable_breach_scan and self.breach_watch:
             try:
                 scan_results = list(self.breach_watch.scan_passwords([password]))
                 if scan_results:
                     _, status = scan_results[0]
                     
-                    # Clean up EUID if present
                     if status and hasattr(status, 'euid') and status.euid:
                         try:
                             self.breach_watch.delete_euids([status.euid])
                         except Exception:
-                            # Log but don't fail - cleanup is best effort
                             pass
                     
                     if status and hasattr(status, 'breachDetected'):
