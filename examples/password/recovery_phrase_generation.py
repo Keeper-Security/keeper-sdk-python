@@ -53,15 +53,7 @@ def login_to_keeper_with_config(filename: str) -> KeeperParams:
         raise Exception('Failed to authenticate with Keeper')
     return context
 
-def generate_recovery_phrases(
-    context: KeeperParams,
-    number: Optional[int] = None,
-    output_format: Optional[str] = None,
-    output_file: Optional[str] = None,
-    clipboard: Optional[bool] = None,
-    password_list: Optional[bool] = None,
-    no_breachwatch: Optional[bool] = None,
-):
+def generate_recovery_phrases(context: KeeperParams):
     """
     Generate 24-word recovery phrases.
     
@@ -70,18 +62,7 @@ def generate_recovery_phrases(
     """
     try:
         command = PasswordGenerateCommand()
-
-        kwargs = {
-            'recoveryphrase': True,
-            'number': number or 2,
-            'output_format': output_format or 'table',
-            'output_file': output_file,
-            'clipboard': clipboard or False,
-            'password_list': password_list or False,
-            'no_breachwatch': no_breachwatch or True,  # Recovery phrases usually skip BreachWatch
-        }
-
-        command.execute(context=context, **kwargs)
+        command.execute(context=context, recoveryphrase=True, number=2, no_breachwatch=True)
         return True
         
     except Exception as e:
@@ -96,9 +77,6 @@ if __name__ == '__main__':
         epilog='''
 Examples:
   python recovery_phrase_generation.py
-  python recovery_phrase_generation.py --number 3
-  python recovery_phrase_generation.py --output recovery_phrases.txt --password-list
-  python recovery_phrase_generation.py --clipboard --format json
         '''
     )
     
@@ -106,37 +84,6 @@ Examples:
         '-c', '--config',
         default='myconfig.json',
         help='Configuration file (default: myconfig.json)'
-    )
-    parser.add_argument(
-        '-n', '--number',
-        type=int,
-        default=2,
-        help='Number of recovery phrases to generate (default: 2)'
-    )
-    parser.add_argument(
-        '-f', '--format',
-        choices=['table', 'json'],
-        default='table',
-        help='Output format (default: table)'
-    )
-    parser.add_argument(
-        '-o', '--output',
-        help='Write output to specified file'
-    )
-    parser.add_argument(
-        '--clipboard',
-        action='store_true',
-        help='Copy generated phrases to clipboard'
-    )
-    parser.add_argument(
-        '-p', '--password-list',
-        action='store_true',
-        help='Include phrase list in addition to formatted output'
-    )
-    parser.add_argument(
-        '--enable-breachwatch',
-        action='store_true',
-        help='Enable BreachWatch scanning (disabled by default for recovery phrases)'
     )
 
     args = parser.parse_args()
@@ -149,26 +96,10 @@ Examples:
     try:
         context = login_to_keeper_with_config(args.config)
         
-        using_defaults = (args.number == 2 and args.format == 'table' and 
-                         not any([args.output, args.clipboard, args.password_list, args.enable_breachwatch]))
+        logger.info("Generating 2 recovery phrases...")
+        logger.info("These are 24-word phrases suitable for cryptocurrency wallet recovery")
         
-        if using_defaults:
-            logger.info("Running with default settings - generating 2 recovery phrases")
-            logger.info("These are 24-word phrases suitable for cryptocurrency wallet recovery")
-            logger.info("Use --help to see all available options")
-        else:
-            logger.info(f'Generating {args.number} recovery phrase(s)...')
-            logger.info('These are 24-word phrases suitable for cryptocurrency wallets')
-        
-        generate_recovery_phrases(
-            context,
-            number=args.number,
-            output_format=args.format,
-            output_file=args.output,
-            clipboard=args.clipboard,
-            password_list=args.password_list,
-            no_breachwatch=not args.enable_breachwatch,
-        )
+        generate_recovery_phrases(context)
         
     except Exception as e:
         logger.error(f'Error: {str(e)}')

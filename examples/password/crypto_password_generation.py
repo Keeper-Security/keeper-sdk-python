@@ -53,15 +53,7 @@ def login_to_keeper_with_config(filename: str) -> KeeperParams:
         raise Exception('Failed to authenticate with Keeper')
     return context
 
-def generate_crypto_passwords(
-    context: KeeperParams,
-    number: Optional[int] = None,
-    output_format: Optional[str] = None,
-    output_file: Optional[str] = None,
-    clipboard: Optional[bool] = None,
-    password_list: Optional[bool] = None,
-    no_breachwatch: Optional[bool] = None,
-):
+def generate_crypto_passwords(context: KeeperParams):
     """
     Generate crypto-style strong passwords.
     
@@ -70,18 +62,7 @@ def generate_crypto_passwords(
     """
     try:
         command = PasswordGenerateCommand()
-
-        kwargs = {
-            'crypto': True,
-            'number': number or 3,
-            'output_format': output_format or 'table',
-            'output_file': output_file,
-            'clipboard': clipboard or False,
-            'password_list': password_list or False,
-            'no_breachwatch': no_breachwatch or False,
-        }
-
-        command.execute(context=context, **kwargs)
+        command.execute(context=context, crypto=True, number=3)
         return True
         
     except Exception as e:
@@ -96,9 +77,6 @@ if __name__ == '__main__':
         epilog='''
 Examples:
   python crypto_password_generation.py
-  python crypto_password_generation.py --number 5
-  python crypto_password_generation.py --clipboard --format json
-  python crypto_password_generation.py --output crypto_passwords.txt --password-list
         '''
     )
     
@@ -106,37 +84,6 @@ Examples:
         '-c', '--config',
         default='myconfig.json',
         help='Configuration file (default: myconfig.json)'
-    )
-    parser.add_argument(
-        '-n', '--number',
-        type=int,
-        default=3,
-        help='Number of passwords to generate (default: 3)'
-    )
-    parser.add_argument(
-        '-f', '--format',
-        choices=['table', 'json'],
-        default='table',
-        help='Output format (default: table)'
-    )
-    parser.add_argument(
-        '-o', '--output',
-        help='Write output to specified file'
-    )
-    parser.add_argument(
-        '--clipboard',
-        action='store_true',
-        help='Copy generated passwords to clipboard'
-    )
-    parser.add_argument(
-        '-p', '--password-list',
-        action='store_true',
-        help='Include password list in addition to formatted output'
-    )
-    parser.add_argument(
-        '--no-breachwatch',
-        action='store_true',
-        help='Skip BreachWatch scanning'
     )
 
     args = parser.parse_args()
@@ -149,26 +96,10 @@ Examples:
     try:
         context = login_to_keeper_with_config(args.config)
         
-        using_defaults = (args.number == 3 and args.format == 'table' and 
-                         not any([args.output, args.clipboard, args.password_list, args.no_breachwatch]))
+        logger.info("Generating 3 crypto-style passwords...")
+        logger.info("These passwords are optimized for high-security applications like cryptocurrency")
         
-        if using_defaults:
-            logger.info("Running with default settings - generating 3 crypto-style passwords")
-            logger.info("These passwords are optimized for high-security applications like cryptocurrency")
-            logger.info("Use --help to see all available options")
-        else:
-            logger.info(f'Generating {args.number} crypto-style password(s)...')
-            logger.info('These passwords are optimized for high-security applications')
-        
-        generate_crypto_passwords(
-            context,
-            number=args.number,
-            output_format=args.format,
-            output_file=args.output,
-            clipboard=args.clipboard,
-            password_list=args.password_list,
-            no_breachwatch=args.no_breachwatch,
-        )
+        generate_crypto_passwords(context)
         
     except Exception as e:
         logger.error(f'Error: {str(e)}')

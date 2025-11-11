@@ -9,7 +9,7 @@
 # Copyright 2025 Keeper Security Inc.
 # Contact: commander@keepersecurity.com
 #
-# Example showing how to generate diceware passwords
+# Example showing how to generate diceware passwords with hyphen delimiter
 # using the Keeper CLI package.
 #
 
@@ -53,36 +53,16 @@ def login_to_keeper_with_config(filename: str) -> KeeperParams:
         raise Exception('Failed to authenticate with Keeper')
     return context
 
-def generate_diceware_passwords(
-    context: KeeperParams,
-    number: Optional[int] = None,
-    dice_rolls: Optional[int] = None,
-    delimiter: Optional[str] = None,
-    word_list: Optional[str] = None,
-    output_format: Optional[str] = None,
-    quiet: Optional[bool] = None,
-    no_breachwatch: Optional[bool] = None,
-):
+def generate_diceware_passwords(context: KeeperParams):
     """
     Generate diceware passwords.
     
     This function uses the Keeper CLI `PasswordGenerateCommand` to generate diceware-style passwords
-    using dice rolls to select words from a word list.
+    using dice rolls to select words from a word list with hyphen (-) delimiter.
     """
     try:
         command = PasswordGenerateCommand()
-
-        kwargs = {
-            'number': number or 3,
-            'dice_rolls': dice_rolls or 6,
-            'delimiter': delimiter or ' ',
-            'word_list': word_list,
-            'output_format': output_format or 'table',
-            'quiet': quiet or False,
-            'no_breachwatch': no_breachwatch or False,
-        }
-
-        command.execute(context=context, **kwargs)
+        command.execute(context=context, number=1, dice_rolls=6, delimiter='-')
         return True
         
     except Exception as e:
@@ -92,14 +72,11 @@ def generate_diceware_passwords(
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description='Generate diceware passwords using Keeper SDK',
+        description='Generate diceware passwords with hyphen delimiter using Keeper SDK',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
 Examples:
   python diceware_password_generation.py
-  python diceware_password_generation.py --dice-rolls 8 --delimiter "-"
-  python diceware_password_generation.py --word-list custom_words.txt --quiet
-  python diceware_password_generation.py --number 5 --delimiter "_" --format json
         '''
     )
     
@@ -107,44 +84,6 @@ Examples:
         '-c', '--config',
         default='myconfig.json',
         help='Configuration file (default: myconfig.json)'
-    )
-    parser.add_argument(
-        '-n', '--number',
-        type=int,
-        default=3,
-        help='Number of passwords to generate (default: 3)'
-    )
-    parser.add_argument(
-        '--dice-rolls',
-        type=int,
-        default=6,
-        help='Number of dice rolls for diceware generation (default: 6)'
-    )
-    parser.add_argument(
-        '--delimiter',
-        choices=['-', '+', ':', '.', '/', '_', '=', ' '],
-        default=' ',
-        help='Word delimiter for diceware (default: space)'
-    )
-    parser.add_argument(
-        '--word-list',
-        help='Path to custom word list file for diceware'
-    )
-    parser.add_argument(
-        '-f', '--format',
-        choices=['table', 'json'],
-        default='table',
-        help='Output format (default: table)'
-    )
-    parser.add_argument(
-        '-q', '--quiet',
-        action='store_true',
-        help='Only print password list (minimal output)'
-    )
-    parser.add_argument(
-        '--no-breachwatch',
-        action='store_true',
-        help='Skip BreachWatch scanning'
     )
 
     args = parser.parse_args()
@@ -157,33 +96,10 @@ Examples:
     try:
         context = login_to_keeper_with_config(args.config)
         
-        # Show what we're generating
-        using_defaults = (args.number == 3 and args.dice_rolls == 6 and args.delimiter == ' ' and 
-                         not args.word_list and args.format == 'table' and not args.quiet and not args.no_breachwatch)
+        logger.info("Generating 1 diceware password...")
+        logger.info("Using 6 dice rolls with hyphen (-) delimiter and default word list")
         
-        if using_defaults:
-            logger.info("Running with default settings - generating 3 diceware passwords")
-            logger.info("Using 6 dice rolls with space delimiter and default word list")
-            logger.info("Use --help to see all available options")
-        else:
-            logger.info(f'Generating {args.number} diceware password(s)...')
-            logger.info(f'Dice rolls: {args.dice_rolls}')
-            logger.info(f'Word delimiter: "{args.delimiter}"')
-            if args.word_list:
-                logger.info(f'Custom word list: {args.word_list}')
-            else:
-                logger.info('Using default word list')
-        
-        generate_diceware_passwords(
-            context,
-            number=args.number,
-            dice_rolls=args.dice_rolls,
-            delimiter=args.delimiter,
-            word_list=args.word_list,
-            output_format=args.format,
-            quiet=args.quiet,
-            no_breachwatch=args.no_breachwatch,
-        )
+        generate_diceware_passwords(context)
         
     except Exception as e:
         logger.error(f'Error: {str(e)}')

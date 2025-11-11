@@ -53,32 +53,16 @@ def login_to_keeper_with_config(filename: str) -> KeeperParams:
         raise Exception('Failed to authenticate with Keeper')
     return context
 
-def generate_basic_passwords(
-    context: KeeperParams,
-    number: Optional[int] = None,
-    length: Optional[int] = None,
-    output_format: Optional[str] = None,
-    quiet: Optional[bool] = None,
-    no_breachwatch: Optional[bool] = None,
-):
+def generate_basic_passwords(context: KeeperParams):
     """
     Generate basic random passwords.
     
     This function uses the Keeper CLI `PasswordGenerateCommand` to generate basic random passwords
-    with customizable length and count.
+    with default settings.
     """
     try:
         command = PasswordGenerateCommand()
-
-        kwargs = {
-            'number': number or 1,
-            'length': length or 20,
-            'output_format': output_format or 'table',
-            'quiet': quiet or False,
-            'no_breachwatch': no_breachwatch or False,
-        }
-
-        command.execute(context=context, **kwargs)
+        command.execute(context=context, number=1, length=20)
         return True
         
     except Exception as e:
@@ -93,8 +77,6 @@ if __name__ == '__main__':
         epilog='''
 Examples:
   python basic_password_generation.py
-  python basic_password_generation.py --number 5 --length 16
-  python basic_password_generation.py --quiet --no-breachwatch
         '''
     )
     
@@ -102,34 +84,6 @@ Examples:
         '-c', '--config',
         default='myconfig.json',
         help='Configuration file (default: myconfig.json)'
-    )
-    parser.add_argument(
-        '-n', '--number',
-        type=int,
-        default=3,
-        help='Number of passwords to generate (default: 3)'
-    )
-    parser.add_argument(
-        '-l', '--length',
-        type=int,
-        default=20,
-        help='Password length (default: 20)'
-    )
-    parser.add_argument(
-        '-f', '--format',
-        choices=['table', 'json'],
-        default='table',
-        help='Output format (default: table)'
-    )
-    parser.add_argument(
-        '-q', '--quiet',
-        action='store_true',
-        help='Only print password list (minimal output)'
-    )
-    parser.add_argument(
-        '--no-breachwatch',
-        action='store_true',
-        help='Skip BreachWatch scanning'
     )
 
     args = parser.parse_args()
@@ -142,21 +96,9 @@ Examples:
     try:
         context = login_to_keeper_with_config(args.config)
         
-        # Show what we're generating if using defaults
-        if not any([args.number != 3, args.length != 20, args.format != 'table', args.quiet, args.no_breachwatch]):
-            logger.info("Running with default settings - generating 3 passwords of length 20 with BreachWatch scanning")
-            logger.info("Use --help to see all available options")
-        else:
-            logger.info(f'Generating {args.number} password(s) of length {args.length}...')
+        logger.info("Generating 1 basic password of length 20...")
         
-        generate_basic_passwords(
-            context,
-            number=args.number,
-            length=args.length,
-            output_format=args.format,
-            quiet=args.quiet,
-            no_breachwatch=args.no_breachwatch,
-        )
+        generate_basic_passwords(context)
         
     except Exception as e:
         logger.error(f'Error: {str(e)}')
