@@ -82,10 +82,10 @@ def prepare_api_request(key_id: int, transmission_key: bytes,
 class KeeperEndpoint(object):
     def __init__(self, configuration_storage: configuration.IConfigurationStorage,
                  keeper_server: Optional[str] = None) -> None:
-        self.client_version = CLIENT_VERSION
-        self.device_name = DEFAULT_DEVICE_NAME
+        self.client_version: str = CLIENT_VERSION
+        self.device_name: str = DEFAULT_DEVICE_NAME
         self.locale = resolve_locale()
-        self._server = ''
+        self._server: str = ''
         self._server_key_id = 7
         self._storage = configuration_storage
         if not keeper_server:
@@ -93,6 +93,10 @@ class KeeperEndpoint(object):
             keeper_server = config.last_server
         self.server = keeper_server or DEFAULT_KEEPER_SERVER
         self.fail_on_throttle = False
+
+    @property
+    def storage(self) -> configuration.IConfigurationStorage:
+        return self._storage
 
     @property
     def server(self) -> str:
@@ -165,9 +169,48 @@ class KeeperEndpoint(object):
                     else:
                         code = 'router_error'
                     raise errors.KeeperApiError(code, router_response.errorMessage)
+            return None
         else:
             message = response.reason
             raise errors.KeeperApiError('router_error', f'{message}: {response.status_code}')
+
+    def execute_router_bi(self, encryption_key: bytes, endpoint: str, request: Optional[TRQ], *,
+                       response_type: Type[TRS]) -> Optional[TRS]:
+        logger = utils.get_logger()
+        if logger.level <= logging.DEBUG:
+            js = MessageToJson(request) if request else ''
+            logger.debug('>>> [RQ] \"%s\": %s', endpoint, js)
+
+        if 'ROUTER_URL' in os.environ:
+            up = urlparse(os.environ['ROUTER_URL'])
+            url_comp = (up.scheme, up.netloc, f'api/bi/{endpoint}', None, None, None)
+        else:
+            url_comp = ('https', self.get_router_server(), f'api/bi/{endpoint}', None, None, None)
+        url = urlunparse(url_comp)
+
+        logger.debug('>>> [ROUTER] POST Request: [%s]', url)
+
+        rq = APIRequest_pb2.ApiRequestByKey()
+        rq.keyId = 2
+        if request:
+            payload = crypto.encrypt_aes_v2(request.SerializeToString(), encryption_key)
+            rq.payload = payload
+
+        response = requests.post(url, data=rq.SerializeToString())
+        if response.status_code == 200:
+            rs_body = response.content
+            payload = crypto.decrypt_aes_v2(rs_body, encryption_key)
+            router_response = response_type()
+            router_response.ParseFromString(payload)
+            if logger.level <= logging.DEBUG:
+                js = MessageToJson(router_response) if router_response else ''
+                logger.debug('>>> [RS] \"%s\": %s', endpoint, js)
+
+            return router_response
+        else:
+            message = response.reason
+            raise errors.KeeperApiError('router_error', f'{message}: {response.status_code}')
+
 
     def _communicate_keeper(self, endpoint: str,
                             payload: Optional[bytes],

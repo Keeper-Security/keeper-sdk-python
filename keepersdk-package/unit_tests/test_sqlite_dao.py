@@ -7,6 +7,7 @@ from keepersdk import crypto, utils, sqlite_dao
 from keepersdk.storage import sqlite, storage_types
 from keepersdk.vault import storage_types as vault_storage_types
 from keepersdk.proto import enterprise_pb2
+from keepersdk.plugins.pedm import admin_storage
 
 
 @dataclass
@@ -26,7 +27,7 @@ class TestSqliteDao(TestCase):
         queries = sqlite_dao.verify_database(connection, (settings_table,), apply_changes=True)
         self.assertTrue(len(queries) == 0)
 
-        settings_storage: storage_types.IEntityStorage[enterprise_pb2.Node, int] = \
+        settings_storage: storage_types.IEntityReaderStorage[enterprise_pb2.Node, int] = \
             sqlite.SqliteEntityStorage(lambda: connection, settings_table, 191)
         s = enterprise_pb2.Node()
         s.nodeId = 3432423432
@@ -79,9 +80,9 @@ class TestSqliteDao(TestCase):
 
         sqlite_dao.verify_database(connection, (record_table, record_key_table, settings_table), apply_changes=True)
 
-        record_storage: storage_types.IEntityStorage[vault_storage_types.StorageRecord, str] = \
+        record_storage: storage_types.IEntityReaderStorage[vault_storage_types.StorageRecord, str] = \
             sqlite.SqliteEntityStorage(lambda: connection, record_table, 'user@company.com')
-        record_key_storage: storage_types.ILinkStorage[vault_storage_types.StorageRecordKey, str, str] = \
+        record_key_storage: storage_types.ILinkReaderStorage[vault_storage_types.StorageRecordKey, str, str] = \
             sqlite.SqliteLinkStorage(lambda: connection, record_key_table, 'user@company.com')
         settings_storage: storage_types.IRecordStorage[Settings] = \
             sqlite.SqliteRecordStorage(lambda: connection, settings_table, 'user@company.com')
@@ -127,3 +128,25 @@ class TestSqliteDao(TestCase):
         links = list(record_key_storage.get_links_by_subject(record.record_uid))
         self.assertEqual(len(links), 1)
         self.assertEqual(link.record_uid, links[0].record_uid)
+
+
+    def test_link_storage(self) -> None:
+        connection = sqlite3.Connection(':memory:')
+        owner_column = 'enterprise_id'
+
+        collection_link_schema = sqlite_dao.TableSchema.load_schema(
+            admin_storage.PedmStorageCollectionLink, primary_key=['collection_uid', 'link_uid'], indexes={'Link': 'link_uid'},
+            owner_column=owner_column, owner_type=int)
+        sqlite_dao.verify_database(connection, (collection_link_schema,), apply_changes=True)
+
+        link_storage: storage_types.ILinkReaderStorage[admin_storage.PedmStorageCollectionLink, str, str] = \
+            sqlite.SqliteLinkStorage(lambda: connection, collection_link_schema, 1000)
+
+        link_storage.put_links([admin_storage.PedmStorageCollectionLink(
+            collection_uid='CollectionUid',
+            link_uid='LinkUid',
+            link_type=2
+        )])
+
+        l = link_storage.get_link('CollectionUid', 'LinkUid')
+        self.assertIsNotNone(l)

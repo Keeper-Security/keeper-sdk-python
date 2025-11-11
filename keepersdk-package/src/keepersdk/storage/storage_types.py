@@ -56,7 +56,7 @@ class IRecordStorage(Generic[T], abc.ABC):
         pass
 
 
-class IEntity(Generic[T, K], abc.ABC):
+class IEntityReader(Generic[T, K], abc.ABC):
     @abc.abstractmethod
     def get_all_entities(self) -> Iterable[T]:
         pass
@@ -66,7 +66,7 @@ class IEntity(Generic[T, K], abc.ABC):
         pass
 
 
-class ILink(Generic[T, KS, KO], abc.ABC):
+class ILinkReader(Generic[T, KS, KO], abc.ABC):
     @abc.abstractmethod
     def get_link(self, subject_id: KS, object_id: KO) -> Optional[T]:
         pass
@@ -84,7 +84,7 @@ class ILink(Generic[T, KS, KO], abc.ABC):
         pass
 
 
-class IEntityStorage(IEntity[T, K]):
+class IEntityReaderStorage(IEntityReader[T, K]):
     @abc.abstractmethod
     def put_entities(self, entities: Iterable[T]) -> None:
         pass
@@ -94,7 +94,7 @@ class IEntityStorage(IEntity[T, K]):
         pass
 
 
-class ILinkStorage(Generic[T, KS, KO], ILink[T, KS, KO]):
+class ILinkReaderStorage(Generic[T, KS, KO], ILinkReader[T, KS, KO]):
     @abc.abstractmethod
     def put_links(self, links: Iterable[T]):
         pass
@@ -108,5 +108,5 @@ class ILinkStorage(Generic[T, KS, KO], ILink[T, KS, KO]):
         pass
 
     @abc.abstractmethod
-    def delete_links_by_objects(self, object_uids: Iterable[KS]):
+    def delete_links_by_objects(self, object_uids: Iterable[KO]):
         pass

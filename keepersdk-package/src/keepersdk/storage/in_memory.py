@@ -1,5 +1,5 @@
 from typing import Dict, Any, Callable, Optional, Generic, Iterable
-from .storage_types import IEntityStorage, ILinkStorage, IRecordStorage, IUidLink, IUid, T, K, KS, KO
+from .storage_types import IEntityReaderStorage, ILinkReaderStorage, IRecordStorage, IUidLink, IUid, T, K, KS, KO
 
 
 class InMemoryRecordStorage(Generic[T], IRecordStorage[T]):
@@ -16,7 +16,7 @@ class InMemoryRecordStorage(Generic[T], IRecordStorage[T]):
 
 
 GetUid = Callable[[Any], K]
-class InMemoryEntityStorage(Generic[T, K], IEntityStorage[T, K]):
+class InMemoryEntityStorage(Generic[T, K], IEntityReaderStorage[T, K]):
     def __init__(self, get_uid: Optional[GetUid]=None) -> None:
         self._items: Dict[K, T] = {}
         self.get_uid = get_uid
@@ -51,7 +51,7 @@ class InMemoryEntityStorage(Generic[T, K], IEntityStorage[T, K]):
         self._items.clear()
 
 
-class InMemoryLinkStorage(Generic[T, KS, KO], ILinkStorage[T, KS, KO]):
+class InMemoryLinkStorage(Generic[T, KS, KO], ILinkReaderStorage[T, KS, KO]):
     def __init__(self, get_subject: Optional[GetUid]=None, get_object: Optional[GetUid]=None) -> None:
         self.get_subject = get_subject
         self.get_object = get_object

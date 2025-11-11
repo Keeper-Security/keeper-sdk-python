@@ -7,9 +7,9 @@ from keepersdk.storage import storage_types
 
 class TestMemoryStorage(TestCase):
     def test_entity_storage(self) -> None:
-        record_storage: storage_types.IEntityStorage[vault_storage_types.StorageRecord, str]
+        record_storage: storage_types.IEntityReaderStorage[vault_storage_types.StorageRecord, str]
         record_storage = memory_storage.InMemoryEntityStorage()
-        record_key_storage: storage_types.ILinkStorage[
+        record_key_storage: storage_types.ILinkReaderStorage[
             vault_storage_types.StorageRecordKey, str, str] = memory_storage.InMemoryLinkStorage()
         record = vault_storage_types.StorageRecord()
         record.record_uid = utils.generate_uid()

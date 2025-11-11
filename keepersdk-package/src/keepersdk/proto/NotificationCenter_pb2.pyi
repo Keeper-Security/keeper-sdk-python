@@ -34,6 +34,9 @@ class NotificationType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     NT_DENIED_RESPONSE: _ClassVar[NotificationType]
     NT_2FA_CONFIGURED: _ClassVar[NotificationType]
     NT_SHARE_APPROVAL_DENIED: _ClassVar[NotificationType]
+    NT_DEVICE_APPROVAL_APPROVED: _ClassVar[NotificationType]
+    NT_DEVICE_APPROVAL_DENIED: _ClassVar[NotificationType]
+    NT_ACCOUNT_CREATE: _ClassVar[NotificationType]
 
 class NotificationReadStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -71,6 +74,9 @@ NT_APPROVED_RESPONSE: NotificationType
 NT_DENIED_RESPONSE: NotificationType
 NT_2FA_CONFIGURED: NotificationType
 NT_SHARE_APPROVAL_DENIED: NotificationType
+NT_DEVICE_APPROVAL_APPROVED: NotificationType
+NT_DEVICE_APPROVAL_DENIED: NotificationType
+NT_ACCOUNT_CREATE: NotificationType
 NRS_UNSPECIFIED: NotificationReadStatus
 NRS_LAST: NotificationReadStatus
 NRS_READ: NotificationReadStatus
@@ -200,3 +206,9 @@ class NotificationSyncRequest(_message.Message):
     SYNCPOINT_FIELD_NUMBER: _ClassVar[int]
     syncPoint: int
     def __init__(self, syncPoint: _Optional[int] = ...) -> None: ...
+
+class NotificationsApprovalStatusUpdateRequest(_message.Message):
+    __slots__ = ("updates",)
+    UPDATES_FIELD_NUMBER: _ClassVar[int]
+    updates: _containers.RepeatedCompositeFieldContainer[ApprovalStatusUpdate]
+    def __init__(self, updates: _Optional[_Iterable[_Union[ApprovalStatusUpdate, _Mapping]]] = ...) -> None: ...

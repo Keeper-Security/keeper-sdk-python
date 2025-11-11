@@ -5,7 +5,7 @@ from . import storage_types
 from .. import sqlite_dao
 
 
-class SqliteEntityStorage(sqlite_dao.SqliteStorage, storage_types.IEntityStorage):
+class SqliteEntityStorage(sqlite_dao.SqliteStorage, storage_types.IEntityReaderStorage):
     def __init__(self, get_connection: Callable[[], sqlite3.Connection], schema: sqlite_dao.TableSchema,
                  owner: Optional[sqlite_dao.KeyTypes]=None) -> None:
         super(SqliteEntityStorage, self).__init__(get_connection, schema, owner)
@@ -27,7 +27,7 @@ class SqliteEntityStorage(sqlite_dao.SqliteStorage, storage_types.IEntityStorage
         self.delete_by_filter(self.schema.primary_key, uids, multiple_criteria=True)
 
 
-class SqliteLinkStorage(sqlite_dao.SqliteStorage, storage_types.ILinkStorage):
+class SqliteLinkStorage(sqlite_dao.SqliteStorage, storage_types.ILinkReaderStorage):
     def __init__(self, get_connection: Callable[[], sqlite3.Connection], schema: sqlite_dao.TableSchema,
                  owner: Optional[sqlite_dao.KeyTypes]=None) -> None:
         super(SqliteLinkStorage, self).__init__(get_connection, schema, owner)

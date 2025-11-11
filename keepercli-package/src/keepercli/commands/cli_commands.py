@@ -53,7 +53,7 @@ class DebugCommand(base.ICliCommand):
     def execute_args(self, context: KeeperParams, args: str, **kwargs):
         logger = logging.getLogger()
         is_debug = logger.getEffectiveLevel() <= logging.DEBUG
-        logger.setLevel((logging.WARNING if context.batch_mode else logging.INFO) if is_debug else logging.DEBUG)
+        logger.setLevel((logging.WARNING if context.keeper_config.batch_mode else logging.INFO) if is_debug else logging.DEBUG)
         is_debug = logger.getEffectiveLevel() <= logging.DEBUG
         prompt_utils.output_text('Debug ' + ('ON' if is_debug else 'OFF'))
 
