@@ -467,8 +467,22 @@ FF_PHONE: ClientFormFactor
 FF_TABLET: ClientFormFactor
 FF_WATCH: ClientFormFactor
 
+class QrcMessageKey(_message.Message):
+    __slots__ = ("clientEcPublicKey", "mlKemEncapsulatedKey", "data", "msgVersion", "ecKeyId")
+    CLIENTECPUBLICKEY_FIELD_NUMBER: _ClassVar[int]
+    MLKEMENCAPSULATEDKEY_FIELD_NUMBER: _ClassVar[int]
+    DATA_FIELD_NUMBER: _ClassVar[int]
+    MSGVERSION_FIELD_NUMBER: _ClassVar[int]
+    ECKEYID_FIELD_NUMBER: _ClassVar[int]
+    clientEcPublicKey: bytes
+    mlKemEncapsulatedKey: bytes
+    data: bytes
+    msgVersion: int
+    ecKeyId: int
+    def __init__(self, clientEcPublicKey: _Optional[bytes] = ..., mlKemEncapsulatedKey: _Optional[bytes] = ..., data: _Optional[bytes] = ..., msgVersion: _Optional[int] = ..., ecKeyId: _Optional[int] = ...) -> None: ...
+
 class ApiRequest(_message.Message):
-    __slots__ = ("encryptedTransmissionKey", "publicKeyId", "locale", "encryptedPayload", "encryptionType", "recaptcha", "subEnvironment")
+    __slots__ = ("encryptedTransmissionKey", "publicKeyId", "locale", "encryptedPayload", "encryptionType", "recaptcha", "subEnvironment", "qrcMessageKey")
     ENCRYPTEDTRANSMISSIONKEY_FIELD_NUMBER: _ClassVar[int]
     PUBLICKEYID_FIELD_NUMBER: _ClassVar[int]
     LOCALE_FIELD_NUMBER: _ClassVar[int]
@@ -476,6 +490,7 @@ class ApiRequest(_message.Message):
     ENCRYPTIONTYPE_FIELD_NUMBER: _ClassVar[int]
     RECAPTCHA_FIELD_NUMBER: _ClassVar[int]
     SUBENVIRONMENT_FIELD_NUMBER: _ClassVar[int]
+    QRCMESSAGEKEY_FIELD_NUMBER: _ClassVar[int]
     encryptedTransmissionKey: bytes
     publicKeyId: int
     locale: str
@@ -483,7 +498,8 @@ class ApiRequest(_message.Message):
     encryptionType: int
     recaptcha: str
     subEnvironment: str
-    def __init__(self, encryptedTransmissionKey: _Optional[bytes] = ..., publicKeyId: _Optional[int] = ..., locale: _Optional[str] = ..., encryptedPayload: _Optional[bytes] = ..., encryptionType: _Optional[int] = ..., recaptcha: _Optional[str] = ..., subEnvironment: _Optional[str] = ...) -> None: ...
+    qrcMessageKey: QrcMessageKey
+    def __init__(self, encryptedTransmissionKey: _Optional[bytes] = ..., publicKeyId: _Optional[int] = ..., locale: _Optional[str] = ..., encryptedPayload: _Optional[bytes] = ..., encryptionType: _Optional[int] = ..., recaptcha: _Optional[str] = ..., subEnvironment: _Optional[str] = ..., qrcMessageKey: _Optional[_Union[QrcMessageKey, _Mapping]] = ...) -> None: ...
 
 class ApiRequestPayload(_message.Message):
     __slots__ = ("payload", "encryptedSessionToken", "timeToken", "apiVersion")
@@ -670,16 +686,18 @@ class LoginResponse(_message.Message):
     def __init__(self, loginState: _Optional[_Union[LoginState, str]] = ..., accountUid: _Optional[bytes] = ..., primaryUsername: _Optional[str] = ..., encryptedDataKey: _Optional[bytes] = ..., encryptedDataKeyType: _Optional[_Union[EncryptedDataKeyType, str]] = ..., encryptedLoginToken: _Optional[bytes] = ..., encryptedSessionToken: _Optional[bytes] = ..., sessionTokenType: _Optional[_Union[SessionTokenType, str]] = ..., message: _Optional[str] = ..., url: _Optional[str] = ..., channels: _Optional[_Iterable[_Union[TwoFactorChannelInfo, _Mapping]]] = ..., salt: _Optional[_Iterable[_Union[Salt, _Mapping]]] = ..., cloneCode: _Optional[bytes] = ..., stateSpecificValue: _Optional[str] = ..., ssoClientVersion: _Optional[str] = ..., sessionTokenTypeModifier: _Optional[str] = ...) -> None: ...
 
 class SwitchListElement(_message.Message):
-    __slots__ = ("username", "fullName", "authRequired", "isLinked")
+    __slots__ = ("username", "fullName", "authRequired", "isLinked", "profilePicUrl")
     USERNAME_FIELD_NUMBER: _ClassVar[int]
     FULLNAME_FIELD_NUMBER: _ClassVar[int]
     AUTHREQUIRED_FIELD_NUMBER: _ClassVar[int]
     ISLINKED_FIELD_NUMBER: _ClassVar[int]
+    PROFILEPICURL_FIELD_NUMBER: _ClassVar[int]
     username: str
     fullName: str
     authRequired: bool
     isLinked: bool
-    def __init__(self, username: _Optional[str] = ..., fullName: _Optional[str] = ..., authRequired: bool = ..., isLinked: bool = ...) -> None: ...
+    profilePicUrl: str
+    def __init__(self, username: _Optional[str] = ..., fullName: _Optional[str] = ..., authRequired: bool = ..., isLinked: bool = ..., profilePicUrl: _Optional[str] = ...) -> None: ...
 
 class SwitchListResponse(_message.Message):
     __slots__ = ("elements",)
@@ -1394,18 +1412,20 @@ class MasterPasswordReentryResponse(_message.Message):
     def __init__(self, status: _Optional[_Union[MasterPasswordReentryStatus, str]] = ...) -> None: ...
 
 class DeviceRegistrationRequest(_message.Message):
-    __slots__ = ("clientVersion", "deviceName", "devicePublicKey", "devicePlatform", "clientFormFactor")
+    __slots__ = ("clientVersion", "deviceName", "devicePublicKey", "devicePlatform", "clientFormFactor", "username")
     CLIENTVERSION_FIELD_NUMBER: _ClassVar[int]
     DEVICENAME_FIELD_NUMBER: _ClassVar[int]
     DEVICEPUBLICKEY_FIELD_NUMBER: _ClassVar[int]
     DEVICEPLATFORM_FIELD_NUMBER: _ClassVar[int]
     CLIENTFORMFACTOR_FIELD_NUMBER: _ClassVar[int]
+    USERNAME_FIELD_NUMBER: _ClassVar[int]
     clientVersion: str
     deviceName: str
     devicePublicKey: bytes
     devicePlatform: str
     clientFormFactor: ClientFormFactor
-    def __init__(self, clientVersion: _Optional[str] = ..., deviceName: _Optional[str] = ..., devicePublicKey: _Optional[bytes] = ..., devicePlatform: _Optional[str] = ..., clientFormFactor: _Optional[_Union[ClientFormFactor, str]] = ...) -> None: ...
+    username: str
+    def __init__(self, clientVersion: _Optional[str] = ..., deviceName: _Optional[str] = ..., devicePublicKey: _Optional[bytes] = ..., devicePlatform: _Optional[str] = ..., clientFormFactor: _Optional[_Union[ClientFormFactor, str]] = ..., username: _Optional[str] = ...) -> None: ...
 
 class DeviceVerificationRequest(_message.Message):
     __slots__ = ("encryptedDeviceToken", "username", "verificationChannel", "messageSessionUid", "clientVersion")
