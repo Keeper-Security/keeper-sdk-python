@@ -18,11 +18,26 @@ import json
 import os
 import sys
 import logging
-from typing import Optional
 
 from keepercli.commands.password_generate import PasswordGenerateCommand
 from keepercli.params import KeeperParams
 from keepercli.login import LoginFlow
+
+def get_default_config_path() -> str:
+    """
+    Get the default config file path following the same logic as JsonFileLoader.
+    
+    First checks if 'config.json' exists in the current directory.
+    If not, uses ~/.keeper/config.json.
+    """
+    file_name = 'config.json'
+    if os.path.isfile(file_name):
+        return os.path.abspath(file_name)
+    else:
+        keeper_dir = os.path.join(os.path.expanduser('~'), '.keeper')
+        if not os.path.exists(keeper_dir):
+            os.mkdir(keeper_dir)
+        return os.path.join(keeper_dir, file_name)
 
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
@@ -262,10 +277,11 @@ Examples:
         '''
     )
     
+    default_config = get_default_config_path()
     parser.add_argument(
         '-c', '--config',
-        default='myconfig.json',
-        help='Configuration file (default: myconfig.json)'
+        default=default_config,
+        help=f'Configuration file (default: {default_config})'
     )
     parser.add_argument(
         '--demo',
