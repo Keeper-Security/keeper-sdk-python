@@ -24,6 +24,11 @@ def init() -> None:
         time.sleep(0.1)
 
 
+async def _stop_loop():
+    if _loop and _loop.is_running():
+        _loop.stop()
+
+
 def get_loop() -> asyncio.AbstractEventLoop:
     global _loop
     assert _loop
@@ -34,28 +39,9 @@ def stop() -> None:
     global _thread, _loop
     if isinstance(_thread, threading.Thread) and _thread.is_alive():
         assert _loop is not None
-
-        # Cancel all pending tasks before stopping the loop
-        def cancel_all_tasks():
-            tasks = [task for task in asyncio.all_tasks(_loop) if not task.done()]
-            for task in tasks:
-                task.cancel()
-
-        _loop.call_soon_threadsafe(cancel_all_tasks)
-
-        # Give tasks time to handle cancellation
-        time.sleep(0.3)
-
-        # Stop the loop
-        _loop.call_soon_threadsafe(_loop.stop)
-
-        # Wait for thread to finish
-        _thread.join(4)
-
-        # Close the loop
-        if _loop and not _loop.is_closed():
-            _loop.close()
-
+        asyncio.run_coroutine_threadsafe(_stop_loop(), _loop)
+        _thread.join(2)
+        _loop.close()
         _loop = None
         _thread = None
 
