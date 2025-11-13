@@ -22,7 +22,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('logout', account_commands.LogoutCommand(), base.CommandScope.Account)
         commands.register_command('this-device', account_commands.ThisDeviceCommand(), base.CommandScope.Account)
         commands.register_command('whoami', account_commands.WhoamiCommand(), base.CommandScope.Account)
-        commands.register_command('reset-password', password_reset.ResetPasswordCommand(), base.CommandScope.Account, 'rp')
+        commands.register_command('reset-password', password_reset.ResetPasswordCommand(), base.CommandScope.Account)
 
 
     if not scopes or bool(scopes & base.CommandScope.Vault):

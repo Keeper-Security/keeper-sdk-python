@@ -8,10 +8,12 @@ for both regular and SSO accounts.
 import argparse
 import getpass
 import logging
+import os
 import re
 from typing import Optional
 
 from keepersdk import crypto, utils, errors
+from keepersdk.authentication import auth_utils
 from keepersdk.proto import APIRequest_pb2, enterprise_pb2
 from . import base
 from .. import api, constants
@@ -27,22 +29,22 @@ reset_password_parser = argparse.ArgumentParser(
     description='Reset or manage master password for Keeper account'
 )
 reset_password_parser.add_argument(
-    '--current-password', '-cp',
-    dest='current_password',
-    action='store',
-    help='Current master password (will be prompted if not provided)'
-)
-reset_password_parser.add_argument(
-    '--new-password', '-np',
-    dest='new_password', 
-    action='store',
-    help='New master password (will be prompted if not provided)'
-)
-reset_password_parser.add_argument(
-    '--delete-alternate', '-da',
-    dest='delete_alternate',
+    '--delete-sso',
+    dest='delete_sso',
     action='store_true',
-    help='Delete SSO alternate password instead of changing it'
+    help='deletes SSO master password'
+)
+reset_password_parser.add_argument(
+    '--current', '-c',
+    dest='current_password',
+    metavar='CURRENT_PASSWORD',
+    help='current password'
+)
+reset_password_parser.add_argument(
+    '--new', '-n',
+    dest='new_password',
+    metavar='NEW_PASSWORD',
+    help='new password'
 )
 
 
@@ -60,13 +62,16 @@ class ResetPasswordCommand(base.ArgparseCommand):
     def execute(self, context: KeeperParams, **kwargs):
         """Execute the password reset command."""
         current_password = kwargs.get('current_password')
-        is_sso_user = context.settings.get('sso_user', False)
+        
+        # Get account summary to check SSO status and enforcements
+        acct_summary = auth_utils.load_account_summary(context.auth)
+        is_sso_user = acct_summary.settings.ssoUser
 
         if is_sso_user:
             allow_alternate_passwords = False
-            if 'booleans' in context.enforcements:
-                allow_alternate_passwords = next((x.get('value') for x in context.enforcements['booleans']
-                                                  if x.get('key') == 'allow_alternate_passwords'), False)
+            if hasattr(acct_summary, 'Enforcements') and hasattr(acct_summary.Enforcements, 'booleans'):
+                allow_alternate_passwords = next((x.value for x in acct_summary.Enforcements.booleans
+                                                  if x.key == 'allow_alternate_passwords'), False)
 
             if not allow_alternate_passwords:
                 logging.warning('You do not have the required privilege to perform this operation.')
@@ -84,19 +89,19 @@ class ResetPasswordCommand(base.ArgparseCommand):
             else:
                 raise kae
 
-        is_delete_alternate = kwargs.get('delete_alternate')
-        if is_delete_alternate:
+        is_delete_sso = kwargs.get('delete_sso')
+        if is_delete_sso:
             if is_sso_user:
-                logging.info('Deleting SSO Master Password for "%s"', context.user)
+                logging.info('Deleting SSO Master Password for "%s"', context.auth.auth_context.username)
             else:
-                logging.warning('"%s" is not SSO account', context.user)
+                logging.warning('"%s" is not SSO account', context.auth.auth_context.username)
                 return
         else:
             if is_sso_user:
                 logging.info('%s SSO Master Password for "%s"',
-                             'Changing' if current_salt else 'Setting', context.user)
+                             'Changing' if current_salt else 'Setting', context.auth.auth_context.username)
             else:
-                logging.info('Changing Master Password for "%s"', context.user)
+                logging.info('Changing Master Password for "%s"', context.auth.auth_context.username)
 
         if current_salt:
             # Validate current password
@@ -125,7 +130,7 @@ class ResetPasswordCommand(base.ArgparseCommand):
         else:
             current_password = ''
 
-        if is_delete_alternate:
+        if is_delete_sso:
             if current_salt:
                 uid_rq = APIRequest_pb2.UidRequest()
                 uid_rq.uid.append(current_salt.uid)
@@ -154,7 +159,7 @@ class ResetPasswordCommand(base.ArgparseCommand):
 
         # Validate password rules
         rules_rq = enterprise_pb2.DomainPasswordRulesRequest()
-        rules_rq.username = context.user
+        rules_rq.username = context.auth.auth_context.username
 
         rules_rs = context.auth.execute_auth_rest(
             'authentication/get_domain_password_rules',
@@ -173,30 +178,20 @@ class ResetPasswordCommand(base.ArgparseCommand):
             logging.warning('Password rules:\n%s', '\n'.join((f'  {x}' for x in failed_rules)))
             return
 
-        # Check password strength using breach watch or internal scoring
-        if hasattr(context, 'breach_watch') and context.breach_watch:
-            euids = []
-            for result in context.breach_watch.scan_passwords(context, [new_password]):
-                if result[1].euid:
-                    euids.append(result[1].euid)
-                logging.info('Breachwatch password scan result: %s', 'WEAK' if result[1].breachDetected else 'GOOD')
-
-            if euids:
-                context.breach_watch.delete_euids(context, euids)
-        else:
-            score = utils.password_score(new_password)
-            logging.info('Password strength: %s', 'WEAK' if score < 40 else 'FAIR' if score < 60 else 'MEDIUM' if score < 80 else 'STRONG')
+        # Check password strength
+        score = utils.password_score(new_password)
+        logging.info('Password strength: %s', 'WEAK' if score < 40 else 'FAIR' if score < 60 else 'MEDIUM' if score < 80 else 'STRONG')
 
         # Set up encryption parameters
         iterations = current_salt.iterations if current_salt else constants.PBKDF2_ITERATIONS
         iterations = max(iterations, constants.PBKDF2_ITERATIONS)
 
-        auth_salt = crypto.get_random_bytes(16)
+        auth_salt = os.urandom(16)
 
         if is_sso_user:
             # Handle SSO user alternate password
             ap_rq = APIRequest_pb2.UserAuthRequest()
-            ap_rq.uid = current_salt.uid if current_salt else crypto.get_random_bytes(16)
+            ap_rq.uid = current_salt.uid if current_salt else os.urandom(16)
             ap_rq.salt = auth_salt
             ap_rq.iterations = iterations
             ap_rq.authHash = crypto.derive_keyhash_v1(new_password, auth_salt, iterations)
@@ -215,7 +210,7 @@ class ResetPasswordCommand(base.ArgparseCommand):
             # Handle regular user password change
             auth_verifier = utils.create_auth_verifier(new_password, auth_salt, iterations)
 
-            data_salt = crypto.get_random_bytes(16)
+            data_salt = os.urandom(16)
             encryption_params = utils.create_encryption_params(
                 new_password, data_salt, iterations, context.auth.auth_context.data_key
             )
@@ -226,5 +221,5 @@ class ResetPasswordCommand(base.ArgparseCommand):
                 'encryption_params': utils.base64_url_encode(encryption_params)
             }
 
-            api.communicate(context, mp_rq)
+            context.auth.execute_auth_command(mp_rq)
             logging.info('Master Password has been changed')
