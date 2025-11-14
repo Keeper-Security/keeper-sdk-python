@@ -85,6 +85,7 @@ class BasePushNotifications(abc.ABC, FanOut[Dict[str, Any]]):
     def __init__(self) -> None:
         super().__init__()
         self._ws_app: Optional[websockets.ClientConnection] = None
+        self._running_task: Optional[asyncio.Future] = None
         self.use_pushes = False
 
     @abc.abstractmethod
@@ -101,22 +102,17 @@ class BasePushNotifications(abc.ABC, FanOut[Dict[str, Any]]):
 
     async def main_loop(self) -> None:
         logger = utils.get_logger()
-        try:
-            await self.close_ws()
-        except Exception as e:
-            logger.debug('Push notification close error: %s', e)
 
         ssl_context: Optional[ssl.SSLContext] = None
-
         while self.use_pushes:
-            push_parameters = self.get_connection_parameters()
+            push_parameters: Optional[PushConnectionParameters] = self.get_connection_parameters()
             if push_parameters is None:
                 break
             if not push_parameters.url:
                 break
 
-            url: str = push_parameters.url
-            headers: Dict[str, str] = push_parameters.headers or {}
+            url = push_parameters.url
+            headers = push_parameters.headers or {}
 
             if url.startswith('wss://'):
                 ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
@@ -135,6 +131,7 @@ class BasePushNotifications(abc.ABC, FanOut[Dict[str, Any]]):
                             logger.debug('Push notification: decrypt error: ', e)
             except Exception as e:
                 logger.debug('Push notification: exception: %s', e)
+                self.use_pushes = False
 
         logger.debug('Push notification: exit.')
         if self._ws_app == ws_app:
@@ -145,16 +142,26 @@ class BasePushNotifications(abc.ABC, FanOut[Dict[str, Any]]):
             await self._ws_app.send(message)
 
     async def close_ws(self):
-        ws_app = self._ws_app
-        if ws_app and ws_app.state == websockets.protocol.State.OPEN:
-            try:
+        try:
+            ws_app = self._ws_app
+            if ws_app and ws_app.state == websockets.protocol.State.OPEN:
                 await ws_app.close(websockets.frames.CloseCode.GOING_AWAY)
-            except Exception:
-                pass
+            running_task = self._running_task
+            if running_task and not running_task.done():
+                running_task.cancel()
+                await running_task
+        except Exception:
+            pass
+        finally:
+            self._running_task = None
 
     def connect_to_push_channel(self) -> None:
+        running_task = self._running_task
+        if running_task and not running_task.done():
+            raise Exception("Already running")
+
         self.use_pushes = True
-        asyncio.run_coroutine_threadsafe(self.main_loop(), background.get_loop())
+        self._running_task = asyncio.run_coroutine_threadsafe(self.main_loop(), background.get_loop())
 
     def shutdown(self):
         self.use_pushes = False

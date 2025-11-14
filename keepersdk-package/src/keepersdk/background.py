@@ -2,6 +2,7 @@ import asyncio
 import atexit
 import threading
 import time
+import warnings
 from typing import Optional
 
 
@@ -26,6 +27,9 @@ def init() -> None:
 
 async def _stop_loop():
     if _loop and _loop.is_running():
+        tasks = asyncio.all_tasks(_loop)
+        if len(tasks) > 0:
+            warnings.warn("Keeper asyncio resources are not properly cleaned up.", ResourceWarning)
         _loop.stop()
 
 

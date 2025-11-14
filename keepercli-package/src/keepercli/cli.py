@@ -48,7 +48,7 @@ def do_command(command_line: str, context: KeeperParams, commands: base.CliComma
     return None
 
 
-def loop(keeper_config: KeeperConfig, commands: base.CliCommands):
+def loop(keeper_config: KeeperConfig, commands: base.CliCommands) -> int:
     prompt_session: Optional[PromptSession] = None
     command_queue: List[str] = []
     context_stack: List[KeeperParams] = []
@@ -166,6 +166,8 @@ def loop(keeper_config: KeeperConfig, commands: base.CliCommands):
         if keeper_config.batch_mode and error_no != 0 and not suppress_errno:
             break
 
+    context.clear_session()
+    return 0
 
 def display_command_help(commands: base.CliCommands):
     alias_lookup = {x[1]: x[0] for x in commands.aliases.items()}
