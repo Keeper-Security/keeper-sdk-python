@@ -4,8 +4,9 @@ import re
 from typing import Tuple, Optional, List, Any
 
 from keepersdk import crypto, utils
-from keepersdk.authentication import auth_utils  
+from keepersdk.authentication import keeper_auth  
 from keepersdk.proto import AccountSummary_pb2, APIRequest_pb2
+from keepersdk.vault import vault_online
 from . import base
 from .. import params, login, api
 from ..helpers import parse_utils, timeout_utils, report_utils
@@ -20,6 +21,9 @@ RESET_PASSWORD_CHANGING = 'Changing Master Password for "{}"'
 RESET_PASSWORD_CURRENT_INCORRECT = 'Current password incorrect'
 RESET_PASSWORD_BREACHWATCH_SCAN = 'Breachwatch: 1 passwords to scan'
 RESET_PASSWORD_BREACHWATCH_RESULT = 'Breachwatch password scan result: {}'
+
+
+logger = api.get_logger()
 
 
 class LoginCommand(base.ArgparseCommand):
@@ -314,12 +318,11 @@ class ResetPasswordCommand(base.ArgparseCommand):
 
     def execute(self, context: params.KeeperParams, **kwargs):
         """Execute the password reset command."""
-        logger = api.get_logger()
         
-        if not self._validate_authentication(context, logger):
+        if not self._validate_authentication(context):
             return
             
-        if self._handle_sso_deletion(kwargs, logger):
+        if self._handle_sso_deletion(kwargs):
             return
         
         try:
@@ -327,40 +330,41 @@ class ResetPasswordCommand(base.ArgparseCommand):
             new_password = kwargs.get('new_password')
             
             if current_password and new_password:
-                self._change_password_non_interactive(context, current_password, new_password, logger)
+                self._change_password_non_interactive(context, current_password, new_password)
             else:
-                self._change_password_interactive(context, logger)
+                self._change_password_interactive(context)
                 
         except Exception as e:
             logger.error(RESET_PASSWORD_ERROR.format(str(e)))
     
-    def _validate_authentication(self, context: params.KeeperParams, logger) -> bool:
+    def _validate_authentication(self, context: params.KeeperParams) -> bool:
         """Validate that user is authenticated."""
         if not context.auth:
             logger.warning(RESET_PASSWORD_NOT_LOGGED_IN)
             return False
         return True
     
-    def _handle_sso_deletion(self, kwargs: dict, logger) -> bool:
+    def _handle_sso_deletion(self, kwargs: dict) -> bool:
         """Handle SSO password deletion request."""
         if kwargs.get('delete_sso'):
             logger.warning(RESET_PASSWORD_SSO_NOT_IMPLEMENTED)
             return True
         return False
     
-    def _change_password_non_interactive(self, context: params.KeeperParams, current_password: str, new_password: str, logger):
+    def _change_password_non_interactive(self, context: params.KeeperParams, current_password: str, new_password: str):
         """Change password using provided arguments."""
-        logger.info(RESET_PASSWORD_CHANGING.format(context.auth.auth_context.username))
+        auth = context.auth
+        logger.info(RESET_PASSWORD_CHANGING.format(auth.auth_context.username))
         
-        if not self._validate_current_password(context, current_password, logger):
+        if not self._validate_current_password(auth, current_password):
             return
             
-        self._perform_breachwatch_scan(context, new_password, logger)
-        login.LoginAPI.change_master_password_command(context.auth, new_password)
+        self._perform_breachwatch_scan(context.vault, new_password)
+        login.LoginAPI.change_master_password_command(auth, new_password)
         logger.info(RESET_PASSWORD_SUCCESS)
         self._update_context_password(context, new_password)
     
-    def _change_password_interactive(self, context: params.KeeperParams, logger):
+    def _change_password_interactive(self, context: params.KeeperParams):
         """Change password using interactive prompts."""
         new_password = login.LoginAPI.change_master_password(context.auth)
         if new_password:
@@ -373,10 +377,10 @@ class ResetPasswordCommand(base.ArgparseCommand):
         """Update context with new password."""
         context.password = new_password
     
-    def _validate_current_password(self, context: params.KeeperParams, current_password: str, logger) -> bool:
+    def _validate_current_password(self, auth: keeper_auth.KeeperAuth, current_password: str) -> bool:
         """Validate the current password before allowing change."""
         try:
-            current_salt = context.auth.execute_auth_rest(
+            current_salt = auth.execute_auth_rest(
                 'authentication/get_salt_and_iterations',
                 None,
                 response_type=APIRequest_pb2.Salt
@@ -389,7 +393,7 @@ class ResetPasswordCommand(base.ArgparseCommand):
                 rq.pbkdf2Password = utils.base64_url_encode(auth_hash)
                 rq.action = APIRequest_pb2.UNMASK
                 
-                rs = context.auth.execute_auth_rest(
+                rs = auth.execute_auth_rest(
                     'authentication/validate_master_password',
                     rq,
                     response_type=APIRequest_pb2.MasterPasswordReentryResponse,
@@ -397,7 +401,7 @@ class ResetPasswordCommand(base.ArgparseCommand):
                 )
                 
                 if rs.status != APIRequest_pb2.MP_SUCCESS:
-                    logger.info(RESET_PASSWORD_CURRENT_INCORRECT)
+                    logger.warning(RESET_PASSWORD_CURRENT_INCORRECT)
                     return False
                     
                 return True
@@ -405,16 +409,16 @@ class ResetPasswordCommand(base.ArgparseCommand):
                 return True
                 
         except Exception:
-            logger.info(RESET_PASSWORD_CURRENT_INCORRECT)
+            logger.warning(RESET_PASSWORD_CURRENT_INCORRECT)
             return False
     
-    def _perform_breachwatch_scan(self, context: params.KeeperParams, password: str, logger):
+    def _perform_breachwatch_scan(self, vault: vault_online.VaultOnline, password: str):
         """Perform BreachWatch scan on the new password."""
         try:
-            if context.vault and context.vault.breach_watch_plugin():
+            if vault and vault.breach_watch_plugin():
                 logger.info(RESET_PASSWORD_BREACHWATCH_SCAN)
                 
-                breach_watch = context.vault.breach_watch_plugin().breach_watch
+                breach_watch = vault.breach_watch_plugin().breach_watch
                 scan_results = breach_watch.scan_passwords([password])
                 
                 if scan_results:
