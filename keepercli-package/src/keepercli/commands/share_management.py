@@ -130,7 +130,7 @@ class ShareRecordCommand(base.ArgparseCommand):
         
         emails = kwargs.get('email') or []
         if not emails:
-            raise ValueError('share-record', '\'email\' parameter is missing')
+            raise ValueError('\'email\' parameter is missing')
         
         force = kwargs.get('force')
         action = kwargs.get('action', ShareAction.GRANT.value)
@@ -270,7 +270,7 @@ class ShareRecordCommand(base.ArgparseCommand):
                     pass
 
         if record_uid is None and folder_uid is None and shared_folder_uid is None:
-            raise ValueError('share-record', 'Enter name or uid of existing record or shared folder')
+            raise ValueError('Enter name or uid of existing record or shared folder')
         
         # Collect record UIDs
         record_uids = set()
@@ -288,7 +288,7 @@ class ShareRecordCommand(base.ArgparseCommand):
             record_uids = {uid for uid in folders if uid in record_cache}
         elif shared_folder_uid:
             if not recursive:
-                raise ValueError('share-record', '--recursive parameter is required')
+                raise ValueError('--recursive parameter is required')
             if isinstance(shared_folder_uid, str):
                 sf = vault.vault_data.load_shared_folder(shared_folder_uid=shared_folder_uid)
                 if sf and sf.record_permissions:
@@ -301,10 +301,10 @@ class ShareRecordCommand(base.ArgparseCommand):
                             record_uids.update(x.record_uid for x in sf.record_permissions)
 
         if not record_uids:
-            raise ValueError('share-record', 'There are no records to share selected')
+            raise ValueError('There are no records to share selected')
 
         if action == 'owner' and len(emails) > 1:
-            raise ValueError('share-record', 'You can transfer ownership to a single account only')
+            raise ValueError('You can transfer ownership to a single account only')
 
         all_users = {email.casefold() for email in emails}
         
@@ -321,7 +321,7 @@ class ShareRecordCommand(base.ArgparseCommand):
                 all_users.intersection_update(vault.keeper_auth._key_cache.keys())
 
         if not all_users:
-            raise ValueError('share-record', 'Nothing to do.')
+            raise ValueError('Nothing to do.')
 
         # Load records in shared folders
         if shared_folder_uid:
@@ -675,7 +675,7 @@ class ShareFolderCommand(base.ArgparseCommand):
             shared_folder_uids.update(share_admin_folder_uids or [])
 
         if not shared_folder_uids:
-            raise ValueError('share-folder', 'Enter name of at least one existing folder')
+            raise ValueError('Enter name of at least one existing folder')
 
         action = kwargs.get('action') or ShareAction.GRANT.value
 
@@ -1059,7 +1059,7 @@ class OneTimeShareListCommand(base.ArgparseCommand):
         
         record_uids = self._resolve_record_uids(context, vault, records, kwargs.get('recursive', False))
         if not record_uids:
-            raise base.CommandError('one-time-share', 'No records found')
+            raise base.CommandError('No records found')
 
         applications = self._get_applications(vault, record_uids)
         table_data = self._build_share_table(applications, kwargs)
@@ -1234,11 +1234,10 @@ class OneTimeShareCreateCommand(base.ArgparseCommand):
             record_names = [record_names]
         if not record_names:
             self.get_parser().print_help()
-            return None
+            raise base.CommandError('No records provided')
         if not period_str:
-            logger.warning('URL expiration period parameter \"--expire\" is required.')
             self.get_parser().print_help()
-            return None
+            raise base.CommandError('URL expiration period parameter \"--expire\" is required.')
         
         period = self._validate_and_parse_expiration(period_str)
         
@@ -1251,7 +1250,7 @@ class OneTimeShareCreateCommand(base.ArgparseCommand):
         period = timeout_utils.parse_timeout(period_str)        
         SIX_MONTHS_IN_SECONDS = 182 * 24 * 60 * 60
         if period.total_seconds() > SIX_MONTHS_IN_SECONDS:
-            raise base.CommandError('one-time-share', 'URL expiration period cannot be greater than 6 months.')
+            raise base.CommandError('URL expiration period cannot be greater than 6 months.')
         return period
 
     def _create_share_urls(self, context: KeeperParams, vault, record_names: list, period, name: str, is_editable: bool):

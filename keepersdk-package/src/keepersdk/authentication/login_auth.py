@@ -701,6 +701,11 @@ def _on_logged_in(login: LoginAuth, response: APIRequest_pb2.LoginResponse,
     auth_context.device_private_key = login.context.device_private_key
     auth_context.message_session_uid = login.context.message_session_uid
 
+    # Close login-time push notifications
+    if login.push_notifications:
+        login.push_notifications.shutdown()
+        login.push_notifications = None
+
     keeper_endpoint = login.keeper_endpoint
     logged_auth = keeper_auth.KeeperAuth(keeper_endpoint, auth_context)
     logged_auth.post_login()
