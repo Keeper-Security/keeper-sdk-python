@@ -1,7 +1,6 @@
 import argparse
 import itertools
 import json
-import logging
 from typing import Tuple, List, Optional, Set, Dict
 
 from .base import ArgparseCommand, CommandError
@@ -9,10 +8,14 @@ from ..params import KeeperParams
 from ..prompt_utils import user_choice
 from ..helpers.report_utils import dump_report_data
 from ..helpers.record_utils import get_totp_code
-
+from .. import api
 from keepersdk import crypto, utils
 from keepersdk.proto import record_pb2, folder_pb2
-from keepersdk.vault import vault_record
+from keepersdk.vault import vault_record, vault_online
+
+
+logger = api.get_logger()
+
 
 # Constants
 MAX_DISPLAY_RECORDS = 99
@@ -23,38 +26,41 @@ V3_RECORD_KEY_LENGTH = 60
 
 class VerifySharedFoldersCommand(ArgparseCommand):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='verify-shared-folders', 
+        self.parser = argparse.ArgumentParser(prog='verify-shared-folders', 
                                        description='Verify and fix shared folder record key issues')
+        VerifySharedFoldersCommand.add_arguments_to_parser(self.parser)
+        super().__init__(self.parser)
+    
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
         parser.add_argument('--dry-run', dest='dry_run', action='store_true',
                            help='Display the found problems without fixing')
         parser.add_argument('target', nargs='*', help='Shared folder UID or name.')
-        super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs):
         self._validate_context(context)
-        shared_folders = self._resolve_target_folders(context, kwargs.get('target'))
-        sf_v3_keys, sf_v2_keys = self._find_problematic_keys(context, shared_folders)
+        vault = context.vault
+        shared_folders = self._resolve_target_folders(vault, kwargs.get('target'))
+        sf_v3_keys, sf_v2_keys = self._find_problematic_keys(vault, shared_folders)
         
         if not sf_v3_keys and not sf_v2_keys:
             if kwargs.get('dry_run'):
-                print('There are no record keys to be corrected')
+                logger.info('There are no record keys to be corrected')
             return
         
-        self._display_problems(context, sf_v3_keys, sf_v2_keys)
+        self._display_problems(vault, sf_v3_keys, sf_v2_keys)
         
         if not kwargs.get('dry_run') and self._get_user_confirmation():
-            self._fix_record_keys(context, sf_v3_keys, sf_v2_keys)
-            context.vault.sync_requested = True
+            self._fix_record_keys(vault, sf_v3_keys, sf_v2_keys)
+            vault.sync_down()
     
     def _validate_context(self, context: KeeperParams) -> None:
-        if not context.vault:
-            raise CommandError("Vault is not initialized")
-        if not context.auth:
-            raise CommandError("Authentication is required")
+        if not context.vault or not context.auth:
+            raise CommandError("Vault is not initialized, authentication is required")
     
-    def _resolve_target_folders(self, context: KeeperParams, target) -> Set[str]:
+    def _resolve_target_folders(self, vault: vault_online.VaultOnline, target) -> Set[str]:
         shared_folders = set()
-        all_shared_folders = {sf.shared_folder_uid: sf for sf in context.vault.vault_data.shared_folders()}
+        all_shared_folders = {sf.shared_folder_uid: sf for sf in vault.vault_data.shared_folders()}
         
         if isinstance(target, list) and len(target) > 0:
             sf_names = {sf.name.lower(): sf.shared_folder_uid for sf in all_shared_folders.values()}
@@ -75,13 +81,13 @@ class VerifySharedFoldersCommand(ArgparseCommand):
         
         return shared_folders
     
-    def _find_problematic_keys(self, context: KeeperParams, shared_folders) -> Tuple[List[Tuple[str, str]], List[Tuple[str, str]]]:
+    def _find_problematic_keys(self, vault: vault_online.VaultOnline, shared_folders) -> Tuple[List[Tuple[str, str]], List[Tuple[str, str]]]:
         rq = {
             'command': 'get_shared_folders',
             'shared_folders': [{'shared_folder_uid': x} for x in shared_folders],
             'include': ['sfheaders', 'sfusers', 'sfrecords']
         }
-        rs = context.auth.execute_auth_command(rq)
+        rs = vault.keeper_auth.execute_auth_command(rq)
 
         sf_v3_keys = []
         sf_v2_keys = []
@@ -92,7 +98,7 @@ class VerifySharedFoldersCommand(ArgparseCommand):
                 if 'records' in sf:
                     for rec in sf['records']:
                         record_uid = rec['record_uid']
-                        record_info = context.vault.vault_data.get_record(record_uid)
+                        record_info = vault.vault_data.get_record(record_uid)
                         if not record_info or 'record_key' not in rec:
                             continue
 
@@ -106,23 +112,23 @@ class VerifySharedFoldersCommand(ArgparseCommand):
         
         return sf_v3_keys, sf_v2_keys
     
-    def _display_problems(self, context: KeeperParams, sf_v3_keys, sf_v2_keys):
+    def _display_problems(self, vault: vault_online.VaultOnline, sf_v3_keys, sf_v2_keys):
         if sf_v3_keys:
-            self._display_record_list(context, sf_v3_keys, "V3")
+            self._display_record_list(vault, sf_v3_keys, "V3")
         if sf_v2_keys:
-            self._display_record_list(context, sf_v2_keys, "V2")
+            self._display_record_list(vault, sf_v2_keys, "V2")
     
-    def _display_record_list(self, context: KeeperParams, keys, version):
+    def _display_record_list(self, vault: vault_online.VaultOnline, keys, version):
         record_uids = list({x[0] for x in keys})
         plural = "are" if len(record_uids) > 1 else "is"
-        print(f'There {plural} {len(record_uids)} {version} record key(s) to be corrected')
+        logger.info(f'There {plural} {len(record_uids)} {version} record key(s) to be corrected')
         
         try:
             for record_uid in record_uids[:MAX_DISPLAY_RECORDS]:
-                record = context.vault.vault_data.load_record(record_uid)
-                print(f' {record_uid}  {record.title}')
+                record = vault.vault_data.load_record(record_uid)
+                logger.info(f' {record_uid}  {record.title}')
             if len(record_uids) > MAX_DISPLAY_RECORDS:
-                print(f' {(len(record_uids) - MAX_DISPLAY_RECORDS)} more ...')
+                logger.info(f' {(len(record_uids) - MAX_DISPLAY_RECORDS)} more ...')
         except Exception:
             pass
     
@@ -130,27 +136,27 @@ class VerifySharedFoldersCommand(ArgparseCommand):
         answer = user_choice('Do you want to proceed?', 'yn', 'n')
         return answer.lower() == 'y'
     
-    def _fix_record_keys(self, context: KeeperParams, sf_v3_keys, sf_v2_keys):
+    def _fix_record_keys(self, vault: vault_online.VaultOnline, sf_v3_keys, sf_v2_keys):
         if sf_v3_keys:
-            self._fix_v3_keys(context, sf_v3_keys)
+            self._fix_v3_keys(vault, sf_v3_keys)
         if sf_v2_keys:
-            self._fix_v2_keys(context, sf_v2_keys)
+            self._fix_v2_keys(vault, sf_v2_keys)
     
-    def _fix_v3_keys(self, context: KeeperParams, sf_v3_keys):
+    def _fix_v3_keys(self, vault: vault_online.VaultOnline, sf_v3_keys):
         sf_v3_keys.sort(key=lambda x: x[0])
         while sf_v3_keys:
             chunk = sf_v3_keys[:MAX_RECORDS_CHUNK]
             sf_v3_keys = sf_v3_keys[MAX_RECORDS_CHUNK:]
-            self._process_v3_chunk(context, chunk)
+            self._process_v3_chunk(vault, chunk)
     
-    def _process_v3_chunk(self, context: KeeperParams, chunk):
+    def _process_v3_chunk(self, vault: vault_online.VaultOnline, chunk):
         rq = record_pb2.RecordsConvertToV3Request()
         record_convert = None
         last_record_uid = ''
         
         for record_uid, shared_folder_uid in chunk:
-            shared_folder_key = context.vault.vault_data.get_shared_folder_key(shared_folder_uid)
-            record_key = context.vault.vault_data.get_record_key(record_uid)
+            shared_folder_key = vault.vault_data.get_shared_folder_key(shared_folder_uid)
+            record_key = vault.vault_data.get_record_key(record_uid)
             
             if not shared_folder_key or not record_key:
                 continue
@@ -158,19 +164,19 @@ class VerifySharedFoldersCommand(ArgparseCommand):
             if last_record_uid != record_uid:
                 if record_convert:
                     rq.records.append(record_convert)
-                record_convert = self._create_v3_record_convert(context, record_uid)
+                record_convert = self._create_v3_record_convert(vault, record_uid)
                 last_record_uid = record_uid
             
-            self._add_folder_key_to_convert(context, record_convert, record_uid, shared_folder_uid)
+            self._add_folder_key_to_convert(vault, record_convert, record_uid, shared_folder_uid)
 
         if record_convert:
             rq.records.append(record_convert)
 
-        context.vault.keeper_auth.execute_auth_rest('vault/records_convert3', rq, 
+        vault.keeper_auth.execute_auth_rest('vault/records_convert3', rq, 
                                                   response_type=record_pb2.RecordsModifyResponse)
     
-    def _create_v3_record_convert(self, context: KeeperParams, record_uid):
-        record_info = context.vault.vault_data.get_record(record_uid)
+    def _create_v3_record_convert(self, vault: vault_online.VaultOnline, record_uid):
+        record_info = vault.vault_data.get_record(record_uid)
         if not record_info:
             return None
             
@@ -179,16 +185,15 @@ class VerifySharedFoldersCommand(ArgparseCommand):
         record_convert.client_modified_time = utils.current_milli_time()
         record_convert.revision = record_info.revision
         
-        self._add_audit_data(context, record_convert, record_uid)
+        self._add_audit_data(vault, record_convert, record_uid)
         return record_convert
     
-    def _add_audit_data(self, context: KeeperParams, record_convert, record_uid):
-        auth_context = context.vault.keeper_auth.auth_context
-        if not (hasattr(auth_context, 'enterprise_ec_public_key') and 
-                auth_context.enterprise_ec_public_key):
+    def _add_audit_data(self, vault: vault_online.VaultOnline, record_convert, record_uid):
+        auth_context = vault.keeper_auth.auth_context
+        if not auth_context.enterprise_ec_public_key:
             return
             
-        rec = context.vault.vault_data.load_record(record_uid)
+        rec = vault.vault_data.load_record(record_uid)
         if not isinstance(rec, vault_record.TypedRecord):
             return
             
@@ -208,18 +213,18 @@ class VerifySharedFoldersCommand(ArgparseCommand):
             auth_context.enterprise_ec_public_key
         )
     
-    def _add_folder_key_to_convert(self, context: KeeperParams, record_convert, record_uid, shared_folder_uid):
+    def _add_folder_key_to_convert(self, vault: vault_online.VaultOnline, record_convert, record_uid, shared_folder_uid):
         fk = record_pb2.RecordFolderForConversion()
         fk.folder_uid = utils.base64_url_decode(shared_folder_uid)
         
-        record_key = context.vault.vault_data.get_record_key(record_uid)
-        shared_folder_key = context.vault.vault_data.get_shared_folder_key(shared_folder_uid)
+        record_key = vault.vault_data.get_record_key(record_uid)
+        shared_folder_key = vault.vault_data.get_shared_folder_key(shared_folder_uid)
         
         if record_key and shared_folder_key:
             fk.record_folder_key = crypto.encrypt_aes_v2(record_key, shared_folder_key)
             record_convert.folder_key.append(fk)
     
-    def _fix_v2_keys(self, context: KeeperParams, sf_v2_keys):
+    def _fix_v2_keys(self, vault: vault_online.VaultOnline, sf_v2_keys):
         sf_v2_keys.sort(key=lambda x: x[1])
         rqs = {}
         results = []
@@ -228,8 +233,8 @@ class VerifySharedFoldersCommand(ArgparseCommand):
             if shared_folder_uid not in rqs:
                 rqs[shared_folder_uid] = []
 
-            record_key = context.vault.vault_data.get_record_key(record_uid)
-            shared_folder_key = context.vault.vault_data.get_shared_folder_key(shared_folder_uid)
+            record_key = vault.vault_data.get_record_key(record_uid)
+            shared_folder_key = vault.vault_data.get_shared_folder_key(shared_folder_uid)
             
             if not record_key or not shared_folder_key:
                 continue
@@ -242,13 +247,13 @@ class VerifySharedFoldersCommand(ArgparseCommand):
             sfur.canShare = folder_pb2.BOOLEAN_TRUE
             rqs[shared_folder_uid].append(sfur)
 
-        self._process_v2_updates(context, rqs, results)
+        self._process_v2_updates(vault, rqs, results)
         
         if results:
             headers = ['Shared Folder UID', 'Record UID', 'Record Owner', 'Error code']
             dump_report_data(results, headers=headers, title='V2 Record key errors')
     
-    def _process_v2_updates(self, context: KeeperParams, rqs, results):
+    def _process_v2_updates(self, vault: vault_online.VaultOnline, rqs, results):
         sfu_rqs = None
         left = 0
         
@@ -276,12 +281,12 @@ class VerifySharedFoldersCommand(ArgparseCommand):
                 rqs[shared_folder_uid] = sfu_records
 
             try:
-                sfu_rss = context.vault.keeper_auth.execute_auth_rest(
+                sfu_rss = vault.keeper_auth.execute_auth_rest(
                     'vault/shared_folder_update_v3', sfu_rqs, 
                     response_type=folder_pb2.SharedFolderUpdateV3ResponseV2
                 )
                 
-                for sfu_rs in sfu_rss.sharedFolderUpdateV3Response:
+                for sfu_rs in sfu_rss.sharedFoldersUpdateV3Response:
                     shared_folder_uid = utils.base64_url_encode(sfu_rs.sharedFolderUid)
                     for sfu_status in sfu_rs.sharedFolderAddRecordStatus:
                         if sfu_status.status.lower() != 'success':
@@ -300,36 +305,35 @@ class VerifyRecordsCommand(ArgparseCommand):
 
     def execute(self, context: KeeperParams, **kwargs):
         self._validate_context(context)
-        records_v3_to_fix, records_v2_to_fix = self._analyze_records(context)
+        vault = context.vault
+        records_v3_to_fix, records_v2_to_fix = self._analyze_records(vault)
         
         if not records_v2_to_fix and not records_v3_to_fix:
             return
             
         total_records = len(records_v2_to_fix) + len(records_v3_to_fix)
-        print(f'There are {total_records} record(s) to be corrected')
+        logger.info(f'There are {total_records} record(s) to be corrected')
         
         if self._get_user_confirmation():
-            success, failed = self._fix_records(context, records_v2_to_fix, records_v3_to_fix)
+            success, failed = self._fix_records(vault, records_v2_to_fix, records_v3_to_fix)
             self._report_results(success, failed)
             
             if success > 0:
-                context.vault.sync_requested = True
+                vault.sync_down()
     
     def _validate_context(self, context: KeeperParams) -> None:
-        if not context.vault:
-            raise CommandError("Vault is not initialized")
-        if not context.auth:
-            raise CommandError("Authentication is required")
+        if not context.vault or not context.auth:
+            raise CommandError("Vault is not initialized, authentication is required")
     
-    def _analyze_records(self, context: KeeperParams) -> Tuple[Dict[str, dict], Dict[str, dict]]:
+    def _analyze_records(self, vault: vault_online.VaultOnline) -> Tuple[Dict[str, dict], Dict[str, dict]]:
         records_v3_to_fix = {}
         records_v2_to_fix = {}
 
-        for record_info in context.vault.vault_data.records():
+        for record_info in vault.vault_data.records():
             record_uid = record_info.record_uid
             
             try:
-                record = context.vault.vault_data.load_record(record_uid)
+                record = vault.vault_data.load_record(record_uid)
                 if not record:
                     continue
             except Exception:
@@ -549,7 +553,7 @@ class VerifyRecordsCommand(ArgparseCommand):
             'title': record.title or '',
             'secret1': record.password or '',
             'secret2': record.login or '',
-            'link': record.login_url or '',
+            'link': record.link or '',
             'notes': record.notes or ''
         }
         
@@ -583,23 +587,23 @@ class VerifyRecordsCommand(ArgparseCommand):
         answer = user_choice('Do you want to proceed?', 'yn', 'n')
         return answer.lower() == 'y'
     
-    def _fix_records(self, context: KeeperParams, records_v2_to_fix, records_v3_to_fix) -> Tuple[int, List[str]]:
+    def _fix_records(self, vault: vault_online.VaultOnline, records_v2_to_fix, records_v3_to_fix) -> Tuple[int, List[str]]:
         success = 0
         failed = []
 
         if records_v2_to_fix:
-            v2_success, v2_failed = self._fix_v2_records(context, records_v2_to_fix)
+            v2_success, v2_failed = self._fix_v2_records(vault, records_v2_to_fix)
             success += v2_success
             failed.extend(v2_failed)
 
         if records_v3_to_fix:
-            v3_success, v3_failed = self._fix_v3_records(context, records_v3_to_fix)
+            v3_success, v3_failed = self._fix_v3_records(vault, records_v3_to_fix)
             success += v3_success
             failed.extend(v3_failed)
             
         return success, failed
     
-    def _fix_v2_records(self, context: KeeperParams, records_v2_to_fix) -> Tuple[int, List[str]]:
+    def _fix_v2_records(self, vault: vault_online.VaultOnline, records_v2_to_fix) -> Tuple[int, List[str]]:
         success = 0
         failed = []
         record_uids = list(records_v2_to_fix.keys())
@@ -607,13 +611,13 @@ class VerifyRecordsCommand(ArgparseCommand):
         while record_uids:
             chunk = record_uids[:MAX_DISPLAY_RECORDS]
             record_uids = record_uids[MAX_DISPLAY_RECORDS:]
-            chunk_success, chunk_failed = self._process_v2_chunk(context, records_v2_to_fix, chunk)
+            chunk_success, chunk_failed = self._process_v2_chunk(vault, records_v2_to_fix, chunk)
             success += chunk_success
             failed.extend(chunk_failed)
             
         return success, failed
     
-    def _process_v2_chunk(self, context: KeeperParams, records_v2_to_fix, chunk) -> Tuple[int, List[str]]:
+    def _process_v2_chunk(self, vault: vault_online.VaultOnline, records_v2_to_fix, chunk) -> Tuple[int, List[str]]:
         rq = {
             'command': 'record_update',
             'client_time': utils.current_milli_time(),
@@ -622,8 +626,8 @@ class VerifyRecordsCommand(ArgparseCommand):
         }
 
         for record_uid in chunk:
-            record_info = context.vault.vault_data.get_record(record_uid)
-            record_key = context.vault.vault_data.get_record_key(record_uid)
+            record_info = vault.vault_data.get_record(record_uid)
+            record_key = vault.vault_data.get_record_key(record_uid)
             
             if not record_info or not record_key:
                 continue
@@ -639,7 +643,7 @@ class VerifyRecordsCommand(ArgparseCommand):
                 'revision': record_info.revision,
             })
 
-        rs = context.auth.execute_auth_command(rq)
+        rs = vault.keeper_auth.execute_auth_command(rq)
         success = 0
         failed = []
         
@@ -653,13 +657,13 @@ class VerifyRecordsCommand(ArgparseCommand):
                 
         return success, failed
     
-    def _fix_v3_records(self, context: KeeperParams, records_v3_to_fix) -> Tuple[int, List[str]]:
+    def _fix_v3_records(self, vault: vault_online.VaultOnline, records_v3_to_fix) -> Tuple[int, List[str]]:
         rq = record_pb2.RecordsUpdateRequest()
         rq.client_time = utils.current_milli_time()
         
         for record_uid in records_v3_to_fix:
-            record_info = context.vault.vault_data.get_record(record_uid)
-            record_key = context.vault.vault_data.get_record_key(record_uid)
+            record_info = vault.vault_data.get_record(record_uid)
+            record_key = vault.vault_data.get_record_key(record_uid)
             
             if not record_info or not record_key:
                 continue
@@ -675,7 +679,7 @@ class VerifyRecordsCommand(ArgparseCommand):
             if len(rq.records) >= MAX_RECORDS_CHUNK:
                 break
 
-        rs = context.vault.keeper_auth.execute_auth_rest(
+        rs = vault.keeper_auth.execute_auth_rest(
             'vault/records_update', rq, response_type=record_pb2.RecordsModifyResponse
         )
         
@@ -693,7 +697,7 @@ class VerifyRecordsCommand(ArgparseCommand):
     
     def _report_results(self, success: int, failed: List[str]) -> None:
         if success > 0:
-            logging.info('Successfully corrected %d record(s)', success)
+            logger.info('Successfully corrected %d record(s)', success)
         if failed:
-            logging.warning('Failed to correct %d record(s)', len(failed))
-            logging.info('\n'.join(failed))
+            logger.warning('Failed to correct %d record(s)', len(failed))
+            logger.info('\n'.join(failed))
