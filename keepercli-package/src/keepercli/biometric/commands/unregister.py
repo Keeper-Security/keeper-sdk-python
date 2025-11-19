@@ -31,13 +31,10 @@ class BiometricUnregisterCommand(BiometricArgparseCommand):
                        help='Skip confirmation prompt')
         super().__init__(parser)
 
-    # def get_parser(self):
-    #     return self.parser
-
     def execute(self, context: KeeperParams, **kwargs):
         """Disable biometric authentication for the current user"""
         def _unregister():
-            username = context.username
+            username = context.auth.auth_context.username
             if not self._check_biometric_flag(username):
                 print(f"Biometric authentication is already disabled for user '{username}'.")
                 return
@@ -50,7 +47,6 @@ class BiometricUnregisterCommand(BiometricArgparseCommand):
 
             self._disable_server_passkeys(context)
 
-            context.biometric = False
             cleanup_success = self._cleanup_local_credentials(rp_id)
             delete_success = self._delete_biometric_flag(username)  
 
@@ -90,7 +86,7 @@ class BiometricUnregisterCommand(BiometricArgparseCommand):
     def _disable_server_passkeys(self, context: KeeperParams):
         """Disable the specific passkey stored for this device"""
         try:
-            stored_credential_id = self._get_stored_credential_id(context.username)
+            stored_credential_id = self._get_stored_credential_id(context.auth.auth_context.username)
             
             if stored_credential_id:
                 passkey_result = self._disable_specific_passkey(context.vault, stored_credential_id)

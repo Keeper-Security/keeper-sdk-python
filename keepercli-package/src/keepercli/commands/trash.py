@@ -389,7 +389,7 @@ class TrashGetCommand(base.ArgparseCommand):
             self._load_record_shares(context.vault, record, record_uid)
 
         if 'shares' in record and 'user_permissions' in record['shares']:
-            self._display_user_permissions(record['shares']['user_permissions'], context.username)
+            self._display_user_permissions(record['shares']['user_permissions'], context.auth.auth_context.username)
     
     def _load_record_shares(self, vault, record: Dict, record_uid: str):
         """Load record shares if not already present."""

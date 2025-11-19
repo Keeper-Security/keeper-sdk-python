@@ -1392,10 +1392,10 @@ class RecordGetCommand(base.ArgparseCommand):
     def _display_team_json(self, context: KeeperParams, uid: str):
         """Display team information in JSON format."""
         team = context.enterprise_data.teams.get_entity(uid)
-        user = enterprise_utils.UserUtils.resolve_single_user(context.enterprise_data, context.username)
+        user = enterprise_utils.UserUtils.resolve_single_user(context.enterprise_data, context.auth.auth_context.username)
         team_users = {x.team_uid for x in context.enterprise_data.team_users.get_links_by_object(user.enterprise_user_id)}
         if team.team_uid not in team_users:
-            logger.info(f'User {context.username} does not belong to team {team.name}')
+            logger.info(f'User {context.auth.auth_context.username} does not belong to team {team.name}')
         output = {
             'Team UID:': uid,
             'Name:': team.name
@@ -1626,11 +1626,11 @@ class RecordGetCommand(base.ArgparseCommand):
         """Display team information in detailed format."""
         team = context.enterprise_data.teams.get_entity(uid)
 
-        user = enterprise_utils.UserUtils.resolve_single_user(context.enterprise_data, context.username)
+        user = enterprise_utils.UserUtils.resolve_single_user(context.enterprise_data, context.auth.auth_context.username)
         team_users = {x.team_uid for x in context.enterprise_data.team_users.get_links_by_object(user.enterprise_user_id)}
         team_user = True
         if team.team_uid not in team_users:
-            logger.info(f'User {context.username} does not belong to team {team.name}')
+            logger.info(f'User {context.auth.auth_context.username} does not belong to team {team.name}')
             team_user = False
 
         logger.info('')
@@ -1785,7 +1785,7 @@ class RecordSearchCommand(base.ArgparseCommand):
 
     def _perform_search(self, vault: vault_online.VaultOnline, config: dict, context: KeeperParams):
         """Perform the search across all specified categories."""
-        # Validate categories
+
         valid_categories = set('rst')
         requested_categories = set(config['categories'])
         if not requested_categories.issubset(valid_categories):
@@ -1793,12 +1793,10 @@ class RecordSearchCommand(base.ArgparseCommand):
                           f"Using valid categories: {requested_categories & valid_categories}")
             config['categories'] = ''.join(requested_categories & valid_categories)
         
-        # Store search results for each category
         search_results = {}
         total_found = 0
         max_results_per_category = 1000
 
-        # Search in each requested category
         if 'r' in config['categories']:
             try:
                 records = context.vault.vault_data.find_records(criteria=config['pattern'], record_type=None, record_version=None)
@@ -1826,12 +1824,12 @@ class RecordSearchCommand(base.ArgparseCommand):
                 logger.error(f"Error searching teams: {e}")
                 search_results['teams'] = []
         
-        # Check if any objects were found in any of the requested categories
         if total_found == 0:
+            if 't' in config['categories']:
+                logger.error("No teams found matching the pattern or you are not a member of the requested team")
             categories_str = ', '.join(requested_categories)
             raise base.CommandError(f"No objects found in any of the requested categories: {categories_str}")
         
-        # Display results after all searches are completed
         self._display_all_search_results(search_results, config, context, vault)
 
     def _display_all_search_results(self, search_results: dict, config: dict, context: KeeperParams, vault: vault_online.VaultOnline):

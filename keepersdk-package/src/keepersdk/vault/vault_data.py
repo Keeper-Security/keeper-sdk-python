@@ -129,7 +129,10 @@ class VaultData:
         if isinstance(words, str):
             words = list(utils.tokenize_searchable_text(words))
         elif isinstance(words, list):
-            return False
+            search_words = []
+            for word in words:
+                search_words.extend(utils.tokenize_searchable_text(word))
+            words = search_words
         for entity_word in entity_words:
             for search_word in words:
                 if len(search_word) <= len(entity_word):

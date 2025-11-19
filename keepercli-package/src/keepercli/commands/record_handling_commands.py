@@ -1167,7 +1167,7 @@ class _PermissionProcessor:
                     continue
                     
                 username = up.get('username')
-                if username == self.context.username:  # Skip self
+                if username == self.context.auth.auth_context.username:  # Skip self
                     continue
                 
                 needs_update = self._needs_permission_update(
@@ -1299,7 +1299,7 @@ class _PermissionProcessor:
                 return True
             
             user = next(
-                (x for x in shared_folder.user_permissions if x.name == self.context.username),
+                (x for x in shared_folder.user_permissions if x.name == self.context.auth.auth_context.username),
                 None
             )
             if user and user.manage_records:
