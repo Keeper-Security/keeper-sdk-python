@@ -86,7 +86,7 @@ class BiometricUnregisterCommand(BiometricArgparseCommand):
     def _disable_server_passkeys(self, context: KeeperParams):
         """Disable the specific passkey stored for this device"""
         try:
-            stored_credential_id = self._get_stored_credential_id(context.username)
+            stored_credential_id = self._get_stored_credential_id(context.auth.auth_context.username)
             
             if stored_credential_id:
                 passkey_result = self._disable_specific_passkey(context.vault, stored_credential_id)

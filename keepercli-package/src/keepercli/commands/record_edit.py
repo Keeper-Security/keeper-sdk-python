@@ -1392,10 +1392,10 @@ class RecordGetCommand(base.ArgparseCommand):
     def _display_team_json(self, context: KeeperParams, uid: str):
         """Display team information in JSON format."""
         team = context.enterprise_data.teams.get_entity(uid)
-        user = enterprise_utils.UserUtils.resolve_single_user(context.enterprise_data, context.username)
+        user = enterprise_utils.UserUtils.resolve_single_user(context.enterprise_data, context.auth.auth_context.username)
         team_users = {x.team_uid for x in context.enterprise_data.team_users.get_links_by_object(user.enterprise_user_id)}
         if team.team_uid not in team_users:
-            logger.info(f'User {context.username} does not belong to team {team.name}')
+            logger.info(f'User {context.auth.auth_context.username} does not belong to team {team.name}')
         output = {
             'Team UID:': uid,
             'Name:': team.name
@@ -1626,11 +1626,11 @@ class RecordGetCommand(base.ArgparseCommand):
         """Display team information in detailed format."""
         team = context.enterprise_data.teams.get_entity(uid)
 
-        user = enterprise_utils.UserUtils.resolve_single_user(context.enterprise_data, context.username)
+        user = enterprise_utils.UserUtils.resolve_single_user(context.enterprise_data, context.auth.auth_context.username)
         team_users = {x.team_uid for x in context.enterprise_data.team_users.get_links_by_object(user.enterprise_user_id)}
         team_user = True
         if team.team_uid not in team_users:
-            logger.info(f'User {context.username} does not belong to team {team.name}')
+            logger.info(f'User {context.auth.auth_context.username} does not belong to team {team.name}')
             team_user = False
 
         logger.info('')
