@@ -9,11 +9,10 @@ from ..params import KeeperParams
 from ..prompt_utils import user_choice
 from ..helpers.report_utils import dump_report_data
 from ..helpers.record_utils import get_totp_code
-from .. import api
 
 from keepersdk import crypto, utils
 from keepersdk.proto import record_pb2, folder_pb2
-from keepersdk.vault import vault_record, vault_online
+from keepersdk.vault import vault_record
 
 # Constants
 MAX_DISPLAY_RECORDS = 99
@@ -26,13 +25,10 @@ class VerifySharedFoldersCommand(ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(prog='verify-shared-folders', 
                                        description='Verify and fix shared folder record key issues')
-        self._add_arguments_to_parser(parser)
-        super().__init__(parser)
-    
-    def _add_arguments_to_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument('--dry-run', dest='dry_run', action='store_true',
                            help='Display the found problems without fixing')
         parser.add_argument('target', nargs='*', help='Shared folder UID or name.')
+        super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs):
         self._validate_context(context)
@@ -153,7 +149,6 @@ class VerifySharedFoldersCommand(ArgparseCommand):
         last_record_uid = ''
         
         for record_uid, shared_folder_uid in chunk:
-            # Use vault data directly instead of cache for better compatibility
             shared_folder_key = context.vault.vault_data.get_shared_folder_key(shared_folder_uid)
             record_key = context.vault.vault_data.get_record_key(record_uid)
             
@@ -301,12 +296,7 @@ class VerifySharedFoldersCommand(ArgparseCommand):
 class VerifyRecordsCommand(ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(prog='verify-records', description='Verify and fix record data issues')
-        self._add_arguments_to_parser(parser)
         super().__init__(parser)
-    
-    def _add_arguments_to_parser(self, parser: argparse.ArgumentParser) -> None:
-        # No additional arguments needed for this command
-        pass
 
     def execute(self, context: KeeperParams, **kwargs):
         self._validate_context(context)
@@ -354,9 +344,7 @@ class VerifyRecordsCommand(ArgparseCommand):
                 fixed_data = self._analyze_v2_record(record)
                 if fixed_data:
                     records_v2_to_fix[record_uid] = fixed_data
-            # Handle other record versions if they exist
             elif version > 3:
-                # For future record versions, try to handle as V3 format
                 fixed_data = self._analyze_v3_record(record)
                 if fixed_data:
                     records_v3_to_fix[record_uid] = fixed_data
@@ -364,11 +352,9 @@ class VerifyRecordsCommand(ArgparseCommand):
         return records_v3_to_fix, records_v2_to_fix
     
     def _analyze_v3_record(self, record) -> Optional[dict]:
-        # Handle both TypedRecord and other V3+ record formats
         if isinstance(record, vault_record.TypedRecord):
             return self._analyze_typed_record(record)
         elif hasattr(record, 'fields') and hasattr(record, 'custom'):
-            # Handle other V3+ record formats that might have fields/custom attributes
             return self._analyze_generic_v3_record(record)
         else:
             return None
@@ -394,10 +380,8 @@ class VerifyRecordsCommand(ArgparseCommand):
         return self._convert_record_to_data(record) if is_broken else None
     
     def _analyze_generic_v3_record(self, record) -> Optional[dict]:
-        """Handle generic V3+ records that aren't TypedRecord instances"""
         is_broken = False
         
-        # Basic field validation for generic records
         if hasattr(record, 'fields'):
             for field in record.fields:
                 if hasattr(field, 'value') and not isinstance(field.value, list):
@@ -410,7 +394,6 @@ class VerifyRecordsCommand(ArgparseCommand):
         return self._convert_generic_record_to_data(record) if is_broken else None
     
     def _convert_generic_record_to_data(self, record) -> dict:
-        """Convert generic record formats to data dict"""
         data = {
             'type': getattr(record, 'record_type', 'login'),
             'title': getattr(record, 'title', ''),
@@ -553,11 +536,9 @@ class VerifyRecordsCommand(ArgparseCommand):
         return data
     
     def _analyze_v2_record(self, record) -> Optional[dict]:
-        # Handle both PasswordRecord and other V2 record formats
         if isinstance(record, vault_record.PasswordRecord):
             return self._analyze_password_record(record)
         elif hasattr(record, 'title'):
-            # Handle generic V2 records
             return self._analyze_generic_v2_record(record)
         else:
             return None
@@ -581,7 +562,6 @@ class VerifyRecordsCommand(ArgparseCommand):
         return data if is_broken else None
     
     def _analyze_generic_v2_record(self, record) -> Optional[dict]:
-        """Handle generic V2 records that aren't PasswordRecord instances"""
         is_broken = False
         data = {
             'title': getattr(record, 'title', '') or '',
