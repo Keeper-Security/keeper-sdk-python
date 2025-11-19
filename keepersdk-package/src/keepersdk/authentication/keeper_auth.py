@@ -293,13 +293,13 @@ class KeeperAuth:
                                 assert self.auth_context.rsa_private_key is not None
                                 aes = crypto.decrypt_rsa(encrypted_key, self.auth_context.rsa_private_key)
                             elif key_type == 3:
-                                rsa = encrypted_key
+                                aes = crypto.decrypt_aes_v2(encrypted_key, self.auth_context.data_key)
                             elif key_type == 4:
                                 assert self.auth_context.ec_private_key is not None
                                 aes = crypto.decrypt_ec(encrypted_key, self.auth_context.ec_private_key)
                             elif key_type == -3:
-                                aes = crypto.decrypt_aes_v2(encrypted_key, self.auth_context.data_key)
-                            elif key_type == -4:
+                                rsa = encrypted_key
+                            elif key_type == -1:
                                 ec = encrypted_key
                             self._key_cache[team_uid] = UserKeys(aes=aes,rsa=rsa, ec=ec)
                         except Exception as e:

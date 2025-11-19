@@ -167,7 +167,9 @@ class PedmPlugin(IPedmAdmin):
                 self._need_sync = True
 
     def close(self):
-        self._push_notifications.shutdown()
+        if self._push_notifications and not self._push_notifications.is_completed:
+            self._push_notifications.shutdown()
+        self._push_notifications = None
 
     @property
     def deployments(self) -> storage_types.IEntityReader[admin_types.PedmDeployment, str]:
