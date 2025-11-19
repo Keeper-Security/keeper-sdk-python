@@ -905,7 +905,9 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
                             if not team_keys:
                                 raise Exception('team key is not loaded')
                             if not team_keys.aes:
-                                raise Exception('team key is not loaded')
+                                team = enterprise_data.teams.get_entity(team_user.team_uid)
+                                if team:
+                                    team_keys.aes = team.encrypted_team_key
                             user_keys = self.loader.keeper_auth.get_user_keys(u.username)
                             if not user_keys:
                                 raise Exception('user key is not loaded')
