@@ -1094,6 +1094,7 @@ class RecordGetCommand(base.ArgparseCommand):
     def execute(self, context: KeeperParams, **kwargs):
         """Execute the get command based on the provided parameters."""
         self._validate_context(context)
+        vault = context.vault
         
         uid = kwargs.get('uid')
         output_format = kwargs.get('format', 'detail')
@@ -1103,11 +1104,11 @@ class RecordGetCommand(base.ArgparseCommand):
         record = kwargs.get('record')
         
         if folder:
-            shared_folder = self._find_shared_folder(context.vault, folder)
+            shared_folder = self._find_shared_folder(vault, folder)
             if shared_folder:
                 target_object = ('shared_folder', shared_folder)
             else:
-                folder = self._find_folder(context.vault, folder)
+                folder = self._find_folder(vault, folder)
                 if folder:
                     target_object = ('folder', folder)
                 else:
@@ -1119,7 +1120,7 @@ class RecordGetCommand(base.ArgparseCommand):
             else:
                 raise base.CommandError('The given UID or title is not a valid team')
         elif record:
-            record = self._find_record(context.vault, record)
+            record = self._find_record(vault, record)
             if record:
                 target_object = ('record', record)
             else:
@@ -1161,7 +1162,7 @@ class RecordGetCommand(base.ArgparseCommand):
         
         return None
 
-    def _find_record(self, vault: vault_data.VaultData, uid_or_title: str):
+    def _find_record(self, vault: vault_online.VaultOnline, uid_or_title: str):
         """Find a record by UID or title."""
         return next(
             (r for r in vault.vault_data.records() 
@@ -1169,7 +1170,7 @@ class RecordGetCommand(base.ArgparseCommand):
             None
         )
 
-    def _find_shared_folder(self, vault: vault_data.VaultData, uid_or_title: str):
+    def _find_shared_folder(self, vault: vault_online.VaultOnline, uid_or_title: str):
         """Find a shared folder by UID or name."""
         return next(
             (f for f in vault.vault_data.shared_folders() 
@@ -1177,7 +1178,7 @@ class RecordGetCommand(base.ArgparseCommand):
             None
         )
     
-    def _find_folder(self, vault: vault_data.VaultData, uid_or_title: str):
+    def _find_folder(self, vault: vault_online.VaultOnline, uid_or_title: str):
         """Find a folder by UID or name."""
         return next(
             (f for f in vault.vault_data.folders() 
@@ -1206,7 +1207,7 @@ class RecordGetCommand(base.ArgparseCommand):
         elif object_type == 'team':
             self._display_team(context, object_data, output_format)
 
-    def _display_record(self, vault: vault_data.VaultData, record, output_format: str, unmask: bool):
+    def _display_record(self, vault: vault_online.VaultOnline, record, output_format: str, unmask: bool):
         """Display a record in the specified format."""
         record_uid = record.record_uid
         dispatch = {
@@ -1218,14 +1219,14 @@ class RecordGetCommand(base.ArgparseCommand):
         display_func = dispatch.get(output_format, lambda: self._display_record_detail(vault, record_uid, unmask))
         display_func()
 
-    def _display_shared_folder(self, vault: vault_data.VaultData, shared_folder, output_format: str):
+    def _display_shared_folder(self, vault: vault_online.VaultOnline, shared_folder, output_format: str):
         """Display a shared folder in the specified format."""
         if output_format == 'json':
             self._display_shared_folder_json(vault, shared_folder.shared_folder_uid)
         else:  # detail format
             self._display_shared_folder_detail(vault, shared_folder.shared_folder_uid)
 
-    def _display_folder(self, vault: vault_data.VaultData, folder, output_format: str):
+    def _display_folder(self, vault: vault_online.VaultOnline, folder, output_format: str):
         """Display a folder in the specified format."""
         if output_format == 'json':
             self._display_folder_json(vault, folder.folder_uid)
@@ -1239,7 +1240,7 @@ class RecordGetCommand(base.ArgparseCommand):
         else:  # detail format
             self._display_team_detail(context, team.team_uid)
     
-    def _display_record_json(self, vault: vault_data.VaultData, uid: str, unmask: bool = False):
+    def _display_record_json(self, vault: vault_online.VaultOnline, uid: str, unmask: bool = False):
         """Display record information in JSON format."""
         record = vault.vault_data.get_record(record_uid=uid)
         record_data = vault.vault_data.load_record(record_uid=uid)
@@ -1285,9 +1286,9 @@ class RecordGetCommand(base.ArgparseCommand):
         
         if record_data.attachments:
             output['Attachments:'] = [{
-                'Id': a.get('id'),
-                'Name': a.get('name'),
-                'Size': a.get('size')
+                'Id': a.id,
+                'Name': a.name,
+                'Size': a.size
             } for a in record_data.attachments]
         
         if record_data.custom:
@@ -1334,7 +1335,7 @@ class RecordGetCommand(base.ArgparseCommand):
         output['MIME Type:'] = record_data.mime_type
         output['Size:'] = record_data.size
 
-    def _add_share_info_to_json(self, vault: vault_data.VaultData, uid: str, output: dict):
+    def _add_share_info_to_json(self, vault: vault_online.VaultOnline, uid: str, output: dict):
         """Add share information to JSON output."""
         share_infos = share_utils.get_record_shares(vault=vault, record_uids=[uid])
         if share_infos and len(share_infos) > 0:
@@ -1348,7 +1349,7 @@ class RecordGetCommand(base.ArgparseCommand):
             if folder_shares:
                 output['Shared Folders:'] = folder_shares
     
-    def _display_shared_folder_json(self, vault: vault_data.VaultData, uid: str):
+    def _display_shared_folder_json(self, vault: vault_online.VaultOnline, uid: str):
         """Display shared folder information in JSON format."""
         shared_folder = vault.vault_data.load_shared_folder(shared_folder_uid=uid)
         output = {
@@ -1378,7 +1379,7 @@ class RecordGetCommand(base.ArgparseCommand):
         
         logger.info(json.dumps(output, indent=2))
     
-    def _display_folder_json(self, vault: vault_data.VaultData, uid: str):
+    def _display_folder_json(self, vault: vault_online.VaultOnline, uid: str):
         """Display folder information in JSON format."""
         folder = vault.vault_data.get_folder(folder_uid=uid)
         output = {
@@ -1402,7 +1403,7 @@ class RecordGetCommand(base.ArgparseCommand):
         }
         logger.info(json.dumps(output, indent=2))
     
-    def _display_record_detail(self, vault: vault_data.VaultData, uid: str, unmask: bool):
+    def _display_record_detail(self, vault: vault_online.VaultOnline, uid: str, unmask: bool):
         """Display record information in detailed format."""
         record = vault.vault_data.get_record(record_uid=uid)
         record_data = vault.vault_data.load_record(record_uid=uid)
@@ -1511,7 +1512,7 @@ class RecordGetCommand(base.ArgparseCommand):
             if code:
                 logger.info('{0:>20s}: {1:<20s} valid for {2} sec'.format('Two Factor Code', code, remain))
 
-    def _display_share_information(self, vault: vault_data.VaultData, uid: str):
+    def _display_share_information(self, vault: vault_online.VaultOnline, uid: str):
         """Display share information for a record."""
         share_infos = share_utils.get_record_shares(vault=vault, record_uids=[uid])
         if not share_infos or len(share_infos) == 0:
@@ -1570,7 +1571,7 @@ class RecordGetCommand(base.ArgparseCommand):
                 logger.info('Can Share: True')
         logger.info('')
 
-    def _display_share_admins(self, vault: vault_data.VaultData, uid: str):
+    def _display_share_admins(self, vault: vault_online.VaultOnline, uid: str):
         """Display share admins for a record."""
         admins = record_utils.get_share_admins_for_record(vault=vault, record_uid=uid)
         if admins:
@@ -1579,7 +1580,7 @@ class RecordGetCommand(base.ArgparseCommand):
             for admin in admins:
                 logger.info(admin)
         
-    def _display_shared_folder_detail(self, vault: vault_data.VaultData, uid: str):
+    def _display_shared_folder_detail(self, vault: vault_online.VaultOnline, uid: str):
         """Display shared folder information in detailed format."""
         shared_folder = vault.vault_data.load_shared_folder(shared_folder_uid=uid)
         logger.info('') 
@@ -1610,7 +1611,7 @@ class RecordGetCommand(base.ArgparseCommand):
 
         logger.info('')
     
-    def _display_folder_detail(self, vault: vault_data.VaultData, uid: str):
+    def _display_folder_detail(self, vault: vault_online.VaultOnline, uid: str):
         """Display folder information in detailed format."""
         folder = vault.vault_data.get_folder(folder_uid=uid)
         logger.info('')
@@ -1642,7 +1643,7 @@ class RecordGetCommand(base.ArgparseCommand):
             logger.info('{0:>20s}: {1}'.format('Restrict Share', team.restrict_share))
         logger.info('')
     
-    def _display_record_password(self, vault: vault_data.VaultData, uid: str):
+    def _display_record_password(self, vault: vault_online.VaultOnline, uid: str):
         """Display only the password field of a record."""
         record_data = vault.vault_data.load_record(record_uid=uid)
         if isinstance(record_data, vault_record.PasswordRecord):
@@ -1654,7 +1655,7 @@ class RecordGetCommand(base.ArgparseCommand):
         else:
             logger.info('No password field found in this record type')
     
-    def _display_record_fields(self, vault: vault_data.VaultData, uid: str, unmask: bool):
+    def _display_record_fields(self, vault: vault_online.VaultOnline, uid: str, unmask: bool):
         """Display record fields in JSON format."""
         record = vault.vault_data.get_record(record_uid=uid)
         record_data = vault.vault_data.load_record(record_uid=uid)
@@ -1847,7 +1848,7 @@ class RecordSearchCommand(base.ArgparseCommand):
         
         if 'teams' in search_results and search_results['teams']:
             logger.info('')
-            self._display_teams(search_results['teams'], config['skip_details'], vault)
+            self._display_teams(search_results['teams'], config['skip_details'], context)
 
     def _search_records(self, config: dict, context: KeeperParams):
         """Search and display records matching the pattern."""
@@ -1872,13 +1873,13 @@ class RecordSearchCommand(base.ArgparseCommand):
         except Exception as e:
             logger.error(f"Error searching shared folders: {e}")
 
-    def _search_teams(self, vault: vault_online.VaultOnline, config: dict):
+    def _search_teams(self, context: KeeperParams, config: dict):
         """Search and display teams matching the pattern."""
         try:
-            teams = vault.vault_data.find_teams(criteria=config['pattern'])
+            teams = context.vault.vault_data.find_teams(criteria=config['pattern'])
             if teams:
                 logger.info('')
-                self._display_teams(teams, config['skip_details'], vault)
+                self._display_teams(teams, config['skip_details'], context)
         except Exception as e:
             logger.error(f"Error searching teams: {e}")
 
@@ -1910,7 +1911,7 @@ class RecordSearchCommand(base.ArgparseCommand):
             kwargs = {'uid': record.record_uid, 'record': True}
             get_command.execute(context, **kwargs)
 
-    def _display_shared_folders(self, shared_folders: Iterable[vault_types.SharedFolder], 
+    def _display_shared_folders(self, shared_folders: Iterable[vault_types.SharedFolderInfo],
                                skip_details: bool, vault: vault_online.VaultOnline):
         """Display shared folders in a formatted table with optional details."""
         shared_folders_list = list(shared_folders)
@@ -1924,7 +1925,7 @@ class RecordSearchCommand(base.ArgparseCommand):
             if len(shared_folders_list) < self.MAX_DETAILS_THRESHOLD and not skip_details:
                 self._display_shared_folder_details(shared_folders_list, vault)
 
-    def _display_shared_folders_table(self, shared_folders: Iterable[vault_types.SharedFolder]):
+    def _display_shared_folders_table(self, shared_folders: Iterable[vault_types.SharedFolderInfo]):
         """Display shared folders in a formatted table."""
         table = [[i + 1, sf.shared_folder_uid, sf.name] 
                 for i, sf in enumerate(shared_folders)]
@@ -1933,15 +1934,15 @@ class RecordSearchCommand(base.ArgparseCommand):
         )
         logger.info('')
 
-    def _display_shared_folder_details(self, shared_folders: Iterable[vault_types.SharedFolder], 
+    def _display_shared_folder_details(self, shared_folders: Iterable[vault_types.SharedFolderInfo],
                                      vault: vault_online.VaultOnline):
         """Display detailed information for shared folders."""
         get_command = RecordGetCommand()
         for sf in shared_folders:
             get_command._display_shared_folder_detail(vault=vault, uid=sf.shared_folder_uid)
     
-    def _display_teams(self, teams: Iterable[vault_types.Team], skip_details: bool, 
-                       vault: vault_online.VaultOnline):
+    def _display_teams(self, teams: Iterable[vault_types.TeamInfo], skip_details: bool,
+                       context: KeeperParams):
         """Display teams in a formatted table with optional details."""
         teams_list = list(teams)
         
@@ -1952,9 +1953,9 @@ class RecordSearchCommand(base.ArgparseCommand):
             
             # Display details for small result sets
             if len(teams_list) < self.MAX_DETAILS_THRESHOLD and not skip_details:
-                self._display_team_details(teams_list, vault)
+                self._display_team_details(teams_list, context)
 
-    def _display_teams_table(self, teams: Iterable[vault_types.Team]):
+    def _display_teams_table(self, teams: Iterable[vault_types.TeamInfo]):
         """Display teams in a formatted table."""
         table = [[i + 1, team.team_uid, team.name] 
                 for i, team in enumerate(teams)]
@@ -1963,8 +1964,8 @@ class RecordSearchCommand(base.ArgparseCommand):
         )
         logger.info('')
 
-    def _display_team_details(self, teams: Iterable[vault_types.Team], vault: vault_online.VaultOnline):
+    def _display_team_details(self, teams: Iterable[vault_types.TeamInfo], context: KeeperParams):
         """Display detailed information for teams."""
         get_command = RecordGetCommand()
         for team in teams:
-            get_command._display_team_detail(vault=vault, uid=team.team_uid)
+            get_command._display_team_detail(context=context, uid=team.team_uid)

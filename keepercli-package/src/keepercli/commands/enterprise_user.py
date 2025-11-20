@@ -820,22 +820,21 @@ class EnterpriseDeviceApprovalCommand(base.ArgparseCommand, enterprise_managemen
         data_key_rq.enterpriseUserId.extend(user_ids)
         data_key_rs = context.auth.execute_auth_rest(
             GET_ENTERPRISE_USER_DATA_KEY_ENDPOINT, data_key_rq, 
-            response_type=APIRequest_pb2.EnterpriseUserDataKeys)
+            response_type=APIRequest_pb2.EnterpriseUserIdDataKeyPair)
         
-        for key in data_key_rs.keys:
-            enc_data_key = key.userEncryptedDataKey
-            if enc_data_key:
-                try:
-                    ephemeral_public_key = ec.EllipticCurvePublicKey.from_encoded_point(
-                        curve, enc_data_key[:ECC_PUBLIC_KEY_LENGTH])
-                    shared_key = ecc_private_key.exchange(ec.ECDH(), ephemeral_public_key)
-                    digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
-                    digest.update(shared_key)
-                    enc_key = digest.finalize()
-                    data_key = utils.crypto.decrypt_aes_v2(enc_data_key[ECC_PUBLIC_KEY_LENGTH:], enc_key)
-                    data_keys[key.enterpriseUserId] = data_key
-                except Exception as e:
-                    logger.debug(e)
+        enc_data_key = data_key_rs.encryptedDataKey
+        if enc_data_key:
+            try:
+                ephemeral_public_key = ec.EllipticCurvePublicKey.from_encoded_point(
+                    curve, enc_data_key[:ECC_PUBLIC_KEY_LENGTH])
+                shared_key = ecc_private_key.exchange(ec.ECDH(), ephemeral_public_key)
+                digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
+                digest.update(shared_key)
+                enc_key = digest.finalize()
+                data_key = utils.crypto.decrypt_aes_v2(enc_data_key[ECC_PUBLIC_KEY_LENGTH:], enc_key)
+                data_keys[data_key_rs.enterpriseUserId] = data_key
+            except Exception as e:
+                logger.debug(e)
         
         return data_keys
 

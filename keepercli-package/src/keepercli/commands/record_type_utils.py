@@ -93,11 +93,10 @@ def get_record_type_example(vault: vault_online.VaultOnline, record_type_name: s
                     ft['sample']['region'] = 'US'
 
             rte['fields'].append(val)
+        result = json.dumps(rte, indent=2) if rte else ''
+        return result
     else:
         raise ValueError(f'No record type found with name {record_type_name}. Use "record-type-info" to list all record types')
-
-    result = json.dumps(rte, indent=2) if rte else ''
-    return result
 
 
 def get_record_types(vault:vault_online.VaultOnline) -> list[vault_types.RecordType]:
@@ -138,7 +137,7 @@ def get_field_type(id):
     return result
 
 
-def isEnterpriseRecordType(record_type_id: int) -> bool:
+def is_enterprise_record_type(record_type_id: int) -> tuple[bool, int]:
     num_rts_per_scope = 1_000_000
     enterprise_scope = record_pb2.RT_ENTERPRISE
     min_id = num_rts_per_scope * enterprise_scope

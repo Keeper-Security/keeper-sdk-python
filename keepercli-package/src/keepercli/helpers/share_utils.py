@@ -841,9 +841,6 @@ def get_share_admins_for_shared_folder(vault: vault_online.VaultOnline, shared_f
 def get_folder_uids(context: KeeperParams, name: str) -> set[str]:
     folder_uids = set()
     
-    if not context.vault or not context.vault.vault_data:
-        return folder_uids
-    
     if name in context.vault.vault_data._folders:
         folder_uids.add(name)
         return folder_uids
@@ -863,9 +860,10 @@ def get_folder_uids(context: KeeperParams, name: str) -> set[str]:
     return folder_uids
 
 
-def get_contained_record_uids(vault: vault_online.VaultOnline, name: str, children_only: bool = True) -> Dict[str, Set[str]]:
+def get_contained_record_uids(context: KeeperParams, name: str, children_only: bool = True) -> Dict[str, Set[str]]:
     records_by_folder = dict()
-    root_folder_uids = get_folder_uids(vault, name)
+    root_folder_uids = get_folder_uids(context, name)
+    vault = context.vault
 
     def add_child_recs(f_uid):
         folder = vault.vault_data.get_folder(f_uid)
