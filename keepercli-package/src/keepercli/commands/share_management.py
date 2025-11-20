@@ -1267,7 +1267,7 @@ class OneTimeShareCreateCommand(base.ArgparseCommand):
 
     def _handle_output(self, context: KeeperParams, urls: dict, kwargs):
         """Handle different output formats for the URLs."""
-        if context.batch_mode:
+        if context.keeper_config.batch_mode:
             return '\n'.join(urls.values())
         
         output = kwargs.get('output') or ''

@@ -260,7 +260,7 @@ class LoadRecordTypesCommand(base.ArgparseCommand):
         existing_record_types = record_type_utils.get_record_types(context.vault)
         if existing_record_types:
             for existing_record_type in existing_record_types:
-                loaded_record_types.add(existing_record_type[1].lower())
+                loaded_record_types.add(existing_record_type.name.lower())
 
         for record_type in record_types_list:
             record_type_name = record_type.get('record_type_name')

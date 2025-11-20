@@ -633,7 +633,7 @@ class TrashUnshareCommand(base.ArgparseCommand):
         try:
             title_pattern = re.compile(fnmatch.translate(pattern), re.IGNORECASE)
         except re.error as e:
-            raise base.CommandError("Invalid record name: %s", e)
+            raise base.CommandError(f"Invalid record name: {e}")
         
         for record_uid, record in orphaned_records.items():
             if record_uid in records_to_unshare:

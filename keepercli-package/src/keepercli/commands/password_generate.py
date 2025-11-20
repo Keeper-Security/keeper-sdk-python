@@ -24,7 +24,7 @@ from . import base
 from .. import api
 from ..helpers.password_utils import (
     PasswordGenerationService, GenerationRequest, GeneratedPassword,
-    BreachStatus, PasswordStrength
+    BreachStatus
 )
 from ..params import KeeperParams
 
@@ -265,7 +265,7 @@ class PasswordGenerateCommand(base.ArgparseCommand):
                 logger.info(f"Output written to: {output_file}")
             except Exception as e:
                 logger.error(f"Failed to write to file {output_file}: {e}")
-                raise base.CommandError('generate', f"File write error: {e}")
+                raise base.CommandError(f"File write error: {e}")
         else:
             print(output)
     

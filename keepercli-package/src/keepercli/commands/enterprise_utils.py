@@ -503,8 +503,6 @@ class EnterpriseMixin:
 
 def is_addon_enabled(context: KeeperParams, addon_name: str) -> bool:
     keeper_licenses = context.enterprise_data.licenses.get_all_entities()
-    for license in keeper_licenses:
-        license.license_status
     if not keeper_licenses:
         raise base.CommandError('No licenses found')
     if next(iter(keeper_licenses), {}).license_status == BUSINESS_TRIAL:
