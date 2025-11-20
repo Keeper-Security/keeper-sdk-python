@@ -191,13 +191,12 @@ class GroupCommand(ICliCommand, CommandCollection):
             else:
                 verb = args.strip()
                 args = ''
-        elif args == '-h':
+        elif args in ('-h', '--help'):
             self.print_help(**kwargs)
             return
 
         if not verb and self.default_verb:
             verb = self.default_verb
-            self.print_help(**kwargs)
 
         if verb in self.aliases:
             verb = self.aliases[verb]
