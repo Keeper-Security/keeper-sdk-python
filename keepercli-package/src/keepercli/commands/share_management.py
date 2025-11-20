@@ -754,7 +754,7 @@ class ShareFolderCommand(base.ArgparseCommand):
                 if (all_users or all_records) and sh_fol:
                     if all_users:
                         if sh_fol.user_permissions:
-                            sf_users.update((x.name for x in sh_fol.user_permissions if x.name != context.username))
+                            sf_users.update((x.name for x in sh_fol.user_permissions if x.name != context.auth.auth_context.username))
                     if all_records:
                         if sh_fol and sh_fol.record_permissions:
                             sf_records.update((x.record_uid for x in sh_fol.record_permissions))
@@ -1267,7 +1267,7 @@ class OneTimeShareCreateCommand(base.ArgparseCommand):
 
     def _handle_output(self, context: KeeperParams, urls: dict, kwargs):
         """Handle different output formats for the URLs."""
-        if context.batch_mode:
+        if context.keeper_config.batch_mode:
             return '\n'.join(urls.values())
         
         output = kwargs.get('output') or ''

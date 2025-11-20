@@ -170,7 +170,7 @@ class RecordFileReportCommand(base.ArgparseCommand):
                     record.record_uid,
                     record.record_type,
                     file_record.record_uid,
-                    file_record.title or file_record.name,
+                    file_record.title or file_record.file_name,
                     file_record.size
                 ]
                 

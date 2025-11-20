@@ -25,13 +25,10 @@ class BiometricRegisterCommand(BiometricArgparseCommand):
                        help='Friendly name for the biometric method')
         super().__init__(parser)
 
-    # def get_parser(self):
-    #     return self.parser
-
     def execute(self, context: KeeperParams, **kwargs):
         """Execute registration with improved error handling and method breakdown"""
         def _register():
-            username = context.username
+            username = context.auth.auth_context.username
             self._validate_prerequisites(username, kwargs)
             registration_data = self._prepare_registration(kwargs)
             credential = self._perform_registration(context, registration_data)
@@ -84,7 +81,7 @@ class BiometricRegisterCommand(BiometricArgparseCommand):
             }
             
         except Exception as e:
-            return self._handle_registration_error(e, context.username, registration_data['friendly_name'])
+            return self._handle_registration_error(e, context.auth.auth_context.username, registration_data['friendly_name'])
 
     def _handle_registration_error(self, error, username, friendly_name):
         """Handle registration errors, including existing credential scenarios"""

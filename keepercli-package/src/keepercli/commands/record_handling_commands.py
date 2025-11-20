@@ -305,9 +305,12 @@ class ClipboardCommand(base.ArgparseCommand):
         field_name, field_property = self._parse_field_name(field_name)
         
         if isinstance(record, vault_record.PasswordRecord):
-            return copy_item, record.custom.get(field_name, '')
+            for field in record.custom:
+                if field.name.lower() == field_name.lower():
+                    return copy_item, field.value
+            return copy_item, ''
         elif isinstance(record, vault_record.TypedRecord):
-            return self._extract_typed_field_data(record, field_name, field_property, copy_item)
+            return self._extract_typed_field_data(record, field_name.lower(), field_property, copy_item)
         
         return copy_item, ''
 
@@ -1167,7 +1170,7 @@ class _PermissionProcessor:
                     continue
                     
                 username = up.get('username')
-                if username == self.context.username:  # Skip self
+                if username == self.context.auth.auth_context.username:  # Skip self
                     continue
                 
                 needs_update = self._needs_permission_update(
@@ -1299,7 +1302,7 @@ class _PermissionProcessor:
                 return True
             
             user = next(
-                (x for x in shared_folder.user_permissions if x.name == self.context.username),
+                (x for x in shared_folder.user_permissions if x.name == self.context.auth.auth_context.username),
                 None
             )
             if user and user.manage_records:

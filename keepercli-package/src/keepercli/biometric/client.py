@@ -124,11 +124,11 @@ class BiometricClient:
                 if storage_handler and hasattr(storage_handler, 'store_credential_id'):
                     try:
                         credential_id = credential_response.id
-                        success = storage_handler.store_credential_id(context.username, credential_id)
+                        success = storage_handler.store_credential_id(context.auth.auth_context.username, credential_id)
                         if success:
-                            logging.debug("Stored credential ID for user: %s", context.username)
+                            logging.debug("Stored credential ID for user: %s", context.auth.auth_context.username)
                         else:
-                            logging.warning("Failed to store credential ID for user: %s", context.username)
+                            logging.warning("Failed to store credential ID for user: %s", context.auth.auth_context.username)
                     except Exception as e:
                         logging.warning("Error storing credential ID: %s", str(e))
 
@@ -141,7 +141,7 @@ class BiometricClient:
             rq = APIRequest_pb2.PasskeyAuthenticationRequest()
             rq.authenticatorAttachment = APIRequest_pb2.AuthenticatorAttachment.PLATFORM
             rq.clientVersion = context.auth.keeper_endpoint.client_version
-            rq.username = context.username
+            rq.username = context.auth.auth_context.username
             rq.passkeyPurpose = (APIRequest_pb2.PasskeyPurpose.PK_REAUTH
                                if purpose == 'vault' else APIRequest_pb2.PasskeyPurpose.PK_LOGIN)
 
