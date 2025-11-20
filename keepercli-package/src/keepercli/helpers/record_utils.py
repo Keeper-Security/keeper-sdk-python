@@ -111,7 +111,7 @@ def process_external_share(context: KeeperParams, expiration_period: timedelta,
     
     url = urlunparse((
         'https', 
-        context.server, 
+        context.auth.keeper_endpoint.server, 
         '/vault/share', 
         None, 
         None, 
@@ -186,4 +186,4 @@ def resolve_record(context: KeeperParams, name: str) -> str:
                         if r.title.lower() == name.lower():
                             return uid
     if record_uid is None:
-        raise CommandError('one-time-share', f'Record not found: {name}')
+        raise CommandError(f'Record not found: {name}')

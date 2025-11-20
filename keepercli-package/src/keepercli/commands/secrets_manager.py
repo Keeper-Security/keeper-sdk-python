@@ -476,8 +476,8 @@ class SecretsManagerClientCommand(base.ArgparseCommand):
 
             tokens_and_device = SecretsManagerClientCommand.add_client(
                 vault=vault, uid=uid, count=count, client_name=client_name, 
-                unlock_ip=unlock_ip, first_access_expire_duration=first_access_expire_in, 
-                access_expire_in_min=access_expire_in_min, server=context.server
+                unlock_ip=unlock_ip, first_access_expire_duration=first_access_expire_in,
+                access_expire_in_min=access_expire_in_min, server=context.auth.keeper_endpoint.server
             )
 
             tokens_only = [d['oneTimeToken'] for d in tokens_and_device]

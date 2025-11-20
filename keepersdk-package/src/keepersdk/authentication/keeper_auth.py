@@ -11,7 +11,6 @@ import attrs
 from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePrivateKey, EllipticCurvePublicKey
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
 from google.protobuf.json_format import MessageToJson, MessageToDict
-from urllib3.util import url
 
 from . import endpoint, notifications
 from .. import errors, utils, crypto

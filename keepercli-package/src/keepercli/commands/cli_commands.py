@@ -111,7 +111,7 @@ class VersionCommand(base.ArgparseCommand):
             table.append(['Operating System', f'{p} ({platform.release()})'])
             table.append(['Working directory', os.getcwd()])
             table.append(['Package directory', os.path.dirname(api.__file__)])
-            table.append(['Config. File', context.config_filename])
+            table.append(['Config. File', context.keeper_config.config_filename])
             table.append(['Executable', sys.executable])
 
         if logger.isEnabledFor(logging.DEBUG) or show_packages:

@@ -217,7 +217,7 @@ class CreateEnterpriseUserCommand(base.ArgparseCommand):
         
         try:
             result = self._create_user(context, email, displayname, node_name)
-            keeper_url = self._build_keeper_url(context.server, email)
+            keeper_url = self._build_keeper_url(context.auth.keeper_endpoint.server, email)
             
             self._log_results(
                 result, displayname, keeper_url, PASSWORD_CHANGE_NOTE, verbose

@@ -104,7 +104,7 @@ class PasswordReportCommand(base.ArgparseCommand):
         if not folder or pattern:
             raise base.CommandError(f'Folder path {path_or_uid} not found')
             
-        return folder.uid or ''
+        return folder.folder_uid or ''
 
     def _extract_password_from_record(self, record: Any) -> str:
         """Extract password from a vault record.
