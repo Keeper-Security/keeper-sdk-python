@@ -305,9 +305,12 @@ class ClipboardCommand(base.ArgparseCommand):
         field_name, field_property = self._parse_field_name(field_name)
         
         if isinstance(record, vault_record.PasswordRecord):
-            return copy_item, record.custom.get(field_name, '')
+            for field in record.custom:
+                if field.name.lower() == field_name.lower():
+                    return copy_item, field.value
+            return copy_item, ''
         elif isinstance(record, vault_record.TypedRecord):
-            return self._extract_typed_field_data(record, field_name, field_property, copy_item)
+            return self._extract_typed_field_data(record, field_name.lower(), field_property, copy_item)
         
         return copy_item, ''
 

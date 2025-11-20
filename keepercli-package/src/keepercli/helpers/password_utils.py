@@ -5,7 +5,7 @@ This module provides password generation functionality with optional BreachWatch
 """
 
 import dataclasses
-from typing import Optional, List, Dict, Any, Union, Iterator, Tuple
+from typing import Optional, List, Any
 from enum import Enum
 
 import os
