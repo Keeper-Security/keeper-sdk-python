@@ -191,7 +191,7 @@ class GroupCommand(ICliCommand, CommandCollection):
             else:
                 verb = args.strip()
                 args = ''
-        elif args == '-h':
+        elif args in ('-h', '--help'):
             self.print_help(**kwargs)
             return
 
