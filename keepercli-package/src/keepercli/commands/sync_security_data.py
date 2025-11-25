@@ -21,16 +21,13 @@ logger = logging.getLogger(__name__)
 
 
 def raise_parse_exception(message):
-    """Raise a parse exception for argument parser errors."""
     raise base.ParseError(message)
 
 
 def suppress_exit(*args):
-    """Suppress parser exit and raise ParseError instead."""
     raise base.ParseError()
 
 
-# Create argument parser for sync-security-data command
 sync_security_data_parser = argparse.ArgumentParser(
     prog='sync-security-data',
     description='Sync security audit data for Keeper records'
@@ -80,21 +77,9 @@ class SyncSecurityDataCommand(base.ArgparseCommand):
         super().__init__(sync_security_data_parser)
     
     def get_parser(self):
-        """Get the argument parser for this command."""
         return sync_security_data_parser
     
     def execute(self, context: KeeperParams, **kwargs):
-        """
-        Execute the sync-security-data command.
-        
-        Args:
-            context: KeeperParams instance with vault access
-            **kwargs: Command arguments including:
-                - record: List of record names/UIDs or "@all"
-                - force: Force update flag
-                - quiet: Quiet mode flag
-        """
-        # Check for enterprise key requirement
         if not context.vault:
             raise base.CommandError('sync-security-data', 'Vault not initialized. Please login first.')
         
@@ -105,30 +90,23 @@ class SyncSecurityDataCommand(base.ArgparseCommand):
             msg = 'Command not allowed -- This command is limited to enterprise users only.'
             raise base.CommandError('sync-security-data', msg)
         
-        # Parse input records
         def parse_input_records() -> Set[str]:
-            """Parse record names/UIDs from command arguments."""
             names = kwargs.get('record', [])
             do_all = '@all' in names
             
             if do_all:
-                # Return all record UIDs from vault
                 return set(r.record_uid for r in vault.vault_data.records())
             else:
-                # Resolve each record name/pattern to UIDs
                 return set(itertools.chain.from_iterable(
                     record_utils.resolve_records(n, context) for n in names
                 ))
         
-        # Parse parameters
         force_update = kwargs.get('force', False)
         quiet = kwargs.get('quiet', False)
         
-        # Sync vault before processing
         vault.sync_requested = True
         vault.sync_down()
         
-        # Load records
         try:
             record_uids = parse_input_records()
         except Exception as e:
@@ -139,7 +117,6 @@ class SyncSecurityDataCommand(base.ArgparseCommand):
                 logger.info('No records found matching the specified criteria')
             return
         
-        # Load record objects
         records = []
         for record_uid in record_uids:
             try:
@@ -147,23 +124,18 @@ class SyncSecurityDataCommand(base.ArgparseCommand):
                 if record and isinstance(record, (vault_record.PasswordRecord, vault_record.TypedRecord)):
                     records.append(record)
             except Exception as e:
-                pass  # Skip records that can't be loaded
+                pass
         
-        # Filter records that need update
         should_update = lambda r: force_update or security_data.needs_security_audit(vault, r)
         recs_to_update = [r for r in records if should_update(r)]
         num_to_update = len(recs_to_update)
         
-        # Update security audit data
         num_updated = security_data.update_security_audit_data(vault, recs_to_update, quiet=True)
         
-        # Sync down after update to get latest data
         if num_updated:
-            # Save reused password count if breach watch is available
             try:
                 bwp = vault.breach_watch_plugin()
                 if bwp and hasattr(bwp, 'breach_watch') and bwp.breach_watch:
-                    # Count reused passwords
                     password_counts = {}
                     for record in vault.vault_data.records():
                         try:
@@ -181,12 +153,11 @@ class SyncSecurityDataCommand(base.ArgparseCommand):
                         if sap:
                             sap.set_reused_passwords(reused_count, 1)
             except Exception:
-                pass  # Ignore reused password count errors
+                pass
             
             vault.sync_requested = True
             vault.sync_down()
         
-        # Output results
         if not quiet:
             if num_updated:
                 logger.info(f'Updated security data for [{num_updated}] record(s)')
