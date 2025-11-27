@@ -1,0 +1,90 @@
+import getpass
+import sqlite3
+
+from keepersdk.authentication import login_auth, configuration, endpoint
+from keepersdk.vault import sqlite_storage, vault_online
+
+config = configuration.JsonConfigurationStorage()
+keeper_endpoint = endpoint.KeeperEndpoint(config)
+login_auth_context = login_auth.LoginAuth(keeper_endpoint)
+
+username = None
+if config.get().users() and config.get().users()[0]:
+    username = config.get().users()[0].username
+if not username:
+    username = input('Enter username: ')
+login_auth_context.resume_session = True
+login_auth_context.login(username)
+
+logged_in_with_persistent = True
+while not login_auth_context.login_step.is_final():
+    if isinstance(login_auth_context.login_step, login_auth.LoginStepDeviceApproval):
+        login_auth_context.login_step.send_push(login_auth.DeviceApprovalChannel.KeeperPush)
+        print("Device approval request sent. Login to existing vault/console or ask admin to approve this device and then press return/enter to resume")
+        input()
+    elif isinstance(login_auth_context.login_step, login_auth.LoginStepPassword):
+        password = getpass.getpass('Enter password: ')
+        login_auth_context.login_step.verify_password(password)
+    elif isinstance(login_auth_context.login_step, login_auth.LoginStepTwoFactor):
+        channel = login_auth_context.login_step.get_channels()[0]
+        code = getpass.getpass(f'Enter 2FA code for {channel.channel_name}: ')
+        login_auth_context.login_step.send_code(channel.channel_uid, code)
+    else:
+        raise NotImplementedError()
+    logged_in_with_persistent = False
+
+if logged_in_with_persistent:
+    print("Successfully logged in with persistent login")
+
+if isinstance(login_auth_context.login_step, login_auth.LoginStepConnected):
+    keeper_auth_context = login_auth_context.login_step.take_keeper_auth()
+    
+    conn = sqlite3.Connection('file::memory:', uri=True)
+    vault_storage = sqlite_storage.SqliteVaultStorage(
+        lambda: conn,
+        vault_owner=bytes(keeper_auth_context.auth_context.username, 'utf-8')
+    )
+    vault = vault_online.VaultOnline(keeper_auth_context, vault_storage)
+    
+    print("\nVault Summary")
+    print("=" * 100)
+    
+    total_records = 0
+    v2_records = 0
+    v3_records = 0
+    password_records = 0
+    typed_records = 0
+    
+    for record_info in vault.vault_data.records():
+        total_records += 1
+        if record_info.version == 2:
+            v2_records += 1
+        elif record_info.version == 3:
+            v3_records += 1
+    
+    total_folders = len(list(vault.vault_data.folders()))
+    user_folders = sum(1 for f in vault.vault_data.folders() if f.folder_type == 'user_folder')
+    shared_folders = vault.vault_data.shared_folder_count
+    
+    total_teams = len(list(vault.vault_data.teams()))
+    
+    print(f"\nRecords:")
+    print(f"  Total Records: {total_records}")
+    print(f"  Version 2 (Legacy): {v2_records}")
+    print(f"  Version 3+ (Modern): {v3_records}")
+    
+    print(f"\nFolders:")
+    print(f"  Total Folders: {total_folders}")
+    print(f"  User Folders: {user_folders}")
+    print(f"  Shared Folders: {shared_folders}")
+    
+    print(f"\nTeams:")
+    print(f"  Total Teams: {total_teams}")
+    
+    print("\n" + "=" * 100)
+    print("\nThis summary provides an overview of your vault structure.")
+    print("Use export_vault.py to create a detailed backup.")
+    
+    vault.close()
+    keeper_auth_context.close()
+
