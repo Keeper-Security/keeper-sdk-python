@@ -55,6 +55,7 @@ if isinstance(login_auth_context.login_step, login_auth.LoginStepConnected):
         vault_owner=bytes(keeper_auth_context.auth_context.username, 'utf-8')
     )
     vault = vault_online.VaultOnline(keeper_auth_context, vault_storage)
+    vault.sync_down()
     
     folder_search = input('Enter folder name or UID to move: ').strip()
     
@@ -76,11 +77,16 @@ if isinstance(login_auth_context.login_step, login_auth.LoginStepConnected):
             print(f"Type: {folder_found.folder_type}")
             print(f"UID: {folder_found.folder_uid}")
             
-            destination_search = input('\nEnter destination folder UID (or leave empty for root): ').strip()
+            destination_search = input('\nEnter destination folder name or UID (or leave empty for root): ').strip()
             
             destination_folder = None
             if destination_search:
                 destination_folder = vault.vault_data.get_folder(destination_search)
+                if not destination_folder:
+                    for folder in vault.vault_data.folders():
+                        if folder.name.lower() == destination_search.lower():
+                            destination_folder = folder
+                            break
                 if not destination_folder:
                     print(f"Destination folder '{destination_search}' not found")
                 else:

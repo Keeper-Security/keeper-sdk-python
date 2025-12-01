@@ -1,7 +1,10 @@
 import getpass
+import logging
 import sqlite3
 
 from keepersdk.authentication import login_auth, configuration, endpoint
+
+logging.getLogger('asyncio').setLevel(logging.CRITICAL)
 from keepersdk.enterprise import enterprise_loader, sqlite_enterprise_storage
 from keepersdk.errors import KeeperApiError
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
@@ -67,7 +70,7 @@ if isinstance(login_auth_context.login_step, login_auth.LoginStepConnected):
             teams_to_display = []
             
             if team_search:
-                for team in enterprise.enterprise_data.teams.get_all():
+                for team in enterprise.enterprise_data.teams.get_all_entities():
                     team_name = team.name if hasattr(team, 'name') and team.name else ''
                     team_uid = team.team_uid if hasattr(team, 'team_uid') else ''
                     
@@ -78,7 +81,7 @@ if isinstance(login_auth_context.login_step, login_auth.LoginStepConnected):
                 if not teams_to_display:
                     print(f'\nNo teams found matching: "{team_search}"')
             else:
-                teams_to_display = list(enterprise.enterprise_data.teams.get_all())
+                teams_to_display = list(enterprise.enterprise_data.teams.get_all_entities())
             
             if teams_to_display:
                 print("\nEnterprise Team Details")

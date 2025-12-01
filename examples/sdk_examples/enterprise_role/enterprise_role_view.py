@@ -1,7 +1,10 @@
 import getpass
+import logging
 import sqlite3
 
 from keepersdk.authentication import login_auth, configuration, endpoint
+
+logging.getLogger('asyncio').setLevel(logging.CRITICAL)
 from keepersdk.enterprise import enterprise_loader, sqlite_enterprise_storage
 from keepersdk.errors import KeeperApiError
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
@@ -67,8 +70,8 @@ if isinstance(login_auth_context.login_step, login_auth.LoginStepConnected):
             roles_to_display = []
             
             if role_search:
-                for role in enterprise.enterprise_data.roles.get_all():
-                    role_name = role.display_name if hasattr(role, 'display_name') and role.display_name else ''
+                for role in enterprise.enterprise_data.roles.get_all_entities():
+                    role_name = role.name if hasattr(role, 'name') and role.name else ''
                     role_id_str = str(role.role_id) if hasattr(role, 'role_id') else ''
                     
                     if (role_search.lower() in role_name.lower() or 
@@ -78,21 +81,21 @@ if isinstance(login_auth_context.login_step, login_auth.LoginStepConnected):
                 if not roles_to_display:
                     print(f'\nNo roles found matching: "{role_search}"')
             else:
-                roles_to_display = list(enterprise.enterprise_data.roles.get_all())
+                roles_to_display = list(enterprise.enterprise_data.roles.get_all_entities())
             
             if roles_to_display:
                 print("\nEnterprise Role Details")
                 print("=" * 120)
                 
                 for role in roles_to_display:
-                    role_name = role.display_name if hasattr(role, 'display_name') and role.display_name else 'N/A'
+                    role_name = role.name if hasattr(role, 'name') and role.name else 'N/A'
                     role_id = str(role.role_id) if hasattr(role, 'role_id') else 'N/A'
                     
                     node_name = ""
                     if hasattr(role, 'node_id') and role.node_id:
                         node = enterprise.enterprise_data.nodes.get_entity(role.node_id)
                         if node:
-                            node_name = node.display_name if hasattr(node, 'display_name') and node.display_name else str(role.node_id)
+                            node_name = node.name if hasattr(node, 'name') and node.name else str(role.node_id)
                     
                     print(f"\nRole Name: {role_name}")
                     print(f"Role ID: {role_id}")
@@ -109,7 +112,7 @@ if isinstance(login_auth_context.login_step, login_auth.LoginStepConnected):
                     if role_users:
                         print(f"\nUsers ({len(role_users)}):")
                         for role_user in role_users[:10]:
-                            user = enterprise.enterprise_data.users.get_entity(role_user.user_id)
+                            user = enterprise.enterprise_data.users.get_entity(role_user.enterprise_user_id)
                             if user:
                                 print(f"  - {user.username}")
                         if len(role_users) > 10:

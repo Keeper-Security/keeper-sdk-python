@@ -3,8 +3,9 @@ import sqlite3
 from datetime import datetime
 
 from keepersdk.authentication import login_auth, configuration, endpoint
-from keepersdk.vault import sqlite_storage, vault_online
+from keepersdk.vault import sqlite_storage, vault_online, ksm_management
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
+from keepersdk import utils
 
 config = configuration.JsonConfigurationStorage()
 if not config.get().last_server:
@@ -56,50 +57,82 @@ if isinstance(login_auth_context.login_step, login_auth.LoginStepConnected):
         vault_owner=bytes(keeper_auth_context.auth_context.username, 'utf-8')
     )
     vault = vault_online.VaultOnline(keeper_auth_context, vault_storage)
+    vault.sync_down()
     
     try:
-        rq = {
-            'command': 'get_one_time_shares'
-        }
-        response = keeper_auth_context.execute_auth_command(rq)
+        record_search = input('Enter record name/UID to check for shares (or leave empty for all records): ').strip()
         
-        shares = response.get('one_time_shares', [])
-        
-        if not shares:
-            print("\nNo one-time shares found")
+        record_uids = []
+        if record_search:
+            for record_info in vault.vault_data.records():
+                if record_info.version not in (2, 3):
+                    continue
+                if record_search.lower() in record_info.title.lower() or record_search == record_info.record_uid:
+                    record_uids.append(record_info.record_uid)
         else:
-            print(f"\nOne-Time Shares ({len(shares)})")
-            print("=" * 120)
-            print(f"{'Share Name':<30} {'Record Title':<30} {'Created':<25} {'Expires':<25}")
-            print("-" * 120)
-            
-            for share in shares:
-                share_uid = share.get('share_uid', 'N/A')
-                share_name = share.get('name', 'Unnamed')[:29]
-                record_uid = share.get('record_uid', '')
-                
-                record_title = 'N/A'
-                if record_uid:
-                    record_info = vault.vault_data.get_record(record_uid)
-                    if record_info:
-                        record_title = record_info.title[:29]
-                
-                created_time = share.get('created_time', 0)
-                expire_time = share.get('expire_time', 0)
-                
-                created_str = datetime.fromtimestamp(created_time / 1000).strftime('%Y-%m-%d %H:%M:%S') if created_time else 'N/A'
-                expire_str = datetime.fromtimestamp(expire_time / 1000).strftime('%Y-%m-%d %H:%M:%S') if expire_time else 'N/A'
-                
-                print(f"{share_name:<30} {record_title:<30} {created_str:<25} {expire_str:<25}")
-            
-            print("-" * 120)
-            print(f"Total shares: {len(shares)}")
+            for record_info in vault.vault_data.records():
+                if record_info.version in (2, 3):
+                    record_uids.append(record_info.record_uid)
         
-        print("=" * 120)
+        if not record_uids:
+            print("\nNo records found to check for one-time shares")
+        else:
+            app_infos = ksm_management.get_app_info(vault=vault, app_uid=record_uids[:100])
+            
+            shares_found = []
+            now = utils.current_milli_time()
+            
+            for app_info in app_infos:
+                if not app_info.isExternalShare:
+                    continue
+                
+                record_uid = utils.base64_url_encode(app_info.appRecordUid)
+                record_info = vault.vault_data.get_record(record_uid)
+                record_title = record_info.title if record_info else 'Unknown'
+                
+                for client in app_info.clients:
+                    share_data = {
+                        'record_uid': record_uid,
+                        'record_title': record_title,
+                        'share_name': client.id if client.id else 'Unnamed',
+                        'share_id': utils.base64_url_encode(client.clientId),
+                        'created': datetime.fromtimestamp(client.createdOn / 1000) if client.createdOn else None,
+                        'expires': datetime.fromtimestamp(client.accessExpireOn / 1000) if client.accessExpireOn else None,
+                        'opened': datetime.fromtimestamp(client.firstAccess / 1000) if client.firstAccess else None,
+                        'expired': now > client.accessExpireOn if client.accessExpireOn else False
+                    }
+                    shares_found.append(share_data)
+            
+            if not shares_found:
+                print("\nNo one-time shares found")
+            else:
+                print(f"\nOne-Time Shares ({len(shares_found)})")
+                print("=" * 130)
+                print(f"{'Record Title':<30} {'Share Name':<20} {'Created':<20} {'Expires':<20} {'Status':<15}")
+                print("-" * 130)
+                
+                for share in shares_found:
+                    title = (share['record_title'][:29] if share['record_title'] else 'Unknown')
+                    name = (share['share_name'][:19] if share['share_name'] else 'Unnamed')
+                    created = share['created'].strftime('%Y-%m-%d %H:%M') if share['created'] else 'N/A'
+                    expires = share['expires'].strftime('%Y-%m-%d %H:%M') if share['expires'] else 'N/A'
+                    
+                    if share['expired']:
+                        status = 'Expired'
+                    elif share['opened']:
+                        status = 'Opened'
+                    else:
+                        status = 'Active'
+                    
+                    print(f"{title:<30} {name:<20} {created:<20} {expires:<20} {status:<15}")
+                
+                print("-" * 130)
+                print(f"Total one-time shares: {len(shares_found)}")
+        
+        print("=" * 130)
         
     except Exception as e:
         print(f"Error retrieving one-time shares: {e}")
     
     vault.close()
     keeper_auth_context.close()
-

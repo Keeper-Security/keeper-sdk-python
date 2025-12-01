@@ -1,7 +1,10 @@
 import getpass
+import logging
 import sqlite3
 
 from keepersdk.authentication import login_auth, configuration, endpoint
+
+logging.getLogger('asyncio').setLevel(logging.CRITICAL)
 from keepersdk.enterprise import enterprise_loader, sqlite_enterprise_storage
 from keepersdk.errors import KeeperApiError
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
@@ -70,8 +73,8 @@ if isinstance(login_auth_context.login_step, login_auth.LoginStepConnected):
             print(f"{'Role Name':<35} {'Role ID':<12} {'Users':<10} {'Teams':<10} {'Node':<30}")
             print("-" * 100)
             
-            for role in enterprise.enterprise_data.roles.get_all():
-                role_name = role.display_name if hasattr(role, 'display_name') and role.display_name else 'N/A'
+            for role in enterprise.enterprise_data.roles.get_all_entities():
+                role_name = role.name if hasattr(role, 'name') and role.name else 'N/A'
                 role_id = str(role.role_id) if hasattr(role, 'role_id') else 'N/A'
                 
                 user_count = len(list(enterprise.enterprise_data.role_users.get_links_by_subject(role.role_id)))
@@ -81,13 +84,13 @@ if isinstance(login_auth_context.login_step, login_auth.LoginStepConnected):
                 if hasattr(role, 'node_id') and role.node_id:
                     node = enterprise.enterprise_data.nodes.get_entity(role.node_id)
                     if node:
-                        node_name = node.display_name if hasattr(node, 'display_name') and node.display_name else str(role.node_id)
+                        node_name = node.name if hasattr(node, 'name') and node.name else str(role.node_id)
                 
                 print(f"{role_name[:34]:<35} {role_id[:11]:<12} {user_count:<10} {team_count:<10} {node_name[:29]:<30}")
             
             print("=" * 100)
             
-            total_roles = len(list(enterprise.enterprise_data.roles.get_all()))
+            total_roles = len(list(enterprise.enterprise_data.roles.get_all_entities()))
             print(f"\nTotal roles: {total_roles}")
             
             enterprise.close()

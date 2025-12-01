@@ -1,7 +1,10 @@
 import getpass
+import logging
 import sqlite3
 
 from keepersdk.authentication import login_auth, configuration, endpoint
+
+logging.getLogger('asyncio').setLevel(logging.CRITICAL)
 from keepersdk.enterprise import enterprise_loader, sqlite_enterprise_storage
 from keepersdk.errors import KeeperApiError
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
@@ -67,9 +70,9 @@ if isinstance(login_auth_context.login_step, login_auth.LoginStepConnected):
             users_to_display = []
             
             if user_search:
-                for user in enterprise.enterprise_data.users.get_all():
+                for user in enterprise.enterprise_data.users.get_all_entities():
                     user_email = user.username if hasattr(user, 'username') else ''
-                    user_id_str = str(user.user_id) if hasattr(user, 'user_id') else ''
+                    user_id_str = str(user.enterprise_user_id) if hasattr(user, 'enterprise_user_id') else ''
                     
                     if (user_search.lower() in user_email.lower() or 
                         user_search == user_id_str):
@@ -78,23 +81,23 @@ if isinstance(login_auth_context.login_step, login_auth.LoginStepConnected):
                 if not users_to_display:
                     print(f'\nNo users found matching: "{user_search}"')
             else:
-                users_to_display = list(enterprise.enterprise_data.users.get_all())
+                users_to_display = list(enterprise.enterprise_data.users.get_all_entities())
             
             if users_to_display:
                 print("\nEnterprise User Details")
                 print("=" * 120)
                 
                 for user in users_to_display:
-                    user_name = user.display_name if hasattr(user, 'display_name') and user.display_name else user.username
+                    user_name = user.full_name if hasattr(user, 'full_name') and user.full_name else user.username
                     user_email = user.username if hasattr(user, 'username') else 'N/A'
-                    user_id = str(user.user_id) if hasattr(user, 'user_id') else 'N/A'
-                    user_status = user.status.name if hasattr(user, 'status') else 'unknown'
+                    user_id = str(user.enterprise_user_id) if hasattr(user, 'enterprise_user_id') else 'N/A'
+                    user_status = user.status if hasattr(user, 'status') else 'unknown'
                     
                     node_name = ""
                     if hasattr(user, 'node_id') and user.node_id:
                         node = enterprise.enterprise_data.nodes.get_entity(user.node_id)
                         if node:
-                            node_name = node.display_name if hasattr(node, 'display_name') and node.display_name else str(user.node_id)
+                            node_name = node.name if hasattr(node, 'name') and node.name else str(user.node_id)
                     
                     print(f"\nUser Name: {user_name}")
                     print(f"Email: {user_email}")
@@ -106,7 +109,7 @@ if isinstance(login_auth_context.login_step, login_auth.LoginStepConnected):
                     if hasattr(user, 'account_share_expiration') and user.account_share_expiration:
                         print(f"Account Share Expiration: {user.account_share_expiration}")
                     
-                    user_teams = [tu for tu in enterprise.enterprise_data.team_users.get_links_by_object(user.user_id)]
+                    user_teams = [tu for tu in enterprise.enterprise_data.team_users.get_links_by_object(user.enterprise_user_id)]
                     if user_teams:
                         print(f"\nTeams ({len(user_teams)}):")
                         for team_user in user_teams[:10]:
@@ -117,13 +120,13 @@ if isinstance(login_auth_context.login_step, login_auth.LoginStepConnected):
                         if len(user_teams) > 10:
                             print(f"  ... and {len(user_teams) - 10} more")
                     
-                    user_roles = [ru for ru in enterprise.enterprise_data.role_users.get_links_by_object(user.user_id)]
+                    user_roles = [ru for ru in enterprise.enterprise_data.role_users.get_links_by_object(user.enterprise_user_id)]
                     if user_roles:
                         print(f"\nRoles ({len(user_roles)}):")
                         for role_user in user_roles[:10]:
                             role = enterprise.enterprise_data.roles.get_entity(role_user.role_id)
                             if role:
-                                role_name = role.display_name if hasattr(role, 'display_name') and role.display_name else str(role_user.role_id)
+                                role_name = role.name if hasattr(role, 'name') and role.name else str(role_user.role_id)
                                 print(f"  - {role_name}")
                         if len(user_roles) > 10:
                             print(f"  ... and {len(user_roles) - 10} more")

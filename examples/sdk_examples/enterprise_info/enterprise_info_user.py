@@ -1,7 +1,10 @@
 import getpass
+import logging
 import sqlite3
 
 from keepersdk.authentication import login_auth, configuration, endpoint
+
+logging.getLogger('asyncio').setLevel(logging.CRITICAL)
 from keepersdk.enterprise import enterprise_loader, sqlite_enterprise_storage
 from keepersdk.errors import KeeperApiError
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
@@ -70,22 +73,22 @@ if isinstance(login_auth_context.login_step, login_auth.LoginStepConnected):
             print(f"{'Name':<30} {'Email':<35} {'Status':<15} {'Node':<20}")
             print("-" * 100)
             
-            for user in enterprise.enterprise_data.users.get_all():
-                user_name = user.display_name if hasattr(user, 'display_name') and user.display_name else user.username
+            for user in enterprise.enterprise_data.users.get_all_entities():
+                user_name = user.full_name if hasattr(user, 'full_name') and user.full_name else user.username
                 user_email = user.username
-                user_status = user.status.name if hasattr(user, 'status') else 'unknown'
+                user_status = user.status if hasattr(user, 'status') else 'unknown'
                 
                 node_name = ""
                 if hasattr(user, 'node_id') and user.node_id:
                     node = enterprise.enterprise_data.nodes.get_entity(user.node_id)
                     if node:
-                        node_name = node.display_name if hasattr(node, 'display_name') and node.display_name else str(user.node_id)
+                        node_name = node.name if hasattr(node, 'name') and node.name else str(user.node_id)
                 
                 print(f"{user_name[:29]:<30} {user_email[:34]:<35} {user_status:<15} {node_name[:19]:<20}")
             
             print("=" * 100)
             
-            total_users = len(list(enterprise.enterprise_data.users.get_all()))
+            total_users = len(list(enterprise.enterprise_data.users.get_all_entities()))
             print(f"\nTotal users: {total_users}")
             
             enterprise.close()

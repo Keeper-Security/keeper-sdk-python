@@ -1,7 +1,10 @@
 import getpass
+import logging
 import sqlite3
 
 from keepersdk.authentication import login_auth, configuration, endpoint
+
+logging.getLogger('asyncio').setLevel(logging.CRITICAL)
 from keepersdk.enterprise import enterprise_loader, sqlite_enterprise_storage
 from keepersdk.errors import KeeperApiError
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
@@ -69,17 +72,17 @@ if isinstance(login_auth_context.login_step, login_auth.LoginStepConnected):
                 prefix = "  " * indent
                 node_name = node.display_name if hasattr(node, 'display_name') and node.display_name else f"Node {node.node_id}"
                 
-                user_count = sum(1 for user in enterprise.enterprise_data.users.get_all() 
+                user_count = sum(1 for user in enterprise.enterprise_data.users.get_all_entities() 
                                  if hasattr(user, 'node_id') and user.node_id == node.node_id)
-                team_count = sum(1 for team in enterprise.enterprise_data.teams.get_all() 
+                team_count = sum(1 for team in enterprise.enterprise_data.teams.get_all_entities() 
                                  if hasattr(team, 'node_id') and team.node_id == node.node_id)
-                role_count = sum(1 for role in enterprise.enterprise_data.roles.get_all() 
+                role_count = sum(1 for role in enterprise.enterprise_data.roles.get_all_entities() 
                                  if hasattr(role, 'node_id') and role.node_id == node.node_id)
                 
                 print(f"{prefix}├─ {node_name}")
                 print(f"{prefix}│  └─ Users: {user_count}, Teams: {team_count}, Roles: {role_count}")
                 
-                child_nodes = [n for n in enterprise.enterprise_data.nodes.get_all() 
+                child_nodes = [n for n in enterprise.enterprise_data.nodes.get_all_entities() 
                                if hasattr(n, 'parent_id') and n.parent_id == node.node_id]
                 
                 for child in child_nodes:

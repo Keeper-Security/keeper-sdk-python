@@ -1,7 +1,10 @@
 import getpass
+import logging
 import sqlite3
 
 from keepersdk.authentication import login_auth, configuration, endpoint
+
+logging.getLogger('asyncio').setLevel(logging.CRITICAL)
 from keepersdk.vault import sqlite_storage, vault_online
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
 
@@ -55,6 +58,7 @@ if isinstance(login_auth_context.login_step, login_auth.LoginStepConnected):
         vault_owner=bytes(keeper_auth_context.auth_context.username, 'utf-8')
     )
     vault = vault_online.VaultOnline(keeper_auth_context, vault_storage)
+    vault.sync_down()
     
     search_pattern = input('Enter search pattern (or press Enter for all shared folders): ').strip()
     

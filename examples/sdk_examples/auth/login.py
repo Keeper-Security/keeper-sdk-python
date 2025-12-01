@@ -1,7 +1,10 @@
 import getpass
+import logging
 
 from keepersdk.authentication import login_auth, configuration, endpoint
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
+
+logging.getLogger('asyncio').setLevel(logging.CRITICAL)
 
 config = configuration.JsonConfigurationStorage()
 if not config.get().last_server:

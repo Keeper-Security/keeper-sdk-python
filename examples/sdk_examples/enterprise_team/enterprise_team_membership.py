@@ -1,7 +1,10 @@
 import getpass
+import logging
 import sqlite3
 
 from keepersdk.authentication import login_auth, configuration, endpoint
+
+logging.getLogger('asyncio').setLevel(logging.CRITICAL)
 from keepersdk.enterprise import enterprise_loader, sqlite_enterprise_storage
 from keepersdk.errors import KeeperApiError
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
@@ -69,7 +72,7 @@ if isinstance(login_auth_context.login_step, login_auth.LoginStepConnected):
             else:
                 team_found = None
                 
-                for team in enterprise.enterprise_data.teams.get_all():
+                for team in enterprise.enterprise_data.teams.get_all_entities():
                     team_name = team.name if hasattr(team, 'name') and team.name else ''
                     team_uid = team.team_uid if hasattr(team, 'team_uid') else ''
                     
@@ -95,11 +98,11 @@ if isinstance(login_auth_context.login_step, login_auth.LoginStepConnected):
                         print("-" * 100)
                         
                         for team_user in team_users:
-                            user = enterprise.enterprise_data.users.get_entity(team_user.user_id)
+                            user = enterprise.enterprise_data.users.get_entity(team_user.enterprise_user_id)
                             if user:
-                                user_name = user.display_name if hasattr(user, 'display_name') and user.display_name else user.username
+                                user_name = user.full_name if hasattr(user, 'full_name') and user.full_name else user.username
                                 user_email = user.username
-                                user_status = user.status.name if hasattr(user, 'status') else 'unknown'
+                                user_status = user.status if hasattr(user, 'status') else 'unknown'
                                 print(f"{user_name[:39]:<40} {user_email[:39]:<40} {user_status:<20}")
                     else:
                         print("\nNo users in this team")

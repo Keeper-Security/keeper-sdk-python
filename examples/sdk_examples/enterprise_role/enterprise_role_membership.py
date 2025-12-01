@@ -1,7 +1,10 @@
 import getpass
+import logging
 import sqlite3
 
 from keepersdk.authentication import login_auth, configuration, endpoint
+
+logging.getLogger('asyncio').setLevel(logging.CRITICAL)
 from keepersdk.enterprise import enterprise_loader, sqlite_enterprise_storage
 from keepersdk.errors import KeeperApiError
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
@@ -28,21 +31,28 @@ login_auth_context.resume_session = True
 login_auth_context.login(username)
 
 logged_in_with_persistent = True
-while not login_auth_context.login_step.is_final():
-    if isinstance(login_auth_context.login_step, login_auth.LoginStepDeviceApproval):
-        login_auth_context.login_step.send_push(login_auth.DeviceApprovalChannel.KeeperPush)
-        print("Device approval request sent. Login to existing vault/console or ask admin to approve this device and then press return/enter to resume")
-        input()
-    elif isinstance(login_auth_context.login_step, login_auth.LoginStepPassword):
-        password = getpass.getpass('Enter password: ')
-        login_auth_context.login_step.verify_password(password)
-    elif isinstance(login_auth_context.login_step, login_auth.LoginStepTwoFactor):
-        channel = login_auth_context.login_step.get_channels()[0]
-        code = getpass.getpass(f'Enter 2FA code for {channel.channel_name}: ')
-        login_auth_context.login_step.send_code(channel.channel_uid, code)
+try:
+    while not login_auth_context.login_step.is_final():
+        if isinstance(login_auth_context.login_step, login_auth.LoginStepDeviceApproval):
+            login_auth_context.login_step.send_push(login_auth.DeviceApprovalChannel.KeeperPush)
+            print("Device approval request sent. Login to existing vault/console or ask admin to approve this device and then press return/enter to resume")
+            input()
+        elif isinstance(login_auth_context.login_step, login_auth.LoginStepPassword):
+            password = getpass.getpass('Enter password: ')
+            login_auth_context.login_step.verify_password(password)
+        elif isinstance(login_auth_context.login_step, login_auth.LoginStepTwoFactor):
+            channel = login_auth_context.login_step.get_channels()[0]
+            code = getpass.getpass(f'Enter 2FA code for {channel.channel_name}: ')
+            login_auth_context.login_step.send_code(channel.channel_uid, code)
+        else:
+            raise NotImplementedError(f"Unsupported login step type: {type(login_auth_context.login_step).__name__}")
+        logged_in_with_persistent = False
+except KeeperApiError as e:
+    if 'invalid_credentials' in str(e):
+        print("\nError: Invalid password. Please check your credentials and try again.")
     else:
-        raise NotImplementedError(f"Unsupported login step type: {type(login_auth_context.login_step).__name__}")
-    logged_in_with_persistent = False
+        print(f"\nLogin error: {e}")
+    exit(1)
 
 if logged_in_with_persistent:
     print("Successfully logged in with persistent login")
@@ -69,8 +79,8 @@ if isinstance(login_auth_context.login_step, login_auth.LoginStepConnected):
             else:
                 role_found = None
                 
-                for role in enterprise.enterprise_data.roles.get_all():
-                    role_name = role.display_name if hasattr(role, 'display_name') and role.display_name else ''
+                for role in enterprise.enterprise_data.roles.get_all_entities():
+                    role_name = role.name if hasattr(role, 'name') and role.name else ''
                     role_id_str = str(role.role_id) if hasattr(role, 'role_id') else ''
                     
                     if (role_search.lower() in role_name.lower() or 
@@ -79,7 +89,7 @@ if isinstance(login_auth_context.login_step, login_auth.LoginStepConnected):
                         break
                 
                 if role_found:
-                    role_name = role_found.display_name if hasattr(role_found, 'display_name') and role_found.display_name else 'N/A'
+                    role_name = role_found.name if hasattr(role_found, 'name') and role_found.name else 'N/A'
                     
                     print(f"\nRole Membership for: {role_name}")
                     print("=" * 100)
@@ -94,11 +104,11 @@ if isinstance(login_auth_context.login_step, login_auth.LoginStepConnected):
                         print("-" * 100)
                         
                         for role_user in role_users:
-                            user = enterprise.enterprise_data.users.get_entity(role_user.user_id)
+                            user = enterprise.enterprise_data.users.get_entity(role_user.enterprise_user_id)
                             if user:
-                                user_name = user.display_name if hasattr(user, 'display_name') and user.display_name else user.username
+                                user_name = user.full_name if hasattr(user, 'full_name') and user.full_name else user.username
                                 user_email = user.username
-                                user_status = user.status.name if hasattr(user, 'status') else 'unknown'
+                                user_status = user.status if hasattr(user, 'status') else 'unknown'
                                 print(f"{user_name[:39]:<40} {user_email[:39]:<40} {user_status:<20}")
                     else:
                         print("\nNo users assigned to this role")

@@ -1,7 +1,10 @@
 import getpass
+import logging
 import sqlite3
 
 from keepersdk.authentication import login_auth, configuration, endpoint
+
+logging.getLogger('asyncio').setLevel(logging.CRITICAL)
 from keepersdk.enterprise import enterprise_loader, sqlite_enterprise_storage
 from keepersdk.errors import KeeperApiError
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
@@ -67,7 +70,7 @@ if isinstance(login_auth_context.login_step, login_auth.LoginStepConnected):
             nodes_to_display = []
             
             if node_search:
-                for node in enterprise.enterprise_data.nodes.get_all():
+                for node in enterprise.enterprise_data.nodes.get_all_entities():
                     node_name = node.display_name if hasattr(node, 'display_name') and node.display_name else node.name if hasattr(node, 'name') else ''
                     node_id_str = str(node.node_id) if hasattr(node, 'node_id') else ''
                     
@@ -78,7 +81,7 @@ if isinstance(login_auth_context.login_step, login_auth.LoginStepConnected):
                 if not nodes_to_display:
                     print(f'\nNo nodes found matching: "{node_search}"')
             else:
-                nodes_to_display = list(enterprise.enterprise_data.nodes.get_all())
+                nodes_to_display = list(enterprise.enterprise_data.nodes.get_all_entities())
             
             if nodes_to_display:
                 print("\nEnterprise Node Details")
@@ -94,11 +97,11 @@ if isinstance(login_auth_context.login_step, login_auth.LoginStepConnected):
                         if parent_node:
                             parent_name = parent_node.display_name if hasattr(parent_node, 'display_name') and parent_node.display_name else parent_node.name if hasattr(parent_node, 'name') else str(node.parent_id)
                     
-                    user_count = sum(1 for user in enterprise.enterprise_data.users.get_all() 
+                    user_count = sum(1 for user in enterprise.enterprise_data.users.get_all_entities() 
                                      if hasattr(user, 'node_id') and user.node_id == node.node_id)
-                    team_count = sum(1 for team in enterprise.enterprise_data.teams.get_all() 
+                    team_count = sum(1 for team in enterprise.enterprise_data.teams.get_all_entities() 
                                      if hasattr(team, 'node_id') and team.node_id == node.node_id)
-                    role_count = sum(1 for role in enterprise.enterprise_data.roles.get_all() 
+                    role_count = sum(1 for role in enterprise.enterprise_data.roles.get_all_entities() 
                                      if hasattr(role, 'node_id') and role.node_id == node.node_id)
                     
                     print(f"\nNode Name: {node_name}")

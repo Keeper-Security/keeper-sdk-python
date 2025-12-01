@@ -1,7 +1,10 @@
 import getpass
+import logging
 import sqlite3
 
 from keepersdk.authentication import login_auth, configuration, endpoint
+
+logging.getLogger('asyncio').setLevel(logging.CRITICAL)
 from keepersdk.enterprise import enterprise_loader, sqlite_enterprise_storage
 from keepersdk.errors import KeeperApiError
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
@@ -70,7 +73,7 @@ if isinstance(login_auth_context.login_step, login_auth.LoginStepConnected):
             print(f"{'Team Name':<35} {'Team UID':<25} {'Users':<10} {'Node':<30}")
             print("-" * 100)
             
-            for team in enterprise.enterprise_data.teams.get_all():
+            for team in enterprise.enterprise_data.teams.get_all_entities():
                 team_name = team.name if hasattr(team, 'name') and team.name else 'N/A'
                 team_uid = team.team_uid if hasattr(team, 'team_uid') else 'N/A'
                 
@@ -86,7 +89,7 @@ if isinstance(login_auth_context.login_step, login_auth.LoginStepConnected):
             
             print("=" * 100)
             
-            total_teams = len(list(enterprise.enterprise_data.teams.get_all()))
+            total_teams = len(list(enterprise.enterprise_data.teams.get_all_entities()))
             print(f"\nTotal teams: {total_teams}")
             
             enterprise.close()
