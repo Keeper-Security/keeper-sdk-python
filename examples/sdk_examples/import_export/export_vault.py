@@ -56,6 +56,7 @@ if isinstance(login_auth_context.login_step, login_auth.LoginStepConnected):
         vault_owner=bytes(keeper_auth_context.auth_context.username, 'utf-8')
     )
     vault = vault_online.VaultOnline(keeper_auth_context, vault_storage)
+    vault.sync_down()
     
     output_file = input('Enter output filename (default: vault_export.json): ').strip() or 'vault_export.json'
     

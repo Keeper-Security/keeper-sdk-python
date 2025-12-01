@@ -1,10 +1,7 @@
 import getpass
-import logging
 import sqlite3
 
 from keepersdk.authentication import login_auth, configuration, endpoint
-
-logging.getLogger('asyncio').setLevel(logging.CRITICAL)
 from keepersdk.enterprise import enterprise_loader, sqlite_enterprise_storage
 from keepersdk.errors import KeeperApiError
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS

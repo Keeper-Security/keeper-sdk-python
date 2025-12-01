@@ -55,52 +55,61 @@ if isinstance(login_auth_context.login_step, login_auth.LoginStepConnected):
         vault_owner=bytes(keeper_auth_context.auth_context.username, 'utf-8')
     )
     vault = vault_online.VaultOnline(keeper_auth_context, vault_storage)
+    vault.sync_down()
     
     print("\nAvailable Record Types")
     print("=" * 100)
     
-    record_types = vault.vault_data.record_types()
+    record_types_list = list(vault.vault_data.get_record_types())
     
-    if not record_types:
-        print("\nNo custom record types found")
+    if not record_types_list:
+        print("\nNo record types found")
         print("Record types are managed at the enterprise level.")
     else:
-        print(f"\nFound {len(record_types)} record type(s)")
+        print(f"\nFound {len(record_types_list)} record type(s)")
         print("-" * 100)
-        print(f"{'Record Type ID':<20} {'Name':<40} {'Category':<20}")
+        print(f"{'ID':<10} {'Name':<40} {'Scope':<15} {'Description':<30}")
         print("-" * 100)
         
-        for rt_id, rt in record_types.items():
-            rt_name = rt.name if hasattr(rt, 'name') else rt_id
-            rt_category = rt.category if hasattr(rt, 'category') else 'N/A'
+        record_types_dict = {}
+        for rt in record_types_list:
+            rt_id = str(rt.id) if hasattr(rt, 'id') else 'N/A'
+            rt_name = rt.name if hasattr(rt, 'name') else 'N/A'
+            rt_scope = str(rt.scope) if hasattr(rt, 'scope') else 'N/A'
+            rt_desc = (rt.description[:29] if rt.description else '') if hasattr(rt, 'description') else ''
             
-            print(f"{rt_id[:19]:<20} {rt_name[:39]:<40} {rt_category[:19]:<20}")
+            record_types_dict[rt_name.lower()] = rt
+            print(f"{rt_id[:9]:<10} {rt_name[:39]:<40} {rt_scope[:14]:<15} {rt_desc:<30}")
         
         print("-" * 100)
         
-        rt_id_to_view = input('\nEnter record type ID to view details (or press Enter to skip): ').strip()
+        rt_name_to_view = input('\nEnter record type name to view details (or press Enter to skip): ').strip()
         
-        if rt_id_to_view and rt_id_to_view in record_types:
-            rt = record_types[rt_id_to_view]
+        if rt_name_to_view and rt_name_to_view.lower() in record_types_dict:
+            rt = record_types_dict[rt_name_to_view.lower()]
             
-            print(f"\nRecord Type Details: {rt.name if hasattr(rt, 'name') else rt_id_to_view}")
+            print(f"\nRecord Type Details: {rt.name if hasattr(rt, 'name') else rt_name_to_view}")
             print("=" * 100)
             
+            if hasattr(rt, 'id'):
+                print(f"ID: {rt.id}")
+            if hasattr(rt, 'scope'):
+                print(f"Scope: {rt.scope}")
             if hasattr(rt, 'description') and rt.description:
                 print(f"Description: {rt.description}")
             
             if hasattr(rt, 'fields') and rt.fields:
                 print(f"\nFields ({len(rt.fields)}):")
                 print("-" * 100)
-                print(f"{'Field Type':<20} {'Label':<30} {'Required':<10}")
+                print(f"{'Field Type':<25} {'Label':<30} {'Required':<10}")
                 print("-" * 100)
                 
                 for field in rt.fields:
                     field_type = field.type if hasattr(field, 'type') else 'N/A'
-                    field_label = field.label if hasattr(field, 'label') else 'N/A'
+                    field_label = field.label if hasattr(field, 'label') else ''
                     field_required = 'Yes' if (hasattr(field, 'required') and field.required) else 'No'
                     
-                    print(f"{field_type[:19]:<20} {field_label[:29]:<30} {field_required:<10}")
+                    print(f"{field_type[:24]:<25} {field_label[:29]:<30} {field_required:<10}")
             
             print("=" * 100)
     
