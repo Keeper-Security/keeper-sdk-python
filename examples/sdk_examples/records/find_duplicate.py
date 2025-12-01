@@ -4,14 +4,24 @@ from typing import Dict, List
 
 from keepersdk.authentication import login_auth, configuration, endpoint
 from keepersdk.vault import sqlite_storage, vault_online, vault_record
+from keepersdk.constants import KEEPER_PUBLIC_HOSTS
 
 config = configuration.JsonConfigurationStorage()
-keeper_endpoint = endpoint.KeeperEndpoint(config)
+if not config.get().last_server:
+    print("Available server options:")
+    for region, host in KEEPER_PUBLIC_HOSTS.items():
+        print(f"  {region}: {host}")
+    server = input('Enter server (default: keepersecurity.com): ').strip() or 'keepersecurity.com'
+
+    config.get().last_server = server
+else:
+    server = config.get().last_server
+keeper_endpoint = endpoint.KeeperEndpoint(config, server)
 login_auth_context = login_auth.LoginAuth(keeper_endpoint)
 
 username = None
-if config.get().users() and config.get().users()[0]:
-    username = config.get().users()[0].username
+if config.get().last_login:
+    username = config.get().last_login
 if not username:
     username = input('Enter username: ')
 login_auth_context.resume_session = True
@@ -31,7 +41,7 @@ while not login_auth_context.login_step.is_final():
         code = getpass.getpass(f'Enter 2FA code for {channel.channel_name}: ')
         login_auth_context.login_step.send_code(channel.channel_uid, code)
     else:
-        raise NotImplementedError()
+        raise NotImplementedError(f"Unsupported login step type: {type(login_auth_context.login_step).__name__}")
     logged_in_with_persistent = False
 
 if logged_in_with_persistent:
