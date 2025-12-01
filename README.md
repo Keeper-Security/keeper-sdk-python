@@ -269,6 +269,7 @@ import getpass
 import sqlite3
 
 from keepersdk.authentication import login_auth, configuration, endpoint
+from keepersdk.constants import KEEPER_PUBLIC_HOSTS
 from keepersdk.vault import sqlite_storage, vault_online, vault_record
 
 # Initialize configuration and authentication context
