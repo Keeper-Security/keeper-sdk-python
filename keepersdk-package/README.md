@@ -164,25 +164,55 @@ A sample showing the structure of the config.json needed is shown below:
 }
 ```
 ### SDK Persistent Login Flow
+The persistent login flow allows you to authenticate once and remain logged in for a specified timeout period without requiring session refresh. This is particularly useful for automated scripts and long-running applications.
 
-Using this example you can set username and password through a one-time execution script on a new device (which does not have any configs created). The persistent login flow allows you to enter your credentials once and stay logged in for the timeout period without requiring session refresh. Default timeout is set to 30 days.
+**Key Features:**
+- **One-time setup**: Configure persistent login on a new device with a single execution
+- **Automatic session management**: No need to re-authenticate during the timeout period
+- **Configurable timeout**: Default is 30 days, but can be customized
+- **Device registration**: Registers the device's data key for secure authentication
 
+**When to Use:**
+- Automated scripts and background services
+- Long-running applications that need continuous access
+- Development and testing environments
+- Applications where user interaction is not always possible
+
+**Important Notes:**
+- Persistent login must be enabled on first-time device setup
+- The device data key registration is a one-time operation per device
+- Enterprise policies may restrict persistent login usage
+- Always follow your organization's security policies when using persistent login
+
+**Example: Setting Up Persistent Login**
+
+This example demonstrates how to enable persistent login on a new device. Run this script once to configure persistent login for subsequent sessions:
 
 ```python
 import logging
 import getpass
 
 from keepersdk.authentication import login_auth, configuration, endpoint, keeper_auth
+from keepersdk.constants import KEEPER_PUBLIC_HOSTS
 
 # Initialize configuration and authentication context
 config = configuration.JsonConfigurationStorage()
-keeper_endpoint = endpoint.KeeperEndpoint(config)
+if not config.get().last_server:
+    print("Available server options:")
+    for region, host in KEEPER_PUBLIC_HOSTS.items():
+        print(f"  {region}: {host}")
+    server = input('Enter server (default: keepersecurity.com): ').strip() or 'keepersecurity.com'
+
+    config.get().last_server = server
+else:
+    server = config.get().last_server
+keeper_endpoint = endpoint.KeeperEndpoint(config, server)
 login_auth_context = login_auth.LoginAuth(keeper_endpoint)
 
 # Authenticate user
 username = None
-if config.get().users() and config.get().users()[0]:
-    username = config.get().users()[0].username
+if config.get().last_login:
+    username = config.get().last_login
 if not username:
     username = input('Enter username: ')
 login_auth_context.resume_session = True
@@ -215,7 +245,7 @@ if isinstance(login_auth_context.login_step, login_auth.LoginStepConnected):
     timeout_in_minutes = mins_per_day*30 # 30 days
     keeper_auth.set_user_setting(keeper_auth_context, 'logout_timer', str(timeout_in_minutes))
     
-    logging.info("Persistent login turned on successfully and device registered")
+    print("Persistent login turned on successfully and device registered")
 
     keeper_auth_context.close()
 ```
@@ -233,13 +263,22 @@ from keepersdk.vault import sqlite_storage, vault_online, vault_record
 
 # Initialize configuration and authentication context
 config = configuration.JsonConfigurationStorage()
-keeper_endpoint = endpoint.KeeperEndpoint(config)
+if not config.get().last_server:
+    print("Available server options:")
+    for region, host in KEEPER_PUBLIC_HOSTS.items():
+        print(f"  {region}: {host}")
+    server = input('Enter server (default: keepersecurity.com): ').strip() or 'keepersecurity.com'
+
+    config.get().last_server = server
+else:
+    server = config.get().last_server
+keeper_endpoint = endpoint.KeeperEndpoint(config, server)
 login_auth_context = login_auth.LoginAuth(keeper_endpoint)
 
 # Authenticate user
 username = None
-if config.get().users() and config.get().users()[0]:
-    username = config.get().users()[0].username
+if config.get().last_login:
+    username = config.get().last_login
 if not username:
     username = input('Enter username: ')
 login_auth_context.resume_session = True
@@ -259,7 +298,7 @@ while not login_auth_context.login_step.is_final():
         code = getpass.getpass(f'Enter 2FA code for {channel.channel_name}: ')
         login_auth_context.login_step.send_code(channel.channel_uid, code)
     else:
-        raise NotImplementedError()
+        raise NotImplementedError(f"Unsupported login step type: {type(login_auth_context.login_step).__name__}")
     logged_in_with_persistent = False
 
 if logged_in_with_persistent:
