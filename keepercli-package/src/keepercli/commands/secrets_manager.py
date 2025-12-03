@@ -983,9 +983,29 @@ class SecretsManagerShareCommand(base.ArgparseCommand):
             logger.warning("No secret UIDs provided for removal.")
             return
 
+        app_infos = ksm_management.get_app_info(vault=vault, app_uid=app_uid)
+        if not app_infos:
+            raise ValueError(f"Could not retrieve application info for UID: {app_uid}")
+        
+        app_info = app_infos[0]
+        current_shared_uids = {
+            utils.base64_url_encode(share.secretUid) 
+            for share in getattr(app_info, 'shares', [])
+        }
+
+        valid_uids = [uid for uid in secret_uids if uid in current_shared_uids]
+        invalid_uids = [uid for uid in secret_uids if uid not in current_shared_uids]
+
+        for uid in invalid_uids:
+            logger.warning(f"Secret UID '{uid}' is not shared with this application. Skipping.")
+
+        if not valid_uids:
+            logger.warning("None of the provided secret UIDs are shared with this application. Nothing to remove.")
+            return
+
         request = RemoveAppSharesRequest()
         request.appRecordUid = utils.base64_url_decode(app_uid)
-        request.shares.extend(utils.base64_url_decode(uid) for uid in secret_uids)
+        request.shares.extend(utils.base64_url_decode(uid) for uid in valid_uids)
         
         vault.keeper_auth.execute_auth_rest(rest_endpoint=SHARE_REMOVE_URL, request=request)
         logger.info("Shared secrets were successfully removed from the application\n")
