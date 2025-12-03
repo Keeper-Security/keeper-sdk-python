@@ -57,7 +57,7 @@ class EnterpriseInfoTreeCommand(base.ArgparseCommand):
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs):
-        assert context.enterprise_data is not None
+        base.require_enterprise_admin(context)
         assert context.auth is not None
         enterprise_data = context.enterprise_data
 
@@ -223,7 +223,7 @@ class EnterpriseInfoNodeCommand(base.ArgparseCommand, enterprise_utils.Enterpris
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs):
-        assert context.enterprise_data is not None
+        base.require_enterprise_admin(context)
         enterprise_data = context.enterprise_data
 
         columns: Set[str] = set()
@@ -349,7 +349,7 @@ class EnterpriseInfoUserCommand(base.ArgparseCommand, enterprise_utils.Enterpris
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs):
-        assert context.enterprise_data is not None
+        base.require_enterprise_admin(context)
         enterprise_data = context.enterprise_data
 
         columns: Set[str] = set()
@@ -493,7 +493,7 @@ class EnterpriseInfoTeamCommand(base.ArgparseCommand, enterprise_utils.Enterpris
         return rs
 
     def execute(self, context: KeeperParams, **kwargs):
-        assert context.enterprise_data is not None
+        base.require_enterprise_admin(context)
         enterprise_data = context.enterprise_data
 
         columns: Set[str] = set()
@@ -626,7 +626,7 @@ class EnterpriseInfoRoleCommand(base.ArgparseCommand, enterprise_utils.Enterpris
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs):
-        assert context.enterprise_data is not None
+        base.require_enterprise_admin(context)
         enterprise_data = context.enterprise_data
 
         columns: Set[str] = set()
@@ -718,7 +718,7 @@ class EnterpriseInfoManagedCompanyCommand(base.ArgparseCommand, enterprise_utils
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs):
-        assert context.enterprise_data is not None
+        base.require_enterprise_admin(context)
         enterprise_data = context.enterprise_data
         
         pattern = (kwargs.get('pattern') or '').lower()

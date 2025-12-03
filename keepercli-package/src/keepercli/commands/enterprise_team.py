@@ -31,7 +31,7 @@ class EnterpriseTeamViewCommand(base.ArgparseCommand):
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> Any:
-        assert context.enterprise_data is not None
+        base.require_enterprise_admin(context)
         assert context.vault
 
         verbose = kwargs.get('verbose') is True
@@ -152,7 +152,7 @@ class EnterpriseTeamAddCommand(base.ArgparseCommand, enterprise_management.IEnte
     def execute(self, context: KeeperParams, **kwargs) -> None:
         assert context.auth is not None
         assert context.enterprise_loader is not None
-        assert context.enterprise_data is not None
+        base.require_enterprise_admin(context)
 
         parent_id: Optional[int]
         if kwargs.get('parent'):
@@ -242,7 +242,7 @@ class EnterpriseTeamEditCommand(base.ArgparseCommand, enterprise_management.IEnt
     def execute(self, context: KeeperParams, **kwargs) -> None:
         assert context.auth is not None
         assert context.enterprise_loader is not None
-        assert context.enterprise_data is not None
+        base.require_enterprise_admin(context)
 
         team_list, missing_names = enterprise_utils.TeamUtils.resolve_existing_teams(context.enterprise_data, kwargs.get('team'))
         if isinstance(missing_names, list) and len(missing_names) > 0:
@@ -296,7 +296,7 @@ class EnterpriseTeamDeleteCommand(base.ArgparseCommand, enterprise_management.IE
         self.logger.warning(message)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.enterprise_data is not None
+        base.require_enterprise_admin(context)
 
         team_list, missing_names = enterprise_utils.TeamUtils.resolve_existing_teams(context.enterprise_data, kwargs.get('team'))
         if isinstance(missing_names, list) and len(missing_names) > 0:
@@ -322,7 +322,7 @@ class EnterpriseTeamMembershipCommand(base.ArgparseCommand, enterprise_managemen
         self.logger.warning(message)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.enterprise_data is not None
+        base.require_enterprise_admin(context)
 
         team_list, missing_names = enterprise_utils.TeamUtils.resolve_existing_teams(context.enterprise_data, kwargs.get('team'))
         queued_team_list: List[enterprise_types.QueuedTeam]

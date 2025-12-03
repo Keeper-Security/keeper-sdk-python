@@ -183,7 +183,7 @@ class PedmColumnReportCommand(base.ArgparseCommand):
             print_formatted_text(HTML(audit_column_description))
             return
 
-        assert context.enterprise_data is not None
+        base.require_enterprise_admin(context)
         assert context.auth is not None
         auth = context.auth
 
@@ -292,7 +292,7 @@ class PedmEventReportCommand(base.ArgparseCommand):
         if kwargs.get("syntax_help") is True:
             print_formatted_text(HTML(audit_report_description))
             return
-        assert context.enterprise_data is not None
+        base.require_enterprise_admin(context)
         assert context.auth is not None
         auth = context.auth
 
@@ -439,7 +439,7 @@ class PedmEventSummaryReportCommand(base.ArgparseCommand):
         if kwargs.get("syntax_help") is True:
             return audit_summary_report_description
 
-        assert context.enterprise_data is not None
+        base.require_enterprise_admin(context)
         assert context.auth is not None
         auth = context.auth
 

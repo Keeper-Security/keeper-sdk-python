@@ -369,7 +369,7 @@ class DownloadMembershipCommand(base.ArgparseCommand):
 
     def execute(self, context: KeeperParams, **kwargs):
         assert context.vault is not None
-        assert context.enterprise_data is not None
+        base.require_enterprise_admin(context)
         source = kwargs.get('source') or 'keeper'
         file_name = kwargs.get('name') or 'shared_folder_membership.json'
         folders_only = kwargs.get('folders_only') is True
@@ -497,7 +497,7 @@ class ApplyMembershipCommand(base.ArgparseCommand):
 
     def execute(self, context: KeeperParams, **kwargs):
         assert context.vault is not None
-        assert context.enterprise_data is not None
+        base.require_enterprise_admin(context)
         assert context.auth is not None
 
         logger = api.get_logger()

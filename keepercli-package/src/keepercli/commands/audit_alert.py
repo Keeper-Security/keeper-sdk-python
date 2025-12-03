@@ -176,7 +176,7 @@ class AuditSettingMixin:
 
     @staticmethod
     def apply_alert_options(context: KeeperParams, alert: Dict[str, Any], **kwargs) -> None:
-        assert context.enterprise_data
+        base.require_enterprise_admin(context)
         assert context.vault
 
         alert_name = kwargs.get('name')
@@ -326,7 +326,7 @@ class AuditAlertView(base.ArgparseCommand, AuditSettingMixin):
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
         assert context.auth
-        assert context.enterprise_data
+        base.require_enterprise_admin(context)
 
         show_recipient = True
         show_filter = True

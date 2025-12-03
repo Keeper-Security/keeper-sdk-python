@@ -14,7 +14,7 @@ class SwitchToManagedCompanyCommand(base.ArgparseCommand):
         super().__init__(SwitchToManagedCompanyCommand.parser)
     
     def execute(self, context: KeeperParams, **kwargs):
-        assert context.enterprise_data is not None
+        base.require_enterprise_admin(context)
         assert context.auth is not None
         logger = api.get_logger()
 

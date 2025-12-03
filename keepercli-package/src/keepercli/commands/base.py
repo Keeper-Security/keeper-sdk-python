@@ -38,6 +38,12 @@ class CommandError(errors.KeeperError):
             return super().__str__()
 
 
+def require_enterprise_admin(context: KeeperParams):
+    """Check if the user has enterprise admin privileges. Raises CommandError if not."""
+    if context.enterprise_data is None:
+        raise CommandError('This command requires enterprise admin privileges. Please login with an admin account.')
+
+
 class ICliCommand(abc.ABC):
     @abc.abstractmethod
     def execute_args(self, context: KeeperParams, args: str, **kwargs):
