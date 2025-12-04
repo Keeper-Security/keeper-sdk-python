@@ -33,7 +33,7 @@ class BreachWatchCommand(base.GroupCommand):
 
 class BreachWatchListCommand(base.ArgparseCommand):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='breachwatch list', description='Displays a list of breached passwords.')
+        parser = argparse.ArgumentParser(prog='breachwatch list', description='Displays a list of breached passwords.', allow_abbrev=False)
         parser.add_argument('--all', '-a', dest='all', action='store_true',
                             help='Display all breached records (default is to show only first 30 records)')
         parser.add_argument('--owned', '-o', dest='owned', action='store_true',
@@ -79,7 +79,7 @@ class BreachWatchListCommand(base.ArgparseCommand):
 
 class BreachWatchIgnoreCommand(base.ArgparseCommand):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='breachwatch ignore', description='Ignores breached passwords.')
+        parser = argparse.ArgumentParser(prog='breachwatch ignore', description='Ignores breached passwords.', allow_abbrev=False)
         parser.add_argument('records', type=str, nargs='+', help='Record UID to ignore')
         super().__init__(parser)
 
@@ -275,7 +275,7 @@ class BreachWatchIgnoreCommand(base.ArgparseCommand):
 class BreachWatchScanCommand(base.ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(
-            prog='breachwatch scan', description='Scan for breached passwords.'
+            prog='breachwatch scan', description='Scan for breached passwords.', allow_abbrev=False
         )
         self.add_arguments_to_parser(parser)
         super().__init__(parser)
@@ -383,7 +383,7 @@ class BreachWatchPasswordCommand(base.ArgparseCommand):
     PASSWORD_FIELD_WIDTH = 16
     
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='breachwatch password', description='Scan a password against the breach watch database.')
+        parser = argparse.ArgumentParser(prog='breachwatch password', description='Scan a password against the breach watch database.', allow_abbrev=False)
         parser.add_argument('passwords', type=str, nargs='*', help='Password')
         super().__init__(parser)
 

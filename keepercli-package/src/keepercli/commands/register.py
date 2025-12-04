@@ -30,7 +30,8 @@ class FindOwnerlessCommand(base.ArgparseCommand):
         parser = argparse.ArgumentParser(
             prog='find-ownerless', 
             description='List (and, optionally, claim) records in the user\'s vault that currently do not have an owner',
-            parents=[base.report_output_parser]
+            parents=[base.report_output_parser],
+            allow_abbrev=False
         )
         FindOwnerlessCommand.add_arguments_to_parser(parser)
         super().__init__(parser)

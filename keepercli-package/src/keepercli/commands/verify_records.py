@@ -27,7 +27,8 @@ V3_RECORD_KEY_LENGTH = 60
 class VerifySharedFoldersCommand(ArgparseCommand):
     def __init__(self):
         self.parser = argparse.ArgumentParser(prog='verify-shared-folders', 
-                                       description='Verify and fix shared folder record key issues')
+                                       description='Verify and fix shared folder record key issues',
+                                       allow_abbrev=False)
         VerifySharedFoldersCommand.add_arguments_to_parser(self.parser)
         super().__init__(self.parser)
     
@@ -300,7 +301,7 @@ class VerifySharedFoldersCommand(ArgparseCommand):
 
 class VerifyRecordsCommand(ArgparseCommand):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='verify-records', description='Verify and fix record data issues')
+        parser = argparse.ArgumentParser(prog='verify-records', description='Verify and fix record data issues', allow_abbrev=False)
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs):

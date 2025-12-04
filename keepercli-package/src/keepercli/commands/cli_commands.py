@@ -14,7 +14,7 @@ from ..params import KeeperParams
 
 
 class HelpCommand(base.ArgparseCommand):
-    parser = argparse.ArgumentParser(prog='help', description='Displays help on a specific command')
+    parser = argparse.ArgumentParser(prog='help', description='Displays help on a specific command', allow_abbrev=False)
     parser.add_argument('command', action='store', type=str, help='Commander\'s command')
 
     def __init__(self, commands: base.CliCommands):
@@ -73,7 +73,7 @@ class HistoryCommand(base.ICliCommand):
 
 
 class VersionCommand(base.ArgparseCommand):
-    version_parser = argparse.ArgumentParser(prog='version', description='Displays version of the installed Commander')
+    version_parser = argparse.ArgumentParser(prog='version', description='Displays version of the installed Commander', allow_abbrev=False)
     version_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', help='verbose output')
     version_parser.add_argument('-p', '--packages', action='store_true', help='Show installed Python packages')
 

@@ -266,7 +266,7 @@ class AuditSettingMixin:
 class AuditAlertList(base.ArgparseCommand, AuditSettingMixin):
     def __init__(self) -> None:
         parser = argparse.ArgumentParser(prog='audit-alert list', parents=[base.report_output_parser],
-                                         description='Display alert list.')
+                                         description='Display alert list.', allow_abbrev=False)
         parser.add_argument('--reload', dest='reload', action='store_true', help='reload alert information')
         super().__init__(parser)
 
@@ -315,13 +315,13 @@ class AuditAlertList(base.ArgparseCommand, AuditSettingMixin):
         return report_utils.dump_report_data(table, headers, fmt=fmt, filename=kwargs.get('output'), sort_by=0)
 
 
-alert_target_parser = argparse.ArgumentParser(add_help=False)
+alert_target_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
 alert_target_parser.add_argument('target', metavar='ALERT', help='Alert ID or Name.')
 
 class AuditAlertView(base.ArgparseCommand, AuditSettingMixin):
     def __init__(self) -> None:
         parser = argparse.ArgumentParser(prog='audit-alert view', parents=[alert_target_parser],
-                                         description='View alert configuration.')
+                                         description='View alert configuration.', allow_abbrev=False)
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
@@ -412,7 +412,7 @@ class AuditAlertView(base.ArgparseCommand, AuditSettingMixin):
 class AuditAlertHistory(base.ArgparseCommand, AuditSettingMixin):
     def __init__(self):
         parser = argparse.ArgumentParser(prog='audit-alert history', parents=[base.report_output_parser, alert_target_parser],
-                                         description='View alert history.')
+                                         description='View alert history.', allow_abbrev=False)
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> Any:
@@ -448,7 +448,7 @@ class AuditAlertHistory(base.ArgparseCommand, AuditSettingMixin):
 class AuditAlertDelete(base.ArgparseCommand, AuditSettingMixin):
     def __init__(self):
         parser = argparse.ArgumentParser(prog='audit-alert remove', parents=[alert_target_parser],
-                                         description='Delete audit alert.')
+                                         description='Delete audit alert.', allow_abbrev=False)
         super().__init__(parser)
     def execute(self, context: KeeperParams, **kwargs) -> Any:
         assert context.auth
@@ -468,7 +468,7 @@ class AuditAlertDelete(base.ArgparseCommand, AuditSettingMixin):
         command.execute(context, reload=True)
 
 
-alert_edit_options = argparse.ArgumentParser(add_help=False)
+alert_edit_options = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
 alert_edit_options.add_argument('--name', action='store', metavar='NAME', help='Alert Name.')
 alert_edit_options.add_argument('--frequency', dest='frequency', action='store', metavar='FREQUENCY',
                                 help='Alert Frequency. "[N:]event|minute|hour|day"')
@@ -486,7 +486,7 @@ alert_edit_options.add_argument('--active', dest='active', action='store', metav
 class AuditAlertAdd(base.ArgparseCommand, AuditSettingMixin):
     def __init__(self):
         parser = argparse.ArgumentParser(prog='audit-alert add', parents=[alert_edit_options],
-                                         description='Add audit alert')
+                                         description='Add audit alert', allow_abbrev=False)
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> Any:
@@ -545,7 +545,7 @@ class AuditAlertAdd(base.ArgparseCommand, AuditSettingMixin):
 class AuditAlertEdit(base.ArgparseCommand, AuditSettingMixin):
     def __init__(self):
         parser = argparse.ArgumentParser(prog='audit-alert edit', parents=[alert_target_parser, alert_edit_options],
-                                         description='Edit audit alert')
+                                         description='Edit audit alert', allow_abbrev=False)
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> Any:
@@ -588,7 +588,7 @@ class AuditAlertEdit(base.ArgparseCommand, AuditSettingMixin):
 class AuditAlertResetCount(base.ArgparseCommand, AuditSettingMixin):
     def __init__(self):
         parser = argparse.ArgumentParser(prog='audit-alert reset-counts', parents=[alert_target_parser],
-                                         description='Reset alert counts')
+                                         description='Reset alert counts', allow_abbrev=False)
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> Any:
@@ -611,7 +611,7 @@ class AuditAlertResetCount(base.ArgparseCommand, AuditSettingMixin):
 
 class AuditAlertRecipients(base.ArgparseCommand, AuditSettingMixin):
     def __init__(self):
-        edit_options = argparse.ArgumentParser(add_help=False)
+        edit_options = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
         edit_options.add_argument('--name', dest='name', metavar='NAME', action='store',
                                   help='recipient name')
         edit_options.add_argument('--email', dest='email', metavar='EMAIL', action='store',
@@ -628,7 +628,7 @@ class AuditAlertRecipients(base.ArgparseCommand, AuditSettingMixin):
                                   help='Generate new access token')
 
         parser = argparse.ArgumentParser(prog='audit-alert recipient', parents=[alert_target_parser],
-                                         description='Modify alert recipients')
+                                         description='Modify alert recipients', allow_abbrev=False)
         subparsers = parser.add_subparsers(title='recipient actions', dest='action')
         enable_parser = subparsers.add_parser('enable', help='enables recipient')
         enable_parser.add_argument('recipient', metavar='RECIPIENT',

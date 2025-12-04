@@ -172,7 +172,7 @@ Commander> <ansigreen>pedm report column audit_event_type</ansigreen>
 class PedmColumnReportCommand(base.ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(prog='report column', description='Run column data audit reports',
-                                         parents=[base.report_output_parser])
+                                         parents=[base.report_output_parser], allow_abbrev=False)
         parser.add_argument('--syntax-help', dest='syntax_help', action='store_true', help='display help')
         parser.add_argument('column', nargs='?', help='Audit report column')
 
@@ -277,7 +277,7 @@ Predefined date range values: today, yesterday, last_7_days, last_30_days, month
 class PedmEventReportCommand(base.ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(prog='report event', description='Run audit event reports',
-                                         parents=[base.report_output_parser])
+                                         parents=[base.report_output_parser], allow_abbrev=False)
         parser.add_argument('--syntax-help', dest='syntax_help', action='store_true', help='display help')
         parser.add_argument('--report-format', dest='report_format', action='store', default='message',
                             choices=['message', 'fields'], help='output format (raw reports only)')
@@ -419,7 +419,7 @@ Predefined date range values: today, yesterday, last_7_days, last_30_days, month
 class PedmEventSummaryReportCommand(base.ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(prog='report event', description='Run audit summary reports',
-                                         parents=[base.report_output_parser])
+                                         parents=[base.report_output_parser], allow_abbrev=False)
         parser.add_argument('--syntax-help', dest='syntax_help', action='store_true', help='display help')
         parser.add_argument('--report-type', dest='report_type', action='store', required=True,
                             choices=['hour', 'day', 'month', 'span'], help='report type')
@@ -523,7 +523,7 @@ class PedmEventSummaryReportCommand(base.ArgparseCommand):
 class PedmPolicyUsageReportCommand(base.ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(prog='report policy-usage', description='Run audit summary reports',
-                                         parents=[base.report_output_parser])
+                                         parents=[base.report_output_parser], allow_abbrev=False)
         parser.add_argument('--summary', dest='summary', action='store_true', help='Agent count only')
         parser.add_argument('policy', nargs='+', help='Policy UID')
         super().__init__(parser)

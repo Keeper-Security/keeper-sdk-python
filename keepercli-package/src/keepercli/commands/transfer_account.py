@@ -58,7 +58,8 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
     def __init__(self):
         self.parser = argparse.ArgumentParser(
             prog='transfer-user',
-            description='Transfer user account from one user to another'
+            description='Transfer user account from one user to another',
+            allow_abbrev=False
         )
         EnterpriseTransferAccountCommand.add_arguments_to_parser(self.parser)
         super().__init__(self.parser)

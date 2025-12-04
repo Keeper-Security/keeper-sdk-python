@@ -12,14 +12,14 @@ from ..helpers import report_utils
 from ..params import KeeperParams
 from .. import api
 
-json_output_parser = argparse.ArgumentParser(add_help=False)
+json_output_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
 json_output_parser.add_argument('--format', dest='format', action='store', choices=['table', 'json'],
                                 default='table', help='format of output')
 json_output_parser.add_argument('--output', dest='output', action='store',
                                 help='path to resulting output file (ignored for "table" format)')
 
 
-report_output_parser = argparse.ArgumentParser(add_help=False)
+report_output_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
 report_output_parser.add_argument('--format', dest='format', action='store', choices=['table', 'csv', 'json'],
                                   default='table', help='format of output')
 report_output_parser.add_argument('--output', dest='output', action='store',
@@ -140,13 +140,47 @@ class ArgparseCommand(ICliCommand, abc.ABC):
     def execute(self, context: KeeperParams, **kwargs):
         pass
 
+    def _get_all_option_strings(self, parser: argparse.ArgumentParser) -> set:
+        """Get all valid option strings from the parser and its parents."""
+        options = set()
+        for action in parser._actions:
+            for opt in action.option_strings:
+                options.add(opt)
+        return options
+
+    def _validate_no_abbreviated_args(self, arg_list: list, valid_options: set) -> None:
+        """Validate that no abbreviated long options are used.
+        
+        Raises ParseError if an abbreviated argument is found that matches
+        a valid option as a prefix but is not an exact match.
+        """
+        long_options = {opt for opt in valid_options if opt.startswith('--')}
+        
+        for arg in arg_list:
+            if arg.startswith('--') and '=' not in arg:
+                # Extract the option name (without value if using space separator)
+                opt_name = arg
+                # Check if this is an abbreviation of any long option
+                if opt_name not in long_options:
+                    # Check if it's a prefix of any valid option
+                    matches = [opt for opt in long_options if opt.startswith(opt_name)]
+                    if matches:
+                        raise ParseError(
+                            f'unrecognized argument: {arg} (did you mean {matches[0]}?)'
+                        )
+
     def execute_args(self, context: KeeperParams, args, **kwargs):
         d = {}
         d.update(kwargs)
         self.extra_parameters = ''
         parser = self.get_parser()
         try:
-            opts, extra_args = parser.parse_known_args(shlex.split(args))
+            arg_list = shlex.split(args)
+            # Validate no abbreviated arguments are used
+            valid_options = self._get_all_option_strings(parser)
+            self._validate_no_abbreviated_args(arg_list, valid_options)
+            
+            opts, extra_args = parser.parse_known_args(arg_list)
             if extra_args:
                 self.extra_parameters = ' '.join(extra_args)
             d.update(opts.__dict__)

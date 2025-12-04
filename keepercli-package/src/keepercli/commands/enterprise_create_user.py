@@ -32,7 +32,8 @@ class CreateEnterpriseUserCommand(base.ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(
             prog='create-user',
-            description='Create an enterprise user.'
+            description='Create an enterprise user.',
+            allow_abbrev=False
         )
         CreateEnterpriseUserCommand.add_arguments_to_parser(parser)
         super().__init__(parser)

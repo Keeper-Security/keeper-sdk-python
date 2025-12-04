@@ -610,7 +610,7 @@ class RecordEditMixin(typed_field_utils.TypedFieldMixin):
 
 
 class RecordAddCommand(base.ArgparseCommand, RecordEditMixin):
-    parser = argparse.ArgumentParser(prog='record-add', description='Add a record to folder')
+    parser = argparse.ArgumentParser(prog='record-add', description='Add a record to folder', allow_abbrev=False)
     parser.add_argument('--syntax-help', dest='syntax_help', action='store_true',
                         help='Display help on field parameters.')
     parser.add_argument('-f', '--force', dest='force', action='store_true', help='ignore warnings')
@@ -720,7 +720,7 @@ class RecordAddCommand(base.ArgparseCommand, RecordEditMixin):
             return message
 
 class RecordUpdateCommand(base.ArgparseCommand, RecordEditMixin):
-    parser = argparse.ArgumentParser(prog='record-update', description='Update a record')
+    parser = argparse.ArgumentParser(prog='record-update', description='Update a record', allow_abbrev=False)
     parser.add_argument('--syntax-help', dest='syntax_help', action='store_true',
                                       help='Display help on field parameters.')
     parser.add_argument('-f', '--force', dest='force', action='store_true', help='ignore warnings')
@@ -826,7 +826,8 @@ class RecordUpdateCommand(base.ArgparseCommand, RecordEditMixin):
 
 class RecordDeleteAttachmentCommand(base.ArgparseCommand):
     parser = argparse.ArgumentParser(prog='delete-attachment', description='Delete an attachment from a record',
-                                     usage="Example to remove two files for a record: delete-attachment {uid} --name secrets.txt --name photo.jpg")
+                                     usage="Example to remove two files for a record: delete-attachment {uid} --name secrets.txt --name photo.jpg",
+                                     allow_abbrev=False)
     parser.add_argument('--name', dest='name', action='append', required=True,
                         help='attachment file name or ID. Can be repeated')
     parser.add_argument('record', action='store', metavar='RECORD', help='record path or UID')
@@ -890,7 +891,7 @@ class RecordDeleteAttachmentCommand(base.ArgparseCommand):
 
 
 class RecordDownloadAttachmentCommand(base.ArgparseCommand):
-    parser = argparse.ArgumentParser(prog='download-attachment', description='Download record attachments')
+    parser = argparse.ArgumentParser(prog='download-attachment', description='Download record attachments', allow_abbrev=False)
     parser.add_argument('-r', '--recursive', dest='recursive', action='store_true',
                         help='Download recursively through subfolders')
     parser.add_argument('--out-dir', dest='out_dir', action='store',
@@ -970,7 +971,7 @@ class RecordDownloadAttachmentCommand(base.ArgparseCommand):
 
 
 class RecordUploadAttachmentCommand(base.ArgparseCommand):
-    parser = argparse.ArgumentParser(prog='upload-attachment', description='Upload record attachments')
+    parser = argparse.ArgumentParser(prog='upload-attachment', description='Upload record attachments', allow_abbrev=False)
     parser.add_argument('--file', dest='file', action='append', required=True, help='file name to upload')
     parser.add_argument('record', action='store', metavar='PATH', help='record path or UID')
 
@@ -1012,7 +1013,8 @@ class RecordDeleteCommand(base.ArgparseCommand):
     def __init__(self):
         self.parser = argparse.ArgumentParser(
             prog='rm',
-            description='Remove a record'
+            description='Remove a record',
+            allow_abbrev=False
         )
         RecordDeleteCommand.add_arguments_to_parser(self.parser)
         super().__init__(self.parser)
@@ -1053,7 +1055,8 @@ class RecordGetCommand(base.ArgparseCommand):
     def __init__(self):
         self.parser = argparse.ArgumentParser(
             prog='get',
-            description='Get the details of a Record/Folder/Team by UID or title'
+            description='Get the details of a Record/Folder/Team by UID or title',
+            allow_abbrev=False
         )
         RecordGetCommand.add_arguments_to_parser(self.parser)
         super().__init__(self.parser)
@@ -1741,7 +1744,8 @@ class RecordSearchCommand(base.ArgparseCommand):
 
     def __init__(self):
         self.parser = argparse.ArgumentParser(
-            prog='search', description='Search the vault for records. Can use a regular expression.'
+            prog='search', description='Search the vault for records. Can use a regular expression.',
+            allow_abbrev=False
         )
         RecordSearchCommand.add_arguments_to_parser(self.parser)
         super().__init__(self.parser)

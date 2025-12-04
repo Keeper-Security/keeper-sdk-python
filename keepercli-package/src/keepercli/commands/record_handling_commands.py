@@ -59,7 +59,8 @@ class ClipboardCommand(base.ArgparseCommand):
     def __init__(self):
         self.parser = argparse.ArgumentParser(
             prog='clipboard-copy', 
-            description='Retrieve the password for a specific record.'
+            description='Retrieve the password for a specific record.',
+            allow_abbrev=False
         )
         self.add_arguments_to_parser(self.parser)
         super().__init__(self.parser)
@@ -449,7 +450,8 @@ class RecordHistoryCommand(base.ArgparseCommand):
         self.parser = argparse.ArgumentParser(
             prog='record-history', 
             parents=[base.report_output_parser],
-            description='Show the history of a record modifications.'
+            description='Show the history of a record modifications.',
+            allow_abbrev=False
         )
         self.add_arguments_to_parser(self.parser)
         super(RecordHistoryCommand, self).__init__(self.parser)
@@ -749,7 +751,8 @@ class FindDuplicateCommand(base.ArgparseCommand):
         self.parser = argparse.ArgumentParser(
             prog='find-duplicates',
             description='List duplicated records.',
-            parents=[base.report_output_parser]
+            parents=[base.report_output_parser],
+            allow_abbrev=False
         )
         self.add_arguments_to_parser(self.parser)
         super().__init__(self.parser)
@@ -1607,7 +1610,7 @@ class RecordPermissionCommand(base.ArgparseCommand):
     SHARED_FOLDER_TYPES = [SHARED_FOLDER, SHARED_FOLDER_FOLDER]
 
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='record-permission', description='Modify the permissions of a record')
+        parser = argparse.ArgumentParser(prog='record-permission', description='Modify the permissions of a record', allow_abbrev=False)
         RecordPermissionCommand.add_arguments_to_parser(parser)
         super().__init__(parser)
     

@@ -43,7 +43,7 @@ class _FolderMixin:
 
 
 class FolderCdCommand(base.ArgparseCommand, _FolderMixin):
-    parser = argparse.ArgumentParser(prog='cd', description='Change current folder')
+    parser = argparse.ArgumentParser(prog='cd', description='Change current folder', allow_abbrev=False)
     parser.add_argument('folder', nargs='?', type=str, action='store', metavar='FOLDER', help='folder path or UID')
 
     def __init__(self):
@@ -55,7 +55,7 @@ class FolderCdCommand(base.ArgparseCommand, _FolderMixin):
 
 
 class FolderListCommand(base.ArgparseCommand):
-    parser = argparse.ArgumentParser(prog='ls', description='List folder contents')
+    parser = argparse.ArgumentParser(prog='ls', description='List folder contents', allow_abbrev=False)
     parser.add_argument('-l', '--list', dest='detail', action='store_true', help='show detailed list')
     parser.add_argument('-f', '--folders', dest='folders', action='store_true', help='display folders')
     parser.add_argument('-r', '--records', dest='records', action='store_true', help='display records')
@@ -182,7 +182,7 @@ class FolderListCommand(base.ArgparseCommand):
 
 
 class FolderTreeCommand(base.ArgparseCommand, _FolderMixin):
-    parser = argparse.ArgumentParser(prog='tree', description='Display the folder structure')
+    parser = argparse.ArgumentParser(prog='tree', description='Display the folder structure', allow_abbrev=False)
     parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', help='print ids')
     parser.add_argument('-r', '--records', action='store_true', help='show records within each folder')
     show_shares_help = 'show share permissions info (shown in parentheses) for each shared folder'
@@ -278,7 +278,7 @@ class FolderTreeCommand(base.ArgparseCommand, _FolderMixin):
 
 
 class FolderMakeCommand(base.ArgparseCommand):
-    parser = argparse.ArgumentParser(prog='mkdir', description='Create a folder')
+    parser = argparse.ArgumentParser(prog='mkdir', description='Create a folder', allow_abbrev=False)
     folder_type = parser.add_mutually_exclusive_group()
     folder_type.add_argument('-sf', '--shared-folder', dest='shared_folder', action='store_true',
                              help='create shared folder')
@@ -361,7 +361,7 @@ class FolderMakeCommand(base.ArgparseCommand):
 
 
 class FolderRemoveCommand(base.ArgparseCommand):
-    parser = argparse.ArgumentParser(prog='rmdir', description='Remove a folder and its contents')
+    parser = argparse.ArgumentParser(prog='rmdir', description='Remove a folder and its contents', allow_abbrev=False)
     parser.add_argument('-f', '--force', dest='force', action='store_true',
                         help='remove folder without prompting')
     parser.add_argument('-q', '--quiet', dest='quiet', action='store_true',
@@ -431,7 +431,7 @@ class FolderRemoveCommand(base.ArgparseCommand):
 
 
 class FolderRenameCommand(base.ArgparseCommand, _FolderMixin):
-    parser = argparse.ArgumentParser(prog='rndir', description='Rename a folder')
+    parser = argparse.ArgumentParser(prog='rndir', description='Rename a folder', allow_abbrev=False)
     parser.add_argument('-n', '--name', dest='name', action='store', required=True, help='folder new name')
     parser.add_argument('-q', '--quiet', action='store_true', help='rename folder without folder info')
     parser.add_argument('folder', nargs='?', type=str, action='store', metavar='FOLDER',
@@ -460,7 +460,7 @@ class FolderRenameCommand(base.ArgparseCommand, _FolderMixin):
 
 
 class FolderMoveCommand(base.ArgparseCommand, _FolderMixin):
-    parser = argparse.ArgumentParser(prog='mv', description='Move a record or folder to another folder')
+    parser = argparse.ArgumentParser(prog='mv', description='Move a record or folder to another folder', allow_abbrev=False)
     parser.add_argument('-l', '--link', dest='link', action='store_true', help='do not delete source')
     parser.add_argument('-f', '--force', dest='force', action='store_true', help='do not prompt')
     parser.add_argument('-R', '--recursive', dest='recursive', action='store_true',
@@ -564,7 +564,7 @@ class FolderTransformCommand(base.ArgparseCommand, _FolderMixin):
     DEFAULT_CONFIRMATION = 'n'
 
     def __init__(self):
-        self.parser = argparse.ArgumentParser(prog='transform-folder', description='Move folders to another location')
+        self.parser = argparse.ArgumentParser(prog='transform-folder', description='Move folders to another location', allow_abbrev=False)
         FolderTransformCommand.add_arguments_to_parser(self.parser)
         super().__init__(self.parser)
     

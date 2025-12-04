@@ -52,7 +52,7 @@ def get_event_message(event: Dict[str, Any]) -> str:
 
 class EnterpriseAuditReport(base.ArgparseCommand):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='audit-report', parents=[base.report_output_parser], description='Run an audit trail report.')
+        parser = argparse.ArgumentParser(prog='audit-report', parents=[base.report_output_parser], description='Run an audit trail report.', allow_abbrev=False)
         parser.add_argument('--syntax-help', dest='syntax_help', action='store_true', help='display help')
         parser.add_argument('--report-type', dest='report_type', action='store',
                             choices=['raw', 'dim', 'hour', 'day', 'week', 'month', 'span'],

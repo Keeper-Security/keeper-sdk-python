@@ -82,7 +82,7 @@ class EnterpriseUserCommand(base.GroupCommand):
 
 class EnterpriseUserViewCommand(base.ArgparseCommand):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='enterprise-user view', parents=[base.json_output_parser], description='View enterprise user.')
+        parser = argparse.ArgumentParser(prog='enterprise-user view', parents=[base.json_output_parser], description='View enterprise user.', allow_abbrev=False)
         parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', help='print verbose information')
         parser.add_argument('team', help='User email or UID')
         super().__init__(parser)
@@ -226,7 +226,7 @@ class EnterpriseUserViewCommand(base.ArgparseCommand):
 
 class EnterpriseUserAddCommand(base.ArgparseCommand, enterprise_management.IEnterpriseManagementLogger):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='enterprise-user add', description='Create enterprise user(s).')
+        parser = argparse.ArgumentParser(prog='enterprise-user add', description='Create enterprise user(s).', allow_abbrev=False)
         parser.add_argument('--parent', dest='parent', action='store', help='Parent node name or ID')
         parser.add_argument('--full-name', dest='full_name', action='store', help='set user full name')
         parser.add_argument('--job-title', dest='job_title', action='store', help='set user job title')
@@ -322,7 +322,7 @@ class EnterpriseUserAddCommand(base.ArgparseCommand, enterprise_management.IEnte
 
 class EnterpriseUserEditCommand(base.ArgparseCommand, enterprise_management.IEnterpriseManagementLogger):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='enterprise-user edit', description='Edit enterprise user(s).')
+        parser = argparse.ArgumentParser(prog='enterprise-user edit', description='Edit enterprise user(s).', allow_abbrev=False)
         parser.add_argument('--parent', dest='parent', action='store', help='Parent node name or ID')
         parser.add_argument('--full-name', dest='full_name', action='store', help='set user full name')
         parser.add_argument('--job-title', dest='job_title', action='store', help='set user job title')
@@ -451,7 +451,7 @@ class EnterpriseUserEditCommand(base.ArgparseCommand, enterprise_management.IEnt
 
 class EnterpriseUserDeleteCommand(base.ArgparseCommand, enterprise_management.IEnterpriseManagementLogger):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='enterprise-user delete', description='Delete enterprise user(s).')
+        parser = argparse.ArgumentParser(prog='enterprise-user delete', description='Delete enterprise user(s).', allow_abbrev=False)
         parser.add_argument('-f', '--force', dest='force', action='store_true',
                             help='do not prompt for confirmation')
         parser.add_argument('email', type=str, nargs='+', help='User email or ID. Can be repeated.')
@@ -489,7 +489,7 @@ class EnterpriseUserDeleteCommand(base.ArgparseCommand, enterprise_management.IE
 
 class EnterpriseUserActionCommand(base.ArgparseCommand, enterprise_management.IEnterpriseManagementLogger):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='enterprise-user action', description='Enterprise user actions.')
+        parser = argparse.ArgumentParser(prog='enterprise-user action', description='Enterprise user actions.', allow_abbrev=False)
         actions = parser.add_mutually_exclusive_group(required=True)
         actions.add_argument('--expire', dest='expire', action='store_true', help='expire master password')
         actions.add_argument('--extend', dest='extend', action='store_true',
@@ -539,7 +539,7 @@ class EnterpriseUserActionCommand(base.ArgparseCommand, enterprise_management.IE
 
 class EnterpriseUserAliasCommand(base.ArgparseCommand):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='enterprise-user alias', description='Manage user aliases.')
+        parser = argparse.ArgumentParser(prog='enterprise-user alias', description='Manage user aliases.', allow_abbrev=False)
         actions = parser.add_mutually_exclusive_group(required=True)
         actions.add_argument('--add-alias', dest='add_alias', action='store',
                              help='adds user alias')
@@ -597,7 +597,8 @@ class EnterpriseDeviceApprovalCommand(base.ArgparseCommand, enterprise_managemen
         parser = argparse.ArgumentParser(
             prog='device-approve', parents=[base.report_output_parser],
             description='Approve Cloud SSO Devices.',
-            formatter_class=argparse.ArgumentDefaultsHelpFormatter
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+            allow_abbrev=False
         )
         EnterpriseDeviceApprovalCommand.add_arguments_to_parser(parser)
         super().__init__(parser)

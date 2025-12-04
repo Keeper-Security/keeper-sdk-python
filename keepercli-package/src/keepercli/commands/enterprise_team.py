@@ -25,7 +25,7 @@ class EnterpriseTeamCommand(base.GroupCommand):
 
 class EnterpriseTeamViewCommand(base.ArgparseCommand):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='enterprise-team view', parents=[base.json_output_parser], description='View enterprise team.')
+        parser = argparse.ArgumentParser(prog='enterprise-team view', parents=[base.json_output_parser], description='View enterprise team.', allow_abbrev=False)
         parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', help='print verbose information')
         parser.add_argument('team', help='Team Name or UID')
         super().__init__(parser)
@@ -132,7 +132,7 @@ class EnterpriseTeamViewCommand(base.ArgparseCommand):
 
 class EnterpriseTeamAddCommand(base.ArgparseCommand, enterprise_management.IEnterpriseManagementLogger):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='enterprise-team add', description='Create enterprise team(s).')
+        parser = argparse.ArgumentParser(prog='enterprise-team add', description='Create enterprise team(s).', allow_abbrev=False)
         parser.add_argument('-f', '--force', dest='force', action='store_true',
                             help='do not prompt for confirmation')
         parser.add_argument('--parent', dest='parent', action='store', help='Parent node name or ID')
@@ -221,7 +221,7 @@ class EnterpriseTeamAddCommand(base.ArgparseCommand, enterprise_management.IEnte
 
 class EnterpriseTeamEditCommand(base.ArgparseCommand, enterprise_management.IEnterpriseManagementLogger):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='enterprise-team edit', description='Edit enterprise team(s).')
+        parser = argparse.ArgumentParser(prog='enterprise-team edit', description='Edit enterprise team(s).', allow_abbrev=False)
         parser.add_argument('-f', '--force', dest='force', action='store_true',
                             help='do not prompt for confirmation')
         parser.add_argument('--name', dest='displayname', action='store', help='set team display name')
@@ -287,7 +287,7 @@ class EnterpriseTeamEditCommand(base.ArgparseCommand, enterprise_management.IEnt
 
 class EnterpriseTeamDeleteCommand(base.ArgparseCommand, enterprise_management.IEnterpriseManagementLogger):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='enterprise-team delete', description='Delete enterprise team(s).')
+        parser = argparse.ArgumentParser(prog='enterprise-team delete', description='Delete enterprise team(s).', allow_abbrev=False)
         parser.add_argument('team', type=str, nargs='+', help='Team Name or UID. Can be repeated.')
         super().__init__(parser)
         self.logger = api.get_logger()
@@ -309,7 +309,7 @@ class EnterpriseTeamDeleteCommand(base.ArgparseCommand, enterprise_management.IE
 
 class EnterpriseTeamMembershipCommand(base.ArgparseCommand, enterprise_management.IEnterpriseManagementLogger):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='enterprise-team membership', description='Manage enterprise team membership.')
+        parser = argparse.ArgumentParser(prog='enterprise-team membership', description='Manage enterprise team membership.', allow_abbrev=False)
         parser.add_argument('-au', '--add-user', action='append', help='add user to team')
         parser.add_argument('-ru', '--remove-user', action='append', help='remove user from team. @all')
         parser.add_argument('-ar', '--add-role', action='append', help='add user to team')
@@ -407,7 +407,8 @@ class TeamApproveCommand(base.ArgparseCommand):
     def __init__(self):
         self.parser = argparse.ArgumentParser(
             prog='team-approve', parents=[base.report_output_parser],
-            description='Enable or disable automated team and user approvals'
+            description='Enable or disable automated team and user approvals',
+            allow_abbrev=False
         )
         TeamApproveCommand.add_arguments_to_parser(self.parser)
         super().__init__(self.parser)

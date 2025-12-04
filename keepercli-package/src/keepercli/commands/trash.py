@@ -40,7 +40,8 @@ class TrashListCommand(base.ArgparseCommand):
     
     def __init__(self):
         parser = argparse.ArgumentParser(
-            prog='trash list', description='Displays a list of deleted records.', parents=[base.report_output_parser]
+            prog='trash list', description='Displays a list of deleted records.', parents=[base.report_output_parser],
+            allow_abbrev=False
         )
         self.add_arguments_to_parser(parser)
         super().__init__(parser)
@@ -288,7 +289,7 @@ class TrashGetCommand(base.ArgparseCommand):
     """Command to get details of a deleted record."""
     
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='trash get', description='Get the details of a deleted record.')
+        parser = argparse.ArgumentParser(prog='trash get', description='Get the details of a deleted record.', allow_abbrev=False)
         self.add_arguments_to_parser(parser)
         super().__init__(parser)
     
@@ -450,7 +451,7 @@ class TrashRestoreCommand(base.ArgparseCommand):
     """Command to restore deleted records from trash."""
     
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='trash restore', description='Restores deleted records.')
+        parser = argparse.ArgumentParser(prog='trash restore', description='Restores deleted records.', allow_abbrev=False)
         self.add_arguments_to_parser(parser)
         super().__init__(parser)
     
@@ -517,7 +518,8 @@ class TrashPurgeCommand(base.ArgparseCommand):
     
     def __init__(self):
         parser = argparse.ArgumentParser(
-            prog='trash purge', description='Removes all deleted record from the trash bin.'
+            prog='trash purge', description='Removes all deleted record from the trash bin.',
+            allow_abbrev=False
         )
         self.add_arguments_to_parser(parser)
         super().__init__(parser)
@@ -549,7 +551,7 @@ class TrashUnshareCommand(base.ArgparseCommand):
     """Command to remove shares from deleted records."""
     
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='trash unshare', description='Remove shares from deleted records.')
+        parser = argparse.ArgumentParser(prog='trash unshare', description='Remove shares from deleted records.', allow_abbrev=False)
         self.add_arguments_to_parser(parser)
         super().__init__(parser)
     

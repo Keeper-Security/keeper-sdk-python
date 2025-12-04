@@ -7,7 +7,7 @@ from ..params import KeeperParams
 
 
 class SwitchToManagedCompanyCommand(base.ArgparseCommand):
-    parser = argparse.ArgumentParser(prog='switch-to-mc', description='Switch to a managed company context')
+    parser = argparse.ArgumentParser(prog='switch-to-mc', description='Switch to a managed company context', allow_abbrev=False)
     parser.add_argument('mc_id', type=int, help='Managed company ID')
     
     def __init__(self):

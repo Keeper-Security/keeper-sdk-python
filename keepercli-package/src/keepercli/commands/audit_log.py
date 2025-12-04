@@ -422,7 +422,8 @@ class AuditLogCommand(ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(
             prog='audit-log', 
-            description='Export and display the enterprise audit log'
+            description='Export and display the enterprise audit log',
+            allow_abbrev=False
         )
         AuditLogCommand.add_arguments_to_parser(parser)
         super().__init__(parser)
