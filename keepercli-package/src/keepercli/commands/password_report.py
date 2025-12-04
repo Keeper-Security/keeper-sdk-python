@@ -27,8 +27,7 @@ class PasswordReportCommand(base.ArgparseCommand):
     def __init__(self) -> None:
         """Initialize the password report command."""
         self.parser = argparse.ArgumentParser(
-            prog='password-report', parents=[base.report_output_parser], description='Display record password report.',
-            allow_abbrev=False
+            prog='password-report', parents=[base.report_output_parser], description='Display record password report.'
         )
         PasswordReportCommand.add_arguments_to_parser(self.parser)
         super().__init__(self.parser)

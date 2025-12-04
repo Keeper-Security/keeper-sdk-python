@@ -2,7 +2,7 @@ import argparse
 from . import base
 
 class SyncDownCommand(base.ArgparseCommand):
-    parser = argparse.ArgumentParser(prog='sync-down', description='Download & decrypt data', allow_abbrev=False)
+    parser = argparse.ArgumentParser(prog='sync-down', description='Download & decrypt data')
     parser.add_argument('-f', '--force', dest='force', action='store_true', help='full data sync')
 
     def __init__(self):

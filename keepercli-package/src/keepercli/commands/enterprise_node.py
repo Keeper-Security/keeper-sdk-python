@@ -30,7 +30,7 @@ class EnterpriseNodeCommand(base.GroupCommand):
 class EnterpriseNodeViewCommand(base.ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(prog='enterprise-node view', parents=[base.json_output_parser],
-                                         description='View enterprise node.', allow_abbrev=False)
+                                         description='View enterprise node.')
         parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', help='print verbose information')
         parser.add_argument('node', help='Node name or UID')
         super().__init__(parser)
@@ -231,7 +231,7 @@ class EnterpriseNodeViewCommand(base.ArgparseCommand):
 
 class EnterpriseNodeAddCommand(base.ArgparseCommand, enterprise_management.IEnterpriseManagementLogger):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='enterprise-node add', description='Create enterprise node(s).', allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='enterprise-node add', description='Create enterprise node(s).')
         parser.add_argument('--parent', dest='parent', action='store', help='Parent node name or ID')
         parser.add_argument('--name', dest='displayname', action='store', help='set node display name')
         parser.add_argument('--set-isolated', dest='set_isolated', action='store', choices=['on', 'off'],
@@ -295,7 +295,7 @@ class EnterpriseNodeAddCommand(base.ArgparseCommand, enterprise_management.IEnte
 
 class EnterpriseNodeEditCommand(base.ArgparseCommand, enterprise_management.IEnterpriseManagementLogger):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='enterprise-node edit', description='Edit enterprise node(s).', allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='enterprise-node edit', description='Edit enterprise node(s).')
         parser.add_argument('--parent', dest='parent', action='store', help='Parent node name or ID')
         parser.add_argument('--name', dest='displayname', action='store', help='set node display name')
         parser.add_argument('--set-isolated', dest='set_isolated', action='store', choices=['on', 'off'],
@@ -330,7 +330,7 @@ class EnterpriseNodeEditCommand(base.ArgparseCommand, enterprise_management.IEnt
 
 class EnterpriseNodeDeleteCommand(base.ArgparseCommand, enterprise_management.IEnterpriseManagementLogger):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='enterprise-node delete', description='Delete enterprise node(s).', allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='enterprise-node delete', description='Delete enterprise node(s).')
         parser.add_argument('node', type=str, nargs='+', help='Node Name or ID. Can be repeated.')
         super().__init__(parser)
         self.logger = api.get_logger()
@@ -354,7 +354,7 @@ class EnterpriseNodeDeleteCommand(base.ArgparseCommand, enterprise_management.IE
 
 class EnterpriseNodeSetLogoCommand(base.ArgparseCommand, enterprise_management.IEnterpriseManagementLogger):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='enterprise-node set-logo', description='Set node logo.', allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='enterprise-node set-logo', description='Set node logo.')
         parser.add_argument('--logo-file', dest='logo_file', action='store',
                             help='Sets company logo using local image file (max size: 500 kB, min dimensions: 10x10, max dimensions: 320x320)')
         parser.add_argument('node', help='Node Name or ID.')
@@ -434,7 +434,7 @@ class EnterpriseNodeSetLogoCommand(base.ArgparseCommand, enterprise_management.I
 
 class EnterpriseNodeInviteCommand(base.ArgparseCommand, enterprise_management.IEnterpriseManagementLogger):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='enterprise-node invite-email', description='Set invitation email.', allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='enterprise-node invite-email', description='Set invitation email.')
         parser.add_argument('-f', '--force', dest='force', action='store_true',
                             help='do not prompt for confirmation')
         parser.add_argument('--invite-email', dest='invite_email', action='store',
@@ -573,7 +573,7 @@ class EnterpriseNodeInviteCommand(base.ArgparseCommand, enterprise_management.IE
 
 class EnterpriseNodeWipeOutCommand(base.ArgparseCommand, enterprise_management.IEnterpriseManagementLogger):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='enterprise-node wipe-out', description='Wipe out node content.', allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='enterprise-node wipe-out', description='Wipe out node content.')
         parser.add_argument('node', help='Node Name or ID.')
         super().__init__(parser)
         self.logger = api.get_logger()

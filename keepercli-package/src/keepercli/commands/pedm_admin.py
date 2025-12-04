@@ -170,7 +170,7 @@ class PedmCommand(base.GroupCommand):
 
 class PedmSyncDownCommand(base.ArgparseCommand):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='sync-down', description='Sync down PEDM data from the backend', allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='sync-down', description='Sync down PEDM data from the backend')
         parser.add_argument('--reload', dest='reload', action='store_true', help='Perform full sync')
         super().__init__(parser)
 
@@ -192,7 +192,7 @@ class PedmDeploymentCommand(base.GroupCommand):
 
 class PedmDeploymentListCommand(base.ArgparseCommand):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='list', description='List PEDM deployments', parents=[base.report_output_parser], allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='list', description='List PEDM deployments', parents=[base.report_output_parser])
         parser.add_argument('-v', '--verbose', dest='verbose', action='store_true',
                             help='print verbose information')
         super().__init__(parser)
@@ -226,7 +226,7 @@ class PedmDeploymentListCommand(base.ArgparseCommand):
 
 class PedmDeploymentAddCommand(base.ArgparseCommand):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='add', description='Add PEDM deployments', allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='add', description='Add PEDM deployments')
         parser.add_argument('-f', '--force', dest='force', action='store_true',
                             help='do not prompt for confirmation')
         parser.add_argument('--spiffe-cert', dest='spiffe', action='store',
@@ -275,7 +275,7 @@ class PedmDeploymentAddCommand(base.ArgparseCommand):
 
 class PedmDeploymentUpdateCommand(base.ArgparseCommand):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='update', description='Update PEDM deployment', allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='update', description='Update PEDM deployment')
         parser.add_argument('--disable', dest='disable', action='store', choices=['on', 'off'],
                             help='do not prompt for confirmation')
         parser.add_argument('--spiffe-cert', dest='spiffe', action='store',
@@ -320,7 +320,7 @@ class PedmDeploymentUpdateCommand(base.ArgparseCommand):
 
 class PedmDeploymentDeleteCommand(base.ArgparseCommand):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='delete', description='Delete PEDM deployment', allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='delete', description='Delete PEDM deployment')
         parser.add_argument('-f', '--force', dest='force', action='store_true',
                             help='do not prompt for confirmation')
         parser.add_argument('deployment', metavar='DEPLOYMENT', nargs='+',
@@ -366,7 +366,7 @@ class PedmDeploymentDeleteCommand(base.ArgparseCommand):
 
 class PedmDeploymentDownloadCommand(base.ArgparseCommand):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='download', description='Download PEDM deployment package', allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='download', description='Download PEDM deployment package')
         parser.add_argument('--file', dest='file', action='store', help='File name')
         parser.add_argument('deployment', metavar='DEPLOYMENT', help='Deployment name or UID')
         super().__init__(parser)
@@ -401,7 +401,7 @@ class PedmAgentCommand(base.GroupCommand):
 class PedmAgentCollectionCommand(base.ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(prog='list', parents=[base.report_output_parser],
-                                         description='List PEDM agent resources', allow_abbrev=False)
+                                         description='List PEDM agent resources')
         parser.add_argument('-v', '--verbose', dest='verbose', action='store_true',
                             help='print verbose information')
         parser.add_argument('--type', dest='type', action='store', type=int,
@@ -457,7 +457,7 @@ class PedmAgentCollectionCommand(base.ArgparseCommand):
 
 class PedmAgentDeleteCommand(base.ArgparseCommand):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='update', description='Delete PEDM agents', allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='update', description='Delete PEDM agents')
         parser.add_argument('--force', dest='force', action='store_true',
                             help='do not prompt for confirmation')
         parser.add_argument('agent', nargs='+', help='Agent UID(s)')
@@ -488,7 +488,7 @@ class PedmAgentDeleteCommand(base.ArgparseCommand):
 
 class PedmAgentEditCommand(base.ArgparseCommand):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='update', description='Update PEDM agents', allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='update', description='Update PEDM agents')
         parser.add_argument('--enable', dest='enable', action='store', choices=['on', 'off'],
                                    help='Enables or disables agents')
         parser.add_argument('--deployment', dest='deployment', action='store',
@@ -543,7 +543,7 @@ class PedmAgentEditCommand(base.ArgparseCommand):
 class PedmAgentListCommand(base.ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(prog='list', description='List PEDM agents',
-                                         parents=[base.report_output_parser], allow_abbrev=False)
+                                         parents=[base.report_output_parser])
         parser.add_argument('-v', '--verbose', dest='verbose', action='store_true',
                             help='print verbose information')
         super().__init__(parser)
@@ -606,7 +606,7 @@ class PedmPolicyMixin:
     ALL_FILTERS: List[str] = ['USER', 'MACHINE', 'APP', 'TIME', 'DATE', 'DAY']
     ALL_CONTROLS: List[str] = ['ALLOW', 'DENY', 'NOTIFY', 'MFA', 'JUSTIFY', 'APPROVAL', 'AUDIT', 'RECORD']
 
-    policy_filter = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+    policy_filter = argparse.ArgumentParser(add_help=False)
     policy_filter.add_argument('--user-filter', dest='user_filter', action='append',
                         help='Policy user filter. User collection UID or *')
     policy_filter.add_argument('--machine-filter', dest='machine_filter', action='append',
@@ -880,7 +880,7 @@ class PedmPolicyMixin:
 class PedmPolicyListCommand(base.ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(prog='list', description='List PEDM policies',
-                                         parents=[base.report_output_parser], allow_abbrev=False)
+                                         parents=[base.report_output_parser])
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> Any:
@@ -913,7 +913,7 @@ class PedmPolicyListCommand(base.ArgparseCommand):
 
 class PedmPolicyAddCommand(base.ArgparseCommand, PedmPolicyMixin):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='add', description='Add PEDM policy', parents=[PedmPolicyMixin.policy_filter], allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='add', description='Add PEDM policy', parents=[PedmPolicyMixin.policy_filter])
         parser.add_argument('--policy-type', dest='policy_type', action='store', default='elevation',
                             choices=['elevation', 'file_access', 'command', 'least_privilege'],
                             help='Policy type')
@@ -1032,7 +1032,7 @@ class PedmPolicyAddCommand(base.ArgparseCommand, PedmPolicyMixin):
 
 class PedmPolicyEditCommand(base.ArgparseCommand, PedmPolicyMixin):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='edit', description='Edit PEDM policy', parents=[PedmPolicyMixin.policy_filter], allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='edit', description='Edit PEDM policy', parents=[PedmPolicyMixin.policy_filter])
         parser.add_argument('policy', help='Policy UID')
         parser.add_argument('--policy-name', dest='policy_name', action='store',
                             help='Policy name')
@@ -1092,7 +1092,7 @@ class PedmPolicyEditCommand(base.ArgparseCommand, PedmPolicyMixin):
 
 class PedmPolicyViewCommand(base.ArgparseCommand):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='view', parents=[base.json_output_parser], description='View PEDM policy', allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='view', parents=[base.json_output_parser], description='View PEDM policy')
         parser.add_argument('policy', help='Policy UID or name')
         super().__init__(parser)
 
@@ -1112,7 +1112,7 @@ class PedmPolicyViewCommand(base.ArgparseCommand):
 
 class PedmPolicyDeleteCommand(base.ArgparseCommand):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='delete', description='Delete PEDM policy', allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='delete', description='Delete PEDM policy')
         parser.add_argument('policy', type=str, nargs='+', help='Policy UID or name')
         super().__init__(parser)
 
@@ -1131,7 +1131,7 @@ class PedmPolicyDeleteCommand(base.ArgparseCommand):
 
 class PedmPolicyAgentsCommand(base.ArgparseCommand):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='agent', description='Show agents for policies', allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='agent', description='Show agents for policies')
         parser.add_argument('policy', type=str, nargs='+', help='Policy UID or name')
         super().__init__(parser)
 
@@ -1180,7 +1180,7 @@ class PedmPolicyAgentsCommand(base.ArgparseCommand):
 
 class PedmPolicyAssignCommand(base.ArgparseCommand):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='assign', description='Assign collections to policy', allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='assign', description='Assign collections to policy')
         parser.add_argument('-c', '--collection', action='append', help='Collection UID')
         parser.add_argument('policy', type=str, nargs='+', help='Policy UID or name')
         super().__init__(parser)
@@ -1231,7 +1231,7 @@ class PedmCollectionCommand(base.GroupCommand):
 
 class PedmCollectionWipeOutCommand(base.ArgparseCommand):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='wipe-out', description='Wipe out PEDM collections', allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='wipe-out', description='Wipe out PEDM collections')
         parser.add_argument('--type', dest='type', action='store', type=int,
                             help='collection type')
         super().__init__(parser)
@@ -1253,7 +1253,7 @@ class PedmCollectionWipeOutCommand(base.ArgparseCommand):
 
 class PedmCollectionAddCommand(base.ArgparseCommand):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='add', description='Creates PEDM collections', allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='add', description='Creates PEDM collections')
         parser.add_argument('--type', dest='type', action='store', type=int,
                             help='collection type')
         parser.add_argument('collection', type=str, nargs='+',  help='Collection name')
@@ -1292,7 +1292,7 @@ class PedmCollectionAddCommand(base.ArgparseCommand):
 
 class PedmCollectionUpdateCommand(base.ArgparseCommand):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='update', description='Update PEDM collection', allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='update', description='Update PEDM collection')
         parser.add_argument('--type', dest='type', action='store', type=int,
                             help='collection type (optional)')
         parser.add_argument('--name', dest='name', action='store', required=True,
@@ -1330,7 +1330,7 @@ class PedmCollectionUpdateCommand(base.ArgparseCommand):
 
 class PedmCollectionDeleteCommand(base.ArgparseCommand):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='delete', description='Delete PEDM collections', allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='delete', description='Delete PEDM collections')
         parser.add_argument('-f', '--force', dest='force', action='store_true',
                             help='do not prompt for confirmation')
         parser.add_argument('collection', nargs='+', help='Collection or @orphan_resource')
@@ -1381,7 +1381,7 @@ class PedmCollectionDeleteCommand(base.ArgparseCommand):
 
 class PedmCollectionConnectCommand(base.ArgparseCommand):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='link', description='Link values to PEDM collection', allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='link', description='Link values to PEDM collection')
         parser.add_argument('--collection', '-c', dest='collection', action='store',
                             help='Parent collection UID or name')
         parser.add_argument('--link-type', dest='link_type', action='store', required=True,
@@ -1429,7 +1429,7 @@ class PedmCollectionConnectCommand(base.ArgparseCommand):
 
 class PedmCollectionDisconnectCommand(base.ArgparseCommand):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='unlink', description='Unlink values from PEDM collections', allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='unlink', description='Unlink values from PEDM collections')
         parser.add_argument('--collection', '-c', dest='collection', action='store',
                             help='Parent collection UID or name')
         parser.add_argument('-f', '--force', dest='force', action='store_true',
@@ -1484,7 +1484,7 @@ class PedmCollectionDisconnectCommand(base.ArgparseCommand):
 class PedmCollectionListCommand(base.ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(prog='list', description='List PEDM collections',
-                                         parents=[base.report_output_parser], allow_abbrev=False)
+                                         parents=[base.report_output_parser])
         parser.add_argument('-v', '--verbose', dest='verbose', action='store_true',
                             help='print verbose information')
         parser.add_argument('--type', dest='type', action='store', type=int,
@@ -1581,7 +1581,7 @@ class PedmCollectionListCommand(base.ArgparseCommand):
 class PedmCollectionViewCommand(base.ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(prog='view', description='Show PEDM collection details',
-                                         parents=[base.report_output_parser], allow_abbrev=False)
+                                         parents=[base.report_output_parser])
         parser.add_argument('-v', '--verbose', dest='verbose', action='store_true',
                             help='print verbose information')
         parser.add_argument('--link', dest='link', action='append', help='Show link details')
@@ -1685,7 +1685,7 @@ class PedmApprovalCommand(base.GroupCommand):
 class PedmApprovalListCommand(base.ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(prog='list', description='List PEDM approval requests',
-                                         parents=[base.report_output_parser], allow_abbrev=False)
+                                         parents=[base.report_output_parser])
         parser.add_argument('--type', dest='type', action='store', type=int,
                             help='approval type filter')
 
@@ -1725,7 +1725,7 @@ class PedmApprovalListCommand(base.ArgparseCommand):
 
 class PedmApprovalStatusCommand(base.ArgparseCommand):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='action', description='Modify PEDM approval requests', allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='action', description='Modify PEDM approval requests')
         parser.add_argument('--approve', dest='approve', action='append',
                             help='Request UIDs for approval')
         parser.add_argument('--deny', dest='deny', action='append',

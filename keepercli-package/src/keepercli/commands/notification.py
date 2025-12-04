@@ -41,7 +41,7 @@ class NotificationCommand(base.GroupCommand):
 
 class NotificationListCommand(base.ArgparseCommand):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='list', description='List notifications', parents=[base.report_output_parser], allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='list', description='List notifications', parents=[base.report_output_parser])
         parser.add_argument('--unread-only', dest='unread_only', action='store_true',
                             help='Show unread notifications only')
         super().__init__(parser)
@@ -83,7 +83,7 @@ class NotificationListCommand(base.ArgparseCommand):
 
 class NotificationMarkReadCommand(base.ArgparseCommand):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='mark-read', description='Mark notifications as read', allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='mark-read', description='Mark notifications as read')
         parser.add_argument('notifications', help='Deployment name or UID')
         super().__init__(parser)
 

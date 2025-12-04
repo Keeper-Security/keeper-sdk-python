@@ -21,8 +21,7 @@ class RecordFileReportCommand(base.ArgparseCommand):
         self.parser = argparse.ArgumentParser(
             prog='file-report',
             parents=[base.report_output_parser],
-            description='List records with file attachments.',
-            allow_abbrev=False
+            description='List records with file attachments.'
         )
         RecordFileReportCommand.add_arguments_to_parser(self.parser)
         super().__init__(self.parser)

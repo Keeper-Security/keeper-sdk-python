@@ -20,7 +20,7 @@ SUPPORTED_ROLE_COLUMNS = ['visible_below', 'default_role', 'admin', 'node', 'use
 
 class EnterpriseDownCommand(base.ArgparseCommand):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='enterprise-down', description='Download enterprise data.', allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='enterprise-down', description='Download enterprise data.')
         parser.add_argument('--reset', dest='reset', action='store_true',
                             help='reload enterprise data')
         super().__init__(parser)
@@ -51,8 +51,7 @@ class EnterpriseInfoTreeCommand(base.ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(prog='enterprise-info tree',
                                          description='Display a tree structure of your enterprise.',
-                                         formatter_class=argparse.RawTextHelpFormatter,
-                                         allow_abbrev=False)
+                                         formatter_class=argparse.RawTextHelpFormatter)
         parser.add_argument('--node', dest='node', action='store', help='limit results to node (name or ID)')
         parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', help='print verbose information')
         super().__init__(parser)
@@ -217,8 +216,7 @@ class EnterpriseInfoNodeCommand(base.ArgparseCommand, enterprise_utils.Enterpris
     def __init__(self):
         parser = argparse.ArgumentParser(prog='enterprise-info node', parents=[base.report_output_parser],
                                          description='Display node information.',
-                                         formatter_class=argparse.RawTextHelpFormatter,
-                                         allow_abbrev=False)
+                                         formatter_class=argparse.RawTextHelpFormatter)
         parser.add_argument('-c', '--columns', dest='columns', action='store',
                             help='comma-separated list of available columns per argument: ' + ', '.join(SUPPORTED_NODE_COLUMNS))
         parser.add_argument('pattern', nargs='?', type=str, help='search pattern')
@@ -344,8 +342,7 @@ class EnterpriseInfoUserCommand(base.ArgparseCommand, enterprise_utils.Enterpris
     def __init__(self):
         parser = argparse.ArgumentParser(prog='enterprise-info user', parents=[base.report_output_parser],
                                          description='Display user information.',
-                                         formatter_class=argparse.RawTextHelpFormatter,
-                                         allow_abbrev=False)
+                                         formatter_class=argparse.RawTextHelpFormatter)
         parser.add_argument('-c', '--columns', dest='columns', action='store',
                             help='comma-separated list of available columns per argument: ' + ', '.join(SUPPORTED_USER_COLUMNS))
         parser.add_argument('pattern', nargs='?', type=str, help='search pattern')
@@ -481,8 +478,7 @@ class EnterpriseInfoTeamCommand(base.ArgparseCommand, enterprise_utils.Enterpris
     def __init__(self):
         parser = argparse.ArgumentParser(prog='enterprise-info team', parents=[base.report_output_parser],
                                          description='Display team information.',
-                                         formatter_class=argparse.RawTextHelpFormatter,
-                                         allow_abbrev=False)
+                                         formatter_class=argparse.RawTextHelpFormatter)
         parser.add_argument('-c', '--columns', dest='columns', action='store',
                             help='comma-separated list of available columns per argument: ' + ', '.join(SUPPORTED_TEAM_COLUMNS))
         parser.add_argument('pattern', nargs='?', type=str, help='search pattern')
@@ -623,8 +619,7 @@ class EnterpriseInfoRoleCommand(base.ArgparseCommand, enterprise_utils.Enterpris
     def __init__(self):
         parser = argparse.ArgumentParser(prog='enterprise-info role', parents=[base.report_output_parser],
                                          description='Display role information.',
-                                         formatter_class=argparse.RawTextHelpFormatter,
-                                         allow_abbrev=False)
+                                         formatter_class=argparse.RawTextHelpFormatter)
         parser.add_argument('-c', '--columns', dest='columns', action='store',
                             help='comma-separated list of available columns per argument: ' + ', '.join(SUPPORTED_ROLE_COLUMNS))
         parser.add_argument('pattern', nargs='?', type=str, help='search pattern')
@@ -718,8 +713,7 @@ class EnterpriseInfoManagedCompanyCommand(base.ArgparseCommand, enterprise_utils
     def __init__(self):
         parser = argparse.ArgumentParser(prog='enterprise-info mc', parents=[base.report_output_parser],
                                          description='Display managed company information.',
-                                         formatter_class=argparse.RawTextHelpFormatter,
-                                         allow_abbrev=False)
+                                         formatter_class=argparse.RawTextHelpFormatter)
         parser.add_argument('pattern', nargs='?', type=str, help='search pattern')
         super().__init__(parser)
 

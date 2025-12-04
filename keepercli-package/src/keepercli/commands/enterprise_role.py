@@ -24,7 +24,7 @@ class EnterpriseRoleCommand(base.GroupCommand):
 
 class EnterpriseRoleViewCommand(base.ArgparseCommand):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='enterprise-role view', parents=[base.json_output_parser], description='View enterprise role.', allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='enterprise-role view', parents=[base.json_output_parser], description='View enterprise role.')
         parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', help='print verbose information')
         parser.add_argument('role', help='Role Name or ID')
         super().__init__(parser)
@@ -235,7 +235,7 @@ class EnterpriseRoleViewCommand(base.ArgparseCommand):
 
 class EnterpriseRoleAddCommand(base.ArgparseCommand, enterprise_management.IEnterpriseManagementLogger):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='enterprise-role add', description='Create enterprise role(s).', allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='enterprise-role add', description='Create enterprise role(s).')
         parser.add_argument('--parent', dest='parent', action='store', help='Parent node name or ID')
         parser.add_argument('--new-user', dest='new_user', action='store', choices=['on', 'off'],
                             help='assign this role to new users')
@@ -319,7 +319,7 @@ class EnterpriseRoleAddCommand(base.ArgparseCommand, enterprise_management.IEnte
 
 class EnterpriseRoleEditCommand(base.ArgparseCommand, enterprise_management.IEnterpriseManagementLogger):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='enterprise-role edit', description='Edit enterprise role(s).', allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='enterprise-role edit', description='Edit enterprise role(s).')
         parser.add_argument('--parent', dest='parent', action='store', help='Parent node name or ID')
         parser.add_argument('--name', dest='displayname', action='store', help='set role display name')
         parser.add_argument('--new-user', dest='new_user', action='store', choices=['on', 'off'],
@@ -386,7 +386,7 @@ class EnterpriseRoleEditCommand(base.ArgparseCommand, enterprise_management.IEnt
 
 class EnterpriseRoleDeleteCommand(base.ArgparseCommand, enterprise_management.IEnterpriseManagementLogger):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='enterprise-role delete', description='Delete enterprise role(s).', allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='enterprise-role delete', description='Delete enterprise role(s).')
         parser.add_argument('role', type=str, nargs='+', help='Role Name or ID. Can be repeated.')
         super().__init__(parser)
         self.logger = api.get_logger()
@@ -405,7 +405,7 @@ class EnterpriseRoleDeleteCommand(base.ArgparseCommand, enterprise_management.IE
 
 class EnterpriseRoleCopyCommand(base.ArgparseCommand, enterprise_management.IEnterpriseManagementLogger):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='enterprise-role copy', description='Copy role with enforcements.', allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='enterprise-role copy', description='Copy role with enforcements.')
         parser.add_argument('--node', dest='node', action='store', required=True,
                             help='New role node name or ID')
         parser.add_argument('--name', dest='displayname', action='store', required=True,
@@ -437,7 +437,7 @@ class EnterpriseRoleCopyCommand(base.ArgparseCommand, enterprise_management.IEnt
 
 class EnterpriseRoleMembershipCommand(base.ArgparseCommand, enterprise_management.IEnterpriseManagementLogger):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='enterprise-role membership', description='Manage enterprise role membership.', allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='enterprise-role membership', description='Manage enterprise role membership.')
         parser.add_argument('-au', '--add-user', action='append', metavar='EMAIL',
                             help='add user to role. Can be repeated.')
         parser.add_argument('-ru', '--remove-user', action='append', metavar='EMAIL',
@@ -512,7 +512,7 @@ class EnterpriseRoleMembershipCommand(base.ArgparseCommand, enterprise_managemen
 
 class EnterpriseRoleAdminCommand(base.ArgparseCommand, enterprise_management.IEnterpriseManagementLogger):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='enterprise-role admin', description='Manage enterprise admin role.', allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='enterprise-role admin', description='Manage enterprise admin role.')
         parser.add_argument('-aa', '--add-admin', action='append', metavar='NODE',
                             help='add managed node to role. Can be repeated.')
         parser.add_argument('-ra', '--remove-admin', action='append', metavar='NODE',

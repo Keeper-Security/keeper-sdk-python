@@ -12,14 +12,14 @@ from ..helpers import report_utils
 from ..params import KeeperParams
 from .. import api
 
-json_output_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+json_output_parser = argparse.ArgumentParser(add_help=False)
 json_output_parser.add_argument('--format', dest='format', action='store', choices=['table', 'json'],
                                 default='table', help='format of output')
 json_output_parser.add_argument('--output', dest='output', action='store',
                                 help='path to resulting output file (ignored for "table" format)')
 
 
-report_output_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+report_output_parser = argparse.ArgumentParser(add_help=False)
 report_output_parser.add_argument('--format', dest='format', action='store', choices=['table', 'csv', 'json'],
                                   default='table', help='format of output')
 report_output_parser.add_argument('--output', dest='output', action='store',
@@ -148,26 +148,48 @@ class ArgparseCommand(ICliCommand, abc.ABC):
                 options.add(opt)
         return options
 
-    def _validate_no_abbreviated_args(self, arg_list: list, valid_options: set) -> None:
-        """Validate that no abbreviated long options are used.
+    def _validate_strict_options(self, arg_list: list, valid_options: set) -> None:
+        """Validate that all option-like arguments are recognized.
         
-        Raises ParseError if an abbreviated argument is found that matches
-        a valid option as a prefix but is not an exact match.
+        Raises ParseError if:
+        - An abbreviated long option is used (e.g., --len for --length)
+        - An unrecognized option is used (e.g., --leo, --xyz)
+        - An unrecognized short option is used
         """
         long_options = {opt for opt in valid_options if opt.startswith('--')}
+        short_options = {opt for opt in valid_options if opt.startswith('-') and not opt.startswith('--')}
         
         for arg in arg_list:
-            if arg.startswith('--') and '=' not in arg:
-                
-                opt_name = arg
+            if arg.startswith('--'):
+                opt_name = arg.split('=')[0] if '=' in arg else arg
                 
                 if opt_name not in long_options:
-                    
                     matches = [opt for opt in long_options if opt.startswith(opt_name)]
                     if matches:
                         raise ParseError(
                             f'unrecognized argument: {arg} (did you mean {matches[0]}?)'
                         )
+                    else:
+                        raise ParseError(f'unrecognized argument: {arg}')
+            
+            elif arg.startswith('-') and len(arg) > 1:
+                
+                if arg[1].isdigit() or (arg[1] == '.' and len(arg) > 2):
+                    continue
+                
+                opt_part = arg.split('=')[0] if '=' in arg else arg
+                
+                if opt_part in short_options:
+                    continue
+                
+                matched = False
+                for valid_opt in short_options:
+                    if opt_part.startswith(valid_opt):
+                        matched = True
+                        break
+                
+                if not matched:
+                    raise ParseError(f'unrecognized argument: {arg}')
 
     def execute_args(self, context: KeeperParams, args, **kwargs):
         d = {}
@@ -176,12 +198,16 @@ class ArgparseCommand(ICliCommand, abc.ABC):
         parser = self.get_parser()
         try:
             arg_list = shlex.split(args)
-            # Validate no abbreviated arguments are used
+            
             valid_options = self._get_all_option_strings(parser)
-            self._validate_no_abbreviated_args(arg_list, valid_options)
+            self._validate_strict_options(arg_list, valid_options)
             
             opts, extra_args = parser.parse_known_args(arg_list)
             if extra_args:
+                
+                for extra in extra_args:
+                    if extra.startswith('-') and len(extra) > 1 and not extra[1].isdigit():
+                        raise ParseError(f'unrecognized argument: {extra}')
                 self.extra_parameters = ' '.join(extra_args)
             d.update(opts.__dict__)
             return self.execute(context, **d)

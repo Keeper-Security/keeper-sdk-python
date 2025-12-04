@@ -35,7 +35,7 @@ logger = api.get_logger()
 
 
 class LoginCommand(base.ArgparseCommand):
-    login_parser = argparse.ArgumentParser(prog='login', description='Login to Keeper', allow_abbrev=False)
+    login_parser = argparse.ArgumentParser(prog='login', description='Login to Keeper')
     login_parser.add_argument('--sso-password', dest='sso_password', action='store_true',
                               help='force master password for SSO accounts')
     login_parser.add_argument('--resume-session', dest='resume_session', action='store_true',
@@ -60,7 +60,7 @@ class LoginCommand(base.ArgparseCommand):
 
 
 class LogoutCommand(base.ArgparseCommand):
-    logout_parser = argparse.ArgumentParser(prog='logout', description='Logout from Keeper', allow_abbrev=False)
+    logout_parser = argparse.ArgumentParser(prog='logout', description='Logout from Keeper')
 
     def __init__(self):
         super().__init__(LogoutCommand.logout_parser)
@@ -73,8 +73,7 @@ class ThisDeviceCommand(base.ArgparseCommand):
     this_device_available_command_verbs = ['rename', 'register', 'persistent-login', 'ip-auto-approve',
                                            'no-yubikey-pin', 'timeout']
     this_device_parser = argparse.ArgumentParser(prog='this-device',
-                                                 description='Display and modify settings of the current device',
-                                                 allow_abbrev=False)
+                                                 description='Display and modify settings of the current device')
     this_device_parser.add_argument('ops', nargs='*',
                                     help="operation str: " + ", ".join(this_device_available_command_verbs))
 
@@ -219,8 +218,7 @@ class ThisDeviceCommand(base.ArgparseCommand):
 
 class WhoamiCommand(base.ArgparseCommand):
     whoami_parser = argparse.ArgumentParser(prog='whoami',
-                                            description='Display information about the currently logged in user',
-                                            allow_abbrev=False)
+                                            description='Display information about the currently logged in user')
     whoami_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', help='verbose output')
 
     def __init__(self):
@@ -304,8 +302,7 @@ class ResetPasswordCommand(base.ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(
             prog='reset-password', 
-            description='Reset master password for Keeper account',
-            allow_abbrev=False
+            description='Reset master password for Keeper account'
         )
         parser.add_argument(
             '--delete-sso',

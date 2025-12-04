@@ -18,7 +18,7 @@ logger = api.get_logger()
 
 
 class RecordListCommand(base.ArgparseCommand):
-    parser = argparse.ArgumentParser(prog='list', description='List records', parents=[base.report_output_parser], allow_abbrev=False)
+    parser = argparse.ArgumentParser(prog='list', description='List records', parents=[base.report_output_parser])
     parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', help='verbose output')
     parser.add_argument('-t', '--type', dest='record_type', action='append',
                              help='List records of certain types. Can be repeated')
@@ -78,8 +78,7 @@ class SharedFolderListCommand(base.ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(
             prog='list-sf', parents=[base.report_output_parser], 
-            description='Displays shared folders',
-            allow_abbrev=False
+            description='Displays shared folders'
         )
         SharedFolderListCommand.add_arguments_to_parser(parser)
         super().__init__(parser)
@@ -140,8 +139,7 @@ class TeamListCommand(base.ArgparseCommand):
 
     def __init__(self):
         parser = argparse.ArgumentParser(
-            prog='list-team', parents=[base.report_output_parser], description='Displays teams',
-            allow_abbrev=False
+            prog='list-team', parents=[base.report_output_parser], description='Displays teams'
         )
         TeamListCommand.add_arguments_to_parser(parser)
         super().__init__(parser)
@@ -352,7 +350,7 @@ class ShortcutCommand(base.GroupCommand):
 
 class ShortcutListCommand(base.ArgparseCommand):
     parser = argparse.ArgumentParser(prog='shortcut list', parents=[base.report_output_parser],
-                                     description='Displays shortcuts', allow_abbrev=False)
+                                     description='Displays shortcuts')
     parser.add_argument('--verbose', '-v', dest='verbose', action='store_true',
                         help='verbose output')
     parser.add_argument('-R', '--recursive', dest='recursive', action='store_true',
@@ -455,7 +453,7 @@ class ShortcutListCommand(base.ArgparseCommand):
         return report_utils.dump_report_data(table, headers, fmt=fmt, filename=kwargs.get('output'))
 
 class ShortcutKeepCommand(base.ArgparseCommand):
-    parser = argparse.ArgumentParser(prog='shortcut keep', description='Removes shortcuts except one', allow_abbrev=False)
+    parser = argparse.ArgumentParser(prog='shortcut keep', description='Removes shortcuts except one')
     parser.add_argument('--dry-run', dest='dry_run', action='store_true',
                         help='dry-run mode: do not apply any changes')
     parser.add_argument('-f', '--force', dest='force', action='store_true',

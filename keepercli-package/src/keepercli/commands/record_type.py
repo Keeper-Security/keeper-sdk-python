@@ -17,8 +17,7 @@ class RecordTypeAddCommand(base.ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(
             prog='record-type-add',
-            description='Add a new custom record type.',
-            allow_abbrev=False
+            description='Add a new custom record type.'
         )
         parser.add_argument(
             '--data',
@@ -56,8 +55,7 @@ class RecordTypeEditCommand(base.ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(
             prog='record-type-edit',
-            description='Update or edit a custom record type.',
-            allow_abbrev=False
+            description='Update or edit a custom record type.'
         )
         parser.add_argument(
             '--data',
@@ -105,8 +103,7 @@ class RecordTypeDeleteCommand(base.ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(
             prog='record-type-delete',
-            description='Delete a custom record type.',
-            allow_abbrev=False
+            description='Delete a custom record type.'
         )
         parser.add_argument(
             'record_type_id',
@@ -133,8 +130,7 @@ class RecordTypeInfoCommand(base.ArgparseCommand):
     def __init__(self):
         self.parser = argparse.ArgumentParser(
             prog='record-type-info',
-            description='Get record type info',
-            allow_abbrev=False
+            description='Get record type info'
         )
         RecordTypeInfoCommand.add_arguments_to_parser(self.parser)
         super().__init__(self.parser)
@@ -238,8 +234,7 @@ class LoadRecordTypesCommand(base.ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(
             prog='load-record-types',
-            description='Loads custom record types from a JSON file.',
-            allow_abbrev=False
+            description='Loads custom record types from a JSON file.'
         )
         parser.add_argument(
             '--file',
@@ -323,8 +318,7 @@ class DownloadRecordTypesCommand(base.ArgparseCommand):
     def __init__(self):
         self.parser = argparse.ArgumentParser(
             prog='download-record-types',
-            description='Download custom record types to a JSON file.',
-            allow_abbrev=False
+            description='Download custom record types to a JSON file.'
         )
         DownloadRecordTypesCommand.add_arguments_to_parser(self.parser)
         super().__init__(self.parser)

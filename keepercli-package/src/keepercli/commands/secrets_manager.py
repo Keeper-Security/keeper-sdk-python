@@ -43,8 +43,7 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
     def __init__(self):
         self.parser = argparse.ArgumentParser(
             prog='secrets-manager-app',
-            description='Keeper Secrets Manager (KSM) App Commands',
-            allow_abbrev=False
+            description='Keeper Secrets Manager (KSM) App Commands'
         )
         SecretsManagerAppCommand.add_arguments_to_parser(self.parser)
         super().__init__(self.parser)
@@ -395,8 +394,7 @@ class SecretsManagerClientCommand(base.ArgparseCommand):
     def __init__(self):
         self.parser = argparse.ArgumentParser(
             prog='secrets-manager-client',
-            description='Keeper Secrets Manager (KSM) Client Commands',
-            allow_abbrev=False
+            description='Keeper Secrets Manager (KSM) Client Commands'
         )
         SecretsManagerClientCommand.add_arguments_to_parser(self.parser)
         super().__init__(self.parser)
@@ -802,8 +800,7 @@ class SecretsManagerShareCommand(base.ArgparseCommand):
     def __init__(self):
         self.parser = argparse.ArgumentParser(
             prog='secrets-manager-share',
-            description='Keeper Secrets Manager (KSM) Share Commands',
-            allow_abbrev=False
+            description='Keeper Secrets Manager (KSM) Share Commands'
         )
         SecretsManagerShareCommand.add_arguments_to_parser(self.parser)
         super().__init__(self.parser)

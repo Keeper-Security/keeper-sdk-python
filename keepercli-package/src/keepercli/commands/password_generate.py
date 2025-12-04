@@ -38,8 +38,7 @@ class PasswordGenerateCommand(base.ArgparseCommand):
         """Initialize the password generate command."""
         self.parser = argparse.ArgumentParser(
             prog='generate', 
-            description='Generate secure passwords with optional BreachWatch scanning',
-            allow_abbrev=False
+            description='Generate secure passwords with optional BreachWatch scanning'
         )
         PasswordGenerateCommand.add_arguments_to_parser(self.parser)
         super().__init__(self.parser)

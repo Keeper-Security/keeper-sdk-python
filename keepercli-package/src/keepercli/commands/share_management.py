@@ -70,8 +70,7 @@ class ShareRecordCommand(base.ArgparseCommand):
     def __init__(self):
         self.parser = argparse.ArgumentParser(
             prog='share-record',
-            description='Change the sharing permissions of an individual record',
-            allow_abbrev=False
+            description='Change the sharing permissions of an individual record'
         )
         ShareRecordCommand.add_arguments_to_parser(self.parser)
         super().__init__(self.parser)
@@ -543,8 +542,7 @@ class ShareFolderCommand(base.ArgparseCommand):
     def __init__(self):
         self.parser = argparse.ArgumentParser(
             prog='share-folder',
-            description='Change the sharing permissions of shared folders',
-            allow_abbrev=False
+            description='Change the sharing permissions of shared folders'
         )
         ShareFolderCommand.add_arguments_to_parser(self.parser)
         super().__init__(self.parser)
@@ -1025,8 +1023,7 @@ class OneTimeShareListCommand(base.ArgparseCommand):
         self.parser = argparse.ArgumentParser(
             prog='share-list',
             description='Displays a list of one-time shares for a record',
-            parents=[base.report_output_parser],
-            allow_abbrev=False
+            parents=[base.report_output_parser]
         )
         OneTimeShareListCommand.add_arguments_to_parser(self.parser)
         super().__init__(self.parser)
@@ -1198,8 +1195,7 @@ class OneTimeShareCreateCommand(base.ArgparseCommand):
     def __init__(self):
         self.parser = argparse.ArgumentParser(
             prog='share-create',
-            description='Creates one-time share URL for a record',
-            allow_abbrev=False
+            description='Creates one-time share URL for a record'
         )
         OneTimeShareCreateCommand.add_arguments_to_parser(self.parser)
         super().__init__(self.parser)
@@ -1306,8 +1302,7 @@ class OneTimeShareRemoveCommand(base.ArgparseCommand):
     def __init__(self):
         self.parser = argparse.ArgumentParser(
             prog = 'share-remove',
-            description= 'Removes one-time share URL for a record',
-            allow_abbrev=False
+            description= 'Removes one-time share URL for a record'
         )
         OneTimeShareRemoveCommand.add_arguments_to_parser(self.parser)
         super().__init__(self.parser)

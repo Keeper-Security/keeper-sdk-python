@@ -54,7 +54,7 @@ class ImportData(batch_operations.BatchLogger, import_data.IImportLogger):
 
 class ImportCommand(base.ArgparseCommand):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='import', description='Import data into Keeper', allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='import', description='Import data into Keeper')
         parser.add_argument('--display-csv', '-dc', dest='display_csv', action='store_true',
                             help='display Keeper CSV import instructions')
         parser.add_argument('--display-json', '-dj', dest='display_json', action='store_true',
@@ -142,7 +142,7 @@ class ImportCommand(base.ArgparseCommand):
 
 class ExportCommand(base.ArgparseCommand):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='export', description='Export data from Keeper', allow_abbrev=False)
+        parser = argparse.ArgumentParser(prog='export', description='Export data from Keeper')
         parser.add_argument('--format', dest='format', choices=['json', 'csv', 'keepass'], required=True,
                             help='file format')
         parser.add_argument('--max-size', dest='max_size',
@@ -352,8 +352,7 @@ class ExportCommand(base.ArgparseCommand):
 class DownloadMembershipCommand(base.ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(prog='download-membership',
-                                         description='Unload shared folder membership to JSON file',
-                                         allow_abbrev=False)
+                                         description='Unload shared folder membership to JSON file')
         parser.add_argument('--source', dest='source', choices=['keeper', 'lastpass', 'thycotic'],
                             required=True, help='Shared folder membership source')
         parser.add_argument('-p', '--permissions', dest='permissions', action='store',
@@ -489,8 +488,7 @@ class DownloadMembershipCommand(base.ArgparseCommand):
 class ApplyMembershipCommand(base.ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(prog='apply-membership',
-                                         description='Loads shared folder membership from JSON file into Keeper',
-                                         allow_abbrev=False)
+                                         description='Loads shared folder membership from JSON file into Keeper')
         parser.add_argument('--full-sync', dest='full_sync', action='store_true',
                             help='Update and remove membership also.')
         parser.add_argument('name', type=str, nargs='?',
