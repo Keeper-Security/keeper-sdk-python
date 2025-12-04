@@ -158,11 +158,11 @@ class ArgparseCommand(ICliCommand, abc.ABC):
         
         for arg in arg_list:
             if arg.startswith('--') and '=' not in arg:
-                # Extract the option name (without value if using space separator)
+                
                 opt_name = arg
-                # Check if this is an abbreviation of any long option
+                
                 if opt_name not in long_options:
-                    # Check if it's a prefix of any valid option
+                    
                     matches = [opt for opt in long_options if opt.startswith(opt_name)]
                     if matches:
                         raise ParseError(
