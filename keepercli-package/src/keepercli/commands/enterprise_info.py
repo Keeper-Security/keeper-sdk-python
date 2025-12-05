@@ -84,7 +84,20 @@ class EnterpriseInfoTreeCommand(base.ArgparseCommand):
             root_node = enterprise_utils.NodeUtils.resolve_single_node(enterprise_data, subnode)
             logger.info('Output is limited to \"%s\" node', subnode)
 
-            managed_nodes = enterprise_utils.EnterpriseMixin.filter_managed_nodes(enterprise_data, managed_nodes, root_nodes[0])
+            filtered_nodes = enterprise_utils.EnterpriseMixin.filter_managed_nodes(enterprise_data, managed_nodes, root_node.node_id)
+
+            if root_node.node_id in filtered_nodes:
+                managed_nodes = {root_node.node_id: filtered_nodes[root_node.node_id]}
+            else:
+
+                nodes_to_expand = [root_node.node_id]
+                pos = 0
+                while pos < len(nodes_to_expand):
+                    n_id = nodes_to_expand[pos]
+                    pos += 1
+                    if n_id in subnodes:
+                        nodes_to_expand.extend(subnodes[n_id])
+                managed_nodes = {root_node.node_id: set(nodes_to_expand)}
 
         accessible_nodes.clear()
         for node_id, node_ids in managed_nodes.items():
