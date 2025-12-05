@@ -685,7 +685,7 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
                     rq: Dict[str, Any] = {}
                     if user_action == UserAction.ExpirePassword:
                         rq['command'] = 'set_master_password_expire'
-                        rq['username'] = u.username
+                        rq['email'] = u.username
                     else:
                         rq['enterprise_user_id'] = enterprise_user_id
                         if user_action in {UserAction.Lock, UserAction.Unlock}:
@@ -1069,7 +1069,7 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
                 values['User ID'] = rq.get('enterprise_user_id')
             elif command == 'set_master_password_expire':
                 command_action = 'User Expire Master Password'
-                values['User Email'] = rq.get('username')
+                values['User Email'] = rq.get('email')
             elif command.startswith('role_managed_node_'):
                 command_action = 'Managed Node ' + command[len('role_managed_node_'):].capitalize()
                 values['Role ID'] = rq.get('role_id')
