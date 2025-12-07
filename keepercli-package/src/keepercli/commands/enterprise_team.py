@@ -189,6 +189,15 @@ class EnterpriseTeamAddCommand(base.ArgparseCommand, enterprise_management.IEnte
         if not queued_teams and (team_names is None or len(team_names) == 0):
             raise base.CommandError('No teams to add')
 
+        add_current_user = False
+        if not force:
+            current_user = context.enterprise_data.users.get_entity(context.enterprise_loader.get_enterprise_id())
+            username = current_user.username if current_user else "the logged-in user"
+            answer = prompt_utils.user_choice(f'Do you want to add {username} to the team?', choice='yn', default='y')
+            add_current_user = answer.lower().startswith('y')
+        else:
+            add_current_user = True
+
         restrict_edit: Optional[bool] = None
         r_edit = kwargs.get('restrict_edit')
         if r_edit is not None:
@@ -208,14 +217,14 @@ class EnterpriseTeamAddCommand(base.ArgparseCommand, enterprise_management.IEnte
                 team_uid=utils.generate_uid(), name=x, node_id=parent_id,
                 restrict_edit=restrict_edit, restrict_share=restrict_share, restrict_view=restrict_view)
                 for x in team_names.values()]
-            batch.modify_teams(to_add=teams_to_add)
+            batch.modify_teams(to_add=teams_to_add, add_current_user=add_current_user)
 
         if queued_teams:
             teams_to_add = [enterprise_management.TeamEdit(
                 team_uid=x.team_uid, name=x.name, node_id=parent_id,
                 restrict_edit=restrict_edit, restrict_share=restrict_share, restrict_view=restrict_view)
                 for x in queued_teams]
-            batch.modify_teams(to_add=teams_to_add)
+            batch.modify_teams(to_add=teams_to_add, add_current_user=add_current_user)
 
         batch.apply()
 
@@ -261,7 +270,7 @@ class EnterpriseTeamEditCommand(base.ArgparseCommand, enterprise_management.IEnt
             parent_node = enterprise_utils.NodeUtils.resolve_single_node(context.enterprise_data, kwargs.get('parent'))
             parent_id = parent_node.node_id
         else:
-            parent_id = context.enterprise_data.root_node.node_id
+            parent_id = team_list[0].node_id
 
         restrict_edit: Optional[bool] = None
         r_edit = kwargs.get('restrict_edit')
