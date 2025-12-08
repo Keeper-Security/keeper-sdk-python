@@ -28,7 +28,8 @@ class RecordListCommand(base.ArgparseCommand):
         super().__init__(RecordListCommand.parser)
 
     def execute(self, context: KeeperParams, **kwargs):
-        assert context.vault is not None
+        if context.vault is None:
+            raise base.CommandError('Vault is not initialized. Login to initialize the vault.')
         verbose = kwargs.get('verbose') is True
         fmt = kwargs.get('format', 'table')
         search_text = kwargs.get('search_text')
@@ -362,7 +363,8 @@ class ShortcutListCommand(base.ArgparseCommand):
         super().__init__(ShortcutListCommand.parser)
 
     def execute(self, context: KeeperParams, **kwargs):
-        assert context.vault is not None
+        if context.vault is None:
+            raise base.CommandError('Vault is not initialized. Login to initialize the vault.')
         records = ShortcutCommand.get_record_shortcuts(context.vault.vault_data)
         if len(records) == 0:
             raise base.CommandError('Vault does not have shortcuts')
@@ -464,7 +466,8 @@ class ShortcutKeepCommand(base.ArgparseCommand):
         super().__init__(ShortcutKeepCommand.parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.vault is not None
+        if context.vault is None:
+            raise base.CommandError('Vault is not initialized. Login to initialize the vault.')
         target = kwargs.get('target')
         if not target:
             raise base.CommandError('Target parameter cannot be empty')

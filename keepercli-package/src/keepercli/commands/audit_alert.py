@@ -177,7 +177,8 @@ class AuditSettingMixin:
     @staticmethod
     def apply_alert_options(context: KeeperParams, alert: Dict[str, Any], **kwargs) -> None:
         base.require_enterprise_admin(context)
-        assert context.vault
+        if context.vault is None:
+            raise base.CommandError('Vault is not initialized. Login to initialize the vault.')
 
         alert_name = kwargs.get('name')
         if alert_name:

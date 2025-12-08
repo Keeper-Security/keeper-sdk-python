@@ -31,7 +31,8 @@ class EnterpriseRoleViewCommand(base.ArgparseCommand):
 
     def execute(self, context: KeeperParams, **kwargs) -> Any:
         base.require_enterprise_admin(context)
-        assert context.vault
+        if context.vault is None:
+            raise base.CommandError('Vault is not initialized. Login to initialize the vault.')
 
         verbose = kwargs.get('verbose') is True
 

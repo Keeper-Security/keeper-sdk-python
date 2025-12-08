@@ -82,8 +82,9 @@ class ImportCommand(base.ArgparseCommand):
         super().__init__(parser)
 
     def execute(self, context: params.KeeperParams, **kwargs):
-        assert context.auth
-        assert context.vault
+        base.require_login(context)
+        if context.vault is None:
+            raise base.CommandError('Vault is not initialized. Login to initialize the vault.')
         if 'restrict_import' in context.auth.auth_context.enforcements:
             if context.auth.auth_context.enforcements.get('restrict_import') is True:
                 raise base.CommandError('"import" is restricted by Keeper Administrator')
@@ -160,8 +161,9 @@ class ExportCommand(base.ArgparseCommand):
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs):
-        assert context.auth
-        assert context.vault
+        base.require_login(context)
+        if context.vault is None:
+            raise base.CommandError('Vault is not initialized. Login to initialize the vault.')
 
         logger = api.get_logger()
 
