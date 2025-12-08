@@ -261,7 +261,7 @@ class EnterpriseTeamEditCommand(base.ArgparseCommand, enterprise_management.IEnt
             parent_node = enterprise_utils.NodeUtils.resolve_single_node(context.enterprise_data, kwargs.get('parent'))
             parent_id = parent_node.node_id
         else:
-            parent_id = context.enterprise_data.root_node.node_id
+            parent_id = team_list[0].node_id
 
         restrict_edit: Optional[bool] = None
         r_edit = kwargs.get('restrict_edit')
