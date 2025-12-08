@@ -588,7 +588,7 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
                         if isinstance(team.restrict_view, bool):
                             rq['restrict_view'] = team.restrict_view
                     if action == EntityAction.Add:
-                        rq['manage_only'] = False
+                        rq['manage_only'] = True
                         team_keys = keeper_auth.UserKeys()
                         if not auth.auth_context.forbid_rsa:
                             rsa_private_key, rsa_public_key = crypto.generate_rsa_key()
