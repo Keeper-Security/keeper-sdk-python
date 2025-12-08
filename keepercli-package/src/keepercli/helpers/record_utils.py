@@ -27,7 +27,8 @@ KEEPER_SECRETS_MANAGER_CLIENT_ID = 'KEEPER_SECRETS_MANAGER_CLIENT_ID'
 
 
 def try_resolve_single_record(record_name: Optional[str], context: KeeperParams) -> Optional[vault_record.KeeperRecordInfo]:
-    assert context.vault is not None
+    if context.vault is None:
+        raise CommandError('Vault is not initialized. Login to initialize the vault.')
     if not record_name:
         return None
 
@@ -46,7 +47,8 @@ def try_resolve_single_record(record_name: Optional[str], context: KeeperParams)
 
 
 def resolve_records(pattern: str, context: KeeperParams, *, recursive: bool=False) -> Iterator[str]:
-    assert context.vault is not None
+    if context.vault is None:
+        raise CommandError('Vault is not initialized. Login to initialize the vault.')
     record_info = context.vault.vault_data.get_record(pattern)
     if record_info:
         yield record_info.record_uid

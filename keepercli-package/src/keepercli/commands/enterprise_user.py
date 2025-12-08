@@ -88,9 +88,7 @@ class EnterpriseUserViewCommand(base.ArgparseCommand):
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> Any:
-        assert context.enterprise_data is not None
-        assert context.vault
-        assert context.auth
+        base.require_enterprise_admin(context)
 
         verbose = kwargs.get('verbose') is True
 
@@ -244,9 +242,8 @@ class EnterpriseUserAddCommand(base.ArgparseCommand, enterprise_management.IEnte
         self.logger.warning(message)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.auth is not None
-        assert context.enterprise_loader is not None
-        assert context.enterprise_data is not None
+        base.require_login(context)
+        base.require_enterprise_admin(context)
 
         parent_id: Optional[int]
         if kwargs.get('parent'):
@@ -342,7 +339,7 @@ class EnterpriseUserEditCommand(base.ArgparseCommand, enterprise_management.IEnt
         self.logger.warning(message)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.enterprise_data is not None
+        base.require_enterprise_admin(context)
 
         parent_id: Optional[int]
         if kwargs.get('parent'):
@@ -464,7 +461,7 @@ class EnterpriseUserDeleteCommand(base.ArgparseCommand, enterprise_management.IE
         self.logger.warning(message)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.enterprise_data is not None
+        base.require_enterprise_admin(context)
 
         users = enterprise_utils.UserUtils.resolve_existing_users(context.enterprise_data, kwargs.get('email'))
         if len(users) == 0:
@@ -508,7 +505,7 @@ class EnterpriseUserActionCommand(base.ArgparseCommand, enterprise_management.IE
         self.logger.warning(message)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.enterprise_data is not None
+        base.require_enterprise_admin(context)
 
         users = enterprise_utils.UserUtils.resolve_existing_users(context.enterprise_data, kwargs.get('email'))
         if len(users) == 0:
@@ -552,8 +549,8 @@ class EnterpriseUserAliasCommand(base.ArgparseCommand):
         self.logger = api.get_logger()
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.enterprise_data is not None
-        assert context.auth
+        base.require_login(context)
+        base.require_enterprise_admin(context)
 
         user = enterprise_utils.UserUtils.resolve_single_user(context.enterprise_data, kwargs.get('email'))
         aliases = context.enterprise_data.user_aliases.get_links_by_subject(user.enterprise_user_id)
@@ -628,9 +625,8 @@ class EnterpriseDeviceApprovalCommand(base.ArgparseCommand, enterprise_managemen
         
     def execute(self, context: KeeperParams, **kwargs) -> None:
         """Main execution method for device approval command."""
-        assert context.enterprise_data is not None
-        assert context.auth
-        assert context.enterprise_loader is not None
+        base.require_login(context)
+        base.require_enterprise_admin(context)
 
         if kwargs.get('reload'):
             context.enterprise_loader.load()

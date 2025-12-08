@@ -31,8 +31,9 @@ class EnterpriseTeamViewCommand(base.ArgparseCommand):
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> Any:
-        assert context.enterprise_data is not None
-        assert context.vault
+        base.require_enterprise_admin(context)
+        if context.vault is None:
+            raise base.CommandError('Vault is not initialized. Login to initialize the vault.')
 
         verbose = kwargs.get('verbose') is True
 
@@ -150,9 +151,8 @@ class EnterpriseTeamAddCommand(base.ArgparseCommand, enterprise_management.IEnte
         self.logger.warning(message)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.auth is not None
-        assert context.enterprise_loader is not None
-        assert context.enterprise_data is not None
+        base.require_login(context)
+        base.require_enterprise_admin(context)
 
         parent_id: Optional[int]
         if kwargs.get('parent'):
@@ -240,9 +240,8 @@ class EnterpriseTeamEditCommand(base.ArgparseCommand, enterprise_management.IEnt
         self.logger.warning(message)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.auth is not None
-        assert context.enterprise_loader is not None
-        assert context.enterprise_data is not None
+        base.require_login(context)
+        base.require_enterprise_admin(context)
 
         team_list, missing_names = enterprise_utils.TeamUtils.resolve_existing_teams(context.enterprise_data, kwargs.get('team'))
         if isinstance(missing_names, list) and len(missing_names) > 0:
@@ -261,7 +260,7 @@ class EnterpriseTeamEditCommand(base.ArgparseCommand, enterprise_management.IEnt
             parent_node = enterprise_utils.NodeUtils.resolve_single_node(context.enterprise_data, kwargs.get('parent'))
             parent_id = parent_node.node_id
         else:
-            parent_id = context.enterprise_data.root_node.node_id
+            parent_id = team_list[0].node_id
 
         restrict_edit: Optional[bool] = None
         r_edit = kwargs.get('restrict_edit')
@@ -296,7 +295,7 @@ class EnterpriseTeamDeleteCommand(base.ArgparseCommand, enterprise_management.IE
         self.logger.warning(message)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.enterprise_data is not None
+        base.require_enterprise_admin(context)
 
         team_list, missing_names = enterprise_utils.TeamUtils.resolve_existing_teams(context.enterprise_data, kwargs.get('team'))
         if isinstance(missing_names, list) and len(missing_names) > 0:
@@ -322,7 +321,7 @@ class EnterpriseTeamMembershipCommand(base.ArgparseCommand, enterprise_managemen
         self.logger.warning(message)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.enterprise_data is not None
+        base.require_enterprise_admin(context)
 
         team_list, missing_names = enterprise_utils.TeamUtils.resolve_existing_teams(context.enterprise_data, kwargs.get('team'))
         queued_team_list: List[enterprise_types.QueuedTeam]

@@ -38,6 +38,18 @@ class CommandError(errors.KeeperError):
             return super().__str__()
 
 
+def require_login(context: KeeperParams):
+    """Check if the user is logged in. Raises CommandError if not."""
+    if context.auth is None:
+        raise CommandError('Please login first to access these commands')
+
+
+def require_enterprise_admin(context: KeeperParams):
+    """Check if the user has enterprise admin privileges. Raises CommandError if not."""
+    if context.enterprise_data is None:
+        raise CommandError('This command requires enterprise admin privileges. Please login with an admin account.')
+
+
 class ICliCommand(abc.ABC):
     @abc.abstractmethod
     def execute_args(self, context: KeeperParams, args: str, **kwargs):
@@ -134,14 +146,74 @@ class ArgparseCommand(ICliCommand, abc.ABC):
     def execute(self, context: KeeperParams, **kwargs):
         pass
 
+    def _get_all_option_strings(self, parser: argparse.ArgumentParser) -> set:
+        """Get all valid option strings from the parser and its parents."""
+        options = set()
+        for action in parser._actions:
+            for opt in action.option_strings:
+                options.add(opt)
+        return options
+
+    def _validate_strict_options(self, arg_list: list, valid_options: set) -> None:
+        """Validate that all option-like arguments are recognized.
+        
+        Raises ParseError if:
+        - An abbreviated long option is used (e.g., --len for --length)
+        - An unrecognized option is used (e.g., --leo, --xyz)
+        - An unrecognized short option is used
+        """
+        long_options = {opt for opt in valid_options if opt.startswith('--')}
+        short_options = {opt for opt in valid_options if opt.startswith('-') and not opt.startswith('--')}
+        
+        for arg in arg_list:
+            if arg.startswith('--'):
+                opt_name = arg.split('=')[0] if '=' in arg else arg
+                
+                if opt_name not in long_options:
+                    matches = [opt for opt in long_options if opt.startswith(opt_name)]
+                    if matches:
+                        raise ParseError(
+                            f'unrecognized argument: {arg} (did you mean {matches[0]}?)'
+                        )
+                    else:
+                        raise ParseError(f'unrecognized argument: {arg}')
+            
+            elif arg.startswith('-') and len(arg) > 1:
+                
+                if arg[1].isdigit() or (arg[1] == '.' and len(arg) > 2):
+                    continue
+                
+                opt_part = arg.split('=')[0] if '=' in arg else arg
+                
+                if opt_part in short_options:
+                    continue
+                
+                matched = False
+                for valid_opt in short_options:
+                    if opt_part.startswith(valid_opt):
+                        matched = True
+                        break
+                
+                if not matched:
+                    raise ParseError(f'unrecognized argument: {arg}')
+
     def execute_args(self, context: KeeperParams, args, **kwargs):
         d = {}
         d.update(kwargs)
         self.extra_parameters = ''
         parser = self.get_parser()
         try:
-            opts, extra_args = parser.parse_known_args(shlex.split(args))
+            arg_list = shlex.split(args)
+            
+            valid_options = self._get_all_option_strings(parser)
+            self._validate_strict_options(arg_list, valid_options)
+            
+            opts, extra_args = parser.parse_known_args(arg_list)
             if extra_args:
+                
+                for extra in extra_args:
+                    if extra.startswith('-') and len(extra) > 1 and not extra[1].isdigit():
+                        raise ParseError(f'unrecognized argument: {extra}')
                 self.extra_parameters = ' '.join(extra_args)
             d.update(opts.__dict__)
             return self.execute(context, **d)

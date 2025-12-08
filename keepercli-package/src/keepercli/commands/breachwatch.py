@@ -43,7 +43,8 @@ class BreachWatchListCommand(base.ArgparseCommand):
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> Any:
-        assert context.vault
+        if context.vault is None:
+            raise base.CommandError('Vault is not initialized. Login to initialize the vault.')
         logger = api.get_logger()
         owned_only = kwargs.get('owned') is True
         record_uids = {x.record_uid for x in context.vault.vault_data.breach_watch_records() if x.status in (client_pb2.BWStatus.WEAK, client_pb2.BWStatus.BREACHED)}
@@ -84,7 +85,8 @@ class BreachWatchIgnoreCommand(base.ArgparseCommand):
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> Any:
-        assert context.vault
+        if context.vault is None:
+            raise base.CommandError('Vault is not initialized. Login to initialize the vault.')
         vault = context.vault
 
         # Parse and resolve record names to UIDs
