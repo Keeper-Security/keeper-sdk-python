@@ -36,8 +36,9 @@ class EnterpriseNodeViewCommand(base.ArgparseCommand):
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> Any:
-        assert context.enterprise_data is not None
-        assert context.vault
+        base.require_enterprise_admin(context)
+        if context.vault is None:
+            raise base.CommandError('Vault is not initialized. Login to initialize the vault.')
 
         verbose = kwargs.get('verbose') is True
 
@@ -246,9 +247,8 @@ class EnterpriseNodeAddCommand(base.ArgparseCommand, enterprise_management.IEnte
         self.logger.warning(message)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.auth is not None
-        assert context.enterprise_loader is not None
-        assert context.enterprise_data is not None
+        base.require_login(context)
+        base.require_enterprise_admin(context)
 
         parent_id: Optional[int]
         if kwargs.get('parent'):
@@ -308,7 +308,7 @@ class EnterpriseNodeEditCommand(base.ArgparseCommand, enterprise_management.IEnt
         self.logger.warning(message)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.enterprise_data is not None
+        base.require_enterprise_admin(context)
         node_list = enterprise_utils.NodeUtils.resolve_existing_nodes(context.enterprise_data, kwargs.get('node'))
         parent_id: Optional[int] = None
         if kwargs.get('parent'):
@@ -339,7 +339,7 @@ class EnterpriseNodeDeleteCommand(base.ArgparseCommand, enterprise_management.IE
         self.logger.warning(message)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.enterprise_data is not None
+        base.require_enterprise_admin(context)
 
         node_list = enterprise_utils.NodeUtils.resolve_existing_nodes(context.enterprise_data, kwargs.get('node'))
         depths: Dict[int, int] = {}
@@ -416,8 +416,8 @@ class EnterpriseNodeSetLogoCommand(base.ArgparseCommand, enterprise_management.I
                 raise Exception(f'HTTP status code: {upload_rs.status_code}, expected {success_status_code}')
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.enterprise_data is not None
-        assert context.auth is not None
+        base.require_login(context)
+        base.require_enterprise_admin(context)
 
         node = enterprise_utils.NodeUtils.resolve_single_node(context.enterprise_data, kwargs.get('node'))
         logo_file = kwargs.get('logo_file')
@@ -447,8 +447,8 @@ class EnterpriseNodeInviteCommand(base.ArgparseCommand, enterprise_management.IE
         self.logger.warning(message)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.enterprise_data is not None
-        assert context.auth is not None
+        base.require_login(context)
+        base.require_enterprise_admin(context)
 
         node = enterprise_utils.NodeUtils.resolve_single_node(context.enterprise_data, kwargs.get('node'))
         email_template = kwargs.get('invite_email')
@@ -582,7 +582,7 @@ class EnterpriseNodeWipeOutCommand(base.ArgparseCommand, enterprise_management.I
         self.logger.warning(message)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.enterprise_data is not None
+        base.require_enterprise_admin(context)
 
         node = enterprise_utils.NodeUtils.resolve_single_node(context.enterprise_data, kwargs.get('node'))
         if node.node_id == context.enterprise_data.root_node.node_id:

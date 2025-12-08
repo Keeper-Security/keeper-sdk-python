@@ -2,6 +2,7 @@ from typing import Tuple, Optional
 
 from keepersdk.vault import vault_types
 from ..params import KeeperParams
+from ..commands.base import CommandError
 
 
 def try_resolve_path(context: KeeperParams, path: str) -> Tuple[vault_types.Folder, str]:
@@ -11,7 +12,8 @@ def try_resolve_path(context: KeeperParams, path: str) -> Tuple[vault_types.Fold
     If existent folder(s), the final component is ''.
     If a non-existent folder, the final component is the folders, joined with /, that do not (yet) exist..
     """
-    assert context.vault is not None
+    if context.vault is None:
+        raise CommandError('Vault is not initialized. Login to initialize the vault.')
     if not isinstance(path, str):
         path = ''
 

@@ -26,7 +26,8 @@ class _FolderMixin:
     def resolve_single_folder(folder_name: Optional[str], context: KeeperParams):
         if not folder_name:
             raise base.CommandError('Folder cannot be empty')
-        assert context.vault is not None
+        if context.vault is None:
+            raise base.CommandError('Vault is not initialized. Login to initialize the vault.')
         folder = context.vault.vault_data.get_folder(folder_name)
         if not folder:
             folder, pattern = folder_utils.try_resolve_path(context, folder_name)
@@ -77,7 +78,8 @@ class FolderListCommand(base.ArgparseCommand):
         return rows
 
     def execute(self, context: KeeperParams, **kwargs):
-        assert context.vault is not None
+        if context.vault is None:
+            raise base.CommandError('Vault is not initialized. Login to initialize the vault.')
         show_folders = kwargs['folders'] if 'folders' in kwargs else None
         show_records = kwargs['records'] if 'records' in kwargs else None
         show_detail = kwargs['detail'] if 'detail' in kwargs else False
@@ -202,7 +204,8 @@ class FolderTreeCommand(base.ArgparseCommand, _FolderMixin):
         show_shares: bool = kwargs.get('shares') is True
 
         def tree_node(node: vault_types.Folder) -> Tuple[str, dict]:
-            assert context.vault is not None
+            if context.vault is None:
+                raise base.CommandError('Vault is not initialized. Login to initialize the vault.')
             name = node.name
             children: dict = OrderedDict()
             if verbose and node.folder_uid:
@@ -301,7 +304,8 @@ class FolderMakeCommand(base.ArgparseCommand):
         super().__init__(FolderMakeCommand.parser)
 
     def execute(self, context: KeeperParams, **kwargs):
-        assert context.vault is not None
+        if context.vault is None:
+            raise base.CommandError('Vault is not initialized. Login to initialize the vault.')
         name = kwargs.get('folder')
         if not name:
             raise base.CommandError('Folder cannot be empty')
@@ -373,7 +377,8 @@ class FolderRemoveCommand(base.ArgparseCommand):
         super().__init__(FolderRemoveCommand.parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.vault is not None
+        if context.vault is None:
+            raise base.CommandError('Vault is not initialized. Login to initialize the vault.')
         folder_uids = set()
         pattern_list = kwargs.get('pattern')
         if not isinstance(pattern_list, (tuple, list, set)):
@@ -441,7 +446,8 @@ class FolderRenameCommand(base.ArgparseCommand, _FolderMixin):
         super().__init__(FolderRenameCommand.parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.vault is not None
+        if context.vault is None:
+            raise base.CommandError('Vault is not initialized. Login to initialize the vault.')
         folder = self.resolve_single_folder(kwargs.get('folder'), context)
         if not folder:
             raise base.CommandError('Enter the path or UID of existing folder.')
@@ -478,7 +484,8 @@ class FolderMoveCommand(base.ArgparseCommand, _FolderMixin):
         super().__init__(FolderMoveCommand.parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.vault is not None
+        if context.vault is None:
+            raise base.CommandError('Vault is not initialized. Login to initialize the vault.')
         logger = api.get_logger()
         src_paths = kwargs.get('src')
         dst_path = kwargs.get('dst')
@@ -1251,7 +1258,8 @@ class FolderTransformCommand(base.ArgparseCommand, _FolderMixin):
 
     def execute(self, context: KeeperParams, **kwargs):
         """Execute the folder transformation command."""
-        assert context.vault is not None
+        if context.vault is None:
+            raise base.CommandError('Vault is not initialized. Login to initialize the vault.')
         vault = context.vault
 
         # Resolve target and source folders

@@ -9,7 +9,7 @@ class SyncDownCommand(base.ArgparseCommand):
         super().__init__(SyncDownCommand.parser)
 
     def execute(self, context, **kwargs):
-        assert context.auth is not None
+        base.require_login(context)
         force = kwargs.get('force') is True
         context.vault.sync_down(force)
 

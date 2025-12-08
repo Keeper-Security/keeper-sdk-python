@@ -47,9 +47,11 @@ class NotificationListCommand(base.ArgparseCommand):
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs):
-        assert context.auth is not None
-        assert context.vault is not None
-        assert context.auth.auth_context.ec_private_key is not None
+        base.require_login(context)
+        if context.vault is None:
+            raise base.CommandError('Vault is not initialized. Login to initialize the vault.')
+        if context.auth.auth_context.ec_private_key is None:
+            raise base.CommandError('EC private key is not present')
 
         is_read_only = kwargs.get('unread_only') is True
         storage = context.vault.vault_data.storage
@@ -88,5 +90,6 @@ class NotificationMarkReadCommand(base.ArgparseCommand):
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs):
-        assert context.auth is not None
-        assert context.vault is not None
+        base.require_login(context)
+        if context.vault is None:
+            raise base.CommandError('Vault is not initialized. Login to initialize the vault.')

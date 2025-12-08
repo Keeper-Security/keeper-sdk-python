@@ -61,7 +61,8 @@ class FindOwnerlessCommand(base.ArgparseCommand):
 
     def execute(self, context: KeeperParams, **kwargs):
         """Execute the find-ownerless command."""
-        assert context.vault is not None
+        if context.vault is None:
+            raise base.CommandError('Vault is not initialized. Login to initialize the vault.')
         vault = context.vault
         
         claim_records = kwargs.get('claim', False)

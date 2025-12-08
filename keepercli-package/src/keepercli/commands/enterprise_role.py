@@ -30,8 +30,9 @@ class EnterpriseRoleViewCommand(base.ArgparseCommand):
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> Any:
-        assert context.enterprise_data is not None
-        assert context.vault
+        base.require_enterprise_admin(context)
+        if context.vault is None:
+            raise base.CommandError('Vault is not initialized. Login to initialize the vault.')
 
         verbose = kwargs.get('verbose') is True
 
@@ -253,9 +254,8 @@ class EnterpriseRoleAddCommand(base.ArgparseCommand, enterprise_management.IEnte
         self.logger.warning(message)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.auth is not None
-        assert context.enterprise_loader is not None
-        assert context.enterprise_data is not None
+        base.require_login(context)
+        base.require_enterprise_admin(context)
 
         parent_id: Optional[int]
         if kwargs.get('parent'):
@@ -336,9 +336,8 @@ class EnterpriseRoleEditCommand(base.ArgparseCommand, enterprise_management.IEnt
         self.logger.warning(message)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.auth is not None
-        assert context.enterprise_loader is not None
-        assert context.enterprise_data is not None
+        base.require_login(context)
+        base.require_enterprise_admin(context)
 
         role_list = enterprise_utils.RoleUtils.resolve_existing_roles(context.enterprise_data, kwargs.get('role'))
         role_name: Optional[str] = kwargs.get('displayname')
@@ -395,7 +394,7 @@ class EnterpriseRoleDeleteCommand(base.ArgparseCommand, enterprise_management.IE
         self.logger.warning(message)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.enterprise_data is not None
+        base.require_enterprise_admin(context)
 
         role_list = enterprise_utils.RoleUtils.resolve_existing_roles(context.enterprise_data, kwargs.get('role'))
         batch = batch_management.BatchManagement(loader=context.enterprise_loader, logger=self)
@@ -418,7 +417,7 @@ class EnterpriseRoleCopyCommand(base.ArgparseCommand, enterprise_management.IEnt
         self.logger.warning(message)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.enterprise_data is not None
+        base.require_enterprise_admin(context)
 
         role = enterprise_utils.RoleUtils.resolve_single_role(context.enterprise_data, kwargs.get('role'))
         node = enterprise_utils.NodeUtils.resolve_single_node(context.enterprise_data, kwargs.get('node'))
@@ -454,7 +453,7 @@ class EnterpriseRoleMembershipCommand(base.ArgparseCommand, enterprise_managemen
         self.logger.warning(message)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.enterprise_data is not None
+        base.require_enterprise_admin(context)
 
         role_list = enterprise_utils.RoleUtils.resolve_existing_roles(context.enterprise_data, kwargs.get('role'))
         users_to_add: Optional[List[enterprise_types.User]] = None
@@ -531,7 +530,7 @@ class EnterpriseRoleAdminCommand(base.ArgparseCommand, enterprise_management.IEn
         self.logger.warning(message)
 
     def execute(self, context: KeeperParams, **kwargs):
-        assert context.enterprise_data is not None
+        base.require_enterprise_admin(context)
 
         role = enterprise_utils.RoleUtils.resolve_single_role(context.enterprise_data, kwargs.get('role'))
         nodes_to_add: Optional[List[enterprise_types.Node]] = None

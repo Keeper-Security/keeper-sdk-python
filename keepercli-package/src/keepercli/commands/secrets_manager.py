@@ -43,7 +43,7 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
     def __init__(self):
         self.parser = argparse.ArgumentParser(
             prog='secrets-manager-app',
-            description='Keeper Secrets Manager (KSM) App Commands',
+            description='Keeper Secrets Manager (KSM) App Commands'
         )
         SecretsManagerAppCommand.add_arguments_to_parser(self.parser)
         super().__init__(self.parser)
@@ -394,7 +394,7 @@ class SecretsManagerClientCommand(base.ArgparseCommand):
     def __init__(self):
         self.parser = argparse.ArgumentParser(
             prog='secrets-manager-client',
-            description='Keeper Secrets Manager (KSM) Client Commands',
+            description='Keeper Secrets Manager (KSM) Client Commands'
         )
         SecretsManagerClientCommand.add_arguments_to_parser(self.parser)
         super().__init__(self.parser)
@@ -800,7 +800,7 @@ class SecretsManagerShareCommand(base.ArgparseCommand):
     def __init__(self):
         self.parser = argparse.ArgumentParser(
             prog='secrets-manager-share',
-            description='Keeper Secrets Manager (KSM) Share Commands',
+            description='Keeper Secrets Manager (KSM) Share Commands'
         )
         SecretsManagerShareCommand.add_arguments_to_parser(self.parser)
         super().__init__(self.parser)
@@ -928,7 +928,7 @@ class SecretsManagerShareCommand(base.ArgparseCommand):
             share_type = ApplicationShareType.SHARE_TYPE_FOLDER
             secret_type_name = SHARED_FOLDER
         else:
-            logger.error(
+            logger.warning(
                 f"UID='{secret_uid}' is not a Record nor Shared Folder. "
                 "Only individual records or Shared Folders can be added to the application. "
                 "Make sure your local cache is up to date by running 'sync-down' command and trying again."
@@ -936,7 +936,7 @@ class SecretsManagerShareCommand(base.ArgparseCommand):
             return None
 
         if not share_key_decrypted:
-            logger.error(f"Could not retrieve key for secret {secret_uid}")
+            logger.warning(f"Could not retrieve key for secret {secret_uid}")
             return None
 
         app_share = AppShareAdd()
@@ -983,9 +983,29 @@ class SecretsManagerShareCommand(base.ArgparseCommand):
             logger.warning("No secret UIDs provided for removal.")
             return
 
+        app_infos = ksm_management.get_app_info(vault=vault, app_uid=app_uid)
+        if not app_infos:
+            raise ValueError(f"Could not retrieve application info for UID: {app_uid}")
+        
+        app_info = app_infos[0]
+        current_shared_uids = {
+            utils.base64_url_encode(share.secretUid) 
+            for share in getattr(app_info, 'shares', [])
+        }
+
+        valid_uids = [uid for uid in secret_uids if uid in current_shared_uids]
+        invalid_uids = [uid for uid in secret_uids if uid not in current_shared_uids]
+
+        for uid in invalid_uids:
+            logger.warning(f"Secret UID '{uid}' is not shared with this application. Skipping.")
+
+        if not valid_uids:
+            logger.warning("None of the provided secret UIDs are shared with this application. Nothing to remove.")
+            return
+
         request = RemoveAppSharesRequest()
         request.appRecordUid = utils.base64_url_decode(app_uid)
-        request.shares.extend(utils.base64_url_decode(uid) for uid in secret_uids)
+        request.shares.extend(utils.base64_url_decode(uid) for uid in valid_uids)
         
         vault.keeper_auth.execute_auth_rest(rest_endpoint=SHARE_REMOVE_URL, request=request)
         logger.info("Shared secrets were successfully removed from the application\n")
