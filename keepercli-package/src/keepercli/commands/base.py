@@ -38,6 +38,12 @@ class CommandError(errors.KeeperError):
             return super().__str__()
 
 
+def require_login(context: KeeperParams):
+    """Check if the user is logged in. Raises CommandError if not."""
+    if context.auth is None:
+        raise CommandError('Please login first to access these commands')
+
+
 def require_enterprise_admin(context: KeeperParams):
     """Check if the user has enterprise admin privileges. Raises CommandError if not."""
     if context.enterprise_data is None:

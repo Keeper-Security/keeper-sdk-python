@@ -92,7 +92,7 @@ class EnterpriseAuditReport(base.ArgparseCommand):
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> Any:
-        assert context.auth
+        base.require_login(context)
         base.require_enterprise_admin(context)
 
         report_type = kwargs.get('report_type')

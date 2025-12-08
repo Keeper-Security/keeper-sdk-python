@@ -368,7 +368,8 @@ class DownloadMembershipCommand(base.ArgparseCommand):
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs):
-        assert context.vault is not None
+        if context.vault is None:
+            raise base.CommandError('Vault is not initialized. Login to initialize the vault.')
         base.require_enterprise_admin(context)
         source = kwargs.get('source') or 'keeper'
         file_name = kwargs.get('name') or 'shared_folder_membership.json'
@@ -496,9 +497,10 @@ class ApplyMembershipCommand(base.ArgparseCommand):
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs):
-        assert context.vault is not None
+        if context.vault is None:
+            raise base.CommandError('Vault is not initialized. Login to initialize the vault.')
+        base.require_login(context)
         base.require_enterprise_admin(context)
-        assert context.auth is not None
 
         logger = api.get_logger()
         file_name = kwargs.get('name') or 'shared_folder_membership.json'

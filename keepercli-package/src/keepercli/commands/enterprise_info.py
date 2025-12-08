@@ -57,8 +57,8 @@ class EnterpriseInfoTreeCommand(base.ArgparseCommand):
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs):
+        base.require_login(context)
         base.require_enterprise_admin(context)
-        assert context.auth is not None
         enterprise_data = context.enterprise_data
 
         logger = api.get_logger()

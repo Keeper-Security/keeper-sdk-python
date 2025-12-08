@@ -246,8 +246,7 @@ class EnterpriseNodeAddCommand(base.ArgparseCommand, enterprise_management.IEnte
         self.logger.warning(message)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.auth is not None
-        assert context.enterprise_loader is not None
+        base.require_login(context)
         base.require_enterprise_admin(context)
 
         parent_id: Optional[int]
@@ -416,8 +415,8 @@ class EnterpriseNodeSetLogoCommand(base.ArgparseCommand, enterprise_management.I
                 raise Exception(f'HTTP status code: {upload_rs.status_code}, expected {success_status_code}')
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
+        base.require_login(context)
         base.require_enterprise_admin(context)
-        assert context.auth is not None
 
         node = enterprise_utils.NodeUtils.resolve_single_node(context.enterprise_data, kwargs.get('node'))
         logo_file = kwargs.get('logo_file')
@@ -447,8 +446,8 @@ class EnterpriseNodeInviteCommand(base.ArgparseCommand, enterprise_management.IE
         self.logger.warning(message)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
+        base.require_login(context)
         base.require_enterprise_admin(context)
-        assert context.auth is not None
 
         node = enterprise_utils.NodeUtils.resolve_single_node(context.enterprise_data, kwargs.get('node'))
         email_template = kwargs.get('invite_email')

@@ -253,8 +253,7 @@ class EnterpriseRoleAddCommand(base.ArgparseCommand, enterprise_management.IEnte
         self.logger.warning(message)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.auth is not None
-        assert context.enterprise_loader is not None
+        base.require_login(context)
         base.require_enterprise_admin(context)
 
         parent_id: Optional[int]
@@ -336,8 +335,7 @@ class EnterpriseRoleEditCommand(base.ArgparseCommand, enterprise_management.IEnt
         self.logger.warning(message)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.auth is not None
-        assert context.enterprise_loader is not None
+        base.require_login(context)
         base.require_enterprise_admin(context)
 
         role_list = enterprise_utils.RoleUtils.resolve_existing_roles(context.enterprise_data, kwargs.get('role'))

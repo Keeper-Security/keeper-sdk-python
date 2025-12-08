@@ -271,7 +271,7 @@ class AuditAlertList(base.ArgparseCommand, AuditSettingMixin):
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> Any:
-        assert context.auth
+        base.require_login(context)
         alerts = self.load_settings(context.auth, kwargs.get('reload') or False)
         if not isinstance(alerts, dict):
             raise base.CommandError('No alerts found')
@@ -325,7 +325,7 @@ class AuditAlertView(base.ArgparseCommand, AuditSettingMixin):
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.auth
+        base.require_login(context)
         base.require_enterprise_admin(context)
 
         show_recipient = True
@@ -416,7 +416,7 @@ class AuditAlertHistory(base.ArgparseCommand, AuditSettingMixin):
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> Any:
-        assert context.auth
+        base.require_login(context)
 
         alert = AuditSettingMixin.get_alert_configuration(context.auth, kwargs.get('target'))
 
@@ -451,7 +451,7 @@ class AuditAlertDelete(base.ArgparseCommand, AuditSettingMixin):
                                          description='Delete audit alert.')
         super().__init__(parser)
     def execute(self, context: KeeperParams, **kwargs) -> Any:
-        assert context.auth
+        base.require_login(context)
 
         alert = AuditSettingMixin.get_alert_configuration(context.auth, kwargs.get('target'))
         if not alert:
@@ -490,7 +490,7 @@ class AuditAlertAdd(base.ArgparseCommand, AuditSettingMixin):
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> Any:
-        assert context.auth
+        base.require_login(context)
         name = kwargs.get('name')
         if not name:
             raise base.CommandError('Alert name is required parameter')
@@ -549,7 +549,7 @@ class AuditAlertEdit(base.ArgparseCommand, AuditSettingMixin):
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> Any:
-        assert context.auth
+        base.require_login(context)
 
         alert = AuditSettingMixin.get_alert_configuration(context.auth, kwargs.get('target'))
         self.apply_alert_options(context, alert, **kwargs)
@@ -592,7 +592,7 @@ class AuditAlertResetCount(base.ArgparseCommand, AuditSettingMixin):
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> Any:
-        assert context.auth
+        base.require_login(context)
         alert = AuditSettingMixin.get_alert_configuration(context.auth, kwargs.get('target'))
         rq = {
             'command': 'put_enterprise_setting',
@@ -648,7 +648,7 @@ class AuditAlertRecipients(base.ArgparseCommand, AuditSettingMixin):
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> Any:
-        assert context.auth
+        base.require_login(context)
         alert = AuditSettingMixin.get_alert_configuration(context.auth, kwargs.get('target'))
         action = kwargs.get('action')
         skip_update = False

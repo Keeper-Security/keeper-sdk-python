@@ -928,7 +928,7 @@ class SecretsManagerShareCommand(base.ArgparseCommand):
             share_type = ApplicationShareType.SHARE_TYPE_FOLDER
             secret_type_name = SHARED_FOLDER
         else:
-            logger.error(
+            logger.warning(
                 f"UID='{secret_uid}' is not a Record nor Shared Folder. "
                 "Only individual records or Shared Folders can be added to the application. "
                 "Make sure your local cache is up to date by running 'sync-down' command and trying again."
@@ -936,7 +936,7 @@ class SecretsManagerShareCommand(base.ArgparseCommand):
             return None
 
         if not share_key_decrypted:
-            logger.error(f"Could not retrieve key for secret {secret_uid}")
+            logger.warning(f"Could not retrieve key for secret {secret_uid}")
             return None
 
         app_share = AppShareAdd()

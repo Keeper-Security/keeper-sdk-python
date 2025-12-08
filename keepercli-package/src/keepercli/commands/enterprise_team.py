@@ -150,8 +150,7 @@ class EnterpriseTeamAddCommand(base.ArgparseCommand, enterprise_management.IEnte
         self.logger.warning(message)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.auth is not None
-        assert context.enterprise_loader is not None
+        base.require_login(context)
         base.require_enterprise_admin(context)
 
         parent_id: Optional[int]
@@ -240,8 +239,7 @@ class EnterpriseTeamEditCommand(base.ArgparseCommand, enterprise_management.IEnt
         self.logger.warning(message)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.auth is not None
-        assert context.enterprise_loader is not None
+        base.require_login(context)
         base.require_enterprise_admin(context)
 
         team_list, missing_names = enterprise_utils.TeamUtils.resolve_existing_teams(context.enterprise_data, kwargs.get('team'))
