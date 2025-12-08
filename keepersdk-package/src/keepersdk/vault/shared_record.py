@@ -1,11 +1,12 @@
 from enum import Enum
+import logging
 from typing import Dict
 
-from keepersdk.vault import vault_online, vault_record
+from vault import vault_online, vault_record, vault_utils
 
-from .. import api
-from ..params import KeeperParams
-logger = api.get_logger() 
+
+logger = logging.getLogger()
+
 
 TEXT_EDIT = 'Edit'
 TEXT_SHARE = 'Share'
@@ -47,39 +48,30 @@ class SharePermissions:
 class SharedRecord:
     """Defines a Keeper Shared Record (shared either via Direct-Share or as a child of a Shared-Folder node)"""
 
-    def __init__(self, context: KeeperParams, record: vault_record.KeeperRecordInfo, sf_sharing_admins=None, team_members=None, role_restricted_members=None):
+    def __init__(self, vault: vault_online.VaultOnline, record: vault_record.KeeperRecordInfo, sf_sharing_admins=None, team_members=None, role_restricted_members=None):
         """Initialize SharedRecord with proper error handling."""
-        try:
-            self.context = context
-            self.record = record
-            self.uid = record.record_uid
-            
-            self.name = record.title
-            self.shared_folders = None
-            self.sf_shares = {}
-            self.permissions: Dict[str, SharePermissions] = {}
-            self.team_permissions: Dict[str, SharePermissions] = {}
-            self.user_permissions: Dict[str, SharePermissions] = {}
-            self.revision = None
-            self.folder_uids = []
-            self.folder_paths = []
-            
-            self._initialize_folder_info(context.vault)
-            self.team_members = team_members or {}
+        self.record = record
+        self.uid = record.record_uid
+        
+        self.name = record.title
+        self.shared_folders = None
+        self.sf_shares = {}
+        self.permissions: Dict[str, SharePermissions] = {}
+        self.team_permissions: Dict[str, SharePermissions] = {}
+        self.user_permissions: Dict[str, SharePermissions] = {}
+        self.revision = None
+        self.folder_uids = []
+        self.folder_paths = []
+        
+        self._initialize_folder_info(vault)
+        self.team_members = team_members or {}
 
-            if sf_sharing_admins is None:
-                sf_sharing_admins = {}
-            if role_restricted_members is None:
-                role_restricted_members = set()
-
-        except Exception as e:
-            logger.error(f"Failed to initialize SharedRecord: {e}")
+        if sf_sharing_admins is None:
+            sf_sharing_admins = {}
+        if role_restricted_members is None:
+            role_restricted_members = set()
 
     def _initialize_folder_info(self, vault: vault_online.VaultOnline):
         """Initialize folder information for the record."""
-        try:
-            from keepersdk.vault import vault_utils
-            folders = vault_utils.get_folders_for_record(vault.vault_data, self.uid)
-            self.folder_uids = [f.folder_uid for f in folders]
-        except Exception as e:
-            logger.debug(f"Failed to initialize folder info: {e}")
+        folders = vault_utils.get_folders_for_record(vault.vault_data, self.uid)
+        self.folder_uids = [f.folder_uid for f in folders]

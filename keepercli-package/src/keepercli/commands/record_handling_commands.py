@@ -1633,7 +1633,7 @@ class RecordPermissionCommand(base.ArgparseCommand):
         parser.error = base.ArgparseCommand.raise_parse_exception
         parser.exit = base.ArgparseCommand.suppress_exit
     
-    def _resolve_folder(self, context, folder_name):
+    def _resolve_folder(self, context: KeeperParams, folder_name: str):
         """Resolve folder from name or UID."""
         vault = context.vault
         

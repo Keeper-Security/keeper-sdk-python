@@ -14,7 +14,7 @@ from keepersdk.vault import ksm_management, vault_online
 from keepersdk.vault.vault_record import TypedRecord
 
 from . import base
-from .share_management import ShareAction, ShareFolderCommand, ShareRecordCommand
+from .shares import ShareAction, ShareFolderCommand, ShareRecordCommand
 from .. import api, constants, prompt_utils
 from ..helpers import ksm_utils, report_utils, share_utils
 from ..params import KeeperParams
