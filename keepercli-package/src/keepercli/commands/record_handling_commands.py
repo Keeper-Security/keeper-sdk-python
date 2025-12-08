@@ -505,7 +505,7 @@ class RecordHistoryCommand(base.ArgparseCommand):
             return
 
         action = kwargs.get('action') or 'list'
-        self._execute_action(action, vault, history, kwargs)
+        return self._execute_action(action, vault, history, kwargs)
 
     def _validate_vault(self, context: KeeperParams):
         """Validate that vault is initialized."""
@@ -538,13 +538,13 @@ class RecordHistoryCommand(base.ArgparseCommand):
     def _execute_action(self, action: str, vault: vault_online.VaultOnline, history: list, kwargs: dict):
         """Execute the specified history action."""
         if action == 'list':
-            self._list_history(history, kwargs)
+            return self._list_history(history, kwargs)
         elif action == 'view':
-            self._view_revision(history, kwargs)
+            return self._view_revision(history, kwargs)
         elif action == 'diff':
-            self._show_diff(history, kwargs)
+            return self._show_diff(history, kwargs)
         elif action == 'restore':
-            self._restore_revision(vault, history, kwargs)
+            return self._restore_revision(vault, history, kwargs)
 
     def _list_history(self, history: list, kwargs: dict):
         """List record history revisions."""

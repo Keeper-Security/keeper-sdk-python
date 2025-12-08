@@ -92,8 +92,8 @@ class EnterpriseAuditReport(base.ArgparseCommand):
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> Any:
-        assert context.auth
-        assert context.enterprise_data
+        base.require_login(context)
+        base.require_enterprise_admin(context)
 
         report_type = kwargs.get('report_type')
         if kwargs.get('syntax_help') is True or not report_type:

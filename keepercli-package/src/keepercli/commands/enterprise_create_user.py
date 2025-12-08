@@ -236,8 +236,8 @@ class CreateEnterpriseUserCommand(base.ArgparseCommand):
 
     def _validate_context(self, context: KeeperParams) -> None:
         """Validate that required context data is available."""
-        assert context.enterprise_data is not None
-        assert context.auth is not None
+        base.require_login(context)
+        base.require_enterprise_admin(context)
 
     def _create_user(
         self, 

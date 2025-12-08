@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from keepersdk.vault import vault_record, record_management
 from .. import api
-from .base import CommandError, ArgparseCommand
+from .base import CommandError, ArgparseCommand, require_enterprise_admin, require_login
 from ..params import KeeperParams
 from ..prompt_utils import user_choice
 
@@ -488,8 +488,8 @@ class AuditLogCommand(ArgparseCommand):
 
     def _validate_context(self, context: KeeperParams) -> None:
         """Validate that required context components are available."""
-        assert context.auth
-        assert context.enterprise_data
+        require_login(context)
+        require_enterprise_admin(context)
 
     def _validate_target(self, target: Optional[str]) -> str:
         """Validate and return the target format."""

@@ -57,8 +57,8 @@ class EnterpriseInfoTreeCommand(base.ArgparseCommand):
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs):
-        assert context.enterprise_data is not None
-        assert context.auth is not None
+        base.require_login(context)
+        base.require_enterprise_admin(context)
         enterprise_data = context.enterprise_data
 
         logger = api.get_logger()
@@ -84,7 +84,20 @@ class EnterpriseInfoTreeCommand(base.ArgparseCommand):
             root_node = enterprise_utils.NodeUtils.resolve_single_node(enterprise_data, subnode)
             logger.info('Output is limited to \"%s\" node', subnode)
 
-            managed_nodes = enterprise_utils.EnterpriseMixin.filter_managed_nodes(enterprise_data, managed_nodes, root_nodes[0])
+            filtered_nodes = enterprise_utils.EnterpriseMixin.filter_managed_nodes(enterprise_data, managed_nodes, root_node.node_id)
+
+            if root_node.node_id in filtered_nodes:
+                managed_nodes = {root_node.node_id: filtered_nodes[root_node.node_id]}
+            else:
+
+                nodes_to_expand = [root_node.node_id]
+                pos = 0
+                while pos < len(nodes_to_expand):
+                    n_id = nodes_to_expand[pos]
+                    pos += 1
+                    if n_id in subnodes:
+                        nodes_to_expand.extend(subnodes[n_id])
+                managed_nodes = {root_node.node_id: set(nodes_to_expand)}
 
         accessible_nodes.clear()
         for node_id, node_ids in managed_nodes.items():
@@ -223,7 +236,7 @@ class EnterpriseInfoNodeCommand(base.ArgparseCommand, enterprise_utils.Enterpris
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs):
-        assert context.enterprise_data is not None
+        base.require_enterprise_admin(context)
         enterprise_data = context.enterprise_data
 
         columns: Set[str] = set()
@@ -349,7 +362,7 @@ class EnterpriseInfoUserCommand(base.ArgparseCommand, enterprise_utils.Enterpris
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs):
-        assert context.enterprise_data is not None
+        base.require_enterprise_admin(context)
         enterprise_data = context.enterprise_data
 
         columns: Set[str] = set()
@@ -493,7 +506,7 @@ class EnterpriseInfoTeamCommand(base.ArgparseCommand, enterprise_utils.Enterpris
         return rs
 
     def execute(self, context: KeeperParams, **kwargs):
-        assert context.enterprise_data is not None
+        base.require_enterprise_admin(context)
         enterprise_data = context.enterprise_data
 
         columns: Set[str] = set()
@@ -626,7 +639,7 @@ class EnterpriseInfoRoleCommand(base.ArgparseCommand, enterprise_utils.Enterpris
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs):
-        assert context.enterprise_data is not None
+        base.require_enterprise_admin(context)
         enterprise_data = context.enterprise_data
 
         columns: Set[str] = set()
@@ -718,7 +731,7 @@ class EnterpriseInfoManagedCompanyCommand(base.ArgparseCommand, enterprise_utils
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs):
-        assert context.enterprise_data is not None
+        base.require_enterprise_admin(context)
         enterprise_data = context.enterprise_data
         
         pattern = (kwargs.get('pattern') or '').lower()
