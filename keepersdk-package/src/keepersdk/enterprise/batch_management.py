@@ -162,7 +162,8 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
     def modify_teams(self, *,
                      to_add: Optional[Iterable[enterprise_management.TeamEdit]]=None,
                      to_update: Optional[Iterable[enterprise_management.TeamEdit]] = None,
-                     to_remove: Optional[Iterable[enterprise_management.TeamEdit]] = None) -> None:
+                     to_remove: Optional[Iterable[enterprise_management.TeamEdit]] = None,
+                     add_current_user: bool = True) -> None:
         enterprise_data = self.loader.enterprise_data
 
         t: Optional[enterprise_types.Team]
@@ -195,7 +196,10 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
                     self.logger.warning(f'Role {action.name}: Team UID {team.team_uid} has invalid node')
                     continue
 
-                self._teams[team.team_uid] = (action, team)
+                if action == EntityAction.Add:
+                    self._teams[team.team_uid] = (action, team, add_current_user)
+                else:
+                    self._teams[team.team_uid] = (action, team)
 
     def modify_users(self, *,
                      to_add: Optional[Iterable[enterprise_management.UserEdit]] = None,
@@ -557,8 +561,14 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
             auth = self.loader.keeper_auth
             tree_key = enterprise_data.enterprise_info.tree_key
 
-            for action, team in self._teams.values():
+            for team_data in self._teams.values():
                 try:
+                    if len(team_data) == 3:
+                        action, team, add_current_user = team_data
+                    else:
+                        action, team = team_data
+                        add_current_user = True  
+                    
                     if action == EntityAction.Add:
                         if not team.node_id:
                             team.node_id = enterprise_data.root_node.node_id
@@ -588,7 +598,7 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
                         if isinstance(team.restrict_view, bool):
                             rq['restrict_view'] = team.restrict_view
                     if action == EntityAction.Add:
-                        rq['manage_only'] = False
+                        rq['manage_only'] = not add_current_user
                         team_keys = keeper_auth.UserKeys()
                         if not auth.auth_context.forbid_rsa:
                             rsa_private_key, rsa_public_key = crypto.generate_rsa_key()
