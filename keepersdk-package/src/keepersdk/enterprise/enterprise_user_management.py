@@ -3,12 +3,12 @@
 
 import json
 import re
-from typing import Optional
+from typing import Optional, List
 from dataclasses import dataclass
 
 from keepersdk.authentication import keeper_auth
 
-from . import enterprise_types
+from . import enterprise_types, enterprise_management, batch_management
 from .. import utils, crypto, generator
 from ..proto import enterprise_pb2
 
@@ -47,6 +47,9 @@ ERROR_MSG_AUTO_CREATE_FAILED = (
     'To reserve a domain please contact Keeper support. '
     'Learn more about domain reservation here:\n{}'
 )
+ERROR_MSG_ROLE_NOT_FOUND = "Role '{}' not found"
+ERROR_MSG_ROLE_NOT_FOUND_BY_ID = "Role with ID {} not found"
+ERROR_MSG_NO_USERS_FOUND = "No users found in enterprise"
 
 
 @dataclass
@@ -73,8 +76,27 @@ class CreateUserResponse:
     verification_code: Optional[str] = None
 
 
+@dataclass
+class AddAllUsersToRoleResponse:
+    """Response from adding all users to a role."""
+    role_id: int
+    role_name: str
+    users_added: int
+    success: bool = True
+    message: Optional[str] = None
+
+
 class EnterpriseUserCreationError(Exception):
     """Exception raised when enterprise user creation fails."""
+    
+    def __init__(self, message: str, code: Optional[str] = None):
+        self.message = message
+        self.code = code
+        super().__init__(self.message)
+
+
+class EnterpriseRoleManagementError(Exception):
+    """Exception raised when enterprise role management fails."""
     
     def __init__(self, message: str, code: Optional[str] = None):
         self.message = message
@@ -483,3 +505,109 @@ def create_enterprise_user(
     
     manager = EnterpriseUserManager(loader, auth_context)
     return manager.create_user(request)
+
+
+class _SdkLogger(enterprise_management.IEnterpriseManagementLogger):
+    """Internal logger for SDK operations."""
+    def __init__(self):
+        self.warnings: List[str] = []
+    
+    def warning(self, message: str) -> None:
+        self.warnings.append(message)
+
+
+def resolve_role(
+    enterprise_data: enterprise_types.IEnterpriseData,
+    role_name_or_id: str
+) -> enterprise_types.Role:
+    """Resolve a role by name or ID.
+    
+    Args:
+        enterprise_data: Enterprise data containing roles
+        role_name_or_id: Role name or ID string
+        
+    Returns:
+        The resolved Role object
+        
+    Raises:
+        EnterpriseRoleManagementError: If role cannot be resolved
+    """
+    role: Optional[enterprise_types.Role] = None
+    
+    # Try to resolve by numeric ID first
+    if role_name_or_id.isnumeric():
+        role_id = int(role_name_or_id)
+        role = enterprise_data.roles.get_entity(role_id)
+        if role:
+            return role
+        raise EnterpriseRoleManagementError(ERROR_MSG_ROLE_NOT_FOUND_BY_ID.format(role_id))
+    
+    # Resolve by name (case-insensitive)
+    role_name_lower = role_name_or_id.lower()
+    matching_roles = [
+        r for r in enterprise_data.roles.get_all_entities()
+        if r.name.lower() == role_name_lower
+    ]
+    
+    if len(matching_roles) == 0:
+        raise EnterpriseRoleManagementError(ERROR_MSG_ROLE_NOT_FOUND.format(role_name_or_id))
+    elif len(matching_roles) > 1:
+        raise EnterpriseRoleManagementError(
+            f"Multiple roles found with name '{role_name_or_id}'. Use Role ID instead."
+        )
+    
+    return matching_roles[0]
+
+
+def add_all_users_to_role(
+    loader: enterprise_types.IEnterpriseLoader,
+    role_name_or_id: str
+) -> AddAllUsersToRoleResponse:
+    """Add all enterprise users to a single role.
+    
+    This function adds all existing users in the enterprise to the specified role.
+    Only one role can be specified at a time when using this bulk operation.
+    
+    Args:
+        loader: Enterprise data loader
+        role_name_or_id: Role name or ID to add users to
+        
+    Returns:
+        AddAllUsersToRoleResponse with operation details
+        
+    Raises:
+        EnterpriseRoleManagementError: If role not found or operation fails
+    """
+    enterprise_data = loader.enterprise_data
+    
+    # Resolve the role
+    role = resolve_role(enterprise_data, role_name_or_id)
+    
+    # Get all users
+    users = list(enterprise_data.users.get_all_entities())
+    if len(users) == 0:
+        raise EnterpriseRoleManagementError(ERROR_MSG_NO_USERS_FOUND)
+    
+    # Create role-user memberships
+    sdk_logger = _SdkLogger()
+    batch = batch_management.BatchManagement(loader=loader, logger=sdk_logger)
+    
+    role_membership_to_add: List[enterprise_management.RoleUserEdit] = []
+    for user in users:
+        role_membership_to_add.append(
+            enterprise_management.RoleUserEdit(
+                enterprise_user_id=user.enterprise_user_id,
+                role_id=role.role_id
+            )
+        )
+    
+    batch.modify_role_users(to_add=role_membership_to_add)
+    batch.apply()
+    
+    return AddAllUsersToRoleResponse(
+        role_id=role.role_id,
+        role_name=role.name,
+        users_added=len(users),
+        success=True,
+        message=f"Added {len(users)} users to role '{role.name}'"
+    )

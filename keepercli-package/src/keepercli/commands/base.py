@@ -140,9 +140,7 @@ class ArgparseCommand(ICliCommand, abc.ABC):
         self.extra_parameters = ''
         parser = self.get_parser()
         try:
-            opts, extra_args = parser.parse_known_args(shlex.split(args))
-            if extra_args:
-                self.extra_parameters = ' '.join(extra_args)
+            opts = parser.parse_args(shlex.split(args))
             d.update(opts.__dict__)
             return self.execute(context, **d)
         except ParseError as e:

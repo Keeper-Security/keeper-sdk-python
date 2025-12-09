@@ -8,7 +8,7 @@ from typing import Dict, List, Optional, Any, Set, TypedDict
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 from keepersdk import utils
-from keepersdk.enterprise import batch_management, enterprise_management
+from keepersdk.enterprise import batch_management, enterprise_management, enterprise_user_management
 from keepersdk.proto import APIRequest_pb2,enterprise_pb2
 from . import base, enterprise_utils
 from .. import api, prompt_utils
@@ -228,15 +228,15 @@ class EnterpriseUserViewCommand(base.ArgparseCommand):
 
 class EnterpriseUserAddCommand(base.ArgparseCommand, enterprise_management.IEnterpriseManagementLogger):
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='enterprise-user add', description='Create enterprise user(s).')
+        parser = argparse.ArgumentParser(prog='enterprise-user add', description='Create enterprise user(s). Use @all to add all existing users to role/team.')
         parser.add_argument('--parent', dest='parent', action='store', help='Parent node name or ID')
         parser.add_argument('--full-name', dest='full_name', action='store', help='set user full name')
         parser.add_argument('--job-title', dest='job_title', action='store', help='set user job title')
-        parser.add_argument('--add-role', dest='add_role', action='append', help='role name or role ID')
-        parser.add_argument('--add-team', dest='add_team', action='append', help='team name or team UID')
+        parser.add_argument('--add-role', dest='add_role', action='append', help='role name or role ID. With @all, adds all users to role')
+        parser.add_argument('--add-team', dest='add_team', action='append', help='team name or team UID. With @all, adds all users to team')
         parser.add_argument('-hsf', '--hide-shared-folders', dest='hide_shared_folders', action='store',
                             choices=['on', 'off'], help='User does not see shared folders. --add-team only')
-        parser.add_argument('email', type=str, nargs='+', help='User email. Can be repeated.')
+        parser.add_argument('email', type=str, nargs='+', help='User email. Can be repeated. Use @all to add all existing users to role/team.')
         super().__init__(parser)
         self.logger = api.get_logger()
 
@@ -248,6 +248,66 @@ class EnterpriseUserAddCommand(base.ArgparseCommand, enterprise_management.IEnte
         assert context.enterprise_loader is not None
         assert context.enterprise_data is not None
 
+        emails = kwargs.get('email')
+        has_all_users = isinstance(emails, list) and any((True for x in emails if x == '@all'))
+
+        # Handle @all case: add all existing users to roles/teams
+        if has_all_users:
+            add_roles = kwargs.get('add_role')
+            add_teams = kwargs.get('add_team')
+            if not add_roles and not add_teams:
+                raise base.CommandError('@all requires --add-role or --add-team to specify what to add users to')
+
+            if isinstance(add_roles, list) and len(add_roles) > 1:
+                raise base.CommandError('@all only supports a single --add-role. Please specify one role at a time.')
+
+            if isinstance(add_roles, list) and len(add_roles) == 1:
+                try:
+                    response = enterprise_user_management.add_all_users_to_role(
+                        loader=context.enterprise_loader,
+                        role_name_or_id=add_roles[0]
+                    )
+                    self.logger.info(response.message)
+                except enterprise_user_management.EnterpriseRoleManagementError as e:
+                    raise base.CommandError(str(e))
+
+            if isinstance(add_teams, list):
+                users = list(context.enterprise_data.users.get_all_entities())
+                if len(users) == 0:
+                    raise base.CommandError('No users found in enterprise')
+
+                teams_to_add: Optional[Set[str]] = None
+                teams, remaining = enterprise_utils.TeamUtils.resolve_existing_teams(context.enterprise_data, add_teams)
+                queued_teams, remaining = enterprise_utils.TeamUtils.resolve_queued_teams(context.enterprise_data, remaining)
+                if len(remaining) > 0:
+                    missing_teams = ', '.join(remaining)
+                    raise base.CommandError(f'Team(s) {missing_teams} cannot be found')
+                if len(teams) > 0 or len(queued_teams) > 0:
+                    teams_to_add = set()
+                    if len(teams) > 0:
+                        teams_to_add.update((x.team_uid for x in teams))
+                    if len(queued_teams) > 0:
+                        teams_to_add.update((x.team_uid for x in queued_teams))
+
+                if teams_to_add:
+                    batch = batch_management.BatchManagement(loader=context.enterprise_loader, logger=self)
+                    team_membership_to_add: List[enterprise_management.TeamUserEdit] = []
+                    hide_shared_folders: Optional[bool] = None
+                    hsf = kwargs.get('hide_shared_folders')
+                    if isinstance(hsf, str) and len(hsf) > 0:
+                        hide_shared_folders = True if hsf == 'on' else False
+                    user_type: Optional[int] = None
+                    if isinstance(hide_shared_folders, bool):
+                        user_type = 0 if hide_shared_folders else 2
+                    for user in users:
+                        for team_uid in teams_to_add:
+                            team_membership_to_add.append(enterprise_management.TeamUserEdit(
+                                enterprise_user_id=user.enterprise_user_id, team_uid=team_uid, user_type=user_type))
+                    batch.modify_team_users(to_add=team_membership_to_add)
+                    batch.apply()
+
+            return
+
         parent_id: Optional[int]
         if kwargs.get('parent'):
             parent_node = enterprise_utils.NodeUtils.resolve_single_node(context.enterprise_data, kwargs.get('parent'))
@@ -256,7 +316,6 @@ class EnterpriseUserAddCommand(base.ArgparseCommand, enterprise_management.IEnte
             parent_id = context.enterprise_data.root_node.node_id
 
         unique_emails: Set[str] = set()
-        emails = kwargs.get('email')
         if emails:
             if isinstance(emails, list):
                 for email in emails:
@@ -271,8 +330,8 @@ class EnterpriseUserAddCommand(base.ArgparseCommand, enterprise_management.IEnte
 
         full_name: Optional[str] = kwargs.get('full_name')
         job_title: Optional[str] = kwargs.get('job_title')
-        roles_to_add: Optional[Set[int]] = None
-        teams_to_add: Optional[Set[str]] = None
+        roles_to_add = None
+        teams_to_add = None
         add_roles = kwargs.get('add_role')
         if isinstance(add_roles, list):
             roles = enterprise_utils.RoleUtils.resolve_existing_roles(context.enterprise_data, add_roles)
@@ -328,13 +387,13 @@ class EnterpriseUserEditCommand(base.ArgparseCommand, enterprise_management.IEnt
         parser.add_argument('--parent', dest='parent', action='store', help='Parent node name or ID')
         parser.add_argument('--full-name', dest='full_name', action='store', help='set user full name')
         parser.add_argument('--job-title', dest='job_title', action='store', help='set user job title')
-        parser.add_argument('--add-role', dest='add_role', action='append', help='role name or role ID')
-        parser.add_argument('--remove-role', dest='remove_role', action='append', help='role name or role ID')
-        parser.add_argument('--add-team', dest='add_team', action='append', help='team name or team UID')
-        parser.add_argument('--remove-team', dest='remove_team', action='append', help='team name or team UID')
+        parser.add_argument('--add-role', dest='add_role', action='append', help='role name or role ID. Supports @all for users')
+        parser.add_argument('--remove-role', dest='remove_role', action='append', help='role name or role ID. Supports @all for users')
+        parser.add_argument('--add-team', dest='add_team', action='append', help='team name or team UID. Supports @all for users')
+        parser.add_argument('--remove-team', dest='remove_team', action='append', help='team name or team UID. Supports @all for users')
         parser.add_argument('-hsf', '--hide-shared-folders', dest='hide_shared_folders', action='store',
                             choices=['on', 'off'], help='User does not see shared folders. --add-team only')
-        parser.add_argument('email', type=str, nargs='+', help='User email or ID. Can be repeated.')
+        parser.add_argument('email', type=str, nargs='+', help='User email or ID. Can be repeated. Use @all for all users.')
         super().__init__(parser)
         self.logger = api.get_logger()
 
@@ -351,7 +410,14 @@ class EnterpriseUserEditCommand(base.ArgparseCommand, enterprise_management.IEnt
         else:
             parent_id = context.enterprise_data.root_node.node_id
 
-        users = enterprise_utils.UserUtils.resolve_existing_users(context.enterprise_data, kwargs.get('email'))
+        emails = kwargs.get('email')
+        has_all_users = isinstance(emails, list) and any((True for x in emails if x == '@all'))
+
+        if has_all_users:
+            users = list(context.enterprise_data.users.get_all_entities())
+        else:
+            users = enterprise_utils.UserUtils.resolve_existing_users(context.enterprise_data, emails)
+
         if len(users) == 0:
             raise base.CommandError('No users to edit')
 
@@ -493,14 +559,17 @@ class EnterpriseUserActionCommand(base.ArgparseCommand, enterprise_management.IE
     def __init__(self):
         parser = argparse.ArgumentParser(prog='enterprise-user action', description='Enterprise user actions.')
         actions = parser.add_mutually_exclusive_group(required=True)
-        actions.add_argument('--expire', dest='expire', action='store_true', help='expire master password')
+        actions.add_argument('--expire', dest='expire', action='store_true',
+                             help='expire master password. Supports @all')
         actions.add_argument('--extend', dest='extend', action='store_true',
-                             help='extend vault transfer consent by 7 days. Supports the following pseudo users: @all')
-        actions.add_argument('--lock', dest='lock', action='store_true', help='lock user')
-        actions.add_argument('--unlock', dest='unlock', action='store_true', help='unlock user')
+                             help='extend vault transfer consent by 7 days. Supports @all')
+        actions.add_argument('--lock', dest='lock', action='store_true',
+                             help='lock user. Supports @all')
+        actions.add_argument('--unlock', dest='unlock', action='store_true',
+                             help='unlock user. Supports @all')
         actions.add_argument('--disable-2fa', dest='disable_2fa', action='store_true',
-                             help='disable 2fa for user')
-        parser.add_argument('email', type=str, nargs='+', help='User email or ID. Can be repeated.')
+                             help='disable 2fa for user. Supports @all')
+        parser.add_argument('email', type=str, nargs='+', help='User email or ID. Can be repeated. Use @all for all users.')
         super().__init__(parser)
         self.logger = api.get_logger()
 
@@ -510,9 +579,16 @@ class EnterpriseUserActionCommand(base.ArgparseCommand, enterprise_management.IE
     def execute(self, context: KeeperParams, **kwargs) -> None:
         assert context.enterprise_data is not None
 
-        users = enterprise_utils.UserUtils.resolve_existing_users(context.enterprise_data, kwargs.get('email'))
+        emails = kwargs.get('email')
+        has_all_users = isinstance(emails, list) and any((True for x in emails if x == '@all'))
+
+        if has_all_users:
+            users = list(context.enterprise_data.users.get_all_entities())
+        else:
+            users = enterprise_utils.UserUtils.resolve_existing_users(context.enterprise_data, emails)
+
         if len(users) == 0:
-            raise base.CommandError('No users to delete')
+            raise base.CommandError('No users found')
 
         inactive_users = [x for x in users if x.status != 'active']
         if len(inactive_users) > 0:
