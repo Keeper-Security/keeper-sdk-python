@@ -1,7 +1,7 @@
 import getpass
 import sqlite3
 
-from keepersdk.authentication import login_auth, configuration, endpoint
+from keepersdk.authentication import login_auth, configuration, endpoint, keeper_auth
 from keepersdk.enterprise import enterprise_loader, sqlite_enterprise_storage
 from keepersdk.errors import KeeperApiError
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
@@ -64,7 +64,7 @@ def login():
     return None
 
 
-def view_enterprise_roles(keeper_auth_context):
+def view_enterprise_roles(keeper_auth_context: keeper_auth.KeeperAuth):
     """
     View enterprise role details with optional search.
     
@@ -152,8 +152,9 @@ def view_enterprise_roles(keeper_auth_context):
                 if role_privileges:
                     print(f"\nPrivileges ({len(role_privileges)}):")
                     for priv in role_privileges:
-                        if hasattr(priv, 'privilege_type'):
-                            print(f"  - {priv.privilege_type}")
+                        priv_set = priv.to_set()
+                        for priv_type in priv_set:
+                            print(f"  - {priv_type}")
                 
                 print("-" * 120)
             

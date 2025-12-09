@@ -1,7 +1,7 @@
 import getpass
 import sqlite3
 
-from keepersdk.authentication import login_auth, configuration, endpoint
+from keepersdk.authentication import login_auth, configuration, endpoint, keeper_auth
 from keepersdk.vault import sqlite_storage, vault_online, vault_record
 from keepersdk import utils
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
@@ -43,7 +43,7 @@ def login():
     return None
 
 
-def password_strength_report(keeper_auth_context):
+def password_strength_report(keeper_auth_context: keeper_auth.KeeperAuth):
     conn = sqlite3.Connection('file::memory:', uri=True)
     vault_storage = sqlite_storage.SqliteVaultStorage(lambda: conn, vault_owner=bytes(keeper_auth_context.auth_context.username, 'utf-8'))
     vault = vault_online.VaultOnline(keeper_auth_context, vault_storage)
@@ -76,7 +76,7 @@ def password_strength_report(keeper_auth_context):
     else:
         print(f"\nTotal: {total} | Strong: {len(password_stats['strong'])} | Medium: {len(password_stats['medium'])} | Weak: {len(password_stats['weak'])}")
         if password_stats['weak']:
-            print(f"\n⚠️  Weak Passwords ({len(password_stats['weak'])} records):\n{'-' * 120}")
+            print(f"\nWeak Passwords ({len(password_stats['weak'])} records):\n{'-' * 120}")
             for rec in password_stats['weak'][:10]:
                 print(f"  {rec['title'][:49]:<50} Score: {rec['score']}")
     print("=" * 120)

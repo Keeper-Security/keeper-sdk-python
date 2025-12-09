@@ -1,6 +1,6 @@
 import getpass
 
-from keepersdk.authentication import login_auth, configuration, endpoint
+from keepersdk.authentication import login_auth, configuration, endpoint, keeper_auth
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
 
 
@@ -61,7 +61,7 @@ def login():
     return None
 
 
-def perform_logout(keeper_auth_context):
+def perform_logout(keeper_auth_context: keeper_auth.KeeperAuth):
     """
     Perform logout after user confirmation.
     

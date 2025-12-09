@@ -1,7 +1,7 @@
 import getpass
 import sqlite3
 
-from keepersdk.authentication import login_auth, configuration, endpoint
+from keepersdk.authentication import login_auth, configuration, endpoint, keeper_auth
 from keepersdk.vault import sqlite_storage, vault_online, folder_management
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
 
@@ -63,7 +63,7 @@ def login():
     return None
 
 
-def update_folder(keeper_auth_context):
+def update_folder(keeper_auth_context: keeper_auth.KeeperAuth):
     """
     Update a folder's name in the vault.
     

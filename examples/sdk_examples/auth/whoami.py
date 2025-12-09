@@ -1,6 +1,6 @@
 import getpass
 
-from keepersdk.authentication import login_auth, configuration, endpoint
+from keepersdk.authentication import login_auth, configuration, endpoint, keeper_auth
 from keepersdk import utils
 
 
@@ -50,7 +50,7 @@ def login():
     return None, None
 
 
-def display_whoami(keeper_auth_context, keeper_endpoint):
+def display_whoami(keeper_auth_context: keeper_auth.KeeperAuth, keeper_endpoint: endpoint.KeeperEndpoint):
     """
     Display current user information.
     
@@ -91,7 +91,7 @@ def display_whoami(keeper_auth_context, keeper_endpoint):
     
     if auth.sso_login_info:
         print(f"\nSSO Login: Enabled")
-        print(f"  SSO Provider: {auth.sso_login_info.sso_provider_name if hasattr(auth.sso_login_info, 'sso_provider_name') else 'N/A'}")
+        print(f"  SSO Provider: {auth.sso_login_info.sso_provider if hasattr(auth.sso_login_info, 'sso_provider') else 'N/A'}")
     
     session_restriction = auth.session_token_restriction
     print(f"\nSession Status: {session_restriction.name if hasattr(session_restriction, 'name') else str(session_restriction)}")

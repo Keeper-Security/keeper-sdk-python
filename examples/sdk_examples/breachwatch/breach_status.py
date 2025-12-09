@@ -1,7 +1,7 @@
 import getpass
 import sqlite3
 
-from keepersdk.authentication import login_auth, configuration, endpoint
+from keepersdk.authentication import login_auth, configuration, endpoint, keeper_auth
 from keepersdk.vault import sqlite_storage, vault_online
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
 
@@ -63,7 +63,7 @@ def login():
     return None
 
 
-def show_breach_status(keeper_auth_context):
+def show_breach_status(keeper_auth_context: keeper_auth.KeeperAuth):
     """
     Display BreachWatch status for the vault.
     
@@ -121,10 +121,10 @@ def show_breach_status(keeper_auth_context):
             print(f"  Breach Percentage: {breach_percentage:.1f}%")
             
             if breached_records > 0:
-                print(f"\n⚠️  WARNING: {breached_records} record(s) with breached passwords detected!")
+                print(f"\nWARNING: {breached_records} record(s) with breached passwords detected!")
                 print("   Run 'list_breaches.py' to see details and update affected passwords.")
             else:
-                print("\n✓  All passwords are secure! No breaches detected.")
+                print("\nAll passwords are secure! No breaches detected.")
         else:
             print("\n  No records found in vault.")
     

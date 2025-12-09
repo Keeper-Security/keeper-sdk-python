@@ -2,7 +2,7 @@ import getpass
 import sqlite3
 from datetime import datetime
 
-from keepersdk.authentication import login_auth, configuration, endpoint
+from keepersdk.authentication import login_auth, configuration, endpoint, keeper_auth
 from keepersdk.vault import sqlite_storage, vault_online, trash_management
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
 
@@ -57,7 +57,7 @@ def login():
     return None
 
 
-def view_trash_record(keeper_auth_context):
+def view_trash_record(keeper_auth_context: keeper_auth.KeeperAuth):
     """View details of a record in trash."""
     conn = sqlite3.Connection('file::memory:', uri=True)
     vault_storage = sqlite_storage.SqliteVaultStorage(

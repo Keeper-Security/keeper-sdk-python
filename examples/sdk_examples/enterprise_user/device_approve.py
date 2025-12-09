@@ -2,7 +2,7 @@ import getpass
 import sqlite3
 import time
 
-from keepersdk.authentication import login_auth, configuration, endpoint
+from keepersdk.authentication import login_auth, configuration, endpoint, keeper_auth
 from keepersdk.enterprise import enterprise_loader, sqlite_enterprise_storage
 from keepersdk.proto import enterprise_pb2, APIRequest_pb2
 from keepersdk import utils, crypto
@@ -69,7 +69,7 @@ def login():
     return None
 
 
-def approve_devices(keeper_auth_context):
+def approve_devices(keeper_auth_context: keeper_auth.KeeperAuth):
     """
     Manage device approval requests for enterprise users.
     
@@ -169,9 +169,8 @@ def approve_devices(keeper_auth_context):
                                 )
                                 
                                 if data_key_rs and data_key_rs.encryptedDataKey:
-                                    keys = enterprise_data.enterprise_info.keys
-                                    if keys and keys.ecc_encrypted_private_key:
-                                        ecc_priv_data = utils.base64_url_decode(keys.ecc_encrypted_private_key)
+                                    if enterprise_data.enterprise_info.ec_private_key:
+                                        ecc_priv_data = utils.base64_url_decode(enterprise_data.enterprise_info.ec_private_key)
                                         ecc_priv_data = crypto.decrypt_aes_v2(
                                             ecc_priv_data, 
                                             enterprise_data.enterprise_info.tree_key

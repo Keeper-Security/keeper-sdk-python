@@ -1,7 +1,7 @@
 import getpass
 import sqlite3
 
-from keepersdk.authentication import login_auth, configuration, endpoint
+from keepersdk.authentication import login_auth, configuration, endpoint, keeper_auth
 from keepersdk.enterprise import enterprise_loader, sqlite_enterprise_storage
 from keepersdk.errors import KeeperApiError
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
@@ -64,7 +64,7 @@ def login():
     return None
 
 
-def display_enterprise_teams(keeper_auth_context):
+def display_enterprise_teams(keeper_auth_context: keeper_auth.KeeperAuth):
     """
     Load and display enterprise teams information.
     
@@ -102,7 +102,7 @@ def display_enterprise_teams(keeper_auth_context):
             if hasattr(team, 'node_id') and team.node_id:
                 node = enterprise.enterprise_data.nodes.get_entity(team.node_id)
                 if node:
-                    node_name = node.display_name if hasattr(node, 'display_name') and node.display_name else str(team.node_id)
+                    node_name = node.name if hasattr(node, 'name') and node.name else str(team.node_id)
             
             print(f"{team_name[:34]:<35} {team_uid[:24]:<25} {user_count:<10} {node_name[:29]:<30}")
         

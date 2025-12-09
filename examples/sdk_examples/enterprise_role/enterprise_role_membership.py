@@ -1,7 +1,7 @@
 import getpass
 import sqlite3
 
-from keepersdk.authentication import login_auth, configuration, endpoint
+from keepersdk.authentication import login_auth, configuration, endpoint, keeper_auth
 from keepersdk.enterprise import enterprise_loader, sqlite_enterprise_storage
 from keepersdk.errors import KeeperApiError
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
@@ -71,7 +71,7 @@ def login():
     return None
 
 
-def view_role_membership(keeper_auth_context):
+def view_role_membership(keeper_auth_context: keeper_auth.KeeperAuth):
     """
     View role membership details for a specific role.
     

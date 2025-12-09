@@ -1,7 +1,7 @@
 import getpass
 import sqlite3
 
-from keepersdk.authentication import login_auth, configuration, endpoint
+from keepersdk.authentication import login_auth, configuration, endpoint, keeper_auth
 from keepersdk.vault import sqlite_storage, vault_online, ksm_management
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
 
@@ -56,7 +56,7 @@ def login():
     return None
 
 
-def create_secrets_manager_application(keeper_auth_context):
+def create_secrets_manager_application(keeper_auth_context: keeper_auth.KeeperAuth):
     """Create a new Secrets Manager application."""
     conn = sqlite3.Connection('file::memory:', uri=True)
     vault_storage = sqlite_storage.SqliteVaultStorage(

@@ -1,7 +1,7 @@
 import getpass
 import sqlite3
 
-from keepersdk.authentication import login_auth, configuration, endpoint
+from keepersdk.authentication import login_auth, configuration, endpoint, keeper_auth
 from keepersdk.enterprise import enterprise_loader, sqlite_enterprise_storage
 from keepersdk.errors import KeeperApiError
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
@@ -64,7 +64,7 @@ def login():
     return None
 
 
-def display_enterprise_tree(keeper_auth_context):
+def display_enterprise_tree(keeper_auth_context: keeper_auth.KeeperAuth):
     """
     Load and display enterprise node tree structure.
     
@@ -89,7 +89,7 @@ def display_enterprise_tree(keeper_auth_context):
         
         def print_node_tree(node, indent=0):
             prefix = "  " * indent
-            node_name = node.display_name if hasattr(node, 'display_name') and node.display_name else f"Node {node.node_id}"
+            node_name = node.name if hasattr(node, 'name') and node.name else f"Node {node.node_id}"
             
             user_count = sum(1 for user in enterprise.enterprise_data.users.get_all_entities() 
                              if hasattr(user, 'node_id') and user.node_id == node.node_id)

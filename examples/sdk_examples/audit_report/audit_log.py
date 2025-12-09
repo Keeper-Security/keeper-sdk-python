@@ -1,6 +1,6 @@
 import getpass
 
-from keepersdk.authentication import login_auth, configuration, endpoint
+from keepersdk.authentication import login_auth, configuration, endpoint, keeper_auth
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
 from keepersdk.enterprise import audit_report
 from keepersdk.errors import KeeperApiError
@@ -63,7 +63,7 @@ def login():
     return None
 
 
-def view_audit_log(keeper_auth_context):
+def view_audit_log(keeper_auth_context: keeper_auth.KeeperAuth):
     """
     View the audit log.
     

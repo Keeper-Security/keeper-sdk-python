@@ -63,7 +63,7 @@ def login():
     return None
 
 
-def transfer_user_account(keeper_auth_context):
+def transfer_user_account(keeper_auth_context: keeper_auth.KeeperAuth):
     """
     Transfer a user account from one user to another.
     

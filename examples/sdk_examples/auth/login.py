@@ -1,6 +1,6 @@
 import getpass
 
-from keepersdk.authentication import login_auth, configuration, endpoint
+from keepersdk.authentication import login_auth, configuration, endpoint, keeper_auth
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
 
 
@@ -61,7 +61,7 @@ def login():
     return None, None
 
 
-def display_login_info(keeper_auth_context, keeper_endpoint):
+def display_login_info(keeper_auth_context: keeper_auth.KeeperAuth, keeper_endpoint: endpoint.KeeperEndpoint):
     """
     Display login success information.
     

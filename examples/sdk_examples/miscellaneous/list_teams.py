@@ -1,7 +1,7 @@
 import getpass
 import sqlite3
 
-from keepersdk.authentication import login_auth, configuration, endpoint
+from keepersdk.authentication import login_auth, configuration, endpoint, keeper_auth
 from keepersdk.vault import sqlite_storage, vault_online
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
 
@@ -42,7 +42,7 @@ def login():
     return None
 
 
-def list_teams(keeper_auth_context):
+def list_teams(keeper_auth_context: keeper_auth.KeeperAuth):
     conn = sqlite3.Connection('file::memory:', uri=True)
     vault_storage = sqlite_storage.SqliteVaultStorage(lambda: conn, vault_owner=bytes(keeper_auth_context.auth_context.username, 'utf-8'))
     vault = vault_online.VaultOnline(keeper_auth_context, vault_storage)
@@ -55,6 +55,7 @@ def list_teams(keeper_auth_context):
         print(f"{'Team Name':<40} {'Team UID':<40} {'Records Shared':<20}\n{'-' * 120}")
         for team in teams:
             team_name = team.name if team.name else '(Unnamed)'
+            #ToDo: shared_records_count
             shared_records_count = sum(1 for r in vault.vault_data.records() if hasattr(r, 'shared') and r.shared)
             print(f"{team_name[:39]:<40} {team.team_uid[:39]:<40} {shared_records_count:<20}")
         print(f"{'-' * 120}\nTotal teams: {len(teams)}")

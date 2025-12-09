@@ -1,7 +1,7 @@
 import getpass
 import sqlite3
 
-from keepersdk.authentication import login_auth, configuration, endpoint
+from keepersdk.authentication import login_auth, configuration, endpoint, keeper_auth
 from keepersdk.vault import sqlite_storage, vault_online, vault_types, record_management
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
 
@@ -63,7 +63,7 @@ def login():
     return None
 
 
-def delete_record(keeper_auth_context):
+def delete_record(keeper_auth_context: keeper_auth.KeeperAuth):
     """
     Delete a record from the vault.
     

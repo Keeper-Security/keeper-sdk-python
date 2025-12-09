@@ -1,9 +1,8 @@
 import getpass
 import sqlite3
 
-from keepersdk.authentication import login_auth, configuration, endpoint
+from keepersdk.authentication import login_auth, configuration, endpoint, keeper_auth
 from keepersdk.vault import sqlite_storage, vault_online, vault_record
-from keepersdk import utils
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
 
 
@@ -43,7 +42,7 @@ def login():
     return None
 
 
-def copy_field(keeper_auth_context):
+def copy_field(keeper_auth_context: keeper_auth.KeeperAuth):
     conn = sqlite3.Connection('file::memory:', uri=True)
     vault_storage = sqlite_storage.SqliteVaultStorage(lambda: conn, vault_owner=bytes(keeper_auth_context.auth_context.username, 'utf-8'))
     vault = vault_online.VaultOnline(keeper_auth_context, vault_storage)
@@ -98,7 +97,8 @@ def copy_field(keeper_auth_context):
                             totp_url = field.value[0] if isinstance(field.value, list) else field.value
                             break
                 if totp_url:
-                    output_value, output_label = utils.get_totp_code(totp_url), "TOTP Code"
+                    print(f"TOTP URL: {totp_url}")
+                    #pending for totp
             elif choice == '5':
                 output_value, output_label = record_found.record_uid, "Record UID"
             if output_value and output_label:

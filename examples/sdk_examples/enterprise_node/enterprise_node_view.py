@@ -1,7 +1,7 @@
 import getpass
 import sqlite3
 
-from keepersdk.authentication import login_auth, configuration, endpoint
+from keepersdk.authentication import login_auth, configuration, endpoint, keeper_auth
 from keepersdk.enterprise import enterprise_loader, sqlite_enterprise_storage
 from keepersdk.errors import KeeperApiError
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
@@ -64,7 +64,7 @@ def login():
     return None
 
 
-def view_enterprise_nodes(keeper_auth_context):
+def view_enterprise_nodes(keeper_auth_context: keeper_auth.KeeperAuth):
     """
     View enterprise node details with optional search.
     
@@ -90,7 +90,7 @@ def view_enterprise_nodes(keeper_auth_context):
         
         if node_search:
             for node in enterprise.enterprise_data.nodes.get_all_entities():
-                node_name = node.display_name if hasattr(node, 'display_name') and node.display_name else node.name if hasattr(node, 'name') else ''
+                node_name = node.name if node.name else ''
                 node_id_str = str(node.node_id) if hasattr(node, 'node_id') else ''
                 
                 if (node_search.lower() in node_name.lower() or 
@@ -107,14 +107,14 @@ def view_enterprise_nodes(keeper_auth_context):
             print("=" * 120)
             
             for node in nodes_to_display:
-                node_name = node.display_name if hasattr(node, 'display_name') and node.display_name else node.name if hasattr(node, 'name') else 'N/A'
+                node_name = node.name if node.name else 'N/A'
                 node_id = str(node.node_id) if hasattr(node, 'node_id') else 'N/A'
                 
                 parent_name = ""
                 if hasattr(node, 'parent_id') and node.parent_id:
                     parent_node = enterprise.enterprise_data.nodes.get_entity(node.parent_id)
                     if parent_node:
-                        parent_name = parent_node.display_name if hasattr(parent_node, 'display_name') and parent_node.display_name else parent_node.name if hasattr(parent_node, 'name') else str(node.parent_id)
+                        parent_name = parent_node.name if parent_node.name else str(node.parent_id)
                 
                 user_count = sum(1 for user in enterprise.enterprise_data.users.get_all_entities() 
                                  if hasattr(user, 'node_id') and user.node_id == node.node_id)
