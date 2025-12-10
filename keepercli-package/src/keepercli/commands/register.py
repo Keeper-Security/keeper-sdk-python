@@ -2,11 +2,11 @@ import argparse
 
 from keepersdk import crypto, utils
 from keepersdk.proto import APIRequest_pb2
-from keepersdk.vault import vault_utils
+from keepersdk.vault import vault_utils, share_management_utils
 
 from . import base
 from .. import api
-from ..helpers import report_utils, share_utils
+from ..helpers import report_utils
 from ..params import KeeperParams
 
 CHUNK_SIZE = 1000
@@ -124,7 +124,7 @@ class FindOwnerlessCommand(base.ArgparseCommand):
         """Filter records to only include those in the specified folders."""
         folder_record_uids = set()
         for folder_path in folders:
-            contained_records = share_utils.get_contained_record_uids(context, folder_path, False)
+            contained_records = share_management_utils.get_contained_record_uids(context, folder_path, False)
             for record_uids in contained_records.values():
                 folder_record_uids.update(record_uids)
         
@@ -187,7 +187,7 @@ class FindOwnerlessCommand(base.ArgparseCommand):
             return None
             
         record_uids = {record.record_uid for record in records}
-        shared_records = share_utils.get_shared_records(context, record_uids).values()
+        shared_records = share_management_utils.get_shared_records(context.vault, context.enterprise_data, record_uids).values()
         
         headers = ['record_uid', 'title', 'shared_with', 'folder_path']
         table_data = []
