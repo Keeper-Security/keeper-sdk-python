@@ -3,7 +3,7 @@
 
 import json
 import re
-from typing import Optional, List
+from typing import Optional, List, Set
 from dataclasses import dataclass
 
 from keepersdk.authentication import keeper_auth
@@ -83,6 +83,16 @@ class AddAllUsersToRoleResponse:
     role_name: str
     users_added: int
     success: bool = True
+    message: Optional[str] = None
+
+
+@dataclass
+class TeamUserResult:
+    """Result of team user management operation."""
+    success: bool
+    added_count: int = 0
+    removed_count: int = 0
+    skipped_count: int = 0
     message: Optional[str] = None
 
 
@@ -610,4 +620,131 @@ def add_all_users_to_role(
         users_added=len(users),
         success=True,
         message=f"Added {len(users)} users to role '{role.name}'"
+    )
+
+
+def add_users_to_teams(
+    loader: enterprise_types.IEnterpriseLoader,
+    user_ids: List[int],
+    team_uids: Set[str],
+    hide_shared_folders: Optional[bool] = None,
+    logger: Optional[enterprise_management.IEnterpriseManagementLogger] = None
+) -> TeamUserResult:
+    """Add users to teams.
+    
+    Args:
+        loader: Enterprise data loader
+        user_ids: List of enterprise user IDs to add
+        team_uids: Set of team UIDs to add users to
+        hide_shared_folders: Whether to hide shared folders (None for default)
+        logger: Optional logger for warnings
+        
+    Returns:
+        TeamUserResult with operation results
+    """
+    if not user_ids or not team_uids:
+        return TeamUserResult(success=False, message='No users or teams specified')
+    
+    enterprise_data = loader.enterprise_data
+    
+    user_type: Optional[int] = None
+    if isinstance(hide_shared_folders, bool):
+        user_type = 0 if hide_shared_folders else 2
+    
+    batch = batch_management.BatchManagement(loader=loader, logger=logger)
+    
+    team_membership_to_add: List[enterprise_management.TeamUserEdit] = []
+    skipped = 0
+    
+    for user_id in user_ids:
+        existing_team_uids = {x.team_uid for x in enterprise_data.team_users.get_links_by_object(user_id)}
+        queued_team_uids = {x.team_uid for x in enterprise_data.queued_team_users.get_links_by_object(user_id)}
+        existing_team_uids.update(queued_team_uids)
+        
+        for team_uid in team_uids:
+            if team_uid not in existing_team_uids:
+                team_membership_to_add.append(
+                    enterprise_management.TeamUserEdit(
+                        enterprise_user_id=user_id, 
+                        team_uid=team_uid, 
+                        user_type=user_type
+                    )
+                )
+            else:
+                skipped += 1
+    
+    if len(team_membership_to_add) == 0:
+        return TeamUserResult(
+            success=True, 
+            skipped_count=skipped,
+            message='All specified users are already members of the specified teams'
+        )
+    
+    batch.modify_team_users(to_add=team_membership_to_add)
+    batch.apply()
+    
+    return TeamUserResult(
+        success=True, 
+        added_count=len(team_membership_to_add),
+        skipped_count=skipped
+    )
+
+
+def remove_users_from_teams(
+    loader: enterprise_types.IEnterpriseLoader,
+    user_ids: List[int],
+    team_uids: Set[str],
+    logger: Optional[enterprise_management.IEnterpriseManagementLogger] = None
+) -> TeamUserResult:
+    """Remove users from teams.
+    
+    Args:
+        loader: Enterprise data loader
+        user_ids: List of enterprise user IDs to remove
+        team_uids: Set of team UIDs to remove users from
+        logger: Optional logger for warnings
+        
+    Returns:
+        TeamUserResult with operation results
+    """
+    if not user_ids or not team_uids:
+        return TeamUserResult(success=False, message='No users or teams specified')
+    
+    enterprise_data = loader.enterprise_data
+    
+    batch = batch_management.BatchManagement(loader=loader, logger=logger)
+    
+    team_membership_to_remove: List[enterprise_management.TeamUserEdit] = []
+    skipped = 0
+    
+    for user_id in user_ids:
+        existing_team_uids = {x.team_uid for x in enterprise_data.team_users.get_links_by_object(user_id)}
+        queued_team_uids = {x.team_uid for x in enterprise_data.queued_team_users.get_links_by_object(user_id)}
+        existing_team_uids.update(queued_team_uids)
+        
+        for team_uid in team_uids:
+            if team_uid in existing_team_uids:
+                team_membership_to_remove.append(
+                    enterprise_management.TeamUserEdit(
+                        enterprise_user_id=user_id, 
+                        team_uid=team_uid
+                    )
+                )
+            else:
+                skipped += 1
+    
+    if len(team_membership_to_remove) == 0:
+        return TeamUserResult(
+            success=True,
+            skipped_count=skipped,
+            message='None of the specified users are members of the specified teams'
+        )
+    
+    batch.modify_team_users(to_remove=team_membership_to_remove)
+    batch.apply()
+    
+    return TeamUserResult(
+        success=True, 
+        removed_count=len(team_membership_to_remove),
+        skipped_count=skipped
     )
