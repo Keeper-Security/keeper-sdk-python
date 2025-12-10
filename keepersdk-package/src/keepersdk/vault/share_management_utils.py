@@ -164,19 +164,7 @@ class ShareNotFoundError(ShareManagementError):
 
 
 def get_share_expiration(expire_at: Optional[str], expire_in: Optional[str]) -> int:
-    """
-    Calculate share expiration timestamp from expire_at or expire_in parameters.
-    
-    Args:
-        expire_at: ISO datetime string or 'never'
-        expire_in: Time period string or 'never'
-        
-    Returns:
-        Unix timestamp for expiration
-        
-    Raises:
-        ShareValidationError: If expiration format is invalid
-    """
+
     if not expire_at and not expire_in:
         return DEFAULT_EXPIRATION
 
@@ -203,15 +191,6 @@ def get_share_expiration(expire_at: Optional[str], expire_in: Optional[str]) -> 
 
 
 def get_share_objects(vault: vault_online.VaultOnline) -> Dict[str, Dict[str, Any]]:
-    """
-    Retrieve share objects (users, enterprises, teams) from the vault.
-    
-    Args:
-        vault: VaultOnline instance
-        
-    Returns:
-        Dictionary containing users, enterprises, and teams
-    """
     try:
         request = record_pb2.GetShareObjectsRequest()
         
@@ -281,18 +260,6 @@ def load_records_in_shared_folder(
     shared_folder_uid: str, 
     record_uids: Optional[set[str]] = None
 ) -> None:
-    """
-    Load records from a shared folder into the vault.
-    
-    Args:
-        vault: VaultOnline instance
-        shared_folder_uid: UID of the shared folder
-        record_uids: Optional set of specific record UIDs to load
-        
-    Raises:
-        ShareNotFoundError: If shared folder is not found
-        ShareManagementError: If loading fails
-    """
     try:
         shared_folder = _find_shared_folder(vault, shared_folder_uid)
         if not shared_folder:
@@ -322,23 +289,36 @@ def _find_shared_folder(vault: vault_online.VaultOnline, shared_folder_uid: str)
     return None
 
 
-def _decrypt_record_keys(vault: vault_online.VaultOnline, shared_folder, shared_folder_key):
-    """Decrypt record keys for shared folder."""
+def _decode_record_key(record_key_attr) -> bytes:
+    if isinstance(record_key_attr, bytes):
+        return utils.base64_url_decode(str(record_key_attr, 'utf-8'))
+    else:
+        return utils.base64_url_decode(str(record_key_attr))
+
+
+def _decrypt_single_record_key(key: bytes, shared_folder_key: bytes) -> bytes:
+    if len(key) == RECORD_KEY_LENGTH_V2:
+        return crypto.decrypt_aes_v2(key, shared_folder_key)
+    else:
+        return crypto.decrypt_aes_v1(key, shared_folder_key)
+
+
+def _decrypt_record_keys(vault: vault_online.VaultOnline, shared_folder, shared_folder_key: bytes) -> Dict[str, bytes]:
+
     record_keys = {}
-    sf_record_keys = vault.vault_data.storage.record_keys.get_links_by_object(shared_folder.shared_folder_uid) or []
+    sf_record_keys = vault.vault_data.storage.record_keys.get_links_by_object(
+        shared_folder.shared_folder_uid
+    ) or []
     
-    for rk in sf_record_keys:
-        record_uid = getattr(rk, 'record_uid', None)
+    for record_key_link in sf_record_keys:
+        record_uid = getattr(record_key_link, 'record_uid', None)
+        if not record_uid:
+            continue
+            
         try:
-            key = utils.base64_url_decode(
-                str(getattr(rk, 'record_key', b''), 'utf-8') 
-                if isinstance(getattr(rk, 'record_key', b''), bytes) 
-                else getattr(rk, 'record_key', '')
-            )
-            if len(key) == RECORD_KEY_LENGTH_V2:
-                record_key = crypto.decrypt_aes_v2(key, shared_folder_key)
-            else:
-                record_key = crypto.decrypt_aes_v1(key, shared_folder_key)
+            record_key_attr = getattr(record_key_link, 'record_key', b'')
+            key = _decode_record_key(record_key_attr)
+            record_key = _decrypt_single_record_key(key, shared_folder_key)
             record_keys[record_uid] = record_key
         except Exception as e:
             logger.error(f'Cannot decrypt record "{record_uid}" key: {e}')
@@ -346,23 +326,30 @@ def _decrypt_record_keys(vault: vault_online.VaultOnline, shared_folder, shared_
     return record_keys
 
 
+def _build_record_details_request(record_uids: set) -> record_pb2.GetRecordDataWithAccessInfoRequest:
+
+    request = record_pb2.GetRecordDataWithAccessInfoRequest()
+    request.clientTime = utils.current_milli_time()
+    request.recordDetailsInclude = record_pb2.DATA_PLUS_SHARE
+    
+    for uid in record_uids:
+        try:
+            request.recordUid.append(utils.base64_url_decode(uid))
+        except Exception as e:
+            logger.debug('Incorrect record UID "%s": %s', uid, e)
+    
+    return request
+
+
 def _load_records_in_batches(vault: vault_online.VaultOnline, record_set: set, record_keys: dict):
-    """Load records in batches to avoid API limits."""
-    while len(record_set) > 0:
-        rq = record_pb2.GetRecordDataWithAccessInfoRequest()
-        rq.clientTime = utils.current_milli_time()
-        rq.recordDetailsInclude = record_pb2.DATA_PLUS_SHARE
-        
-        for uid in record_set:
-            try:
-                rq.recordUid.append(utils.base64_url_decode(uid))
-            except Exception as e:
-                logger.debug('Incorrect record UID "%s": %s', uid, e)
+
+    while record_set:
+        request = _build_record_details_request(record_set)
         record_set.clear()
 
         response = vault.keeper_auth.execute_auth_rest(
             rest_endpoint=RECORD_DETAILS_URL, 
-            request=rq, 
+            request=request, 
             response_type=record_pb2.GetRecordDataWithAccessInfoResponse
         )
         
@@ -373,17 +360,25 @@ def _load_records_in_batches(vault: vault_online.VaultOnline, record_set: set, r
         _process_record_batch(vault, response, record_keys, record_set)
 
 
+def _process_record_owner_key(record_data, record_uid: str, record_keys: dict):
+
+    if record_data.recordUid and record_data.recordKey:
+        owner_id = utils.base64_url_encode(record_data.recordUid)
+        if owner_id in record_keys:
+            record_keys[record_uid] = crypto.decrypt_aes_v2(
+                record_data.recordKey, 
+                record_keys[owner_id]
+            )
+
+
 def _process_record_batch(vault: vault_online.VaultOnline, response, record_keys: dict, record_set: set):
-    """Process a batch of records from API response."""
+
     for record_info in response.recordDataWithAccessInfo:
         record_uid = utils.base64_url_encode(record_info.recordUid)
         record_data = record_info.recordData
         
         try:
-            if record_data.recordUid and record_data.recordKey:
-                owner_id = utils.base64_url_encode(record_data.recordUid)
-                if owner_id in record_keys:
-                    record_keys[record_uid] = crypto.decrypt_aes_v2(record_data.recordKey, record_keys[owner_id])
+            _process_record_owner_key(record_data, record_uid, record_keys)
 
             if record_uid not in record_keys:
                 continue
@@ -413,37 +408,62 @@ def _create_record_dict(record_uid: str, record_data, record_key: bytes, version
     }
 
 
-def _handle_record_versions(vault: vault_online.VaultOnline, record: dict, record_data, version: int, record_set: set):
-    """Handle different record versions and their specific features."""
+def _decrypt_record_data(record_data, record_key: bytes, version: int) -> bytes:
+
     data_decoded = utils.base64_url_decode(record_data.encryptedRecordData)
-    record_key = record['record_key_unencrypted']
     
     if version <= MAX_V2_VERSION:
-        record['data_unencrypted'] = crypto.decrypt_aes_v1(data_decoded, record_key)
+        return crypto.decrypt_aes_v1(data_decoded, record_key)
     else:
-        record['data_unencrypted'] = crypto.decrypt_aes_v2(data_decoded, record_key)
+        return crypto.decrypt_aes_v2(data_decoded, record_key)
 
-    if record_data.encryptedExtraData and version <= MAX_V2_VERSION:
+
+def _process_v2_extra_data(record: dict, record_data, record_key: bytes):
+
+    if record_data.encryptedExtraData:
         record['extra'] = record_data.encryptedExtraData
         extra_decoded = utils.base64_url_decode(record_data.encryptedExtraData)
         record['extra_unencrypted'] = crypto.decrypt_aes_v1(extra_decoded, record_key)
-    
-    if version == V3_VERSION:
-        v3_record = vault.vault_data.load_record(record_uid=record['record_uid'])
-        if isinstance(v3_record, vault_record.TypedRecord):
-            for ref in itertools.chain(v3_record.fields, v3_record.custom):
-                if ref.type.endswith('Ref') and isinstance(ref.value, list):
-                    record_set.update(ref.value)
-    
-    elif version == V4_VERSION:
-        if record_data.fileSize > 0:
-            record['file_size'] = record_data.fileSize
-        if record_data.thumbnailSize > 0:
-            record['thumbnail_size'] = record_data.thumbnailSize
-    
+
+
+def _process_v3_record_references(vault: vault_online.VaultOnline, record: dict, record_set: set):
+
+    v3_record = vault.vault_data.load_record(record_uid=record['record_uid'])
+    if isinstance(v3_record, vault_record.TypedRecord):
+        for ref in itertools.chain(v3_record.fields, v3_record.custom):
+            if ref.type.endswith('Ref') and isinstance(ref.value, list):
+                record_set.update(ref.value)
+
+
+def _process_v4_record_metadata(record: dict, record_data):
+
+    if record_data.fileSize > 0:
+        record['file_size'] = record_data.fileSize
+    if record_data.thumbnailSize > 0:
+        record['thumbnail_size'] = record_data.thumbnailSize
+
+
+def _process_record_owner_info(record: dict, record_data):
+
     if record_data.recordUid and record_data.recordKey:
         record['owner_uid'] = utils.base64_url_encode(record_data.recordUid)
         record['link_key'] = utils.base64_url_encode(record_data.recordKey)
+
+
+def _handle_record_versions(vault: vault_online.VaultOnline, record: dict, record_data, version: int, record_set: set):
+
+    record_key = record['record_key_unencrypted']
+    record['data_unencrypted'] = _decrypt_record_data(record_data, record_key, version)
+
+    if version <= MAX_V2_VERSION:
+        _process_v2_extra_data(record, record_data, record_key)
+    
+    if version == V3_VERSION:
+        _process_v3_record_references(vault, record, record_set)
+    elif version == V4_VERSION:
+        _process_v4_record_metadata(record, record_data)
+    
+    _process_record_owner_info(record, record_data)
 
 
 def _add_share_permissions(record: dict, record_info):
@@ -473,17 +493,7 @@ def get_record_shares(
     record_uids: List[str], 
     is_share_admin: bool = False
 ) -> Optional[List[Dict[str, Any]]]:
-    """
-    Get share information for records.
-    
-    Args:
-        vault: VaultOnline instance
-        record_uids: List of record UIDs
-        is_share_admin: Whether user is share admin
-        
-    Returns:
-        List of record share information or None
-    """
+
     try:
         record_cache = {x.record_uid: x for x in vault.vault_data.records()}
         
@@ -610,56 +620,62 @@ def resolve_record_permission_path(
     return None
 
 
+def _create_access_path(
+    record_uid: str,
+    shared_folder_uid: str, 
+    can_edit: bool, 
+    can_share: bool, 
+    team_uid: Optional[str] = None
+) -> Dict[str, Any]:
+
+    path = {
+        RECORD_UID_FIELD: record_uid,
+        SHARED_FOLDER_UID_FIELD: shared_folder_uid,
+        CAN_EDIT_FIELD: can_edit,
+        CAN_SHARE_FIELD: can_share,
+        CAN_VIEW_FIELD: True
+    }
+    if team_uid:
+        path[TEAM_UID_FIELD] = team_uid
+    return path
+
+
+def _process_team_permissions_for_shared_folder(
+    shared_folder: Any,
+    record_uid: str,
+    enterprise: enterprise_data.EnterpriseData,
+    base_can_edit: bool, 
+    base_can_share: bool
+) -> Generator[Dict[str, Any], None, None]:
+
+    for user_permission in shared_folder.user_permissions:
+        if user_permission.user_type != TEAM_USER_TYPE:
+            continue
+            
+        team_uid = user_permission.user_uid
+        team = enterprise.teams.get_entity(team_uid)
+        
+        if team:
+            yield _create_access_path(
+                record_uid=record_uid,
+                shared_folder_uid=shared_folder.shared_folder_uid,
+                can_edit=base_can_edit and not team.restrict_edit,
+                can_share=base_can_share and not team.restrict_share,
+                team_uid=team_uid
+            )
+
+
 def enumerate_record_access_paths(
     vault: vault_online.VaultOnline,
     enterprise: enterprise_data.EnterpriseData,
     record_uid: str
 ) -> Generator[Dict[str, Any], None, None]:
-    
-    def create_access_path(
-        shared_folder_uid: str, 
-        can_edit: bool, 
-        can_share: bool, 
-        team_uid: Optional[str] = None
-    ) -> Dict[str, Any]:
-        path = {
-            RECORD_UID_FIELD: record_uid,
-            SHARED_FOLDER_UID_FIELD: shared_folder_uid,
-            CAN_EDIT_FIELD: can_edit,
-            CAN_SHARE_FIELD: can_share,
-            CAN_VIEW_FIELD: True
-        }
-        if team_uid:
-            path[TEAM_UID_FIELD] = team_uid
-        return path
-    
-    def process_team_permissions(
-        shared_folder: Any, 
-        base_can_edit: bool, 
-        base_can_share: bool
-    ) -> Generator[Dict[str, Any], None, None]:
-        
-        for user_permission in shared_folder.user_permissions:
-            if user_permission.user_type != TEAM_USER_TYPE:
-                continue
-                
-            team_uid = user_permission.user_uid
-            team = enterprise.teams.get_entity(team_uid)
-            
-            if team:
-                yield create_access_path(
-                    shared_folder_uid=shared_folder.shared_folder_uid,
-                    can_edit=base_can_edit and not team.restrict_edit,
-                    can_share=base_can_share and not team.restrict_share,
-                    team_uid=team_uid
-                )
-    
+
     record = vault.vault_data.get_record(record_uid)
     is_owner = record.flags == vault_record.RecordFlags.IsOwner
 
     for shared_folder_info in vault.vault_data.shared_folders():
         shared_folder_uid = shared_folder_info.shared_folder_uid
-        
         shared_folder = vault.vault_data.load_shared_folder(
             shared_folder_uid=shared_folder_uid
         )
@@ -667,132 +683,139 @@ def enumerate_record_access_paths(
         can_edit, can_share = is_owner, is_owner
         
         if hasattr(shared_folder, 'key_type'):
-            yield create_access_path(
+            yield _create_access_path(
+                record_uid=record_uid,
                 shared_folder_uid=shared_folder_uid,
                 can_edit=can_edit,
                 can_share=can_share
             )
         else:
-            yield from process_team_permissions(shared_folder, can_edit, can_share)
+            yield from _process_team_permissions_for_shared_folder(
+                shared_folder, record_uid, enterprise, can_edit, can_share
+            )
+
+
+def _fetch_team_members_from_api(vault: vault_online.VaultOnline, team_uids: Set[str]) -> Dict[str, Set[str]]:
+
+    members = {}
+    
+    if not vault.keeper_auth.auth_context.enterprise_ec_public_key:
+        return members
+        
+    for team_uid in team_uids:
+        try:
+            request = enterprise_pb2.GetTeamMemberRequest()
+            request.teamUid = utils.base64_url_decode(team_uid)
+            
+            response = vault.keeper_auth.execute_auth_rest(
+                rest_endpoint=TEAM_MEMBERS_ENDPOINT,
+                request=request,
+                response_type=enterprise_pb2.GetTeamMemberResponse
+            )
+            
+            if response and response.enterpriseUser:
+                team_members = {user.email for user in response.enterpriseUser}
+                members[team_uid] = team_members
+                
+        except Exception as e:
+            logger.debug(f"Failed to fetch team members for {team_uid}: {e}")
+            
+    return members
+
+
+def _get_cached_team_members(enterprise: enterprise_data.EnterpriseData, team_uids: Set[str], username_lookup: Dict[str, str]) -> Dict[str, Set[str]]:
+
+    members = {}
+    team_user_links = enterprise.team_users.get_all_links() or []
+    
+    relevant_team_users = [
+        link for link in team_user_links 
+        if link.user_type != USER_TYPE_INACTIVE and link.team_uid in team_uids
+    ]
+
+    for team_user in relevant_team_users:
+        username = username_lookup.get(team_user.enterprise_user_id)
+        if username:
+            team_uid = team_user.team_uid
+            if team_uid not in members:
+                members[team_uid] = set()
+            members[team_uid].add(username)
+
+    return members
+
+
+def _fetch_all_shared_folder_admins(vault: vault_online.VaultOnline) -> Dict[str, List[str]]:
+    sf_uids = list(vault.vault_data._shared_folders.keys())
+    return {
+        sf_uid: get_share_admins_for_shared_folder(vault, sf_uid) or []
+        for sf_uid in sf_uids
+    }
+
+
+def _get_restricted_role_members(enterprise: enterprise_data.EnterpriseData, username_lookup: Dict[str, str]) -> Set[str]:
+
+    role_enforcements = enterprise.role_enforcements.get_all_links()
+    restricted_roles = {
+        re.role_id for re in role_enforcements 
+        if re.enforcement_type == KEY_ENFORCEMENTS and re.value == KEY_RESTRICT_SHARING_ALL
+    }
+
+    if not restricted_roles:
+        return set()
+
+    restricted_users = enterprise.role_users.get_links_by_object(restricted_roles)
+    restricted_teams = enterprise.role_teams.get_links_by_object(restricted_roles)
+
+    restricted_members = set()
+    
+    for user_link in restricted_users:
+        username = username_lookup.get(user_link.enterprise_user_id)
+        if username:
+            restricted_members.add(username)
+
+    team_uids = {team_link.team_uid for team_link in restricted_teams}
+    if team_uids:
+        team_members = _get_cached_team_members(enterprise, team_uids, username_lookup)
+        for members in team_members.values():
+            restricted_members.update(members)
+
+    return restricted_members
+
+
+def _extract_team_uids_from_shares(shares: Optional[List[Dict[str, Any]]]) -> Set[str]:
+    if not shares:
+        return set()
+    
+    sf_teams = [share.get('teams', []) for share in shares]
+    return {
+        team.get('team_uid') 
+        for teams in sf_teams 
+        for team in teams 
+        if team.get('team_uid')
+    }
+
+
+def _build_username_lookup(enterprise: enterprise_data.EnterpriseData) -> Dict[str, str]:
+    if not enterprise:
+        return {}
+    
+    enterprise_users = enterprise.users.get_all_entities()
+    return {user.enterprise_user_id: user.username for user in enterprise_users}
 
 
 def get_shared_records(vault: vault_online.VaultOnline, enterprise: enterprise_data.EnterpriseData, record_uids, cache_only=False):
-    """
-    Get shared record information for the specified record UIDs.
-    
-    Args:
-        context: KeeperParams instance containing vault and enterprise data
-        record_uids: Collection of record UIDs to process
-        cache_only: If True, only use cached data without making API calls
-        
-    Returns:
-        Dict mapping record UIDs to SharedRecord instances
-    """
-    
-    def _fetch_team_members_from_api(team_uids: Set[str]) -> Dict[str, Set[str]]:
-        members = {}
-        
-        if not vault.keeper_auth.auth_context.enterprise_ec_public_key:
-            return members
-            
-        for team_uid in team_uids:
-            try:
-                request = enterprise_pb2.GetTeamMemberRequest()
-                request.teamUid = utils.base64_url_decode(team_uid)
-                
-                response = vault.keeper_auth.execute_auth_rest(
-                    rest_endpoint=TEAM_MEMBERS_ENDPOINT,
-                    request=request,
-                    response_type=enterprise_pb2.GetTeamMemberResponse
-                )
-                
-                if response and response.enterpriseUser:
-                    team_members = {user.email for user in response.enterpriseUser}
-                    members[team_uid] = team_members
-                    
-            except Exception as e:
-                logger.debug(f"Failed to fetch team members for {team_uid}: {e}")
-                
-        return members
-
-    def _get_cached_team_members(enterprise: enterprise_data.EnterpriseData, team_uids: Set[str], username_lookup: Dict[str, str]) -> Dict[str, Set[str]]:
-        members = {}
-
-        team_user_links = enterprise.team_users.get_all_links() or []
-        
-        relevant_team_users = [
-            link for link in team_user_links 
-            if link.user_type != 2 and link.team_uid in team_uids
-        ]
-
-        for team_user in relevant_team_users:
-            username = username_lookup.get(team_user.enterprise_user_id)
-            if username:
-                team_uid = team_user.team_uid
-                if team_uid not in members:
-                    members[team_uid] = set()
-                members[team_uid].add(username)
-
-        return members
-
-    def _fetch_shared_folder_admins() -> Dict[str, List[str]]:
-        sf_uids = list(vault.vault_data._shared_folders.keys())
-        return {
-            sf_uid: get_share_admins_for_shared_folder(vault, sf_uid) or []
-            for sf_uid in sf_uids
-        }
-
-    def _get_restricted_role_members(enterprise: enterprise_data.EnterpriseData, username_lookup: Dict[str, str]) -> Set[str]:
-
-        role_enforcements = enterprise.role_enforcements.get_all_links()
-        restricted_roles = {
-            re.role_id for re in role_enforcements 
-            if re.enforcement_type == 'enforcements' and re.value == 'restrict_sharing_all'
-        }
-
-        if not restricted_roles:
-            return set()
-
-        restricted_users = enterprise.role_users.get_links_by_object(restricted_roles)
-        restricted_teams = enterprise.role_teams.get_links_by_object(restricted_roles)
-
-        restricted_members = set()
-        
-        for user_link in restricted_users:
-            username = username_lookup.get(user_link.enterprise_user_id)
-            if username:
-                restricted_members.add(username)
-
-        team_uids = {team_link.team_uid for team_link in restricted_teams}
-        if team_uids:
-            team_members = _get_cached_team_members(enterprise, team_uids, username_lookup)
-            for members in team_members.values():
-                restricted_members.update(members)
-
-        return restricted_members
-
     try:
         shares = get_record_shares(vault, record_uids)
-        
-        sf_teams = [share.get('teams', []) for share in shares] if shares else []
-        team_uids = {
-            team.get('team_uid') 
-            for teams in sf_teams 
-            for team in teams 
-            if team.get('team_uid')
-        }
+        team_uids = _extract_team_uids_from_shares(shares)
+        username_lookup = _build_username_lookup(enterprise)
 
-        enterprise_users = enterprise.users.get_all_entities() if enterprise else []
-        username_lookup = {user.enterprise_user_id: user.username for user in enterprise_users}
-
-        sf_share_admins = _fetch_shared_folder_admins() if not cache_only else {}
-
+        sf_share_admins = _fetch_all_shared_folder_admins(vault) if not cache_only else {}
         restricted_role_members = _get_restricted_role_members(enterprise, username_lookup)
 
         if cache_only or enterprise:
             team_members = _get_cached_team_members(enterprise, team_uids, username_lookup)
         else:
-            team_members = _fetch_team_members_from_api(team_uids)
+            team_members = _fetch_team_members_from_api(vault, team_uids)
 
         records = [vault.vault_data.get_record(uid) for uid in record_uids]
         valid_records = [record for record in records if record is not None]
@@ -810,128 +833,224 @@ def get_shared_records(vault: vault_online.VaultOnline, enterprise: enterprise_d
         raise ValueError(f"Error in get_shared_records: {e}")
 
 
-def get_share_admins_for_shared_folder(vault: vault_online.VaultOnline, shared_folder_uid):
-    if vault.keeper_auth.auth_context.enterprise_ec_public_key:
-        try:
-            rq = enterprise_pb2.GetSharingAdminsRequest()
-            rq.sharedFolderUid = utils.base64_url_decode(shared_folder_uid)
-            rs = vault.keeper_auth.execute_auth_rest(
-                rest_endpoint=SHARING_ADMINS_ENDPOINT,
-                request=rq,
-                response_type=enterprise_pb2.GetSharingAdminsResponse
-            )
-            admins = [x.email for x in rs.userProfileExts if x.isShareAdminForSharedFolderOwner and x.isInSharedFolder]
-        except Exception as e:
-            logger.debug(e)
-            return
+def get_share_admins_for_shared_folder(vault: vault_online.VaultOnline, shared_folder_uid: str) -> Optional[List[str]]:
+
+    if not vault.keeper_auth.auth_context.enterprise_ec_public_key:
+        return None
+        
+    try:
+        request = enterprise_pb2.GetSharingAdminsRequest()
+        request.sharedFolderUid = utils.base64_url_decode(shared_folder_uid)
+        
+        response = vault.keeper_auth.execute_auth_rest(
+            rest_endpoint=SHARING_ADMINS_ENDPOINT,
+            request=request,
+            response_type=enterprise_pb2.GetSharingAdminsResponse
+        )
+        
+        admins = [
+            x.email for x in response.userProfileExts 
+            if x.isShareAdminForSharedFolderOwner and x.isInSharedFolder
+        ]
         return admins
+    except Exception as e:
+        logger.debug(f"Failed to get share admins for shared folder {shared_folder_uid}: {e}")
+        return None
+
+
+def _find_folders_by_name(vault: vault_online.VaultOnline, name: str) -> Set[str]:
+    folder_uids = set()
+    for folder in vault.vault_data.folders():
+        if folder.name == name:
+            folder_uids.add(folder.folder_uid)
+    return folder_uids
+
+
+def _resolve_folder_by_path(vault: vault_online.VaultOnline, name: str) -> Optional[str]:
+    try:
+        folder, _ = try_resolve_path(vault, name)
+        if folder:
+            return folder.folder_uid
+    except Exception:
+        pass
+    return None
 
 
 def get_folder_uids(vault: vault_online.VaultOnline, name: str) -> Set[str]:
+
     folder_uids = set()
     
     if name in vault.vault_data._folders:
         folder_uids.add(name)
         return folder_uids
     
-    for folder in vault.vault_data.folders():
-        if folder.name == name:
-            folder_uids.add(folder.folder_uid)
+    folder_uids = _find_folders_by_name(vault, name)
     
     if not folder_uids:
-        try:
-            folder, _ = try_resolve_path(vault, name)
-            if folder:
-                folder_uids.add(folder.folder_uid)
-        except:
-            pass
+        resolved_uid = _resolve_folder_by_path(vault, name)
+        if resolved_uid:
+            folder_uids.add(resolved_uid)
     
     return folder_uids
 
 
+def _add_folder_records(vault: vault_online.VaultOnline, folder_uid: str, records_by_folder: Dict[str, Set[str]]):
+    folder = vault.vault_data.get_folder(folder_uid)
+    if folder:
+        records_by_folder[folder_uid] = folder.records
+
+
+def _create_folder_traversal_callback(
+    vault: vault_online.VaultOnline,
+    root_folder_uids: Set[str],
+    children_only: bool,
+    records_by_folder: Dict[str, Set[str]]
+):
+    def on_folder(folder):
+        folder_uid = folder.folder_uid or ''
+        if not children_only or folder_uid in root_folder_uids:
+            _add_folder_records(vault, folder_uid, records_by_folder)
+    
+    return on_folder
+
+
 def get_contained_record_uids(vault: vault_online.VaultOnline, name: str, children_only: bool = True) -> Dict[str, Set[str]]:
-    records_by_folder = dict()
+
+    records_by_folder = {}
     root_folder_uids = get_folder_uids(vault, name)
-
-    def add_child_recs(f_uid):
-        folder = vault.vault_data.get_folder(f_uid)
-        child_recs = folder.records
-        records_by_folder.update({f_uid: child_recs})
-
-    def on_folder(f):
-        f_uid = f.folder_uid or ''
-        if not children_only or f_uid in root_folder_uids:
-            add_child_recs(f_uid)
+    on_folder = _create_folder_traversal_callback(vault, root_folder_uids, children_only, records_by_folder)
 
     for uid in root_folder_uids:
         folder = vault.vault_data.get_folder(uid)
-        vault_utils.traverse_folder_tree(vault.vault_data, folder, on_folder)
+        if folder:
+            vault_utils.traverse_folder_tree(vault.vault_data, folder, on_folder)
 
     return records_by_folder
 
 
-def try_resolve_path(vault: vault_online.VaultOnline, path: str) -> Tuple[vault_types.Folder, str]:
-    
+def _normalize_path_input(path: str) -> str:
     if not isinstance(path, str):
-        path = ''
+        return ''
+    return path
 
-    folder: Optional[vault_types.Folder] = vault.vault_data.get_folder(path)
-    if folder is not None:
-        return folder, ''
+
+def _handle_root_path(path: str, folder: Optional[vault_types.Folder], vault: vault_online.VaultOnline) -> Tuple[Optional[vault_types.Folder], str]:
 
     if path.startswith('/') and not path.startswith('//'):
         folder = vault.vault_data.root_folder
         path = path[1:]
-        
+    
     if folder is None:
         folder = vault.vault_data.root_folder
-
-    components = [s.replace('\0', '/') for s in path.replace('//', '\0').split('/')]
-    while len(components) > 0:
-        component = components.pop(0).strip()
-        if component == '..':
-            parent_uid = folder.parent_uid
-            if parent_uid:
-                f = vault.vault_data.get_folder(parent_uid)
-                if f:
-                    folder = f
-            else:
-                folder = vault.vault_data.root_folder
-        elif component in ('', '.'):
-            pass
-        else:
-            if component in folder.subfolders:
-                f = vault.vault_data.get_folder(component)
-                if f:
-                    folder = f
-            else:
-                folders = [f for f in (vault.vault_data.get_folder(x) for x in folder.subfolders) if f]
-                f = next((x for x in folders if x.name.strip() == component), None)
-                if not f:
-                    f = next((x for x in folders if x.name.strip().casefold() == component.casefold()), None)
-                if f:
-                    folder = f
-                else:
-                    components.insert(0, component)
-                    break
-    path = '/'.join(component.replace('/', '//') for component in components)
-
+    
     return folder, path
 
 
-def parse_timeout(timeout_input: str) -> datetime.timedelta:
+def _split_path_components(path: str) -> List[str]:
+    return [s.replace('\0', '/') for s in path.replace('//', '\0').split('/')]
+
+
+def _handle_parent_directory(folder: vault_types.Folder, vault: vault_online.VaultOnline) -> vault_types.Folder:
+
+    parent_uid = folder.parent_uid
+    if parent_uid:
+        parent_folder = vault.vault_data.get_folder(parent_uid)
+        if parent_folder:
+            return parent_folder
+    return vault.vault_data.root_folder
+
+
+def _find_subfolder_by_name(folder: vault_types.Folder, component: str, vault: vault_online.VaultOnline) -> Optional[vault_types.Folder]:
+
+    if component in folder.subfolders:
+        subfolder = vault.vault_data.get_folder(component)
+        if subfolder:
+            return subfolder
     
-    if timeout_input.strip().isnumeric():
-        tdelta_kwargs = {TIMEOUT_DEFAULT_UNIT: int(timeout_input)}
-    else:
-        all_units = TIMEOUT_ALLOWED_UNITS
-        tdelta_kwargs = {}
-        for v, input_unit in findall(r'(\d+)\s*([a-zA-Z]+)\s*', timeout_input):
-            key_match = [t for t in all_units if t.startswith(input_unit)]
-            if len(key_match) == 0:
-                raise ValueError(
-                    f'{input_unit} is not allowed as a unit for the timeout value. '
-                    f'Valid units for the timeout value are {TIMEOUT_ALLOWED_UNITS}.'
-                )
-            tdelta_kwargs[key_match[0]] = int(v)
+    folders = [f for f in (vault.vault_data.get_folder(x) for x in folder.subfolders) if f]
+    
+    exact_match = next((x for x in folders if x.name.strip() == component), None)
+    if exact_match:
+        return exact_match
+    
+    case_insensitive_match = next(
+        (x for x in folders if x.name.strip().casefold() == component.casefold()), 
+        None
+    )
+    return case_insensitive_match
+
+
+def _traverse_path_components(
+    folder: vault_types.Folder, 
+    components: List[str], 
+    vault: vault_online.VaultOnline
+) -> Tuple[vault_types.Folder, List[str]]:
+
+    remaining_components = []
+    
+    for component in components:
+        component = component.strip()
+        
+        if component == '..':
+            folder = _handle_parent_directory(folder, vault)
+        elif component in ('', '.'):
+            continue
+        else:
+            subfolder = _find_subfolder_by_name(folder, component, vault)
+            if subfolder:
+                folder = subfolder
+            else:
+                remaining_components.append(component)
+                break
+    
+    return folder, remaining_components
+
+
+def _reconstruct_remaining_path(components: List[str]) -> str:
+    return '/'.join(component.replace('/', '//') for component in components)
+
+
+def try_resolve_path(vault: vault_online.VaultOnline, path: str) -> Tuple[vault_types.Folder, str]:
+    
+    path = _normalize_path_input(path)
+    
+    folder = vault.vault_data.get_folder(path)
+    if folder is not None:
+        return folder, ''
+
+    folder, path = _handle_root_path(path, None, vault)
+    components = _split_path_components(path)
+    
+    folder, remaining_components = _traverse_path_components(folder, components, vault)
+    remaining_path = _reconstruct_remaining_path(remaining_components)
+
+    return folder, remaining_path
+
+
+def _parse_timeout_units(timeout_input: str) -> Dict[str, int]:
+    
+    tdelta_kwargs = {}
+    for value, input_unit in findall(r'(\d+)\s*([a-zA-Z]+)\s*', timeout_input):
+        matching_units = [unit for unit in TIMEOUT_ALLOWED_UNITS if unit.startswith(input_unit)]
+        
+        if not matching_units:
+            raise ValueError(
+                f'{input_unit} is not allowed as a unit for the timeout value. '
+                f'Valid units for the timeout value are {TIMEOUT_ALLOWED_UNITS}.'
+            )
+        
+        unit_key = matching_units[0]
+        tdelta_kwargs[unit_key] = int(value)
+    
+    return tdelta_kwargs
+
+
+def parse_timeout(timeout_input: str) -> datetime.timedelta:
+
+    timeout_input = timeout_input.strip()
+    
+    if timeout_input.isnumeric():
+        return datetime.timedelta(**{TIMEOUT_DEFAULT_UNIT: int(timeout_input)})
+    
+    tdelta_kwargs = _parse_timeout_units(timeout_input)
     return datetime.timedelta(**tdelta_kwargs)

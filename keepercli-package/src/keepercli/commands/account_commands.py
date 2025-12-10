@@ -1,6 +1,5 @@
 import argparse
 import datetime
-import getpass
 import os
 import re
 from typing import Tuple, Optional, List, Any
