@@ -6,6 +6,7 @@ from enum import Enum
 from typing import Optional
 
 from keepersdk import utils
+from keepersdk.authentication import keeper_auth
 from keepersdk.proto import record_pb2, APIRequest_pb2
 from keepersdk.vault import ksm_management, vault_online, vault_utils, share_management_utils
 from keepersdk.vault.shares_management import RecordShares, FolderShares
@@ -155,7 +156,8 @@ class ShareRecordCommand(base.ArgparseCommand):
         )
         
         request = RecordShares.prep_request(
-            context=context, 
+            vault=vault, 
+            enterprise=context.enterprise_data,
             uid_or_name=uid_or_name, 
             emails=emails, 
             share_expiration=share_expiration, 
@@ -166,7 +168,14 @@ class ShareRecordCommand(base.ArgparseCommand):
             recursive=kwargs.get('recursive')
         )
         if request:
-            RecordShares.send_requests(vault, [request])
+            success_responses, failed_responses = RecordShares.send_requests(vault, [request])
+            if success_responses:
+                logger.info(f'{len(success_responses)} share requests were successfully processed')
+            if failed_responses:
+                logger.error(f'{len(failed_responses)} share requests failed to process')
+                for failed_response in failed_responses:
+                    logger.error(f'Failed to process share request: {failed_response}')
+            vault.sync_down()
     
     def _validate_and_replace_contacts(self, vault, emails: list, force: bool) -> list:
         """Validate emails against known contacts and optionally replace with matches."""
@@ -278,7 +287,7 @@ class ShareFolderCommand(base.ArgparseCommand):
         
         vault = context.vault
         names = self._normalize_folder_names(kwargs.get('folder'))
-        shared_folder_uids = self._resolve_shared_folder_uids(context, vault, names)
+        shared_folder_uids = self._resolve_shared_folder_uids(vault, names)
         
         if not shared_folder_uids:
             raise ValueError('Enter name of at least one existing folder')
@@ -294,10 +303,17 @@ class ShareFolderCommand(base.ArgparseCommand):
             return
 
         rq_groups = self._prepare_request_groups(
-            vault, context, shared_folder_uids, user_data, record_data, 
+            vault, shared_folder_uids, user_data, record_data, 
             action, share_expiration, kwargs
         )
-        FolderShares.send_requests(vault=vault, partitioned_requests=rq_groups)
+        success_responses, failed_responses = FolderShares.send_requests(vault=vault, partitioned_requests=rq_groups)
+        if success_responses:
+            logger.info(f'{len(success_responses)} share requests were successfully processed')
+        if failed_responses:
+            logger.error(f'{len(failed_responses)} share requests failed to process')
+            for failed_response in failed_responses:
+                logger.error(f'Failed to process share request: {failed_response}')
+        vault.sync_down()
     
     def _normalize_folder_names(self, folder_names) -> list:
         """Normalize folder names list and check for wildcard."""
@@ -307,7 +323,7 @@ class ShareFolderCommand(base.ArgparseCommand):
             return [folder_names]
         return folder_names
     
-    def _resolve_shared_folder_uids(self, context: KeeperParams, vault, names: list) -> set:
+    def _resolve_shared_folder_uids(self, vault: vault_online.VaultOnline, names: list) -> set:
         """Resolve folder names to shared folder UIDs."""
         all_folders = any(x == ALL_FOLDERS_WILDCARD for x in names)
         if all_folders:
@@ -321,19 +337,19 @@ class ShareFolderCommand(base.ArgparseCommand):
             shared_folder_uids.update(shared_folder_cache.keys())
         else:
             shared_folder_uids = self._resolve_specific_folders(
-                context, vault, names, shared_folder_cache, folder_cache
+                vault, names, shared_folder_cache, folder_cache
             )
         
         return shared_folder_uids
     
-    def _resolve_specific_folders(self, context: KeeperParams, vault, names: list, 
+    def _resolve_specific_folders(self, vault: vault_online.VaultOnline, names: list, 
                                    shared_folder_cache: dict, folder_cache: dict) -> set:
         """Resolve specific folder names to shared folder UIDs."""
         shared_folder_uids = set()
         folder_uids = {
             uid 
             for name in names if name 
-            for uid in share_management_utils.get_folder_uids(context, name)
+            for uid in share_management_utils.get_folder_uids(vault, name)
         }
         
         folders = {folder_cache.get(uid) for uid in folder_uids if folder_cache.get(uid)}
@@ -344,7 +360,7 @@ class ShareFolderCommand(base.ArgparseCommand):
         
         unresolved_names = [
             name for name in names 
-            if name and not share_management_utils.get_folder_uids(context, name)
+            if name and not share_management_utils.get_folder_uids(vault, name)
         ]
         if unresolved_names:
             share_admin_folder_uids = self._get_share_admin_obj_uids(
@@ -521,7 +537,7 @@ class ShareFolderCommand(base.ArgparseCommand):
             not record_data['all_records']
         )
     
-    def _prepare_request_groups(self, vault, context: KeeperParams, shared_folder_uids: set,
+    def _prepare_request_groups(self, vault: vault_online.VaultOnline, shared_folder_uids: set,
                                 user_data: dict, record_data: dict, action: str,
                                 share_expiration, kwargs: dict) -> list:
         """Prepare request groups for all shared folders."""
@@ -530,14 +546,14 @@ class ShareFolderCommand(base.ArgparseCommand):
         
         for sf_uid in shared_folder_uids:
             folder_requests = self._prepare_folder_requests(
-                vault, context, sf_uid, shared_folder_cache, user_data, 
+                vault, sf_uid, shared_folder_cache, user_data, 
                 record_data, action, share_expiration, kwargs
             )
             rq_groups.extend(folder_requests)
         
         return rq_groups
     
-    def _prepare_folder_requests(self, vault, context: KeeperParams, sf_uid: str,
+    def _prepare_folder_requests(self, vault: vault_online.VaultOnline, sf_uid: str,
                                   shared_folder_cache: dict, user_data: dict, 
                                   record_data: dict, action: str, share_expiration,
                                   kwargs: dict) -> list:
@@ -552,7 +568,7 @@ class ShareFolderCommand(base.ArgparseCommand):
         
         if sf_uid in shared_folder_cache and sh_fol:
             self._update_from_existing_folder(
-                sh_fol, context, user_data, record_data, sf_users, sf_records
+                sh_fol, vault.keeper_auth, user_data, record_data, sf_users, sf_records
             )
         
         return self._chunk_and_prepare_requests(
@@ -560,7 +576,7 @@ class ShareFolderCommand(base.ArgparseCommand):
             record_data['default_record'], user_data['default_account'], share_expiration
         )
     
-    def _load_or_create_shared_folder(self, vault, sf_uid: str, shared_folder_cache: dict,
+    def _load_or_create_shared_folder(self, vault: vault_online.VaultOnline, sf_uid: str, shared_folder_cache: dict,
                                        user_data: dict, record_data: dict, action: str):
         """Load existing shared folder or create a new one."""
         if sf_uid in shared_folder_cache:
@@ -594,7 +610,7 @@ class ShareFolderCommand(base.ArgparseCommand):
             ]
         }
     
-    def _update_from_existing_folder(self, sh_fol, context: KeeperParams, 
+    def _update_from_existing_folder(self, sh_fol, auth: keeper_auth.KeeperAuth, 
                                      user_data: dict, record_data: dict,
                                      sf_users: set, sf_records: set):
         """Update user and record sets from existing folder permissions."""
@@ -604,13 +620,13 @@ class ShareFolderCommand(base.ArgparseCommand):
         if user_data['all_users'] and sh_fol.user_permissions:
             sf_users.update(
                 x.name for x in sh_fol.user_permissions 
-                if x.name != context.auth.auth_context.username
+                if x.name != auth.auth_context.username
             )
         
         if record_data['all_records'] and sh_fol.record_permissions:
             sf_records.update(x.record_uid for x in sh_fol.record_permissions)
     
-    def _chunk_and_prepare_requests(self, vault, kwargs: dict, sh_fol, sf_uid: str,
+    def _chunk_and_prepare_requests(self, vault: vault_online.VaultOnline, kwargs: dict, sh_fol, sf_uid: str,
                                      sf_users: set, sf_teams: set, sf_records: set,
                                      default_record: bool, default_account: bool,
                                      share_expiration) -> list:

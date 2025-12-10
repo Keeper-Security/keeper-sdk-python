@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Dict, Optional, Set, Union
 
-from vault import vault_online, vault_record, vault_utils
+from . import vault_online, vault_record, vault_utils
 
 
 # Constants

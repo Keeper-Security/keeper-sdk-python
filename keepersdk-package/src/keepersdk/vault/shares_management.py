@@ -1,6 +1,6 @@
 import logging
 from enum import Enum
-from typing import Optional
+from typing import List
 
 from .. import crypto, utils
 from ..proto import folder_pb2, record_pb2
@@ -448,12 +448,11 @@ class RecordShares():
                 len(request.removeSharedRecord) > 0)
     
     @staticmethod
-    def send_requests(vault: vault_online.VaultOnline, requests: record_pb2.RecordShareUpdateRequest):
+    def send_requests(vault: vault_online.VaultOnline, requests: list[record_pb2.RecordShareUpdateRequest]):
         """Send record share update requests in batches."""
+        success_responses = []
+        failed_responses = []
         for request in requests:
-            success_responses = []
-            failed_responses = []
-            
             while RecordShares._has_pending_requests(request):
                 batch_request = RecordShares._create_batch_request(request, MAX_BATCH_SIZE)
                 
@@ -467,7 +466,7 @@ class RecordShares():
                 success_responses.extend(success_response)
                 failed_responses.extend(failed_response)
             
-            return success_responses, failed_responses
+        return success_responses, failed_responses
 
 class FolderShares():
     

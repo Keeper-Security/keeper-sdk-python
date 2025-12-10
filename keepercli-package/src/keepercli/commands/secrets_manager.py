@@ -18,11 +18,11 @@ from keepersdk.proto.APIRequest_pb2 import (
     RemoveAppSharesRequest
 )
 from keepersdk.proto.enterprise_pb2 import GENERAL
-from keepersdk.vault import ksm_management, vault_online, share_management_utils
+from keepersdk.vault import ksm_management, vault_online, share_management_utils, shares_management
 from keepersdk.vault.vault_record import TypedRecord
 
 from . import base
-from .shares import ShareAction, ShareFolderCommand, ShareRecordCommand
+from .shares import ShareAction, ShareRecordCommand
 from .. import api, constants, prompt_utils
 from ..helpers import ksm_utils, report_utils
 from ..params import KeeperParams
@@ -373,10 +373,21 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
     @staticmethod
     def _send_share_requests(vault: vault_online.VaultOnline, sf_requests: list, rec_requests: list) -> None:
         """Send share requests to the server."""
+        success_responses = []
+        failed_responses = []
         if sf_requests:
-            ShareFolderCommand.send_requests(vault, sf_requests)
+            success_responses, failed_responses = shares_management.FolderShares.send_requests(vault, sf_requests)
         if rec_requests:
-            ShareRecordCommand.send_requests(vault, rec_requests)
+            success_responses_rec, failed_responses_rec = shares_management.RecordShares.send_requests(vault, rec_requests)
+            success_responses.extend(success_responses_rec)
+            failed_responses.extend(failed_responses_rec)
+        if success_responses:
+            logger.info(f'{len(success_responses)} share requests were successfully processed')
+        if failed_responses:
+            logger.error(f'{len(failed_responses)} share requests failed to process')
+            for failed_response in failed_responses:
+                logger.error(f'Failed to process share request: {failed_response}')
+        vault.sync_down()
 
     @staticmethod
     def _user_needs_update(vault: vault_online.VaultOnline, user: str, share_uids: list, removed: bool) -> bool:
@@ -471,7 +482,7 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
             'revision': shared_folder_revision
         }
         
-        return ShareFolderCommand.prepare_request(
+        return shares_management.FolderShares.prepare_request(
             vault=vault,
             kwargs={'action': action},
             curr_sf=sf_info,
@@ -496,13 +507,14 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
         for record_uid in shared_recs:
             for user in users:
                 if SecretsManagerAppCommand._user_needs_update(context.vault, user, [record_uid], removed):
-                    request = ShareRecordCommand.prep_request(
-                        context=context,
+                    request = shares_management.RecordShares.prep_request(
+                        vault=context.vault,
                         emails=[user],
                         action=rec_action,
                         uid_or_name=record_uid,
                         share_expiration=-1,
                         dry_run=False,
+                        enterprise=context.enterprise_data,
                         can_edit=False,
                         can_share=False
                     )

@@ -734,7 +734,7 @@ def _get_cached_team_members(enterprise: enterprise_data.EnterpriseData, team_ui
     ]
 
     for team_user in relevant_team_users:
-        username = username_lookup.get(team_user.enterprise_user_id)
+        username = username_lookup.get(team_user.enterprise_user_id.__str__())
         if username:
             team_uid = team_user.team_uid
             if team_uid not in members:
@@ -795,7 +795,7 @@ def _extract_team_uids_from_shares(shares: Optional[List[Dict[str, Any]]]) -> Se
     }
 
 
-def _build_username_lookup(enterprise: enterprise_data.EnterpriseData) -> Dict[str, str]:
+def _build_username_lookup(enterprise: enterprise_data.EnterpriseData) -> dict[int, str] | dict[Any, Any]:
     if not enterprise:
         return {}
     

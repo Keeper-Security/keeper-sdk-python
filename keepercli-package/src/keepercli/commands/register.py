@@ -187,7 +187,7 @@ class FindOwnerlessCommand(base.ArgparseCommand):
             return None
             
         record_uids = {record.record_uid for record in records}
-        shared_records = share_management_utils.get_shared_records(context, record_uids).values()
+        shared_records = share_management_utils.get_shared_records(context.vault, context.enterprise_data, record_uids).values()
         
         headers = ['record_uid', 'title', 'shared_with', 'folder_path']
         table_data = []
