@@ -7,12 +7,12 @@ from typing import Optional
 
 from keepersdk import utils
 from keepersdk.proto import record_pb2, APIRequest_pb2
-from keepersdk.vault import ksm_management, vault_online, vault_utils
+from keepersdk.vault import ksm_management, vault_online, vault_utils, share_management_utils
 from keepersdk.vault.shares_management import RecordShares, FolderShares
 
 from . import base
 from .. import api, prompt_utils, constants
-from ..helpers import folder_utils, record_utils, report_utils, timeout_utils, share_utils
+from ..helpers import folder_utils, record_utils, report_utils, timeout_utils
 from ..params import KeeperParams
 
 
@@ -141,7 +141,7 @@ class ShareRecordCommand(base.ArgparseCommand):
         recursive = kwargs.get('recursive')
     
         if contacts_only:
-            shared_objects = share_utils.get_share_objects(vault=vault)
+            shared_objects = share_management_utils.get_share_objects(vault=vault)
             known_users = shared_objects.get('users', {})
             known_emails = [u.casefold() for u in known_users.keys()]
             def is_unknown(e):
@@ -166,7 +166,7 @@ class ShareRecordCommand(base.ArgparseCommand):
             vault.sync_down()
             return
         else:
-            share_expiration = share_utils.get_share_expiration(kwargs.get('expire_at'), kwargs.get('expire_in'))
+            share_expiration = share_management_utils.get_share_expiration(kwargs.get('expire_at'), kwargs.get('expire_in'))
                 
             request = RecordShares.prep_request(
                 context=context, 
@@ -321,7 +321,7 @@ class ShareFolderCommand(base.ArgparseCommand):
             folder_uids = {
                 uid 
                 for name in names if name 
-                for uid in share_utils.get_folder_uids(context, name)
+                for uid in share_management_utils.get_folder_uids(context, name)
             }
             folders = {get_folder_by_uid(uid) for uid in folder_uids if get_folder_by_uid(uid)}
             shared_folder_uids.update([uid for uid in folder_uids if uid in shared_folder_cache])
@@ -329,7 +329,7 @@ class ShareFolderCommand(base.ArgparseCommand):
             sf_subfolders = {f for f in folders if f and f.folder_type == 'shared_folder_folder'}
             shared_folder_uids.update({f.folder_scope_uid for f in sf_subfolders if f.folder_scope_uid})
 
-            unresolved_names = [name for name in names if name and not share_utils.get_folder_uids(context, name)]
+            unresolved_names = [name for name in names if name and not share_management_utils.get_folder_uids(context, name)]
             share_admin_folder_uids = get_share_admin_obj_uids(vault, unresolved_names, record_pb2.CHECK_SA_ON_SF)
             shared_folder_uids.update(share_admin_folder_uids or [])
 
@@ -340,7 +340,7 @@ class ShareFolderCommand(base.ArgparseCommand):
 
         share_expiration = None
         if action == ShareAction.GRANT.value:
-            share_expiration = share_utils.get_share_expiration(kwargs.get('expire_at'), kwargs.get('expire_in'))
+            share_expiration = share_management_utils.get_share_expiration(kwargs.get('expire_at'), kwargs.get('expire_in'))
 
         as_users = set()
         as_teams = set()
@@ -358,7 +358,7 @@ class ShareFolderCommand(base.ArgparseCommand):
                     if em is not None:
                         as_users.add(u.lower())
                     else:
-                        teams = share_utils.get_share_objects(vault=vault).get('teams', {})
+                        teams = share_management_utils.get_share_objects(vault=vault).get('teams', {})
                         teams_map = {uid: team.get('name') for uid, team in teams.items()}
                         if len(teams) >= 500:
                             teams = vault_utils.load_available_teams(auth=vault.keeper_auth)

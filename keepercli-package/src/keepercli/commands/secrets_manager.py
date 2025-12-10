@@ -10,13 +10,13 @@ from urllib import parse
 from keepersdk import crypto, utils
 from keepersdk.proto.APIRequest_pb2 import AddAppClientRequest, Device, RemoveAppClientsRequest, AppShareAdd, ApplicationShareType, AddAppSharesRequest, RemoveAppSharesRequest
 from keepersdk.proto.enterprise_pb2 import GENERAL
-from keepersdk.vault import ksm_management, vault_online
+from keepersdk.vault import ksm_management, vault_online, share_management_utils
 from keepersdk.vault.vault_record import TypedRecord
 
 from . import base
 from .shares import ShareAction, ShareFolderCommand, ShareRecordCommand
 from .. import api, constants, prompt_utils
-from ..helpers import ksm_utils, report_utils, share_utils
+from ..helpers import ksm_utils, report_utils
 from ..params import KeeperParams
 
 
@@ -219,7 +219,7 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
     @staticmethod
     def _get_app_user_permissions(vault: vault_online.VaultOnline, uid: str) -> list:
         """Get user permissions for the application."""
-        share_info = share_utils.get_record_shares(vault=vault, record_uids=[uid], is_share_admin=False)
+        share_info = share_management_utils.get_record_shares(vault=vault, record_uids=[uid], is_share_admin=False)
         user_perms = []
         if share_info:
             for record_info in share_info:
@@ -244,7 +244,7 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
                 shared_folders.append(uid_str)
         
         if shared_recs:
-            share_utils.get_record_shares(vault=vault, record_uids=shared_recs, is_share_admin=False)
+            share_management_utils.get_record_shares(vault=vault, record_uids=shared_recs, is_share_admin=False)
             
         return shared_recs, shared_folders
 
@@ -293,7 +293,7 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
     def _user_needs_update(vault: vault_online.VaultOnline, user: str, share_uids: list, removed: bool) -> bool:
         """Check if a user needs share permission updates."""
         # Get the share information for records
-        record_share_info = share_utils.get_record_shares(vault=vault, record_uids=share_uids, is_share_admin=False)
+        record_share_info = share_management_utils.get_record_shares(vault=vault, record_uids=share_uids, is_share_admin=False)
         record_permissions = {}
         if record_share_info:
             for record_info in record_share_info:

@@ -9,11 +9,11 @@ import urllib
 from colorama import Fore, Back, Style
 
 from keepersdk.proto import record_pb2, folder_pb2
-from keepersdk.vault import (record_types, vault_record, vault_online, record_management)
+from keepersdk.vault import (record_types, vault_record, vault_online, record_management, share_management_utils)
 from keepersdk import crypto, utils
 
 from . import base
-from ..helpers import folder_utils, record_utils, report_utils, share_utils
+from ..helpers import folder_utils, record_utils, report_utils
 from .. import api, prompt_utils
 from ..params import KeeperParams
 
@@ -842,7 +842,7 @@ class FindDuplicateCommand(base.ArgparseCommand):
             return partitions
         
         r_uids = [rec_uid for duplicates in partitions for rec_uid in duplicates]
-        shared_records_lookup = share_utils.get_shared_records(context, r_uids, cache_only=True)
+        shared_records_lookup = share_management_utils.get_shared_records(context, r_uids, cache_only=True)
         
         return self._partition_by_shares(partitions, shared_records_lookup)
     
@@ -898,7 +898,7 @@ class FindDuplicateCommand(base.ArgparseCommand):
         return [report_utils.field_to_title(h) for h in headers] if out_fmt != 'json' else headers
     
     def _build_report_data(self, context, vault, partitions, match_fields):
-        shared_records_lookup = share_utils.get_shared_records(
+        shared_records_lookup = share_management_utils.get_shared_records(
             context,
             [rec_uid for duplicates in partitions for rec_uid in duplicates],
             cache_only=True
@@ -1157,7 +1157,7 @@ class _PermissionProcessor:
         if not record_uids:
             return updates, skipped
             
-        shared_records = share_utils.get_record_shares(self.vault, record_uids)
+        shared_records = share_management_utils.get_record_shares(self.vault, record_uids)
         if not shared_records:
             return updates, skipped
             
