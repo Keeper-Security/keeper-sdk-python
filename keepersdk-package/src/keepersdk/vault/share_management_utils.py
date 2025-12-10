@@ -300,15 +300,11 @@ def load_records_in_shared_folder(
         
         shared_folder_key = vault.vault_data._shared_folders[shared_folder_uid].shared_folder_key
         record_keys = _decrypt_record_keys(vault, shared_folder, shared_folder_key)
-        
-        record_cache = [x.record_uid for x in vault.vault_data.records()]
-        
-        if record_uids:
-            record_set = set(record_uids)
-            record_set.intersection_update(record_keys.keys())
-        else:
-            record_set = set(record_keys.keys())
-        record_set.difference_update(record_cache)
+
+        record_cache = {x.record_uid for x in vault.vault_data.records()}
+
+        candidates = record_uids or record_keys.keys()
+        record_set = {uid for uid in candidates if uid in record_keys and uid not in record_cache}
 
         _load_records_in_batches(vault, record_set, record_keys)
         
@@ -658,14 +654,15 @@ def enumerate_record_access_paths(
                     team_uid=team_uid
                 )
     
+    record = vault.vault_data.get_record(record_uid)
+    is_owner = record.flags == vault_record.RecordFlags.IsOwner
+
     for shared_folder_info in vault.vault_data.shared_folders():
         shared_folder_uid = shared_folder_info.shared_folder_uid
         
         shared_folder = vault.vault_data.load_shared_folder(
             shared_folder_uid=shared_folder_uid
         )
-
-        is_owner = vault.vault_data.get_record(record_uid).flags == vault_record.RecordFlags.IsOwner
             
         can_edit, can_share = is_owner, is_owner
         
@@ -768,7 +765,7 @@ def get_shared_records(vault: vault_online.VaultOnline, enterprise: enterprise_d
 
         team_uids = {team_link.team_uid for team_link in restricted_teams}
         if team_uids:
-            team_members = _get_cached_team_members(team_uids, username_lookup)
+            team_members = _get_cached_team_members(enterprise, team_uids, username_lookup)
             for members in team_members.values():
                 restricted_members.update(members)
 
@@ -790,10 +787,10 @@ def get_shared_records(vault: vault_online.VaultOnline, enterprise: enterprise_d
 
         sf_share_admins = _fetch_shared_folder_admins() if not cache_only else {}
 
-        restricted_role_members = _get_restricted_role_members(username_lookup)
+        restricted_role_members = _get_restricted_role_members(enterprise, username_lookup)
 
         if cache_only or enterprise:
-            team_members = _get_cached_team_members(team_uids, username_lookup)
+            team_members = _get_cached_team_members(enterprise, team_uids, username_lookup)
         else:
             team_members = _fetch_team_members_from_api(team_uids)
 
@@ -830,7 +827,7 @@ def get_share_admins_for_shared_folder(vault: vault_online.VaultOnline, shared_f
         return admins
 
 
-def get_folder_uids(vault: vault_online.VaultOnline, name: str) -> set[str]:
+def get_folder_uids(vault: vault_online.VaultOnline, name: str) -> Set[str]:
     folder_uids = set()
     
     if name in vault.vault_data._folders:

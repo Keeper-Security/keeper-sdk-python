@@ -1,17 +1,12 @@
-import argparse
-import datetime
 import json
 import logging
-import math
-import re
 from enum import Enum
-from typing import Optional, Tuple
+from typing import Optional
 
 from .. import crypto, utils
-from ..proto import folder_pb2, record_pb2, APIRequest_pb2
-from ..vault import ksm_management, vault_online, vault_utils, vault_types, share_management_utils
+from ..proto import folder_pb2, record_pb2
+from ..vault import vault_online, vault_utils, share_management_utils
 from ..enterprise import enterprise_data
-
 
 
 class ApiUrl(Enum):
@@ -37,25 +32,7 @@ class ManagePermission(Enum):
 logger = logging.getLogger()
 
 
-
 TIMESTAMP_MILLISECONDS_FACTOR = 1000
-TRUNCATE_SUFFIX = '...'
-
-# Constants for FindDuplicatesCommand
-URL_TRUNCATE_LENGTH = 30
-NON_SHARED_DEFAULT = 'non-shared'
-CUSTOM_FIELD_TYPE_PREFIX = 'type:'
-TOTP_FIELD_NAME = 'totp'
-LIST_SEPARATOR = '|'
-DICT_SEPARATOR = ';'
-KEY_VALUE_SEPARATOR = '='
-PERMISSION_SEPARATOR = '='
-SHARE_NAMES_SEPARATOR = ', '
-SUPPORTED_RECORD_VERSIONS = {2, 3}
-DEFAULT_SEARCH_FIELDS = ['by_title', 'by_login', 'by_password']
-
-TIMESTAMP_MILLISECONDS_FACTOR = 1000
-
 
 def set_expiration_fields(obj, expiration):
     """Set expiration and timerNotificationType fields on proto object if expiration is provided."""
@@ -78,7 +55,6 @@ class RecordShares():
             }
             vault.keeper_auth.execute_auth_command(request=request)
         vault.sync_down()
-        return
     
     @staticmethod
     def prep_request(vault: vault_online.VaultOnline,
@@ -88,10 +64,10 @@ class RecordShares():
                     share_expiration: int,
                     dry_run: bool,
                     enterprise: enterprise_data.EnterpriseData,
-                    enterprise_access: Optional[bool] = False,
-                    recursive: Optional[bool] = False,
-                    can_edit: Optional[bool] = False,
-                    can_share: Optional[bool] = False):
+                    enterprise_access: bool = False,
+                    recursive: bool = False,
+                    can_edit: bool = False,
+                    can_share: bool = False):
         
         record_uid = None
         folder_uid = None
@@ -150,8 +126,8 @@ class RecordShares():
                         if response and response.isObjectShareAdmin and response.isObjectShareAdmin[0].isAdmin:
                             is_share_admin = True
                             record_uid = uid_or_name
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.error(f'Error checking share admin status: {e}')
 
         if record_uid is None and folder_uid is None and shared_folder_uid is None:
             raise ValueError('Enter name or uid of existing record or shared folder')
@@ -227,8 +203,6 @@ class RecordShares():
         # Build the request
         rq = record_pb2.RecordShareUpdateRequest()
         existing_shares = {}
-        record_titles = {}
-        transfer_ruids = set()
         
         for record_uid in record_uids:
             # Get record data
@@ -260,14 +234,6 @@ class RecordShares():
                         for po in shares['user_permissions']:
                             existing_shares[po['username'].lower()] = po
                     del rec['shares']
-                
-                if 'data_unencrypted' in rec:
-                    try:
-                        data = json.loads(rec['data_unencrypted'].decode())
-                        if isinstance(data, dict) and 'title' in data:
-                            record_titles[record_uid] = data['title']
-                    except (ValueError, AttributeError):
-                        pass
 
             record_path = share_management_utils.resolve_record_share_path(vault=vault, enterprise=enterprise, record_uid=record_uid)
             
@@ -299,7 +265,6 @@ class RecordShares():
                         
                         if action == ShareAction.OWNER.value:
                             ro.transfer = True
-                            transfer_ruids.add(record_uid)
                         else:
                             ro.editable = bool(can_edit)
                             ro.shareable = bool(can_share)
@@ -308,7 +273,6 @@ class RecordShares():
                         current = existing_shares[email]
                         if action == ShareAction.OWNER.value:
                             ro.transfer = True
-                            transfer_ruids.add(record_uid)
                         else:
                             ro.editable = can_edit if can_edit is not None else current.get('editable')
                             ro.shareable = can_share if can_share is not None else current.get('shareable')
@@ -331,8 +295,8 @@ class RecordShares():
         
         return rq
     
-
-    def send_requests(vault: vault_online.VaultOnline, requests):
+    @staticmethod
+    def send_requests(vault: vault_online.VaultOnline, requests: record_pb2.RecordShareUpdateRequest):
         MAX_BATCH_SIZE = 990
         STATUS_ATTRIBUTES = {
             'addSharedRecordStatus': ('granted to', 'grant'),
@@ -371,8 +335,8 @@ class RecordShares():
                 if not hasattr(response, attr_name):
                     continue
                 
-                success_status = [str]
-                failed_status = [str]
+                success_status = []
+                failed_status = []
                 statuses = getattr(response, attr_name)
                 for status_record in statuses:
                     record_uid = utils.base64_url_encode(status_record.recordUid)
@@ -381,13 +345,11 @@ class RecordShares():
                     
                     if status == 'success':
                         success_status.append(
-                            'Record "%s" access permissions has been %s user \'%s\'', 
-                            record_uid, success_verb, email
+                            f'Record "{record_uid}" access permissions has been {success_verb} user \'{email}\''
                         )
                     else:
                         failed_status.append(
-                            'Failed to %s record "%s" access permissions for user \'%s\': %s', 
-                            failure_verb, record_uid, email, status_record.message
+                            f'Failed to {failure_verb} record "{record_uid}" access permissions for user \'{email}\': {status_record.message}'
                         )
                 return success_status, failed_status
         
@@ -412,7 +374,8 @@ class RecordShares():
                 success_response, failed_response = process_response_statuses(response)
                 success_responses.extend(success_response)
                 failed_responses.extend(failed_response)
-
+            
+            return success_responses, failed_responses
 
 class FolderShares():
     
@@ -431,11 +394,11 @@ class FolderShares():
         mu = kwargs.get('manage_users')
         if default_account and action == ShareAction.GRANT.value:
             if mr is not None:
-                rq.defaultManageRecords = folder_pb2.BOOLEAN_TRUE if mr == 'on' else folder_pb2.BOOLEAN_FALSE
+                rq.defaultManageRecords = folder_pb2.BOOLEAN_TRUE if mr == ManagePermission.ON.value else folder_pb2.BOOLEAN_FALSE
             else:
                 rq.defaultManageRecords = folder_pb2.BOOLEAN_NO_CHANGE
             if mu is not None:
-                rq.defaultManageUsers = folder_pb2.BOOLEAN_TRUE if mu == 'on' else folder_pb2.BOOLEAN_FALSE
+                rq.defaultManageUsers = folder_pb2.BOOLEAN_TRUE if mu == ManagePermission.ON.value else folder_pb2.BOOLEAN_FALSE
             else:
                 rq.defaultManageUsers = folder_pb2.BOOLEAN_NO_CHANGE
 
@@ -624,10 +587,8 @@ class FolderShares():
                                     else:
                                         title = record_uid
                                     if status == 'success':
-                                        success_status.append('Record share \'%s\' %s', title,
-                                                        'added' if attr == 'sharedFolderAddRecordStatus' else
-                                                        'updated' if attr == 'sharedFolderUpdateRecordStatus' else
-                                                        'removed')
+                                        action = 'added' if attr == 'sharedFolderAddRecordStatus' else 'updated' if attr == 'sharedFolderUpdateRecordStatus' else 'removed'
+                                        success_status.append(f'Record share {title} {action}')
                                     else:
-                                        failed_status.append('Record share \'%s\' failed', title)
+                                        failed_status.append(f'Record share \'{title}\' failed')
                     return success_status, failed_status

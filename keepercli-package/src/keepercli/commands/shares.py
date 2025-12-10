@@ -284,19 +284,19 @@ class ShareFolderCommand(base.ArgparseCommand):
             except (ValueError, AttributeError) as e:
                 raise ValueError(f'get_share_admin: msg = {e}') from e
 
-        def get_record_uids(context: KeeperParams, name: str) -> set[str]:
+        def get_record_uids(vault: vault_online.VaultOnline, name: str) -> set[str]:
             """Get record UIDs by name or UID."""
             record_uids = set()
             
-            if not context.vault or not context.vault.vault_data:
+            if not vault or not vault.vault_data:
                 return record_uids
             
-            record = context.vault.vault_data.get_record(name)
+            record = vault.vault_data.get_record(name)
             if record:
                 record_uids.add(name)
                 return record_uids
             
-            for record_info in context.vault.vault_data.records():
+            for record_info in vault.vault_data.records():
                 if record_info.title == name:
                     record_uids.add(record_info.record_uid)
             
@@ -330,7 +330,7 @@ class ShareFolderCommand(base.ArgparseCommand):
             shared_folder_uids.update({f.folder_scope_uid for f in sf_subfolders if f.folder_scope_uid})
 
             unresolved_names = [name for name in names if name and not share_utils.get_folder_uids(context, name)]
-            share_admin_folder_uids = get_share_admin_obj_uids(vault=vault, obj_names=unresolved_names, obj_type=record_pb2.CHECK_SA_ON_SF)
+            share_admin_folder_uids = get_share_admin_obj_uids(vault, unresolved_names, record_pb2.CHECK_SA_ON_SF)
             shared_folder_uids.update(share_admin_folder_uids or [])
 
         if not shared_folder_uids:
@@ -384,11 +384,11 @@ class ShareFolderCommand(base.ArgparseCommand):
                 elif r in ('@existing', '@current'):
                     all_records = True
                 else:
-                    r_uids = get_record_uids(context, r)
+                    r_uids = get_record_uids(vault, r)
                     record_uids.update(r_uids) if r_uids else unresolved_names.append(r)
 
             if unresolved_names:
-                sa_record_uids = get_share_admin_obj_uids(vault=vault, obj_names=unresolved_names, obj_type=record_pb2.CHECK_SA_ON_RECORD)
+                sa_record_uids = get_share_admin_obj_uids(vault, unresolved_names, record_pb2.CHECK_SA_ON_RECORD)
                 record_uids.update(sa_record_uids or {})
 
         if len(as_users) == 0 and len(as_teams) == 0 and len(record_uids) == 0 and \

@@ -4,7 +4,7 @@ from typing import Optional, Dict, List, Any, Generator, Iterable, Set
 
 from keepersdk import crypto, utils
 from keepersdk.proto import enterprise_pb2, record_pb2
-from keepersdk.vault import vault_online, vault_record, vault_utils
+from keepersdk.vault import shared_record, vault_online, vault_record, vault_utils
 
 from .. import api
 from ..commands import enterprise_utils
@@ -807,10 +807,8 @@ def get_shared_records(context: KeeperParams, record_uids, cache_only=False):
         records = [vault.vault_data.get_record(uid) for uid in record_uids]
         valid_records = [record for record in records if record is not None]
 
-        from .share_record import SharedRecord
-        
         shared_records = [
-            SharedRecord(context, record, sf_share_admins, team_members, restricted_role_members)
+            shared_record.SharedRecord(context, record, sf_share_admins, team_members, restricted_role_members)
             for record in valid_records
         ]
 
