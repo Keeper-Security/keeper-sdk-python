@@ -9,11 +9,11 @@ import urllib
 from colorama import Fore, Back, Style
 
 from keepersdk.proto import record_pb2, folder_pb2
-from keepersdk.vault import (record_types, vault_record, vault_online, record_management)
+from keepersdk.vault import (record_types, vault_record, vault_online, record_management, share_management_utils)
 from keepersdk import crypto, utils
 
 from . import base
-from ..helpers import folder_utils, record_utils, report_utils, share_utils
+from ..helpers import folder_utils, record_utils, report_utils
 from .. import api, prompt_utils
 from ..params import KeeperParams
 
@@ -203,8 +203,6 @@ class ClipboardCommand(base.ArgparseCommand):
             if len(records) > 1:
                 raise base.CommandError(f'More than one record are found for search criteria: {record_name}')
 
-        if context.vault and 'output' in context.vault.__dict__ and context.vault.output == 'clipboard':
-            logger.info('Record Title: %s', records[0].title)
         return records[0].record_uid
 
     def _filter_exact_matches(self, records: List, record_name: str) -> List:
@@ -263,6 +261,8 @@ class ClipboardCommand(base.ArgparseCommand):
     def _extract_record_data(self, record, kwargs) -> tuple[str, str]:
         """Extract data from record based on command options."""
         if kwargs.get('copy_uid'):
+            if kwargs.get('output', '') == 'clipboard':
+                logger.info(f'Record title: {record.title}')
             return 'Record UID', record.record_uid
         elif kwargs.get('login'):
             return 'Login', self._get_record_login(record)
@@ -842,7 +842,7 @@ class FindDuplicateCommand(base.ArgparseCommand):
             return partitions
         
         r_uids = [rec_uid for duplicates in partitions for rec_uid in duplicates]
-        shared_records_lookup = share_utils.get_shared_records(context, r_uids, cache_only=True)
+        shared_records_lookup = share_management_utils.get_shared_records(context.vault, context.enterprise_data, r_uids, cache_only=True)
         
         return self._partition_by_shares(partitions, shared_records_lookup)
     
@@ -898,8 +898,9 @@ class FindDuplicateCommand(base.ArgparseCommand):
         return [report_utils.field_to_title(h) for h in headers] if out_fmt != 'json' else headers
     
     def _build_report_data(self, context, vault, partitions, match_fields):
-        shared_records_lookup = share_utils.get_shared_records(
-            context,
+        shared_records_lookup = share_management_utils.get_shared_records(
+            context.vault,
+            context.enterprise_data,
             [rec_uid for duplicates in partitions for rec_uid in duplicates],
             cache_only=True
         )
@@ -1157,7 +1158,7 @@ class _PermissionProcessor:
         if not record_uids:
             return updates, skipped
             
-        shared_records = share_utils.get_record_shares(self.vault, record_uids)
+        shared_records = share_management_utils.get_record_shares(self.vault, list(record_uids))
         if not shared_records:
             return updates, skipped
             
@@ -1366,8 +1367,7 @@ class _PermissionReporter:
         for cmd in skipped:
             record_uid = utils.base64_url_encode(cmd['recordUid'])
             record = self.vault.vault_data.get_record(record_uid=record_uid)
-            record_owners = [x['username'] for x in record['shares']['user_permissions'] if x['owner']]
-            record_owner = record_owners[0] if len(record_owners) > 0 else ''
+            record_owner = record.flags.IsOwner
             rec = self.vault.vault_data.get_record(record_uid=record_uid)
             row = [record_uid, rec.title[:32], record_owner, cmd['to_username']]
             table.append(row)
@@ -1633,7 +1633,7 @@ class RecordPermissionCommand(base.ArgparseCommand):
         parser.error = base.ArgparseCommand.raise_parse_exception
         parser.exit = base.ArgparseCommand.suppress_exit
     
-    def _resolve_folder(self, context, folder_name):
+    def _resolve_folder(self, context: KeeperParams, folder_name: str):
         """Resolve folder from name or UID."""
         vault = context.vault
         

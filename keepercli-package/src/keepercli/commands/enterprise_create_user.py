@@ -7,7 +7,7 @@ from .. import api
 from ..params import KeeperParams
 from keepersdk.vault import vault_record
 from keepersdk.enterprise.enterprise_user_management import EnterpriseUserManager, CreateUserResponse
-from .share_management import OneTimeShareCreateCommand
+from .shares import OneTimeShareCreateCommand
 
 # Constants
 DEFAULT_ONE_TIME_SHARE_EXPIRY = '7d'

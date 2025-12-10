@@ -7,12 +7,12 @@ from typing import List, Dict, Any, Optional
 
 from . import base
 from .. import api, prompt_utils
-from ..helpers import report_utils, share_utils
+from ..helpers import report_utils
 from ..params import KeeperParams
 
 from keepersdk import utils
 from keepersdk.proto import record_pb2
-from keepersdk.vault import trash_management 
+from keepersdk.vault import trash_management, share_management_utils
 from keepersdk.vault.trash_management import TrashManagement
 
 
@@ -394,7 +394,7 @@ class TrashGetCommand(base.ArgparseCommand):
     def _load_record_shares(self, vault, record: Dict, record_uid: str):
         """Load record shares if not already present."""
         record['shares'] = {}
-        shares = share_utils.get_record_shares(vault, [record_uid], True)
+        shares = share_management_utils.get_record_shares(vault, [record_uid], True)
         
         if isinstance(shares, list):
             record_shares = next(
@@ -671,7 +671,7 @@ class TrashUnshareCommand(base.ArgparseCommand):
     
     def _remove_shares_from_records(self, vault, records_to_unshare: List[str]):
         """Remove shares from the specified records."""
-        record_shares = share_utils.get_record_shares(vault, records_to_unshare, True)
+        record_shares = share_management_utils.get_record_shares(vault, records_to_unshare, True)
         if not record_shares:
             return
             
