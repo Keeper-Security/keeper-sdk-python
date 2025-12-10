@@ -355,6 +355,8 @@ class DownloadRecordTypesCommand(base.ArgparseCommand):
 
         if source == 'keeper':
             plugin = keeper_format.KeeperRecordTypeDownload(vault=context.vault)
+        else:
+            raise base.CommandError(f'Method not implemented. Use keeper instead: {source}')
         #elif to be added for any other methods (currently only keeper is implemented)
 
         record_types = []
