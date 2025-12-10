@@ -175,6 +175,7 @@ class PedmSyncDownCommand(base.ArgparseCommand):
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs):
+        base.require_enterprise_admin(context)
         plugin = context.pedm_plugin
         plugin.sync_down(reload=kwargs.get('reload') is True)
 
@@ -198,6 +199,7 @@ class PedmDeploymentListCommand(base.ArgparseCommand):
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs):
+        base.require_enterprise_admin(context)
         plugin = context.pedm_plugin
 
         verbose = kwargs.get('verbose') is True
@@ -235,6 +237,7 @@ class PedmDeploymentAddCommand(base.ArgparseCommand):
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs):
+        base.require_enterprise_admin(context)
         enterprise_data = context.enterprise_data
         assert enterprise_data is not None
         plugin = context.pedm_plugin
@@ -285,6 +288,7 @@ class PedmDeploymentUpdateCommand(base.ArgparseCommand):
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs):
+        base.require_enterprise_admin(context)
         plugin = context.pedm_plugin
         deployment = PedmUtils.resolve_single_deployment(plugin, kwargs.get('deployment'))
         name = kwargs.get('name')
@@ -328,6 +332,7 @@ class PedmDeploymentDeleteCommand(base.ArgparseCommand):
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs):
+        base.require_enterprise_admin(context)
         plugin = context.pedm_plugin
         deployment_names = kwargs.get('deployment')
         if isinstance(deployment_names, str):
@@ -372,6 +377,7 @@ class PedmDeploymentDownloadCommand(base.ArgparseCommand):
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs):
+        base.require_enterprise_admin(context)
         auth = context.auth
         assert auth is not None
         enterprise_data = context.enterprise_data
@@ -465,6 +471,7 @@ class PedmAgentDeleteCommand(base.ArgparseCommand):
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> Any:
+        base.require_enterprise_admin(context)
         plugin = context.pedm_plugin
 
         agents = kwargs['agent']
@@ -498,6 +505,7 @@ class PedmAgentEditCommand(base.ArgparseCommand):
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> Any:
+        base.require_enterprise_admin(context)
         plugin = context.pedm_plugin
 
         deployment_uid = kwargs.get('deployment')
@@ -549,6 +557,7 @@ class PedmAgentListCommand(base.ArgparseCommand):
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> Any:
+        base.require_enterprise_admin(context)
         plugin = context.pedm_plugin
 
         verbose = kwargs.get('verbose') is True

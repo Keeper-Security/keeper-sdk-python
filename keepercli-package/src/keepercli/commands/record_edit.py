@@ -630,7 +630,8 @@ class RecordAddCommand(base.ArgparseCommand, RecordEditMixin):
         super().__init__(RecordAddCommand.parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.vault is not None
+        if context.vault is None:
+            raise base.CommandError('Vault is not initialized. Login to initialize the vault.')
         if kwargs.get('syntax_help') is True:
             prompt_utils.output_text(record_fields_description)
             return
@@ -739,7 +740,8 @@ class RecordUpdateCommand(base.ArgparseCommand, RecordEditMixin):
             prompt_utils.output_text(record_fields_description)
             return
 
-        assert context.vault is not None
+        if context.vault is None:
+            raise base.CommandError('Vault is not initialized. Login to initialize the vault.')
         self.warnings.clear()
         record_name = kwargs.get('record')
         if not record_name:
