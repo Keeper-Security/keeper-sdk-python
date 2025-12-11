@@ -70,7 +70,7 @@ class ShareRecordCommand(base.ArgparseCommand):
     def __init__(self):
         self.parser = argparse.ArgumentParser(
             prog='share-record',
-            description='Change the sharing permissions of an individual record',
+            description='Change the sharing permissions of an individual record'
         )
         ShareRecordCommand.add_arguments_to_parser(self.parser)
         super().__init__(self.parser)

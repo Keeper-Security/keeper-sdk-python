@@ -307,7 +307,8 @@ class UserUtils:
         rq = enterprise_pb2.GetSharingAdminsRequest()
         rq.username = username
         rs = auth.execute_auth_rest('enterprise/get_sharing_admins', rq, response_type=enterprise_pb2.GetSharingAdminsResponse)
-        assert rs is not None
+        if rs is None:
+            raise base.CommandError('This command requires enterprise admin privileges. Please login with an admin account.')
         return [x.email for x in rs.userProfileExts]
 
 

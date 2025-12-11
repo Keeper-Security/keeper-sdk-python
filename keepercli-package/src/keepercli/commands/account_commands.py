@@ -81,7 +81,7 @@ class ThisDeviceCommand(base.ArgparseCommand):
         super().__init__(ThisDeviceCommand.this_device_parser)
 
     def execute(self, context: params.KeeperParams, **kwargs):
-        assert context.auth is not None
+        base.require_login(context)
         logger = api.get_logger()
         ops = kwargs.get('ops')
         if not isinstance(ops, list):
@@ -170,7 +170,7 @@ class ThisDeviceCommand(base.ArgparseCommand):
 
     @staticmethod
     def is_persistent_login_disabled(context: params.KeeperParams) -> bool:
-        assert context.auth is not None
+        base.require_login(context)
         enforcements = context.auth.auth_context.enforcements
         if enforcements and 'booleans' in enforcements:
             return next(
@@ -181,7 +181,7 @@ class ThisDeviceCommand(base.ArgparseCommand):
     @staticmethod
     def get_account_summary_and_this_device(context: params.KeeperParams) \
             -> Tuple[AccountSummary_pb2.AccountSummaryElements, AccountSummary_pb2.DeviceInfo]:
-        assert context.auth is not None
+        base.require_login(context)
         acct_summary = keeper_auth.load_account_summary(context.auth)
         devices = acct_summary.devices
         current_device_token = context.auth.auth_context.device_token
