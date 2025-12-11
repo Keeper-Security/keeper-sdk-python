@@ -18,21 +18,12 @@ RECORD_DETAILS_URL = 'vault/get_records_details'
 SHARE_OBJECTS_API = 'vault/get_share_objects'
 TEAM_MEMBERS_ENDPOINT = 'vault/get_team_members'
 SHARING_ADMINS_ENDPOINT = 'enterprise/get_sharing_admins'
-SHARE_ADMIN_API = 'vault/am_i_share_admin'
-SHARE_UPDATE_API = 'vault/records_share_update'
-SHARE_FOLDER_UPDATE_API = 'vault/shared_folder_update_v3'
-REMOVE_EXTERNAL_SHARE_API = 'vault/external_share_remove'
 
 # Record Processing Constants
 CHUNK_SIZE = 999
-MAX_BATCH_SIZE = 990
 RECORD_KEY_LENGTH_V2 = 60
 DEFAULT_EXPIRATION = 0
 NEVER_EXPIRES = -1
-NEVER_EXPIRES_STRING = 'never'
-TIMESTAMP_MILLISECONDS_FACTOR = 1000
-TRUNCATE_SUFFIX = '...'
-TRUNCATE_LENGTH = 20
 
 # Record Version Constants
 MAX_V2_VERSION = 2
@@ -44,105 +35,17 @@ TEAM_USER_TYPE = 2
 USER_TYPE_INACTIVE = 2
 
 # Permission Field Names
-CAN_SHARE_PERMISSION = 'can_share'
-CAN_EDIT_FIELD = 'can_edit'
-CAN_SHARE_FIELD = 'can_share'
+CAN_SHARE = 'can_share'
+CAN_EDIT = 'can_edit'
 CAN_VIEW_FIELD = 'can_view'
 RECORD_UID_FIELD = 'record_uid'
 SHARED_FOLDER_UID_FIELD = 'shared_folder_uid'
 TEAM_UID_FIELD = 'team_uid'
 
-# Share Object Categories
-RELATIONSHIP_CATEGORY = 'relationship'
-FAMILY_CATEGORY = 'family'
-ENTERPRISE_CATEGORY = 'enterprise'
-MC_CATEGORY = 'mc'
-
-# Record Field Names
-TITLE_FIELD = 'title'
-NAME_FIELD = 'name'
-IS_SA_FIELD = 'is_sa'
-ENTERPRISE_ID_FIELD = 'enterprise_id'
-STATUS_FIELD = 'status'
-CATEGORY_FIELD = 'category'
-SHARES_FIELD = 'shares'
-USER_PERMISSIONS_FIELD = 'user_permissions'
-SHARED_FOLDER_PERMISSIONS_FIELD = 'shared_folder_permissions'
-
-# Key Constants for Data Access
-KEY_USERNAME = 'username'
-KEY_TEAM_UID = 'team_uid'
-KEY_RECORD_UID = 'record_uid'
-KEY_SHARED_FOLDER_UID = 'shared_folder_uid'
-KEY_USER_PERMISSIONS = 'user_permissions'
-KEY_TEAM_PERMISSIONS = 'team_permissions'
-KEY_SHARED_FOLDER_PERMISSIONS = 'shared_folder_permissions'
-KEY_SHARES = 'shares'
-KEY_UID = 'uid'
-KEY_NAME = 'name'
-KEY_EDITABLE = 'editable'
-KEY_SHAREABLE = 'shareable'
-KEY_MANAGE_RECORDS = 'manage_records'
-KEY_MANAGE_USERS = 'manage_users'
-KEY_SHARE_ADMIN = 'share_admin'
-KEY_IS_ADMIN = 'is_admin'
-KEY_EXPIRATION = 'expiration'
-KEY_OWNER = 'owner'
-KEY_VIEW = 'view'
-KEY_TITLE = 'title'
-
-# Enterprise Keys
-KEY_ENTERPRISE = 'enterprise'
-KEY_ENTERPRISE_USER_ID = 'enterprise_user_id'
-KEY_USER_TYPE = 'user_type'
-KEY_ROLE_ID = 'role_id'
-KEY_ROLE_ENFORCEMENTS = 'role_enforcements'
-KEY_ROLE_USERS = 'role_users'
-KEY_ROLE_TEAMS = 'role_teams'
-KEY_TEAM_USERS = 'team_users'
-KEY_USERS = 'users'
-KEY_TEAMS = 'teams'
-KEY_ENFORCEMENTS = 'enforcements'
-
-# Vault Keys
-KEY_VAULT = 'vault'
-KEY_VAULT_DATA = 'vault_data'
-KEY_SHARED_FOLDER_CACHE = 'shared_folder_cache'
-KEY_RECORD_CACHE = 'record_cache'
-KEY_RECORD_OWNER_CACHE = 'record_owner_cache'
-
-# Restriction Keys
-KEY_RESTRICT_EDIT = 'restrict_edit'
-KEY_RESTRICT_SHARING = 'restrict_sharing'
-KEY_RESTRICT_VIEW = 'restrict_view'
 KEY_RESTRICT_SHARING_ALL = 'restrict_sharing_all'
-
-# Permission Constants
-PERMISSION_EDIT = 'edit'
-PERMISSION_SHARE = 'share'
-PERMISSION_VIEW = 'view'
-
-# Text Constants
-TEXT_EDIT = 'Edit'
-TEXT_SHARE = 'Share'
-TEXT_READ_ONLY = 'Read Only'
-TEXT_LAUNCH_ONLY = 'Launch Only'
-TEXT_CAN_PREFIX = 'Can '
-TEXT_TEAM_PREFIX = '(Team)'
-TEXT_TEAM_USER_PREFIX = '(Team User)'
 
 # Default Values
 EMPTY_SHARE_OBJECTS = {'users': {}, 'enterprises': {}, 'teams': {}}
-
-# Time Constants
-SIX_MONTHS_IN_SECONDS = 182 * 24 * 60 * 60
-
-# Status Messages
-STATUS_SUCCESS = 'success'
-STATUS_INVITED = 'invited'
-STATUS_EXPIRED = 'Expired'
-STATUS_OPENED = 'Opened'
-STATUS_GENERATED = 'Generated'
 
 
 logger = logging.getLogger()
@@ -171,11 +74,11 @@ def get_share_expiration(expire_at: Optional[str], expire_in: Optional[str]) -> 
     try:
         dt = None
         if isinstance(expire_at, str):
-            if expire_at == NEVER_EXPIRES_STRING:
+            if expire_at == 'never':
                 return NEVER_EXPIRES
             dt = datetime.datetime.fromisoformat(expire_at)
         elif isinstance(expire_in, str):
-            if expire_in == NEVER_EXPIRES_STRING:
+            if expire_in == 'never':
                 return NEVER_EXPIRES
             td = parse_timeout(expire_in)
             dt = datetime.datetime.now() + td
@@ -204,10 +107,10 @@ def get_share_objects(vault: vault_online.VaultOnline) -> Dict[str, Dict[str, An
             return EMPTY_SHARE_OBJECTS
         
         users_by_type = {
-            RELATIONSHIP_CATEGORY: response.shareRelationships,
-            FAMILY_CATEGORY: response.shareFamilyUsers,
-            ENTERPRISE_CATEGORY: response.shareEnterpriseUsers,
-            MC_CATEGORY: response.shareMCEnterpriseUsers,
+            'relationship': response.shareRelationships,
+            'family': response.shareFamilyUsers,
+            'enterprise': response.shareEnterpriseUsers,
+            'mc': response.shareMCEnterpriseUsers,
         }
         
         users = {}
@@ -236,11 +139,11 @@ def _process_users(users_data: Iterable[Any], category: str) -> Dict[str, Dict[s
     """Process user data and add category information."""
     return {
         user.username: {
-            NAME_FIELD: user.fullname,
-            IS_SA_FIELD: user.isShareAdmin,
-            ENTERPRISE_ID_FIELD: user.enterpriseId,
-            STATUS_FIELD: user.status,
-            CATEGORY_FIELD: category
+            'name': user.fullname,
+            'is_sa': user.isShareAdmin,
+            'enterprise_id': user.enterpriseId,
+            'status': user.status,
+            'category': category
         } for user in users_data
     }
 
@@ -249,8 +152,8 @@ def _process_teams(teams_data: Iterable[Any]) -> Dict[str, Dict[str, Any]]:
     """Process team data."""
     return {
         utils.base64_url_encode(team.teamUid): {
-            NAME_FIELD: team.teamname,
-            ENTERPRISE_ID_FIELD: team.enterpriseId
+            'name': team.teamname,
+            'enterprise_id': team.enterpriseId
         } for team in teams_data
     }
 
@@ -597,7 +500,7 @@ def _process_shared_folder_permissions(info) -> List[Dict[str, Any]]:
 
 
 def resolve_record_share_path(vault: vault_online.VaultOnline, enterprise: enterprise_data.EnterpriseData, record_uid: str) -> Optional[Dict[str, str]]:
-    return resolve_record_permission_path(vault=vault, enterprise=enterprise, record_uid=record_uid, permission=CAN_SHARE_PERMISSION)
+    return resolve_record_permission_path(vault=vault, enterprise=enterprise, record_uid=record_uid, permission=CAN_SHARE)
 
 
 def resolve_record_permission_path(
@@ -631,8 +534,8 @@ def _create_access_path(
     path = {
         RECORD_UID_FIELD: record_uid,
         SHARED_FOLDER_UID_FIELD: shared_folder_uid,
-        CAN_EDIT_FIELD: can_edit,
-        CAN_SHARE_FIELD: can_share,
+        CAN_EDIT: can_edit,
+        CAN_SHARE: can_share,
         CAN_VIEW_FIELD: True
     }
     if team_uid:
@@ -757,7 +660,7 @@ def _get_restricted_role_members(enterprise: enterprise_data.EnterpriseData, use
     role_enforcements = enterprise.role_enforcements.get_all_links()
     restricted_roles = {
         re.role_id for re in role_enforcements 
-        if re.enforcement_type == KEY_ENFORCEMENTS and re.value == KEY_RESTRICT_SHARING_ALL
+        if re.enforcement_type == 'enforcements' and re.value == KEY_RESTRICT_SHARING_ALL
     }
 
     if not restricted_roles:

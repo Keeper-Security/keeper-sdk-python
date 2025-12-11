@@ -1,6 +1,5 @@
 import logging
 from enum import Enum
-from typing import List
 
 from .. import crypto, utils
 from ..proto import folder_pb2, record_pb2
@@ -35,10 +34,6 @@ TIMESTAMP_MILLISECONDS_FACTOR = 1000
 MAX_BATCH_SIZE = 990
 FOLDER_CHUNK_SIZE = 999
 UID_BYTE_LENGTH = 16
-
-# Status strings
-STATUS_SUCCESS = 'success'
-STATUS_INVITED = 'invited'
 
 # Record type attribute names
 RECORD_TYPE_ADD = 'addSharedRecord'
@@ -429,7 +424,7 @@ class RecordShares():
                 status = status_record.status
                 email = status_record.username
                 
-                if status == STATUS_SUCCESS:
+                if status == 'success':
                     success_status.append(
                         f'Record "{record_uid}" access permissions has been {success_verb} user \'{email}\''
                     )
@@ -720,7 +715,7 @@ class FolderShares():
                 team = next((x for x in team_cache if x.team_uid == team_uid), None)
                 if team:
                     status = t.status
-                    if status == STATUS_SUCCESS:
+                    if status == 'success':
                         action_verb = FolderShares._get_team_action_verb(attr)
                         success_status.append(f'Team share \'{team.name}\' {action_verb}')
                     else:
@@ -741,10 +736,10 @@ class FolderShares():
             for s in statuses:
                 username = s.username
                 status = s.status
-                if status == STATUS_SUCCESS:
+                if status == 'success':
                     action_verb = FolderShares._get_user_action_verb(attr)
                     success_status.append(f'User share \'{username}\' {action_verb}')
-                elif status == STATUS_INVITED:
+                elif status == 'invited':
                     success_status.append(f'User \'{username}\' invited')
                 else:
                     failed_status.append(f'User share \'{username}\' failed')
@@ -771,7 +766,7 @@ class FolderShares():
                 else:
                     title = record_uid
                 
-                if status == STATUS_SUCCESS:
+                if status == 'success':
                     action_verb = FolderShares._get_record_action_verb(attr)
                     success_status.append(f'Record share {title} {action_verb}')
                 else:
