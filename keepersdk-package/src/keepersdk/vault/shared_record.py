@@ -1,25 +1,12 @@
-from enum import Enum
 from typing import Dict, Optional, Set, Union
 
 from . import vault_online, vault_record, vault_utils
 
 
-# Constants
-TEXT_EDIT = 'Edit'
-TEXT_SHARE = 'Share'
-BIT_MASK_EDIT = 1 << 0
-BIT_MASK_SHARE = 1 << 1
-BITS_TEXT_LOOKUP = {BIT_MASK_EDIT: TEXT_EDIT, BIT_MASK_SHARE: TEXT_SHARE}
-SHARE_PERMISSIONS_TYPE = Enum('SharePermissionsType', ['USER', 'SF_USER', 'TEAM', 'TEAM_USER'])
-
-
 class SharePermissions:
     """Manages share permissions for records, including edit, share, and view capabilities."""
 
-    SharePermissionsType = SHARE_PERMISSIONS_TYPE
-    bits_text_lookup = BITS_TEXT_LOOKUP
-
-    def __init__(self, sp_types=None, to_name='', permissions_text='', types=None):
+    def __init__(self, sp_types=None, to_name='', permissions_text='', types=None) -> None:
         """Initialize SharePermissions with default values and process provided types."""
         self._initialize_default_attributes(to_name, permissions_text)
         self._process_initial_types(types)
