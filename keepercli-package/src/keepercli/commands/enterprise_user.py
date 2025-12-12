@@ -493,13 +493,13 @@ class EnterpriseUserEditCommand(base.ArgparseCommand, enterprise_management.IEnt
         parser.add_argument('--parent', dest='parent', action='store', help='Parent node name or ID')
         parser.add_argument('--full-name', dest='full_name', action='store', help='set user full name')
         parser.add_argument('--job-title', dest='job_title', action='store', help='set user job title')
-        parser.add_argument('--add-role', dest='add_role', action='append', help='role name or role ID. Supports @all for users')
-        parser.add_argument('--remove-role', dest='remove_role', action='append', help='role name or role ID. Supports @all for users')
-        parser.add_argument('--add-team', dest='add_team', action='append', help='team name or team UID. Supports @all for users')
-        parser.add_argument('--remove-team', dest='remove_team', action='append', help='team name or team UID. Supports @all for users')
+        parser.add_argument('--add-role', dest='add_role', action='append', help='role name or role ID')
+        parser.add_argument('--remove-role', dest='remove_role', action='append', help='role name or role ID')
+        parser.add_argument('--add-team', dest='add_team', action='append', help='team name or team UID')
+        parser.add_argument('--remove-team', dest='remove_team', action='append', help='team name or team UID')
         parser.add_argument('-hsf', '--hide-shared-folders', dest='hide_shared_folders', action='store',
                             choices=['on', 'off'], help='User does not see shared folders. --add-team only')
-        parser.add_argument('email', type=str, nargs='+', help='User email or ID. Can be repeated. Use @all for all users.')
+        parser.add_argument('email', type=str, nargs='+', help='User email or ID. Can be repeated.')
         super().__init__(parser)
         self.logger = api.get_logger()
 
@@ -507,7 +507,7 @@ class EnterpriseUserEditCommand(base.ArgparseCommand, enterprise_management.IEnt
         self.logger.warning(message)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        base.require_enterprise_admin(context)
+        assert context.enterprise_data is not None
 
         parent_id: Optional[int]
         if kwargs.get('parent'):
@@ -516,14 +516,7 @@ class EnterpriseUserEditCommand(base.ArgparseCommand, enterprise_management.IEnt
         else:
             parent_id = context.enterprise_data.root_node.node_id
 
-        emails = kwargs.get('email')
-        has_all_users = isinstance(emails, list) and any((True for x in emails if x == '@all'))
-
-        if has_all_users:
-            users = list(context.enterprise_data.users.get_all_entities())
-        else:
-            users = enterprise_utils.UserUtils.resolve_existing_users(context.enterprise_data, emails)
-
+        users = enterprise_utils.UserUtils.resolve_existing_users(context.enterprise_data, kwargs.get('email'))
         if len(users) == 0:
             raise base.CommandError('No users to edit')
 
@@ -666,15 +659,15 @@ class EnterpriseUserActionCommand(base.ArgparseCommand, enterprise_management.IE
         parser = argparse.ArgumentParser(prog='enterprise-user action', description='Enterprise user actions.')
         actions = parser.add_mutually_exclusive_group(required=True)
         actions.add_argument('--expire', dest='expire', action='store_true',
-                             help='expire master password. Supports @all')
+                             help='expire master password')
         actions.add_argument('--extend', dest='extend', action='store_true',
                              help='extend vault transfer consent by 7 days. Supports @all')
         actions.add_argument('--lock', dest='lock', action='store_true',
-                             help='lock user. Supports @all')
+                             help='lock user')
         actions.add_argument('--unlock', dest='unlock', action='store_true',
                              help='unlock user. Supports @all')
         actions.add_argument('--disable-2fa', dest='disable_2fa', action='store_true',
-                             help='disable 2fa for user. Supports @all')
+                             help='disable 2fa for user')
         parser.add_argument('email', type=str, nargs='+', help='User email or ID. Can be repeated. Use @all for all users.')
         super().__init__(parser)
         self.logger = api.get_logger()
@@ -687,6 +680,14 @@ class EnterpriseUserActionCommand(base.ArgparseCommand, enterprise_management.IE
 
         emails = kwargs.get('email')
         has_all_users = isinstance(emails, list) and any((True for x in emails if x == '@all'))
+
+        if has_all_users:
+            if kwargs.get('expire') is True:
+                raise base.CommandError('The --expire option does not support @all')
+            if kwargs.get('lock') is True:
+                raise base.CommandError('The --lock option does not support @all')
+            if kwargs.get('disable_2fa') is True:
+                raise base.CommandError('The --disable-2fa option does not support @all')
 
         if has_all_users:
             users = list(context.enterprise_data.users.get_all_entities())
