@@ -1,6 +1,8 @@
 import argparse
+import hmac
 import json
 import datetime
+import os
 from keepersdk.enterprise.enterprise_types import DeviceApprovalRequest
 import time
 from typing import Dict, List, Optional, Any, Set, TypedDict
@@ -88,7 +90,7 @@ class EnterpriseUserViewCommand(base.ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(prog='enterprise-user view', parents=[base.json_output_parser], description='View enterprise user.')
         parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', help='print verbose information')
-        parser.add_argument('team', help='User email or UID')
+        parser.add_argument('user', help='User email or UID')
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> Any:
@@ -97,7 +99,7 @@ class EnterpriseUserViewCommand(base.ArgparseCommand):
         verbose = kwargs.get('verbose') is True
 
         enterprise_data = context.enterprise_data
-        user = enterprise_utils.UserUtils.resolve_single_user(enterprise_data, kwargs.get('team'))
+        user = enterprise_utils.UserUtils.resolve_single_user(enterprise_data, kwargs.get('user'))
         node_name = enterprise_utils.NodeUtils.get_node_path(enterprise_data, user.node_id, omit_root=False)
 
         user_obj = {
@@ -165,7 +167,8 @@ class EnterpriseUserViewCommand(base.ArgparseCommand):
             if filename is None:
                 return json_text
             else:
-                with open(filename, 'w') as f:
+                abs_path = os.path.abspath(filename)
+                with open(abs_path, 'w') as f:
                     f.write(json_text)
 
         headers = ['user_id', 'email', 'full_name', 'node_name', 'status', 'transfer_status', 'tfa_enabled']
@@ -263,7 +266,7 @@ class EnterpriseUserAddCommand(base.ArgparseCommand, enterprise_management.IEnte
                         unique_emails.add(email)
                     else:
                         self.logger.info('User \"%s\" already exists', u.username)
-        if len(unique_emails) == 0:
+        if not unique_emails:
             raise base.CommandError('No users to add')
 
         full_name: Optional[str] = kwargs.get('full_name')
@@ -293,11 +296,12 @@ class EnterpriseUserAddRoleCommand(base.ArgparseCommand, enterprise_management.I
         self.logger.warning(message)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.enterprise_data is not None
-        assert context.enterprise_loader is not None
+        base.require_enterprise_admin(context)
+        if context.enterprise_loader is None:
+            raise base.CommandError('Enterprise loader is not initialized')
 
         roles = enterprise_utils.RoleUtils.resolve_existing_roles(context.enterprise_data, kwargs.get('role'))
-        if len(roles) == 0:
+        if not roles:
             raise base.CommandError('No roles to add')
         roles_to_add = {x.role_id for x in roles}
 
@@ -309,7 +313,7 @@ class EnterpriseUserAddRoleCommand(base.ArgparseCommand, enterprise_management.I
         else:
             users = enterprise_utils.UserUtils.resolve_existing_users(context.enterprise_data, user_names)
 
-        if len(users) == 0:
+        if not users:
             raise base.CommandError('No users to add role')
 
         batch = batch_management.BatchManagement(loader=context.enterprise_loader, logger=self)
@@ -322,7 +326,7 @@ class EnterpriseUserAddRoleCommand(base.ArgparseCommand, enterprise_management.I
                     role_membership_to_add.append(
                         enterprise_management.RoleUserEdit(enterprise_user_id=user.enterprise_user_id, role_id=role_id))
 
-        if len(role_membership_to_add) == 0:
+        if not role_membership_to_add:
             self.logger.info('All specified users already have the specified roles')
             return
 
@@ -344,11 +348,12 @@ class EnterpriseUserRemoveRoleCommand(base.ArgparseCommand, enterprise_managemen
         self.logger.warning(message)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.enterprise_data is not None
-        assert context.enterprise_loader is not None
+        base.require_enterprise_admin(context)
+        if context.enterprise_loader is None:
+            raise base.CommandError('Enterprise loader is not initialized')
 
         roles = enterprise_utils.RoleUtils.resolve_existing_roles(context.enterprise_data, kwargs.get('role'))
-        if len(roles) == 0:
+        if not roles:
             raise base.CommandError('No roles to remove')
         roles_to_remove = {x.role_id for x in roles}
 
@@ -360,7 +365,7 @@ class EnterpriseUserRemoveRoleCommand(base.ArgparseCommand, enterprise_managemen
         else:
             users = enterprise_utils.UserUtils.resolve_existing_users(context.enterprise_data, user_names)
 
-        if len(users) == 0:
+        if not users:
             raise base.CommandError('No users to remove role from')
 
         batch = batch_management.BatchManagement(loader=context.enterprise_loader, logger=self)
@@ -373,7 +378,7 @@ class EnterpriseUserRemoveRoleCommand(base.ArgparseCommand, enterprise_managemen
                     role_membership_to_remove.append(
                         enterprise_management.RoleUserEdit(enterprise_user_id=user.enterprise_user_id, role_id=role_id))
 
-        if len(role_membership_to_remove) == 0:
+        if not role_membership_to_remove:
             self.logger.info('None of the specified users have the specified roles')
             return
 
@@ -397,8 +402,9 @@ class EnterpriseUserAddTeamCommand(base.ArgparseCommand, enterprise_management.I
         self.logger.warning(message)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.enterprise_data is not None
-        assert context.enterprise_loader is not None
+        base.require_enterprise_admin(context)
+        if context.enterprise_loader is None:
+            raise base.CommandError('Enterprise loader is not initialized')
 
         teams_to_add: Set[str] = set()
         add_teams = kwargs.get('team')
@@ -413,11 +419,11 @@ class EnterpriseUserAddTeamCommand(base.ArgparseCommand, enterprise_management.I
             if len(queued_teams) > 0:
                 teams_to_add.update((x.team_uid for x in queued_teams))
 
-        if len(teams_to_add) == 0:
+        if not teams_to_add:
             raise base.CommandError('No teams to add')
 
         users = enterprise_utils.UserUtils.resolve_existing_users(context.enterprise_data, kwargs.get('user'))
-        if len(users) == 0:
+        if not users:
             raise base.CommandError('No users to add team')
 
         hide_shared_folders: Optional[bool] = None
@@ -452,8 +458,9 @@ class EnterpriseUserRemoveTeamCommand(base.ArgparseCommand, enterprise_managemen
         self.logger.warning(message)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.enterprise_data is not None
-        assert context.enterprise_loader is not None
+        base.require_enterprise_admin(context)
+        if context.enterprise_loader is None:
+            raise base.CommandError('Enterprise loader is not initialized')
 
         teams_to_remove: Set[str] = set()
         remove_teams = kwargs.get('team')
@@ -468,11 +475,11 @@ class EnterpriseUserRemoveTeamCommand(base.ArgparseCommand, enterprise_managemen
             if len(queued_teams) > 0:
                 teams_to_remove.update((x.team_uid for x in queued_teams))
 
-        if len(teams_to_remove) == 0:
+        if not teams_to_remove:
             raise base.CommandError('No teams to remove')
 
         users = enterprise_utils.UserUtils.resolve_existing_users(context.enterprise_data, kwargs.get('user'))
-        if len(users) == 0:
+        if not users:
             raise base.CommandError('No users to remove team from')
 
         user_ids = [u.enterprise_user_id for u in users]
@@ -507,7 +514,11 @@ class EnterpriseUserEditCommand(base.ArgparseCommand, enterprise_management.IEnt
         self.logger.warning(message)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
-        assert context.enterprise_data is not None
+        base.require_enterprise_admin(context)
+
+        emails = kwargs.get('email')
+        if not emails:
+            raise base.CommandError('No email(s) provided')
 
         parent_id: Optional[int]
         if kwargs.get('parent'):
@@ -516,8 +527,8 @@ class EnterpriseUserEditCommand(base.ArgparseCommand, enterprise_management.IEnt
         else:
             parent_id = context.enterprise_data.root_node.node_id
 
-        users = enterprise_utils.UserUtils.resolve_existing_users(context.enterprise_data, kwargs.get('email'))
-        if len(users) == 0:
+        users = enterprise_utils.UserUtils.resolve_existing_users(context.enterprise_data, emails)
+        if not users:
             raise base.CommandError('No users to edit')
 
         full_name: Optional[str] = kwargs.get('full_name')
@@ -631,8 +642,12 @@ class EnterpriseUserDeleteCommand(base.ArgparseCommand, enterprise_management.IE
     def execute(self, context: KeeperParams, **kwargs) -> None:
         base.require_enterprise_admin(context)
 
-        users = enterprise_utils.UserUtils.resolve_existing_users(context.enterprise_data, kwargs.get('email'))
-        if len(users) == 0:
+        emails = kwargs.get('email')
+        if not emails:
+            raise base.CommandError('No email(s) provided')
+
+        users = enterprise_utils.UserUtils.resolve_existing_users(context.enterprise_data, emails)
+        if not users:
             raise base.CommandError('No users to delete')
 
         active_users = [x for x in users if x.status == 'active']
@@ -694,7 +709,7 @@ class EnterpriseUserActionCommand(base.ArgparseCommand, enterprise_management.IE
         else:
             users = enterprise_utils.UserUtils.resolve_existing_users(context.enterprise_data, emails)
 
-        if len(users) == 0:
+        if not users:
             raise base.CommandError('No users found')
 
         inactive_users = [x for x in users if x.status != 'active']
@@ -702,7 +717,7 @@ class EnterpriseUserActionCommand(base.ArgparseCommand, enterprise_management.IE
             names = ', '.join((x.username for x in inactive_users))
             self.logger.warning(f'Inactive users {names} are skipped')
         users = [x for x in users if x.status == 'active']
-        if len(users) == 0:
+        if not users:
             return
 
         batch = batch_management.BatchManagement(loader=context.enterprise_loader, logger=self)
@@ -738,7 +753,11 @@ class EnterpriseUserAliasCommand(base.ArgparseCommand):
         base.require_login(context)
         base.require_enterprise_admin(context)
 
-        user = enterprise_utils.UserUtils.resolve_single_user(context.enterprise_data, kwargs.get('email'))
+        email = kwargs.get('email')
+        if not email:
+            raise base.CommandError('No email provided')
+
+        user = enterprise_utils.UserUtils.resolve_single_user(context.enterprise_data, email)
         aliases = context.enterprise_data.user_aliases.get_links_by_subject(user.enterprise_user_id)
         add_user = kwargs.get('add_alias')
         if isinstance(add_user, str):
@@ -758,7 +777,8 @@ class EnterpriseUserAliasCommand(base.ArgparseCommand):
                 alias_request.primary = True
                 add_rs = context.auth.execute_auth_rest(
                     'enterprise/enterprise_user_add_alias', alias_request, response_type=APIRequest_pb2.EnterpriseUserAddAliasResponse)
-                assert add_rs
+                if not add_rs:
+                    raise base.CommandError(f'Failed to add alias {add_user}: no response')
                 for rs in add_rs.status:
                     if rs.status != 'success':
                         raise base.CommandError(f'Add alias {add_user} failed ({rs.status})')
@@ -766,8 +786,9 @@ class EnterpriseUserAliasCommand(base.ArgparseCommand):
         remove_alias = kwargs.get('remove_alias')
         if isinstance(remove_alias, str):
             remove_alias = remove_alias.lower()
-            has_alias = remove_alias == user.username or any((True for x in aliases if x.username == add_user))
-            if has_alias:
+            has_alias = remove_alias == user.username or any((True for x in aliases if x.username == remove_alias))
+            if not has_alias:
+                self.logger.info(f'Alias "%s" does not exist for user', remove_alias)
                 return
             alias_rq = APIRequest_pb2.EnterpriseUserAliasRequest()
             alias_rq.enterpriseUserId = user.enterprise_user_id
@@ -843,7 +864,7 @@ class EnterpriseDeviceApprovalCommand(base.ArgparseCommand, enterprise_managemen
     def _load_approval_requests(self, enterprise_data) -> List[DeviceApprovalRequest]:
         """Load and return all pending device approval requests."""
         approval_requests: List[DeviceApprovalRequest] = list(enterprise_data.device_approval_requests.get_all_entities())
-        if len(approval_requests) == 0:
+        if not approval_requests:
             logger.info('No pending approval requests')
             return []
         return approval_requests
@@ -862,7 +883,7 @@ class EnterpriseDeviceApprovalCommand(base.ArgparseCommand, enterprise_managemen
             if self._device_matches_filter(device, device_id, enterprise_data, device_filters):
                 matching_devices[device_id] = device
 
-        if len(matching_devices) == 0:
+        if not matching_devices:
             logger.info('No matching devices found')
         return matching_devices
 
@@ -896,7 +917,10 @@ class EnterpriseDeviceApprovalCommand(base.ArgparseCommand, enterprise_managemen
         for device_id, device in matching_devices.items():
             username = emails.get(device.enterprise_user_id)
             ip_address = device.ip_address
-            is_trusted = username and ip_address and username in ip_map and ip_address in ip_map[username]
+            is_trusted = (
+                username and ip_address and username in ip_map and
+                self._is_ip_in_trusted_set(ip_address, ip_map[username])
+            )
             
             if is_trusted:
                 trusted_devices[device_id] = device
@@ -905,9 +929,19 @@ class EnterpriseDeviceApprovalCommand(base.ArgparseCommand, enterprise_managemen
                               "To force the approval, run the same command without the --trusted-ip argument", 
                               username, ip_address)
 
-        if len(trusted_devices) == 0:
+        if not trusted_devices:
             logger.info('No matching devices found')
         return trusted_devices
+
+    def _is_ip_in_trusted_set(self, ip_address: str, trusted_ips: Set[str]) -> bool:
+        """Check if IP address is in trusted set using constant-time comparison.
+        
+        Uses hmac.compare_digest to prevent timing attacks on IP address comparison.
+        """
+        for trusted_ip in trusted_ips:
+            if hmac.compare_digest(ip_address, trusted_ip):
+                return True
+        return False
 
     def _get_user_emails(self, enterprise_data, user_ids: Set[int]) -> Dict[int, str]:
         """Build a mapping of user IDs to usernames."""

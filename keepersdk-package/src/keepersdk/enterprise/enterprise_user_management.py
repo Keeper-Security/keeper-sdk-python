@@ -2,10 +2,10 @@
 """Enterprise user management functionality for Keeper SDK."""
 
 import json
-import re
 from typing import Optional, List, Set
 from dataclasses import dataclass
 
+from email_validator import validate_email as validate_email_address, EmailNotValidError
 from keepersdk.authentication import keeper_auth
 
 from . import enterprise_types, enterprise_management, batch_management
@@ -13,7 +13,6 @@ from .. import utils, crypto, generator
 from ..proto import enterprise_pb2
 
 # Constants
-EMAIL_PATTERN = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
 PBKDF2_ITERATIONS = 1_000_000
 DEFAULT_PASSWORD_LENGTH = 20
 SALT_LENGTH = 16
@@ -128,7 +127,7 @@ class EnterpriseUserManager:
         self.auth = auth_context
         
     def validate_email(self, email: str) -> bool:
-        """Validate email format.
+        """Validate email format using email-validator library.
         
         Args:
             email: Email address to validate
@@ -139,7 +138,11 @@ class EnterpriseUserManager:
         if not email:
             return False
         
-        return bool(re.match(EMAIL_PATTERN, email))
+        try:
+            validate_email_address(email, check_deliverability=False)
+            return True
+        except EmailNotValidError:
+            return False
     
     def resolve_node_id(self, node_name_or_id: Optional[str] = None) -> int:
         """Resolve node ID from name or ID string.
@@ -191,7 +194,7 @@ class EnterpriseUserManager:
             if node.name == node_name
         ]
         
-        if len(matching_nodes) == 0:
+        if not matching_nodes:
             raise EnterpriseUserCreationError(ERROR_MSG_NODE_NOT_FOUND_BY_NAME.format(node_name))
         elif len(matching_nodes) > 1:
             raise EnterpriseUserCreationError(ERROR_MSG_MULTIPLE_NODES_FOUND.format(node_name))
@@ -383,7 +386,8 @@ class EnterpriseUserManager:
                 provision_request,
                 response_type=enterprise_pb2.EnterpriseUsersProvisionResponse
             )
-            assert rs is not None
+            if rs is None:
+                raise EnterpriseUserCreationError('No response received from provisioning API')
             
             self._validate_provision_response(rs, email)
             return rs
@@ -517,15 +521,6 @@ def create_enterprise_user(
     return manager.create_user(request)
 
 
-class _SdkLogger(enterprise_management.IEnterpriseManagementLogger):
-    """Internal logger for SDK operations."""
-    def __init__(self):
-        self.warnings: List[str] = []
-    
-    def warning(self, message: str) -> None:
-        self.warnings.append(message)
-
-
 def resolve_role(
     enterprise_data: enterprise_types.IEnterpriseData,
     role_name_or_id: str
@@ -542,24 +537,22 @@ def resolve_role(
     Raises:
         EnterpriseRoleManagementError: If role cannot be resolved
     """
-    role: Optional[enterprise_types.Role] = None
-    
-    # Try to resolve by numeric ID first
-    if role_name_or_id.isnumeric():
+    try:
         role_id = int(role_name_or_id)
         role = enterprise_data.roles.get_entity(role_id)
         if role:
             return role
         raise EnterpriseRoleManagementError(ERROR_MSG_ROLE_NOT_FOUND_BY_ID.format(role_id))
+    except ValueError:
+        pass  
     
-    # Resolve by name (case-insensitive)
     role_name_lower = role_name_or_id.lower()
     matching_roles = [
         r for r in enterprise_data.roles.get_all_entities()
         if r.name.lower() == role_name_lower
     ]
     
-    if len(matching_roles) == 0:
+    if not matching_roles:
         raise EnterpriseRoleManagementError(ERROR_MSG_ROLE_NOT_FOUND.format(role_name_or_id))
     elif len(matching_roles) > 1:
         raise EnterpriseRoleManagementError(
@@ -595,12 +588,11 @@ def add_all_users_to_role(
     
     # Get all users
     users = list(enterprise_data.users.get_all_entities())
-    if len(users) == 0:
+    if not users:
         raise EnterpriseRoleManagementError(ERROR_MSG_NO_USERS_FOUND)
     
     # Create role-user memberships
-    sdk_logger = _SdkLogger()
-    batch = batch_management.BatchManagement(loader=loader, logger=sdk_logger)
+    batch = batch_management.BatchManagement(loader=loader)
     
     role_membership_to_add: List[enterprise_management.RoleUserEdit] = []
     for user in users:
@@ -673,7 +665,7 @@ def add_users_to_teams(
             else:
                 skipped += 1
     
-    if len(team_membership_to_add) == 0:
+    if not team_membership_to_add:
         return TeamUserResult(
             success=True, 
             skipped_count=skipped,
@@ -733,7 +725,7 @@ def remove_users_from_teams(
             else:
                 skipped += 1
     
-    if len(team_membership_to_remove) == 0:
+    if not team_membership_to_remove:
         return TeamUserResult(
             success=True,
             skipped_count=skipped,
