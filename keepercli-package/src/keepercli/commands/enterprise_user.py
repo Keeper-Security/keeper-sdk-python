@@ -234,15 +234,19 @@ class EnterpriseUserViewCommand(base.ArgparseCommand):
 class EnterpriseUserAddCommand(base.ArgparseCommand, enterprise_management.IEnterpriseManagementLogger):
     def __init__(self):
         parser = argparse.ArgumentParser(prog='enterprise-user add', description='Create enterprise user(s).')
-        parser.add_argument('--parent', dest='parent', action='store', help='Parent node name or ID')
-        parser.add_argument('--full-name', dest='full_name', action='store', help='set user full name')
-        parser.add_argument('--job-title', dest='job_title', action='store', help='set user job title')
-        parser.add_argument('email', type=str, nargs='+', help='User email. Can be repeated.')
+        EnterpriseUserAddCommand.add_arguments_to_parser(parser)
         super().__init__(parser)
         self.logger = api.get_logger()
 
     def warning(self, message: str) -> None:
         self.logger.warning(message)
+    
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser) -> None:
+        parser.add_argument('--parent', dest='parent', action='store', help='Parent node name or ID')
+        parser.add_argument('--full-name', dest='full_name', action='store', help='set user full name')
+        parser.add_argument('--job-title', dest='job_title', action='store', help='set user job title')
+        parser.add_argument('email', type=str, nargs='+', help='User email. Can be repeated.')
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
         base.require_login(context)
@@ -285,15 +289,19 @@ class EnterpriseUserAddCommand(base.ArgparseCommand, enterprise_management.IEnte
 class EnterpriseUserAddRoleCommand(base.ArgparseCommand, enterprise_management.IEnterpriseManagementLogger):
     def __init__(self):
         parser = argparse.ArgumentParser(prog='enterprise-user add-role', description='Add role(s) to enterprise user(s).')
-        parser.add_argument('--role', dest='role', action='append', required=True,
-                            help='role name or role ID. Can be repeated.')
-        parser.add_argument('user', type=str, nargs='+',
-                            help='User email or ID. Can be repeated. Use @all for all users.')
+        EnterpriseUserAddRoleCommand.add_arguments_to_parser(parser)
         super().__init__(parser)
         self.logger = api.get_logger()
 
     def warning(self, message: str) -> None:
         self.logger.warning(message)
+    
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser) -> None:
+        parser.add_argument('--role', dest='role', action='append', required=True,
+                            help='role name or role ID. Can be repeated.')
+        parser.add_argument('user', type=str, nargs='+',
+                            help='User email or ID. Can be repeated. Use @all for all users.')
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
         base.require_enterprise_admin(context)
@@ -337,15 +345,19 @@ class EnterpriseUserAddRoleCommand(base.ArgparseCommand, enterprise_management.I
 class EnterpriseUserRemoveRoleCommand(base.ArgparseCommand, enterprise_management.IEnterpriseManagementLogger):
     def __init__(self):
         parser = argparse.ArgumentParser(prog='enterprise-user remove-role', description='Remove role(s) from enterprise user(s).')
-        parser.add_argument('--role', dest='role', action='append', required=True,
-                            help='role name or role ID. Can be repeated.')
-        parser.add_argument('user', type=str, nargs='+',
-                            help='User email or ID. Can be repeated. Use @all for all users.')
+        EnterpriseUserRemoveRoleCommand.add_arguments_to_parser(parser)
         super().__init__(parser)
         self.logger = api.get_logger()
 
     def warning(self, message: str) -> None:
         self.logger.warning(message)
+    
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser) -> None:
+        parser.add_argument('--role', dest='role', action='append', required=True,
+                            help='role name or role ID. Can be repeated.')
+        parser.add_argument('user', type=str, nargs='+',
+                            help='User email or ID. Can be repeated. Use @all for all users.')
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
         base.require_enterprise_admin(context)
@@ -389,17 +401,21 @@ class EnterpriseUserRemoveRoleCommand(base.ArgparseCommand, enterprise_managemen
 class EnterpriseUserAddTeamCommand(base.ArgparseCommand, enterprise_management.IEnterpriseManagementLogger):
     def __init__(self):
         parser = argparse.ArgumentParser(prog='enterprise-user add-team', description='Add team(s) to enterprise user(s).')
+        EnterpriseUserAddTeamCommand.add_arguments_to_parser(parser)
+        super().__init__(parser)
+        self.logger = api.get_logger()
+
+    def warning(self, message: str) -> None:
+        self.logger.warning(message)
+
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser) -> None:
         parser.add_argument('--team', dest='team', action='append', required=True,
                             help='team name or team UID. Can be repeated.')
         parser.add_argument('-hsf', '--hide-shared-folders', dest='hide_shared_folders', action='store',
                             choices=['on', 'off'], help='User does not see shared folders.')
         parser.add_argument('user', type=str, nargs='+',
                             help='User email or ID. Can be repeated.')
-        super().__init__(parser)
-        self.logger = api.get_logger()
-
-    def warning(self, message: str) -> None:
-        self.logger.warning(message)
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
         base.require_enterprise_admin(context)
@@ -447,15 +463,19 @@ class EnterpriseUserAddTeamCommand(base.ArgparseCommand, enterprise_management.I
 class EnterpriseUserRemoveTeamCommand(base.ArgparseCommand, enterprise_management.IEnterpriseManagementLogger):
     def __init__(self):
         parser = argparse.ArgumentParser(prog='enterprise-user remove-team', description='Remove team(s) from enterprise user(s).')
-        parser.add_argument('--team', dest='team', action='append', required=True,
-                            help='team name or team UID. Can be repeated.')
-        parser.add_argument('user', type=str, nargs='+',
-                            help='User email or ID. Can be repeated.')
+        EnterpriseUserRemoveTeamCommand.add_arguments_to_parser(parser)
         super().__init__(parser)
         self.logger = api.get_logger()
 
     def warning(self, message: str) -> None:
         self.logger.warning(message)
+
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser) -> None:
+        parser.add_argument('--team', dest='team', action='append', required=True,
+                            help='team name or team UID. Can be repeated.')
+        parser.add_argument('user', type=str, nargs='+',
+                            help='User email or ID. Can be repeated.')
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
         base.require_enterprise_admin(context)

@@ -1,6 +1,3 @@
-
-"""Enterprise user management functionality for Keeper SDK."""
-
 import json
 from typing import Optional, List, Set
 from dataclasses import dataclass
@@ -17,11 +14,6 @@ PBKDF2_ITERATIONS = 1_000_000
 DEFAULT_PASSWORD_LENGTH = 20
 SALT_LENGTH = 16
 AUTH_VERIFIER_SALT_LENGTH = 16
-
-# Error codes
-ERROR_CODE_EXISTS = "exists"
-ERROR_CODE_SUCCESS = "success"
-ERROR_CODE_OK = "ok"
 
 # Documentation URLs
 DOMAIN_RESERVATION_DOC_URL = (
@@ -404,12 +396,12 @@ class EnterpriseUserManager:
     ) -> None:
         """Validate the provision response and raise appropriate errors."""
         for user_rs in response.results:
-            if user_rs.code == ERROR_CODE_EXISTS:
+            if user_rs.code == 'exists':
                 raise EnterpriseUserCreationError(
                     ERROR_MSG_USER_EXISTS.format(email),
-                    code=ERROR_CODE_EXISTS
+                    code='exists'
                 )
-            if user_rs.code and user_rs.code not in [ERROR_CODE_SUCCESS, ERROR_CODE_OK]:
+            if user_rs.code and user_rs.code not in ['success', 'ok']:
                 raise EnterpriseUserCreationError(
                     ERROR_MSG_AUTO_CREATE_FAILED.format(email, DOMAIN_RESERVATION_DOC_URL),
                     code=user_rs.code
@@ -492,23 +484,7 @@ def create_enterprise_user(
     password_length: int = DEFAULT_PASSWORD_LENGTH,
     suppress_email_invite: bool = False
 ) -> CreateUserResponse:
-    """Convenience function to create an enterprise user.
-    
-    Args:
-        loader: Enterprise data loader
-        auth_context: Authentication context
-        email: User email address
-        display_name: Optional display name
-        node_id: Optional node ID (uses root node if None)
-        password_length: Length of generated password (default 20)
-        suppress_email_invite: Whether to suppress email invitation
-        
-    Returns:
-        CreateUserResponse with user details
-        
-    Raises:
-        EnterpriseUserCreationError: If user creation fails
-    """
+
     request = CreateUserRequest(
         email=email,
         display_name=display_name,
@@ -525,26 +501,13 @@ def resolve_role(
     enterprise_data: enterprise_types.IEnterpriseData,
     role_name_or_id: str
 ) -> enterprise_types.Role:
-    """Resolve a role by name or ID.
-    
-    Args:
-        enterprise_data: Enterprise data containing roles
-        role_name_or_id: Role name or ID string
-        
-    Returns:
-        The resolved Role object
-        
-    Raises:
-        EnterpriseRoleManagementError: If role cannot be resolved
-    """
-    try:
+
+    if role_name_or_id.isnumeric():
         role_id = int(role_name_or_id)
         role = enterprise_data.roles.get_entity(role_id)
         if role:
             return role
         raise EnterpriseRoleManagementError(ERROR_MSG_ROLE_NOT_FOUND_BY_ID.format(role_id))
-    except ValueError:
-        pass  
     
     role_name_lower = role_name_or_id.lower()
     matching_roles = [
@@ -566,32 +529,15 @@ def add_all_users_to_role(
     loader: enterprise_types.IEnterpriseLoader,
     role_name_or_id: str
 ) -> AddAllUsersToRoleResponse:
-    """Add all enterprise users to a single role.
-    
-    This function adds all existing users in the enterprise to the specified role.
-    Only one role can be specified at a time when using this bulk operation.
-    
-    Args:
-        loader: Enterprise data loader
-        role_name_or_id: Role name or ID to add users to
-        
-    Returns:
-        AddAllUsersToRoleResponse with operation details
-        
-    Raises:
-        EnterpriseRoleManagementError: If role not found or operation fails
-    """
+
     enterprise_data = loader.enterprise_data
     
-    # Resolve the role
     role = resolve_role(enterprise_data, role_name_or_id)
     
-    # Get all users
     users = list(enterprise_data.users.get_all_entities())
     if not users:
         raise EnterpriseRoleManagementError(ERROR_MSG_NO_USERS_FOUND)
     
-    # Create role-user memberships
     batch = batch_management.BatchManagement(loader=loader)
     
     role_membership_to_add: List[enterprise_management.RoleUserEdit] = []
@@ -622,18 +568,7 @@ def add_users_to_teams(
     hide_shared_folders: Optional[bool] = None,
     logger: Optional[enterprise_management.IEnterpriseManagementLogger] = None
 ) -> TeamUserResult:
-    """Add users to teams.
-    
-    Args:
-        loader: Enterprise data loader
-        user_ids: List of enterprise user IDs to add
-        team_uids: Set of team UIDs to add users to
-        hide_shared_folders: Whether to hide shared folders (None for default)
-        logger: Optional logger for warnings
-        
-    Returns:
-        TeamUserResult with operation results
-    """
+
     if not user_ids or not team_uids:
         return TeamUserResult(success=False, message='No users or teams specified')
     
@@ -688,17 +623,7 @@ def remove_users_from_teams(
     team_uids: Set[str],
     logger: Optional[enterprise_management.IEnterpriseManagementLogger] = None
 ) -> TeamUserResult:
-    """Remove users from teams.
-    
-    Args:
-        loader: Enterprise data loader
-        user_ids: List of enterprise user IDs to remove
-        team_uids: Set of team UIDs to remove users from
-        logger: Optional logger for warnings
-        
-    Returns:
-        TeamUserResult with operation results
-    """
+
     if not user_ids or not team_uids:
         return TeamUserResult(success=False, message='No users or teams specified')
     
