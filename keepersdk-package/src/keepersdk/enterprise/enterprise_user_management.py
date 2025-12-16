@@ -1,28 +1,19 @@
-
-"""Enterprise user management functionality for Keeper SDK."""
-
 import json
-import re
-from typing import Optional
+from typing import Optional, List, Set
 from dataclasses import dataclass
 
+from email_validator import validate_email as validate_email_address, EmailNotValidError
 from keepersdk.authentication import keeper_auth
 
-from . import enterprise_types
+from . import enterprise_types, enterprise_management, batch_management
 from .. import utils, crypto, generator
 from ..proto import enterprise_pb2
 
 # Constants
-EMAIL_PATTERN = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
 PBKDF2_ITERATIONS = 1_000_000
 DEFAULT_PASSWORD_LENGTH = 20
 SALT_LENGTH = 16
 AUTH_VERIFIER_SALT_LENGTH = 16
-
-# Error codes
-ERROR_CODE_EXISTS = "exists"
-ERROR_CODE_SUCCESS = "success"
-ERROR_CODE_OK = "ok"
 
 # Documentation URLs
 DOMAIN_RESERVATION_DOC_URL = (
@@ -47,6 +38,9 @@ ERROR_MSG_AUTO_CREATE_FAILED = (
     'To reserve a domain please contact Keeper support. '
     'Learn more about domain reservation here:\n{}'
 )
+ERROR_MSG_ROLE_NOT_FOUND = "Role '{}' not found"
+ERROR_MSG_ROLE_NOT_FOUND_BY_ID = "Role with ID {} not found"
+ERROR_MSG_NO_USERS_FOUND = "No users found in enterprise"
 
 
 @dataclass
@@ -73,8 +67,37 @@ class CreateUserResponse:
     verification_code: Optional[str] = None
 
 
+@dataclass
+class AddAllUsersToRoleResponse:
+    """Response from adding all users to a role."""
+    role_id: int
+    role_name: str
+    users_added: int
+    success: bool = True
+    message: Optional[str] = None
+
+
+@dataclass
+class TeamUserResult:
+    """Result of team user management operation."""
+    success: bool
+    added_count: int = 0
+    removed_count: int = 0
+    skipped_count: int = 0
+    message: Optional[str] = None
+
+
 class EnterpriseUserCreationError(Exception):
     """Exception raised when enterprise user creation fails."""
+    
+    def __init__(self, message: str, code: Optional[str] = None):
+        self.message = message
+        self.code = code
+        super().__init__(self.message)
+
+
+class EnterpriseRoleManagementError(Exception):
+    """Exception raised when enterprise role management fails."""
     
     def __init__(self, message: str, code: Optional[str] = None):
         self.message = message
@@ -96,7 +119,7 @@ class EnterpriseUserManager:
         self.auth = auth_context
         
     def validate_email(self, email: str) -> bool:
-        """Validate email format.
+        """Validate email format using email-validator library.
         
         Args:
             email: Email address to validate
@@ -107,7 +130,11 @@ class EnterpriseUserManager:
         if not email:
             return False
         
-        return bool(re.match(EMAIL_PATTERN, email))
+        try:
+            validate_email_address(email, check_deliverability=False)
+            return True
+        except EmailNotValidError:
+            return False
     
     def resolve_node_id(self, node_name_or_id: Optional[str] = None) -> int:
         """Resolve node ID from name or ID string.
@@ -159,7 +186,7 @@ class EnterpriseUserManager:
             if node.name == node_name
         ]
         
-        if len(matching_nodes) == 0:
+        if not matching_nodes:
             raise EnterpriseUserCreationError(ERROR_MSG_NODE_NOT_FOUND_BY_NAME.format(node_name))
         elif len(matching_nodes) > 1:
             raise EnterpriseUserCreationError(ERROR_MSG_MULTIPLE_NODES_FOUND.format(node_name))
@@ -351,7 +378,8 @@ class EnterpriseUserManager:
                 provision_request,
                 response_type=enterprise_pb2.EnterpriseUsersProvisionResponse
             )
-            assert rs is not None
+            if rs is None:
+                raise EnterpriseUserCreationError('No response received from provisioning API')
             
             self._validate_provision_response(rs, email)
             return rs
@@ -368,12 +396,12 @@ class EnterpriseUserManager:
     ) -> None:
         """Validate the provision response and raise appropriate errors."""
         for user_rs in response.results:
-            if user_rs.code == ERROR_CODE_EXISTS:
+            if user_rs.code == 'exists':
                 raise EnterpriseUserCreationError(
                     ERROR_MSG_USER_EXISTS.format(email),
-                    code=ERROR_CODE_EXISTS
+                    code='exists'
                 )
-            if user_rs.code and user_rs.code not in [ERROR_CODE_SUCCESS, ERROR_CODE_OK]:
+            if user_rs.code and user_rs.code not in ['success', 'ok']:
                 raise EnterpriseUserCreationError(
                     ERROR_MSG_AUTO_CREATE_FAILED.format(email, DOMAIN_RESERVATION_DOC_URL),
                     code=user_rs.code
@@ -456,23 +484,7 @@ def create_enterprise_user(
     password_length: int = DEFAULT_PASSWORD_LENGTH,
     suppress_email_invite: bool = False
 ) -> CreateUserResponse:
-    """Convenience function to create an enterprise user.
-    
-    Args:
-        loader: Enterprise data loader
-        auth_context: Authentication context
-        email: User email address
-        display_name: Optional display name
-        node_id: Optional node ID (uses root node if None)
-        password_length: Length of generated password (default 20)
-        suppress_email_invite: Whether to suppress email invitation
-        
-    Returns:
-        CreateUserResponse with user details
-        
-    Raises:
-        EnterpriseUserCreationError: If user creation fails
-    """
+
     request = CreateUserRequest(
         email=email,
         display_name=display_name,
@@ -483,3 +495,173 @@ def create_enterprise_user(
     
     manager = EnterpriseUserManager(loader, auth_context)
     return manager.create_user(request)
+
+
+def resolve_role(
+    enterprise_data: enterprise_types.IEnterpriseData,
+    role_name_or_id: str
+) -> enterprise_types.Role:
+
+    if role_name_or_id.isnumeric():
+        role_id = int(role_name_or_id)
+        role = enterprise_data.roles.get_entity(role_id)
+        if role:
+            return role
+        raise EnterpriseRoleManagementError(ERROR_MSG_ROLE_NOT_FOUND_BY_ID.format(role_id))
+    
+    role_name_lower = role_name_or_id.lower()
+    matching_roles = [
+        r for r in enterprise_data.roles.get_all_entities()
+        if r.name.lower() == role_name_lower
+    ]
+    
+    if not matching_roles:
+        raise EnterpriseRoleManagementError(ERROR_MSG_ROLE_NOT_FOUND.format(role_name_or_id))
+    elif len(matching_roles) > 1:
+        raise EnterpriseRoleManagementError(
+            f"Multiple roles found with name '{role_name_or_id}'. Use Role ID instead."
+        )
+    
+    return matching_roles[0]
+
+
+def add_all_users_to_role(
+    loader: enterprise_types.IEnterpriseLoader,
+    role_name_or_id: str
+) -> AddAllUsersToRoleResponse:
+
+    enterprise_data = loader.enterprise_data
+    
+    role = resolve_role(enterprise_data, role_name_or_id)
+    
+    users = list(enterprise_data.users.get_all_entities())
+    if not users:
+        raise EnterpriseRoleManagementError(ERROR_MSG_NO_USERS_FOUND)
+    
+    batch = batch_management.BatchManagement(loader=loader)
+    
+    role_membership_to_add: List[enterprise_management.RoleUserEdit] = []
+    for user in users:
+        role_membership_to_add.append(
+            enterprise_management.RoleUserEdit(
+                enterprise_user_id=user.enterprise_user_id,
+                role_id=role.role_id
+            )
+        )
+    
+    batch.modify_role_users(to_add=role_membership_to_add)
+    batch.apply()
+    
+    return AddAllUsersToRoleResponse(
+        role_id=role.role_id,
+        role_name=role.name,
+        users_added=len(users),
+        success=True,
+        message=f"Added {len(users)} users to role '{role.name}'"
+    )
+
+
+def add_users_to_teams(
+    loader: enterprise_types.IEnterpriseLoader,
+    user_ids: List[int],
+    team_uids: Set[str],
+    hide_shared_folders: Optional[bool] = None,
+    logger: Optional[enterprise_management.IEnterpriseManagementLogger] = None
+) -> TeamUserResult:
+
+    if not user_ids or not team_uids:
+        return TeamUserResult(success=False, message='No users or teams specified')
+    
+    enterprise_data = loader.enterprise_data
+    
+    user_type: Optional[int] = None
+    if isinstance(hide_shared_folders, bool):
+        user_type = 0 if hide_shared_folders else 2
+    
+    batch = batch_management.BatchManagement(loader=loader, logger=logger)
+    
+    team_membership_to_add: List[enterprise_management.TeamUserEdit] = []
+    skipped = 0
+    
+    for user_id in user_ids:
+        existing_team_uids = {x.team_uid for x in enterprise_data.team_users.get_links_by_object(user_id)}
+        queued_team_uids = {x.team_uid for x in enterprise_data.queued_team_users.get_links_by_object(user_id)}
+        existing_team_uids.update(queued_team_uids)
+        
+        for team_uid in team_uids:
+            if team_uid not in existing_team_uids:
+                team_membership_to_add.append(
+                    enterprise_management.TeamUserEdit(
+                        enterprise_user_id=user_id, 
+                        team_uid=team_uid, 
+                        user_type=user_type
+                    )
+                )
+            else:
+                skipped += 1
+    
+    if not team_membership_to_add:
+        return TeamUserResult(
+            success=True, 
+            skipped_count=skipped,
+            message='All specified users are already members of the specified teams'
+        )
+    
+    batch.modify_team_users(to_add=team_membership_to_add)
+    batch.apply()
+    
+    return TeamUserResult(
+        success=True, 
+        added_count=len(team_membership_to_add),
+        skipped_count=skipped
+    )
+
+
+def remove_users_from_teams(
+    loader: enterprise_types.IEnterpriseLoader,
+    user_ids: List[int],
+    team_uids: Set[str],
+    logger: Optional[enterprise_management.IEnterpriseManagementLogger] = None
+) -> TeamUserResult:
+
+    if not user_ids or not team_uids:
+        return TeamUserResult(success=False, message='No users or teams specified')
+    
+    enterprise_data = loader.enterprise_data
+    
+    batch = batch_management.BatchManagement(loader=loader, logger=logger)
+    
+    team_membership_to_remove: List[enterprise_management.TeamUserEdit] = []
+    skipped = 0
+    
+    for user_id in user_ids:
+        existing_team_uids = {x.team_uid for x in enterprise_data.team_users.get_links_by_object(user_id)}
+        queued_team_uids = {x.team_uid for x in enterprise_data.queued_team_users.get_links_by_object(user_id)}
+        existing_team_uids.update(queued_team_uids)
+        
+        for team_uid in team_uids:
+            if team_uid in existing_team_uids:
+                team_membership_to_remove.append(
+                    enterprise_management.TeamUserEdit(
+                        enterprise_user_id=user_id, 
+                        team_uid=team_uid
+                    )
+                )
+            else:
+                skipped += 1
+    
+    if not team_membership_to_remove:
+        return TeamUserResult(
+            success=True,
+            skipped_count=skipped,
+            message='None of the specified users are members of the specified teams'
+        )
+    
+    batch.modify_team_users(to_remove=team_membership_to_remove)
+    batch.apply()
+    
+    return TeamUserResult(
+        success=True, 
+        removed_count=len(team_membership_to_remove),
+        skipped_count=skipped
+    )
