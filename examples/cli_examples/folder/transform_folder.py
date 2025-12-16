@@ -21,11 +21,30 @@ import logging
 from typing import Optional
 
 from keepercli.commands.vault_folder import FolderTransformCommand
-from keepercli.params import KeeperParams
+from keepercli.params import KeeperParams, KeeperConfig
 from keepercli.login import LoginFlow
+
 
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
+
+
+def get_default_config_path() -> str:
+    """
+    Get the default config file path following the same logic as JsonFileLoader.
+    
+    First checks if 'config.json' exists in the current directory.
+    If not, uses ~/.keeper/config.json.
+    """
+    file_name = 'config.json'
+    if os.path.isfile(file_name):
+        return os.path.abspath(file_name)
+    else:
+        keeper_dir = os.path.join(os.path.expanduser('~'), '.keeper')
+        if not os.path.exists(keeper_dir):
+            os.mkdir(keeper_dir)
+        return os.path.join(keeper_dir, file_name)
+        
 
 def login_to_keeper_with_config(filename: str) -> KeeperParams:
     """
@@ -43,11 +62,12 @@ def login_to_keeper_with_config(filename: str) -> KeeperParams:
     password = config_data.get('password', '')
     if not username:
         raise ValueError('Username not found in config file')
-    context = KeeperParams(config_filename=filename, config=config_data)
+    context = KeeperParams(config=config_data)
     logged_in = LoginFlow.login(context, username=username, password=password or None, resume_session=bool(username))
     if not logged_in:
         raise Exception('Failed to authenticate with Keeper')
     return context
+
 
 def transform_folder(
     context: KeeperParams,
@@ -92,10 +112,11 @@ Example:
         '''
     )
     
+    default_config_path = get_default_config_path()
     parser.add_argument(
         '-c', '--config',
-        default='myconfig.json',
-        help='Configuration file (default: myconfig.json)'
+        default=default_config_path,
+        help=f'Configuration file (default: {default_config_path})'
     )
 
     args = parser.parse_args()
