@@ -8,10 +8,10 @@ from typing import Set, Dict, List, Any
 from . import base
 from .. import api, prompt_utils
 from ..params import KeeperParams
-from ..helpers import folder_utils, report_utils, share_utils
+from ..helpers import folder_utils, report_utils
 from keepersdk import utils
 from keepersdk.proto import enterprise_pb2
-from keepersdk.vault import record_management, vault_data, vault_types, vault_record, vault_utils
+from keepersdk.vault import record_management, vault_data, vault_types, vault_record, vault_utils, share_management_utils
 
 
 logger = api.get_logger()
@@ -196,7 +196,7 @@ class TeamListCommand(base.ArgparseCommand):
 
     def _get_teams_from_share_objects(self, context: KeeperParams, show_all_teams: bool):
         """Get teams from share objects with enterprise filtering."""
-        share_objects = share_utils.get_share_objects(vault=context.vault)
+        share_objects = share_management_utils.get_share_objects(vault=context.vault)
         teams_data = share_objects.get('teams', {})
         orgs = share_objects.get('enterprises', {})
         

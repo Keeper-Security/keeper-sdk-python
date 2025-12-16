@@ -28,7 +28,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
 
     if not scopes or bool(scopes & base.CommandScope.Vault):
         from .commands import (vault_folder, vault, vault_record, record_edit, importer_commands, breachwatch,
-                               record_type, secrets_manager, share_management, password_report, trash, record_file_report,
+                               record_type, secrets_manager, shares, password_report, trash, record_file_report,
                                record_handling_commands, register, password_generate, verify_records)
         
         commands.register_command('sync-down', vault.SyncDownCommand(), base.CommandScope.Vault, 'd')
@@ -72,11 +72,11 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('secrets-manager-app', secrets_manager.SecretsManagerAppCommand(), base.CommandScope.Vault)
         commands.register_command('secrets-manager-client', secrets_manager.SecretsManagerClientCommand(), base.CommandScope.Vault)
         commands.register_command('secrets-manager-share', secrets_manager.SecretsManagerShareCommand(), base.CommandScope.Vault)
-        commands.register_command('share-record', share_management.ShareRecordCommand(), base.CommandScope.Vault, 'sr')
-        commands.register_command('share-folder', share_management.ShareFolderCommand(), base.CommandScope.Vault, 'sf')
-        commands.register_command('share-list', share_management.OneTimeShareListCommand(), base.CommandScope.Vault)
-        commands.register_command('share-create', share_management.OneTimeShareCreateCommand(), base.CommandScope.Vault)
-        commands.register_command('share-remove', share_management.OneTimeShareRemoveCommand(), base.CommandScope.Vault)
+        commands.register_command('share-record', shares.ShareRecordCommand(), base.CommandScope.Vault, 'sr')
+        commands.register_command('share-folder', shares.ShareFolderCommand(), base.CommandScope.Vault, 'sf')
+        commands.register_command('share-list', shares.OneTimeShareListCommand(), base.CommandScope.Vault)
+        commands.register_command('share-create', shares.OneTimeShareCreateCommand(), base.CommandScope.Vault)
+        commands.register_command('share-remove', shares.OneTimeShareRemoveCommand(), base.CommandScope.Vault)
         commands.register_command('record-permission', record_handling_commands.RecordPermissionCommand(), base.CommandScope.Vault)
         commands.register_command('trash', trash.TrashCommand(), base.CommandScope.Vault)
         commands.register_command('verify-shared-folders', verify_records.VerifySharedFoldersCommand(), base.CommandScope.Vault)

@@ -12,12 +12,12 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
 from keepersdk.vault import (record_types, typed_field_utils, vault_record, attachment, record_facades,
-                             record_management, vault_online, vault_data, vault_types, vault_utils, vault_extensions)
+                             record_management, vault_online, vault_data, vault_types, vault_utils, vault_extensions, share_management_utils)
 from keepersdk import crypto, generator
 
 from . import base, enterprise_utils
 from .. import prompt_utils, api, constants
-from ..helpers import folder_utils, record_utils, report_utils, share_utils, timeout_utils
+from ..helpers import folder_utils, record_utils, report_utils, timeout_utils
 from ..params import KeeperParams
 
 
@@ -1339,7 +1339,7 @@ class RecordGetCommand(base.ArgparseCommand):
 
     def _add_share_info_to_json(self, vault: vault_online.VaultOnline, uid: str, output: dict):
         """Add share information to JSON output."""
-        share_infos = share_utils.get_record_shares(vault=vault, record_uids=[uid])
+        share_infos = share_management_utils.get_record_shares(vault=vault, record_uids=[uid])
         if share_infos and len(share_infos) > 0:
             share_info = share_infos[0]
             shares = share_info.get('shares', {})
@@ -1516,7 +1516,7 @@ class RecordGetCommand(base.ArgparseCommand):
 
     def _display_share_information(self, vault: vault_online.VaultOnline, uid: str):
         """Display share information for a record."""
-        share_infos = share_utils.get_record_shares(vault=vault, record_uids=[uid])
+        share_infos = share_management_utils.get_record_shares(vault=vault, record_uids=[uid])
         if not share_infos or len(share_infos) == 0:
             return
             
@@ -1666,7 +1666,7 @@ class RecordGetCommand(base.ArgparseCommand):
         normalize_titles = {}
 
         # Get share information
-        share_infos = share_utils.get_record_shares(vault=vault, record_uids=[uid])
+        share_infos = share_management_utils.get_record_shares(vault=vault, record_uids=[uid])
         record_shares = []
         folder_shares = []
         if share_infos and len(share_infos) > 0:
