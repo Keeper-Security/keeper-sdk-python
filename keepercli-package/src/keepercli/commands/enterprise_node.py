@@ -234,7 +234,6 @@ class EnterpriseNodeAddCommand(base.ArgparseCommand, enterprise_management.IEnte
     def __init__(self):
         parser = argparse.ArgumentParser(prog='enterprise-node add', description='Create enterprise node(s).')
         parser.add_argument('--parent', dest='parent', action='store', help='Parent node name or ID')
-        parser.add_argument('--name', dest='displayname', action='store', help='set node display name')
         parser.add_argument('--set-isolated', dest='set_isolated', action='store', choices=['on', 'off'],
                             help='set node isolated')
         parser.add_argument('-f', '--force', dest='force', action='store_true',
