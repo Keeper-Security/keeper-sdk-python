@@ -58,14 +58,15 @@ def login_to_keeper_with_config(filename: str) -> KeeperParams:
         raise FileNotFoundError(f'Config file {filename} not found')
     with open(filename, 'r') as f:
         config_data = json.load(f)
-    username = config_data.get('user', config_data.get('username'))
-    password = config_data.get('password', '')
-    if not username:
-        raise ValueError('Username not found in config file')
-    context = KeeperParams(config=config_data)
-    logged_in = LoginFlow.login(context, username=username, password=password or None, resume_session=bool(username))
-    if not logged_in:
+
+    keeper_config = KeeperConfig(config_filename=filename, config=config_data)
+    auth = LoginFlow.login(keeper_config)
+    if not auth:
         raise Exception('Failed to authenticate with Keeper')
+
+    context = KeeperParams(keeper_config=keeper_config)
+    context.set_auth(auth)
+
     return context
 
 

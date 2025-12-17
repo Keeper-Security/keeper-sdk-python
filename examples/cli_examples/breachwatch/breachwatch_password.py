@@ -54,13 +54,8 @@ def login_to_keeper_with_config(filename: str) -> KeeperParams:
     with open(filename, 'r') as f:
         config_data = json.load(f)
 
-    username = config_data.get('user', config_data.get('username'))
-    password = config_data.get('password', '')
-    if not username:
-        raise ValueError('Username not found in config file')
-
     keeper_config = KeeperConfig(config_filename=filename, config=config_data)
-    auth = LoginFlow.login(keeper_config, username=username, password=password or None, resume_session=bool(username))
+    auth = LoginFlow.login(keeper_config)
     if not auth:
         raise Exception('Failed to authenticate with Keeper')
 
