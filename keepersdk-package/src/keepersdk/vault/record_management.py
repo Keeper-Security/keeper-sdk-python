@@ -287,9 +287,9 @@ def delete_vault_objects(vault: vault_online.VaultOnline,
             folder = vault.vault_data.get_folder(to_delete)
             if folder:
                 obj = {
+                    'delete_resolution': 'unlink',
                     'object_uid': folder.folder_uid,
                     'object_type': folder.folder_type,
-                    'delete_resolution': 'unlink',
                     'from_type': folder.folder_type,
                 }
                 if folder.parent_uid:
@@ -306,14 +306,36 @@ def delete_vault_objects(vault: vault_online.VaultOnline,
                         folder = folders[0]
                     if record:
                         obj = {
+                            'delete_resolution': 'unlink',
                             'object_uid': record.record_uid,
                             'object_type': 'record',
-                            'delete_resolution': 'unlink',
                             'from_type': 'user_folder'
                         }
                         if folder:
                             obj['from_uid'] = folder.folder_uid
+                            obj['from_type'] = 'user_folder' if folder.folder_type == 'user_folder' else 'shared_folder_folder'
                         objects.append(obj)
+            
+            if not folder and not record:
+                record_cache = vault.vault_data._records
+                for record_uid, record_info in record_cache.items():
+                    if to_delete == record_info.info.title:
+                        folders = vault_utils.get_folders_for_record(vault.vault_data, record_info.info.record_uid)
+                        if folders:
+                            parent_folder = folders[0]
+                        if record_info:
+                            obj = {
+                                'delete_resolution': 'unlink',
+                                'object_uid': record_info.info.record_uid,
+                                'object_type': 'record',
+                                'from_type': 'user_folder'
+                            }
+                            if parent_folder:
+                                obj['from_uid'] = parent_folder.folder_uid
+                                obj['from_type'] = 'user_folder' if parent_folder.folder_type == 'user_folder' else 'shared_folder_folder'
+                            objects.append(obj)
+                            break
+
         elif isinstance(to_delete, vault_types.RecordPath):
             if not to_delete.record_uid:
                 raise ValueError('record UID cannot be empy')
@@ -327,9 +349,9 @@ def delete_vault_objects(vault: vault_online.VaultOnline,
             if not record:
                 raise ValueError(f'Record \"{to_delete.record_uid}\" not found')
             obj = {
+                'delete_resolution': 'unlink',
                 'object_uid': record.record_uid,
                 'object_type': 'record',
-                'delete_resolution': 'unlink',
             }
             if folder:
                 obj['from_uid'] = folder.folder_uid
@@ -359,6 +381,8 @@ def delete_vault_objects(vault: vault_online.VaultOnline,
             'pre_delete_token': delete_token
         }
         vault.keeper_auth.execute_auth_command(rq)
+    else:
+        raise ValueError('No objects found to delete.')
     vault.sync_requested = True
 
 
