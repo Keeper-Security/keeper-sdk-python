@@ -1,17 +1,19 @@
 import datetime
 import hmac
 import json
+import logging
 import os
-import time
+
 from typing import Callable, Optional, List, Union
 from urllib import parse
 
-from . import ksm, record_management, shares_management, share_management_utils, vault_online, vault_types
+from . import ksm, record_management, shares_management, share_management_utils, vault_online, vault_record, vault_types
 from .. import utils, crypto, constants
 from ..enterprise import enterprise_data
 from ..proto.APIRequest_pb2 import (
     GetApplicationsSummaryResponse, ApplicationShareType, GetAppInfoRequest, 
-    GetAppInfoResponse, RemoveAppClientsRequest, Device, AddAppClientRequest
+    GetAppInfoResponse, RemoveAppClientsRequest, Device, AddAppClientRequest, 
+    AppShareAdd, AddAppSharesRequest, RemoveAppSharesRequest
 )
 from ..proto.enterprise_pb2 import GENERAL
 from ..proto.record_pb2 import ApplicationAddRequest
@@ -19,13 +21,16 @@ from ..proto.record_pb2 import ApplicationAddRequest
 URL_GET_SUMMARY_API = 'vault/get_applications_summary'
 URL_GET_APP_INFO_API = 'vault/get_app_info'
 URL_CREATE_APP_API = 'vault/application_add'
+
 CLIENT_ADD_URL = 'vault/app_client_add'
 CLIENT_REMOVE_URL = 'vault/app_client_remove'
+
+SHARE_ADD_URL = 'vault/app_share_add'
+SHARE_REMOVE_URL = 'vault/app_share_remove'
 
 CLIENT_SHORT_ID_LENGTH = 8
 
 MILLISECONDS_PER_SECOND = 1000
-MILLISECONDS_PER_MINUTE = 60 * 1000
 
 CLIENT_ID_COUNTER_BYTES = b'KEEPER_SECRETS_MANAGER_CLIENT_ID'
 CLIENT_ID_DIGEST = 'sha512'
@@ -488,7 +493,7 @@ def handle_share_type(share, ksm_app, vault: vault_online.VaultOnline):
 class KSMClientManagement:
 
     @staticmethod
-    def _generate_single_client(
+    def add_client_to_ksm_app(
             vault: vault_online.VaultOnline,
             uid: str,
             client_name: str,
@@ -659,7 +664,7 @@ class KSMClientManagement:
             return 'Invalid timestamp'
 
     @staticmethod
-    def remove_ksm_client(vault: vault_online.VaultOnline, uid: str, client_names_and_ids: list[str], callable: Callable = None):
+    def remove_clients_from_ksm_app(vault: vault_online.VaultOnline, uid: str, client_names_and_ids: list[str], callable: Callable = None):
         """Remove client devices from a KSM application."""
         client_hashes = KSMClientManagement._convert_to_client_hashes(
             vault, uid, client_names_and_ids
@@ -728,3 +733,151 @@ class KSMClientManagement:
         request.appRecordUid = utils.base64_url_decode(uid)
         request.clients.extend(client_hashes)
         vault.keeper_auth.execute_auth_rest(rest_endpoint=CLIENT_REMOVE_URL, request=request)
+
+
+class KSMShareManagement:
+
+    @staticmethod
+    def add_secrets_to_ksm_app(vault: vault_online.VaultOnline, enterprise:enterprise_data.EnterpriseData, app_uid: str, master_key: bytes,
+                    secret_uids: list[str], is_editable: bool = False) -> list:
+        """Share secrets with a KSM application."""
+
+        app_shares, added_secret_info = KSMShareManagement._process_all_secrets(
+            vault, secret_uids, master_key, is_editable
+        )
+
+        if not added_secret_info:
+            raise ValueError("No valid secrets found to share.")
+
+        KSMShareManagement._send_share_request(
+            vault, app_uid, app_shares
+        )
+
+        vault.sync_down()
+
+        _update_shares_user_permissions(vault, enterprise, app_uid, removed=False)
+
+        return added_secret_info
+
+    @staticmethod
+    def _process_all_secrets(vault: vault_online.VaultOnline, secret_uids: list[str], 
+                            master_key: bytes, is_editable: bool) -> tuple[list, list]:
+        """Process all secrets and build share requests."""
+        app_shares = []
+        added_secret_info = []
+
+        for secret_uid in secret_uids:
+            share_info = KSMShareManagement._process_secret(
+                vault, secret_uid, master_key, is_editable
+            )
+            
+            if share_info:
+                app_shares.append(share_info['app_share'])
+                added_secret_info.append(share_info['secret_info'])
+
+        return app_shares, added_secret_info
+
+    @staticmethod
+    def _process_secret(vault: vault_online.VaultOnline, secret_uid: str, 
+                              master_key: bytes, is_editable: bool) -> Optional[dict]:
+        """Process a single secret and create share request."""
+        secret_info = KSMShareManagement._get_secret_info(vault, secret_uid)
+        
+        if not secret_info:
+            return None
+
+        share_key_decrypted, share_type, secret_type_name = secret_info
+        
+        if not share_key_decrypted:
+            logging.warning(f"Could not retrieve key for secret {secret_uid}")
+            return None
+
+        app_share = KSMShareManagement._build_app_share(
+            secret_uid, share_key_decrypted, master_key, share_type, is_editable
+        )
+
+        return {
+            'app_share': app_share,
+            'secret_info': (secret_uid, secret_type_name)
+        }
+
+    @staticmethod
+    def _get_secret_info(vault: vault_online.VaultOnline, secret_uid: str) -> Optional[tuple]:
+        """Get secret information (key, type, name) for a given UID."""
+        is_record = secret_uid in vault.vault_data._records
+        is_shared_folder = secret_uid in vault.vault_data._shared_folders
+
+        if is_record:
+            return KSMShareManagement._get_record_secret_info(vault, secret_uid)
+        elif is_shared_folder:
+            return KSMShareManagement._get_folder_secret_info(vault, secret_uid)
+        else:
+            KSMShareManagement._log_invalid_secret_warning(secret_uid)
+            return None
+
+    @staticmethod
+    def _get_record_secret_info(vault: vault_online.VaultOnline, secret_uid: str) -> Optional[tuple]:
+        """Get secret info for a record."""
+        record = vault.vault_data.load_record(record_uid=secret_uid)
+        if not isinstance(record, vault_record.TypedRecord):
+            raise ValueError("Unable to share application secret, only typed records can be shared")
+        
+        share_key_decrypted = vault.vault_data.get_record_key(record_uid=secret_uid)
+        share_type = ApplicationShareType.SHARE_TYPE_RECORD
+        secret_type_name = 'Record'
+        
+        return share_key_decrypted, share_type, secret_type_name
+
+    @staticmethod
+    def _get_folder_secret_info(vault: vault_online.VaultOnline, secret_uid: str) -> tuple:
+        """Get secret info for a shared folder."""
+        share_key_decrypted = vault.vault_data.get_shared_folder_key(shared_folder_uid=secret_uid)
+        share_type = ApplicationShareType.SHARE_TYPE_FOLDER
+        secret_type_name = 'Shared Folder'
+        
+        return share_key_decrypted, share_type, secret_type_name
+
+    @staticmethod
+    def _log_invalid_secret_warning(secret_uid: str) -> None:
+        """Log warning for invalid secret UID."""
+        logging.warning(
+            f"UID='{secret_uid}' is not a Record nor Shared Folder. "
+            "Only individual records or Shared Folders can be added to the application. "
+        )
+
+    @staticmethod
+    def _build_app_share(secret_uid: str, share_key_decrypted: bytes, master_key: bytes,
+                        share_type: int, is_editable: bool) -> AppShareAdd:
+        """Build AppShareAdd object."""
+        app_share = AppShareAdd()
+        app_share.secretUid = utils.base64_url_decode(secret_uid)
+        app_share.shareType = share_type
+        app_share.encryptedSecretKey = crypto.encrypt_aes_v2(share_key_decrypted, master_key)
+        app_share.editable = is_editable
+        return app_share
+
+    @staticmethod
+    def _send_share_request(vault: vault_online.VaultOnline, app_uid: str, 
+                          app_shares: list) -> bool:
+        """Send the share request to the server."""
+        request = KSMShareManagement._build_share_request(app_uid, app_shares)
+
+        vault.keeper_auth.execute_auth_rest(rest_endpoint=SHARE_ADD_URL, request=request)
+        return True
+
+    @staticmethod
+    def _build_share_request(app_uid: str, app_shares: list) -> AddAppSharesRequest:
+        """Build share request object."""
+        request = AddAppSharesRequest()
+        request.appRecordUid = utils.base64_url_decode(app_uid)
+        request.shares.extend(app_shares)
+        return request
+
+    @staticmethod
+    def remove_secrets_from_ksm_app(vault: vault_online.VaultOnline, app_uid: str, 
+                    secret_uids: list[str]) -> None:
+        """Send remove share request to server."""
+        request = RemoveAppSharesRequest()
+        request.appRecordUid = utils.base64_url_decode(app_uid)
+        request.shares.extend(utils.base64_url_decode(uid) for uid in secret_uids)
+        vault.keeper_auth.execute_auth_rest(rest_endpoint=SHARE_REMOVE_URL, request=request)
