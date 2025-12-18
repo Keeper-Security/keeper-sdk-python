@@ -663,14 +663,26 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
 
         return add_requests, remove_requests
 
-    def _to_disable_tfa_requests(self) -> Optional[enterprise_pb2.EnterpriseUserIds]:
+    def _to_disable_tfa_requests(self) -> Tuple[Optional[enterprise_pb2.EnterpriseUserIds], List[str]]:
+        """Returns tuple of (request, list of usernames with 2FA enabled)"""
         add_requests: Optional[enterprise_pb2.EnterpriseUserIds] = None
+        usernames_with_tfa: List[str] = []
         if isinstance(self._user_actions, dict):
-            user_ids = [user_id for user_id, action in self._user_actions.items() if action == UserAction.DisableTfa]
-            if len(user_ids) > 0:
+            enterprise_data = self.loader.enterprise_data
+            user_ids_with_tfa: List[int] = []
+            for user_id, action in self._user_actions.items():
+                if action == UserAction.DisableTfa:
+                    user = enterprise_data.users.get_entity(user_id)
+                    if user:
+                        if user.tfa_enabled:
+                            user_ids_with_tfa.append(user_id)
+                            usernames_with_tfa.append(user.username)
+                        else:
+                            self.logger.warning(f'User {user.username} does not have 2FA enabled')
+            if len(user_ids_with_tfa) > 0:
                 add_requests = enterprise_pb2.EnterpriseUserIds()
-                add_requests.enterpriseUserId.extend(user_ids)
-        return add_requests
+                add_requests.enterpriseUserId.extend(user_ids_with_tfa)
+        return add_requests, usernames_with_tfa
 
     def _to_user_actions(self) -> List[Dict[str, Any]]:
         requests: List[Dict[str, Any]] = []
@@ -679,6 +691,8 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
 
             for enterprise_user_id, user_action in self._user_actions.items():
                 try:
+                    if user_action == UserAction.DisableTfa:
+                        continue
                     u = enterprise_data.users.get_entity(enterprise_user_id)
                     if not u:
                         raise Exception('user does not exist')
@@ -1171,9 +1185,11 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
         self._execute_role_team('enterprise/role_team_add', add_rt_rqs)
 
         try:
-            tfs_rqs = self._to_disable_tfa_requests()
+            tfs_rqs, usernames_with_tfa = self._to_disable_tfa_requests()
             if tfs_rqs is not None:
                 self.loader.keeper_auth.execute_auth_rest('enterprise/disable_two_fa', tfs_rqs)
+                for username in usernames_with_tfa:
+                    self.logger.warning(f'2FA successfully removed for {username}')
         except Exception as e:
             self.logger.warning(f'Disable TFA error: {e}')
 
