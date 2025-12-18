@@ -14,15 +14,14 @@ from keepersdk.proto.APIRequest_pb2 import (
     AppShareAdd,
     ApplicationShareType,
     Device,
-    RemoveAppClientsRequest,
     RemoveAppSharesRequest
 )
 from keepersdk.proto.enterprise_pb2 import GENERAL
-from keepersdk.vault import ksm_management, vault_online, share_management_utils, shares_management
+from keepersdk.vault import ksm_management, vault_online
 from keepersdk.vault.vault_record import TypedRecord
 
 from . import base
-from .shares import ShareAction, ShareRecordCommand
+from .shares import ShareAction
 from .. import api, constants, prompt_utils
 from ..helpers import ksm_utils, report_utils
 from ..params import KeeperParams
@@ -208,19 +207,27 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
         self._validate_email_parameter(email)
         
         app_uid = self._find_app_uid(context.vault, uid_or_name)
-        share_args = self._build_share_args(app_uid, email, is_admin, unshare)
-        
-        self._execute_share_record(context, share_args)
-        context.vault.sync_down()
-        
-        SecretsManagerAppCommand.update_shares_user_permissions(context=context, uid=app_uid, removed=unshare)
+
+        action = SHARE_ACTION_REVOKE if unshare else SHARE_ACTION_GRANT
+        can_edit = is_admin and not unshare
+        can_share = is_admin and not unshare
+
+        success_responses, failed_responses = ksm_management.share_secrets_manager_app(
+            vault=context.vault, enterprise=context.enterprise_data, app_uid=app_uid, emails=[email], action=action, can_edit=can_edit, can_share=can_share
+        )
+        if success_responses:
+            logger.info(f'{len(success_responses)} share requests were successfully processed')
+        if failed_responses:
+            logger.error(f'{len(failed_responses)} share requests failed to process')
+            for failed_response in failed_responses:
+                logger.error(f'Failed to process share request: {failed_response}')
 
     def _validate_email_parameter(self, email: Optional[str]) -> None:
         """Validate that email parameter is provided."""
         if not email:
             raise ValueError("Email parameter is required for sharing. Use --email='user@example.com' to set it.")
 
-    def _find_app_uid(self, vault, uid_or_name: str) -> str:
+    def _find_app_uid(self, vault: vault_online.VaultOnline, uid_or_name: str) -> str:
         """Find application UID by name or UID."""
         app_record = next(
             (r for r in vault.vault_data.records() 
@@ -232,295 +239,6 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
             raise ValueError(f'No application found with UID/Name: {uid_or_name}')
         
         return app_record.record_uid
-
-    def _build_share_args(self, app_uid: str, email: str, is_admin: bool, unshare: bool) -> dict:
-        """Build arguments for share record command."""
-        action = SHARE_ACTION_REVOKE if unshare else SHARE_ACTION_GRANT
-        can_edit = is_admin and not unshare
-        can_share = is_admin and not unshare
-        
-        return {
-            "action": action,
-            "email": [email],
-            "record": app_uid,
-            "can_edit": can_edit,
-            "can_share": can_share
-        }
-
-    def _execute_share_record(self, context: KeeperParams, share_args: dict) -> None:
-        """Execute share record command."""
-        share_record_command = ShareRecordCommand()
-        share_record_command.execute(context=context, **share_args)
-
-    @staticmethod
-    def update_shares_user_permissions(context: KeeperParams, uid: str, removed: bool):
-        
-        vault = context.vault
-
-        # Get user permissions for the app
-        user_perms = SecretsManagerAppCommand._get_app_user_permissions(vault, uid)
-        
-        # Get app info and shared secrets
-        app_infos = ksm_management.get_app_info(vault=vault, app_uid=uid)
-        app_info = app_infos[0]
-        if not app_info:
-            return
-            
-        # Separate shared records and folders
-        shared_recs, shared_folders = SecretsManagerAppCommand._separate_shared_items(
-            vault, app_info.shares
-        )
-        
-        # Create share requests for users that need updates
-        SecretsManagerAppCommand._process_share_updates(
-            context, vault, user_perms, shared_recs, shared_folders, removed
-        )
-
-    @staticmethod
-    def _get_app_user_permissions(vault: vault_online.VaultOnline, uid: str) -> list:
-        """Get user permissions for the application."""
-        share_info = share_management_utils.get_record_shares(vault=vault, record_uids=[uid], is_share_admin=False)
-        user_perms = []
-        if share_info:
-            for record_info in share_info:
-                if record_info.get('record_uid') == uid:
-                    user_perms = record_info.get('shares', {}).get('user_permissions', [])
-                    break
-        return user_perms
-
-    @staticmethod
-    def _separate_shared_items(vault: vault_online.VaultOnline, shared_secrets):
-        """Separate shared secrets into records and folders."""
-        shared_recs = []
-        shared_folders = []
-        
-        for share in shared_secrets:
-            uid_str = utils.base64_url_encode(share.secretUid)
-            share_type = ApplicationShareType.Name(share.shareType)
-            
-            if share_type == ApplicationShareType.SHARE_TYPE_RECORD:
-                shared_recs.append(uid_str)
-            elif share_type == ApplicationShareType.SHARE_TYPE_FOLDER:
-                shared_folders.append(uid_str)
-        
-        if shared_recs:
-            share_management_utils.get_record_shares(
-                vault=vault, 
-                record_uids=shared_recs, 
-                is_share_admin=False
-            )
-            
-        return shared_recs, shared_folders
-
-    @staticmethod
-    def _process_share_updates(context: KeeperParams, vault: vault_online.VaultOnline, 
-                             user_perms: list, shared_recs: list, shared_folders: list, removed: bool):
-        """Process share updates for users."""
-        app_users_map = SecretsManagerAppCommand._categorize_app_users(vault, user_perms)
-        
-        sf_requests, rec_requests = SecretsManagerAppCommand._build_share_requests(
-            context, vault, app_users_map, shared_recs, shared_folders, removed
-        )
-        
-        SecretsManagerAppCommand._send_share_requests(vault, sf_requests, rec_requests)
-        logger.info("Share updates processed successfully")
-
-    @staticmethod
-    def _categorize_app_users(vault: vault_online.VaultOnline, user_perms: list) -> dict:
-        """Categorize users into admins and viewers."""
-        current_username = vault.keeper_auth.auth_context.username
-        admins = [
-            up.get('username') for up in user_perms 
-            if up.get('editable') and up.get('username') != current_username
-        ]
-        viewers = [
-            up.get('username') for up in user_perms 
-            if not up.get('editable')
-        ]
-        return dict(admins=admins, viewers=viewers)
-
-    @staticmethod
-    def _build_share_requests(context: KeeperParams, vault: vault_online.VaultOnline,
-                              app_users_map: dict, shared_recs: list, shared_folders: list, 
-                              removed: bool) -> tuple:
-        """Build share requests for folders and records."""
-        sf_requests = []
-        rec_requests = []
-        all_share_uids = shared_recs + shared_folders
-        
-        for users in app_users_map.values():
-            users_needing_update = [
-                u for u in users 
-                if SecretsManagerAppCommand._user_needs_update(vault, u, all_share_uids, removed)
-            ]
-            
-            if not users_needing_update:
-                continue
-                
-            folder_requests = SecretsManagerAppCommand._create_folder_share_requests(
-                vault, shared_folders, users_needing_update, removed
-            )
-            if folder_requests:
-                sf_requests.append(folder_requests)
-            
-            record_requests = SecretsManagerAppCommand._create_record_share_requests(
-                context, shared_recs, users_needing_update, removed
-            )
-            rec_requests.extend(record_requests)
-        
-        return sf_requests, rec_requests
-
-    @staticmethod
-    def _send_share_requests(vault: vault_online.VaultOnline, sf_requests: list, rec_requests: list) -> None:
-        """Send share requests to the server."""
-        success_responses = []
-        failed_responses = []
-        if sf_requests:
-            success_responses, failed_responses = shares_management.FolderShares.send_requests(vault, sf_requests)
-        if rec_requests:
-            success_responses_rec, failed_responses_rec = shares_management.RecordShares.send_requests(vault, rec_requests)
-            success_responses.extend(success_responses_rec)
-            failed_responses.extend(failed_responses_rec)
-        if success_responses:
-            logger.info(f'{len(success_responses)} share requests were successfully processed')
-        if failed_responses:
-            logger.error(f'{len(failed_responses)} share requests failed to process')
-            for failed_response in failed_responses:
-                logger.error(f'Failed to process share request: {failed_response}')
-        vault.sync_down()
-
-    @staticmethod
-    def _user_needs_update(vault: vault_online.VaultOnline, user: str, share_uids: list, removed: bool) -> bool:
-        """Check if a user needs share permission updates."""
-        record_permissions = SecretsManagerAppCommand._get_record_permissions(vault, share_uids)
-        record_cache = {x.record_uid: x for x in vault.vault_data.records()}
-        
-        for share_uid in share_uids:
-            share_user_permissions = SecretsManagerAppCommand._get_share_user_permissions(
-                vault, share_uid, record_cache, record_permissions
-            )
-            
-            user_permissions_set = {
-                up.get('username') for up in share_user_permissions 
-                if isinstance(up, dict)
-            }
-            
-            if user not in user_permissions_set:
-                return True
-        return False
-
-    @staticmethod
-    def _get_record_permissions(vault: vault_online.VaultOnline, share_uids: list) -> dict:
-        """Get record permissions for given share UIDs."""
-        record_share_info = share_management_utils.get_record_shares(
-            vault=vault, 
-            record_uids=share_uids, 
-            is_share_admin=False
-        )
-        
-        record_permissions = {}
-        if record_share_info:
-            for record_info in record_share_info:
-                record_uid = record_info.get('record_uid')
-                if record_uid:
-                    record_permissions[record_uid] = (
-                        record_info.get('shares', {}).get('user_permissions', [])
-                    )
-        return record_permissions
-
-    @staticmethod
-    def _get_share_user_permissions(vault: vault_online.VaultOnline, share_uid: str, 
-                                   record_cache: dict, record_permissions: dict) -> list:
-        """Get user permissions for a share (record or folder)."""
-        is_record_share = share_uid in record_cache
-        
-        if is_record_share:
-            return record_permissions.get(share_uid, [])
-        
-        shared_folder_obj = vault.vault_data.load_shared_folder(shared_folder_uid=share_uid)
-        if shared_folder_obj and shared_folder_obj.user_permissions:
-            return shared_folder_obj.user_permissions
-        
-        return []
-
-    @staticmethod
-    def _create_folder_share_requests(vault: vault_online.VaultOnline, shared_folders: list, 
-                                    users: list, removed: bool) -> list:
-        """Create folder share requests."""
-        if not shared_folders:
-            return []
-            
-        sf_action = SHARE_ACTION_REMOVE if removed else SHARE_ACTION_GRANT
-        requests = []
-        
-        for folder_uid in shared_folders:
-            for user in users:
-                if SecretsManagerAppCommand._user_needs_update(vault, user, [folder_uid], removed):
-                    request = SecretsManagerAppCommand._build_folder_share_request(
-                        vault, folder_uid, user, sf_action
-                    )
-                    requests.append(request)
-        
-        return requests
-
-    @staticmethod
-    def _build_folder_share_request(vault: vault_online.VaultOnline, folder_uid: str, 
-                                    user: str, action: str) -> dict:
-        """Build a single folder share request."""
-        shared_folder = vault.vault_data.load_shared_folder(folder_uid)
-        shared_folder_revision = vault.vault_data.storage.shared_folders.get_entity(folder_uid).revision
-        sf_unencrypted_key = vault.vault_data.get_shared_folder_key(shared_folder_uid=folder_uid)
-        
-        sf_info = {
-            'shared_folder_uid': folder_uid,
-            'users': shared_folder.user_permissions,
-            'teams': [],
-            'records': shared_folder.record_permissions,
-            'shared_folder_key_unencrypted': sf_unencrypted_key,
-            'default_manage_users': shared_folder.default_can_share,
-            'default_manage_records': shared_folder.default_can_edit,
-            'revision': shared_folder_revision
-        }
-        
-        return shares_management.FolderShares.prepare_request(
-            vault=vault,
-            kwargs={'action': action},
-            curr_sf=sf_info,
-            users=[user],
-            teams=[],
-            rec_uids=[],
-            default_record=False,
-            default_account=False,
-            share_expiration=-1
-        )
-
-    @staticmethod
-    def _create_record_share_requests(context: KeeperParams, shared_recs: list, 
-                                    users: list, removed: bool) -> list:
-        """Create record share requests."""
-        if not shared_recs or not context.vault:
-            return []
-            
-        rec_action = SHARE_ACTION_REVOKE if removed else SHARE_ACTION_GRANT
-        requests = []
-        
-        for record_uid in shared_recs:
-            for user in users:
-                if SecretsManagerAppCommand._user_needs_update(context.vault, user, [record_uid], removed):
-                    request = shares_management.RecordShares.prep_request(
-                        vault=context.vault,
-                        emails=[user],
-                        action=rec_action,
-                        uid_or_name=record_uid,
-                        share_expiration=-1,
-                        dry_run=False,
-                        enterprise=context.enterprise_data,
-                        can_edit=False,
-                        can_share=False
-                    )
-                    requests.append(request)
-        
-        return requests
 
 
 class SecretsManagerClientCommand(base.ArgparseCommand):
@@ -661,7 +379,6 @@ class SecretsManagerClientCommand(base.ArgparseCommand):
         return (len(client_names_or_ids) == 1 and 
                 client_names_or_ids[0] in [WILDCARD_ALL, WILDCARD_ALL_ALIAS])
 
-    
     @staticmethod
     def add_client(
             vault: vault_online.VaultOnline, 
@@ -688,7 +405,7 @@ class SecretsManagerClientCommand(base.ArgparseCommand):
         output_lines = []
         
         for i in range(count):
-            token_data = SecretsManagerClientCommand._generate_single_client(
+            token_data = ksm_management.KSMClientManagement._generate_single_client(
                 vault=vault,
                 uid=uid,
                 client_name=client_name,
@@ -711,168 +428,6 @@ class SecretsManagerClientCommand(base.ArgparseCommand):
             SecretsManagerClientCommand._log_ip_lock_warning()
         
         return tokens
-
-    @staticmethod
-    def _generate_single_client(
-            vault: vault_online.VaultOnline,
-            uid: str,
-            client_name: str,
-            count: int,
-            index: int,
-            unlock_ip: bool,
-            first_access_expire_duration_ms: int,
-            access_expire_in_ms: Optional[int],
-            master_key: bytes,
-            server: str) -> dict:
-        """Generate a single client device and return token info and output string."""
-        
-        # Generate secret and client ID
-        secret_bytes = os.urandom(32)
-        client_id = SecretsManagerClientCommand._generate_client_id(secret_bytes)
-        
-        encrypted_master_key = crypto.encrypt_aes_v2(master_key, secret_bytes)
-        
-        # Create and send request
-        device = SecretsManagerClientCommand._create_client_request(
-            vault=vault,
-            uid=uid,
-            encrypted_master_key=encrypted_master_key,
-            unlock_ip=unlock_ip,
-            first_access_expire_duration_ms=first_access_expire_duration_ms,
-            access_expire_in_ms=access_expire_in_ms,
-            client_id=client_id,
-            client_name=client_name,
-            count=count,
-            index=index
-        )
-        
-        # Generate token with server prefix
-        token_with_prefix = SecretsManagerClientCommand._generate_token_with_prefix(
-            secret_bytes=secret_bytes,
-            server=server
-        )
-        
-        output_string = SecretsManagerClientCommand._create_output_string(
-            token_with_prefix=token_with_prefix,
-            client_name=client_name,
-            unlock_ip=unlock_ip,
-            first_access_expire_duration_ms=first_access_expire_duration_ms,
-            access_expire_in_ms=access_expire_in_ms
-        )
-        
-        return {
-            'token_info': {
-                'oneTimeToken': token_with_prefix,
-                'deviceToken': utils.base64_url_encode(device.encryptedDeviceToken)
-            },
-            'output_string': output_string
-        }
-
-    @staticmethod
-    def _generate_client_id(secret_bytes: bytes) -> bytes:
-        """Generate client ID using HMAC."""
-        try:
-            return hmac.new(
-                secret_bytes, 
-                CLIENT_ID_COUNTER_BYTES, 
-                CLIENT_ID_DIGEST
-            ).digest()
-        except Exception as e:
-            logger.error(e)
-            raise
-
-    @staticmethod
-    def _create_client_request(
-            vault: vault_online.VaultOnline,
-            uid: str,
-            encrypted_master_key: bytes,
-            unlock_ip: bool,
-            first_access_expire_duration_ms: int,
-            access_expire_in_ms: Optional[int],
-            client_id: bytes,
-            client_name: str,
-            count: int,
-            index: int) -> Device:
-        """Create and send client request to server."""
-        
-        request = AddAppClientRequest()
-        request.appRecordUid = utils.base64_url_decode(uid)
-        request.encryptedAppKey = encrypted_master_key
-        request.lockIp = not unlock_ip
-        request.firstAccessExpireOn = first_access_expire_duration_ms
-        request.appClientType = GENERAL
-        request.clientId = client_id
-        
-        if access_expire_in_ms:
-            request.accessExpireOn = access_expire_in_ms
-        
-        if client_name:
-            request.id = client_name if count == 1 else f"{client_name} {index + 1}"
-        
-        device = vault.keeper_auth.execute_auth_rest(
-            rest_endpoint=CLIENT_ADD_URL, 
-            request=request, 
-            response_type=Device
-        )
-        
-        if not device or not device.encryptedDeviceToken:
-            raise ValueError("Failed to create client device - no device token received")
-        
-        return device
-
-    @staticmethod
-    def _generate_token_with_prefix(secret_bytes: bytes, server: str) -> str:
-        """Generate token with server prefix."""
-        token = utils.base64_url_encode(secret_bytes)
-        
-        # Get server abbreviation
-        abbrev = constants.get_abbrev_by_host(server)
-        
-        if abbrev:
-            return f'{abbrev}:{token}'
-        else:
-            tmp_server = server if server.startswith(('http://', 'https://')) else f"https://{server}"
-            
-            return f'{parse.urlparse(tmp_server).netloc.lower()}:{token}'
-
-    @staticmethod
-    def _create_output_string(
-            token_with_prefix: str,
-            client_name: str,
-            unlock_ip: bool,
-            first_access_expire_duration_ms: int,
-            access_expire_in_ms: Optional[int]) -> str:
-        """Create formatted output string for logging."""
-        output_lines = [f'\nOne-Time Access Token: {token_with_prefix}']
-        
-        if client_name:
-            output_lines.append(f'Name: {client_name}')
-        
-        ip_lock = 'Disabled' if unlock_ip else 'Enabled'
-        output_lines.append(f'IP Lock: {ip_lock}')
-        
-        exp_date_str = SecretsManagerClientCommand._format_timestamp(
-            first_access_expire_duration_ms
-        )
-        output_lines.append(f'Token Expires On: {exp_date_str}')
-        
-        app_expire_on_str = (
-            SecretsManagerClientCommand._format_timestamp(access_expire_in_ms)
-            if access_expire_in_ms else "Never"
-        )
-        output_lines.append(f'App Access Expires on: {app_expire_on_str}')
-        
-        return '\n'.join(output_lines)
-
-    @staticmethod
-    def _format_timestamp(timestamp_ms: int) -> str:
-        """Format timestamp in milliseconds to date string."""
-        try:
-            return datetime.datetime.fromtimestamp(
-                timestamp_ms / MILLISECONDS_PER_SECOND
-            ).strftime(DATE_FORMAT)
-        except (OSError, ValueError):
-            return 'Invalid timestamp'
 
     @staticmethod
     def _log_success_message(output_string: str) -> None:
@@ -929,63 +484,15 @@ class SecretsManagerClientCommand(base.ArgparseCommand):
         return user_choice.lower() == USER_CHOICE_YES
 
     @staticmethod
-    def remove_client(vault: vault_online.VaultOnline, uid: str, client_names_and_ids: list[str], force=False):
+    def remove_client(vault: vault_online.VaultOnline, uid: str, client_names_and_ids: list[str], force: bool = False):
         """Remove client devices from a KSM application."""
-        client_hashes = SecretsManagerClientCommand._convert_to_client_hashes(
-            vault, uid, client_names_and_ids
+        ksm_management.KSMClientManagement.remove_ksm_client(
+            vault=vault, 
+            uid=uid, 
+            client_names_and_ids=client_names_and_ids, 
+            callable=SecretsManagerClientCommand._confirm_remove_clients if not force else None
         )
-
-        found_clients_count = len(client_hashes)
-        if found_clients_count == 0:
-            logger.warning('No Client Devices found with given name or ID\n')
-            return
-        
-        if not force:
-            if not SecretsManagerClientCommand._confirm_remove_clients(found_clients_count):
-                return
-
-        SecretsManagerClientCommand._send_remove_client_request(vault, uid, client_hashes)
         logger.info('\nClient removal was successful\n')
-
-    @staticmethod
-    def _convert_to_client_hashes(vault: vault_online.VaultOnline, uid: str, 
-                                  client_names_and_ids: list[str]) -> list[bytes]:
-        """Convert client names/IDs to client ID hashes."""
-        exact_matches, partial_matches = SecretsManagerClientCommand._categorize_client_matches(
-            client_names_and_ids
-        )
-        
-        app_infos = ksm_management.get_app_info(vault=vault, app_uid=uid)
-        app_info = app_infos[0]
-        client_id_hashes_bytes = []
-        
-        for client in app_info.clients:
-            if client.id in exact_matches:
-                client_id_hashes_bytes.append(client.clientId)
-                continue
-            
-            if partial_matches:
-                client_id = utils.base64_url_encode(client.clientId)
-                for partial_name in partial_matches:
-                    if client_id.startswith(partial_name):
-                        client_id_hashes_bytes.append(client.clientId)
-                        break
-        
-        return client_id_hashes_bytes
-
-    @staticmethod
-    def _categorize_client_matches(client_names_and_ids: list[str]) -> tuple[set, set]:
-        """Categorize client names/IDs into exact and partial matches."""
-        exact_matches = set()
-        partial_matches = set()
-        
-        for name in client_names_and_ids:
-            if len(name) >= ksm_management.CLIENT_SHORT_ID_LENGTH:
-                partial_matches.add(name)
-            else:
-                exact_matches.add(name)
-        
-        return exact_matches, partial_matches
 
     @staticmethod
     def _confirm_remove_clients(clients_count: int) -> bool:
@@ -996,15 +503,6 @@ class SecretsManagerClientCommand(base.ArgparseCommand):
             default=USER_CHOICE_DEFAULT_NO
         )
         return user_choice.lower() == USER_CHOICE_YES
-
-    @staticmethod
-    def _send_remove_client_request(vault: vault_online.VaultOnline, uid: str, 
-                                    client_hashes: list[bytes]) -> None:
-        """Send remove client request to server."""
-        request = RemoveAppClientsRequest()
-        request.appRecordUid = utils.base64_url_decode(uid)
-        request.clients.extend(client_hashes)
-        vault.keeper_auth.execute_auth_rest(rest_endpoint=CLIENT_REMOVE_URL, request=request)
 
 
 class SecretsManagerShareCommand(base.ArgparseCommand):
