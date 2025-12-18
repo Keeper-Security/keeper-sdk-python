@@ -85,7 +85,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
 
     if not scopes or bool(scopes & base.CommandScope.Enterprise):
         from .commands import (enterprise_info, enterprise_node, enterprise_role, enterprise_team, enterprise_user, enterprise_create_user,
-                               importer_commands, audit_report, audit_alert, audit_log, transfer_account, pedm_admin, msp)
+                               importer_commands, audit_report, audit_alert, audit_log, transfer_account, pedm_admin, msp, user_report)
 
         commands.register_command('create-user', enterprise_create_user.CreateEnterpriseUserCommand(), base.CommandScope.Enterprise, 'ecu')
         commands.register_command('enterprise-down', enterprise_info.EnterpriseDownCommand(), base.CommandScope.Enterprise, 'ed')
@@ -104,3 +104,4 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('pedm', pedm_admin.PedmCommand(), base.CommandScope.Enterprise)
         commands.register_command('switch-to-mc', msp.SwitchToManagedCompanyCommand(), base.CommandScope.Enterprise)
         commands.register_command('team-approve', enterprise_team.TeamApproveCommand(), base.CommandScope.Enterprise)
+        commands.register_command('user-report', user_report.UserReportCommand(), base.CommandScope.Enterprise, 'ur')
