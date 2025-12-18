@@ -20,11 +20,30 @@ import os
 import sys
 
 from keepersdk.vault import ksm_management, vault_online
-from keepercli.params import KeeperParams
+from keepercli.params import KeeperParams, KeeperConfig
 from keepercli.login import LoginFlow
+
 
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
+
+
+def get_default_config_path() -> str:
+    """
+    Get the default config file path following the same logic as JsonFileLoader.
+    
+    First checks if 'config.json' exists in the current directory.
+    If not, uses ~/.keeper/config.json.
+    """
+    file_name = 'config.json'
+    if os.path.isfile(file_name):
+        return os.path.abspath(file_name)
+    else:
+        keeper_dir = os.path.join(os.path.expanduser('~'), '.keeper')
+        if not os.path.exists(keeper_dir):
+            os.mkdir(keeper_dir)
+        return os.path.join(keeper_dir, file_name)
+        
 
 def login_to_keeper_with_config(filename: str) -> KeeperParams:
     """
@@ -38,15 +57,17 @@ def login_to_keeper_with_config(filename: str) -> KeeperParams:
         raise FileNotFoundError(f'Config file {filename} not found')
     with open(filename, 'r') as f:
         config_data = json.load(f)
-    username = config_data.get('user', config_data.get('username'))
-    password = config_data.get('password', '')
-    if not username:
-        raise ValueError('Username not found in config file')
-    context = KeeperParams(config_filename=filename, config=config_data)
-    logged_in = LoginFlow.login(context, username=username, password=password or None, resume_session=bool(username))
-    if not logged_in:
+
+    keeper_config = KeeperConfig(config_filename=filename, config=config_data)
+    auth = LoginFlow.login(keeper_config)
+    if not auth:
         raise Exception('Failed to authenticate with Keeper')
+
+    context = KeeperParams(keeper_config=keeper_config)
+    context.set_auth(auth)
+
     return context
+
 
 def print_client_device_info(client_devices):
     """Print client device information in a table-like format."""
@@ -62,6 +83,7 @@ def print_client_device_info(client_devices):
                                     f'  IP Lock: {client_device.ip_lock}\n' \
                                     f'  IP Address: {client_device.ip_address or "--"}'
         logger.info(client_devices_str)
+
 
 def print_shared_secrets_info(shared_secrets):
     """Print shared secrets information in a table-like format."""
@@ -79,6 +101,7 @@ def print_shared_secrets_info(shared_secrets):
         name = str(secrets.name)[:29]
         permissions = str(secrets.permissions)
         logger.info(f"{share_type:<15} {uid:<25} {name:<30} {permissions}")
+
 
 def get_secrets_manager_app(vault: vault_online.VaultOnline, app_id: str):
     """Retrieve and display Secrets Manager application details by UID or title."""
@@ -110,6 +133,7 @@ def get_secrets_manager_app(vault: vault_online.VaultOnline, app_id: str):
         logger.error(f'Error getting Secrets Manager application {app_id}: {str(e)}')
         return None
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='Get details of a Secrets Manager application using Keeper SDK',
@@ -120,10 +144,11 @@ Example:
         '''
     )
     
+    default_config_path = get_default_config_path()
     parser.add_argument(
         '-c', '--config',
-        default='myconfig.json',
-        help='Configuration file (default: myconfig.json)'
+        default=default_config_path,
+        help=f'Configuration file (default: {default_config_path})'
     )
 
     args = parser.parse_args()
