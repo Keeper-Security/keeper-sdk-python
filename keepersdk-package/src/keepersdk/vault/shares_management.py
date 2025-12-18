@@ -74,7 +74,7 @@ class RecordShares():
         vault.sync_down()
     
     @staticmethod
-    def _resolve_uid_or_name(vault, uid_or_name, record_cache, shared_folder_cache, folder_cache):
+    def _resolve_uid_or_name(vault: vault_online.VaultOnline, uid_or_name: str, record_cache: dict, shared_folder_cache: dict, folder_cache: dict):
         """Resolve uid_or_name to record_uid, folder_uid, or shared_folder_uid."""
         record_uid = None
         folder_uid = None
