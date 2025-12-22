@@ -670,18 +670,16 @@ class EnterpriseUserDeleteCommand(base.ArgparseCommand, enterprise_management.IE
         if not users:
             raise base.CommandError('No users to delete')
 
-        active_users = [x for x in users if x.status == 'active']
-        if len(active_users) > 0:
-            if kwargs.get('force') is not True:
-                alert = prompt_utils.get_formatted_text('\nALERT!\n', prompt_utils.COLORS.FAIL)
-                prompt_utils.output_text(
-                    alert,'Deleting a user will also delete any records owned and shared by this user.\n' +
-                          'Before you delete this user(s), we strongly recommend you lock their account\n' +
-                          'and transfer any important records to other user(s).\n' +
-                          'This action cannot be undone.\n')
-                answer = prompt_utils.user_choice('Do you want to proceed with deletion?', 'yn', 'n')
-                if answer.lower() not in ('y', 'yes'):
-                    return
+        if kwargs.get('force') is not True:
+            alert = prompt_utils.get_formatted_text('\nALERT!\n', prompt_utils.COLORS.FAIL)
+            prompt_utils.output_text(
+                alert, 'Deleting a user will also delete any records owned and shared by this user.\n' +
+                      'Before you delete this user(s), we strongly recommend you lock their account\n' +
+                      'and transfer any important records to other user(s).\n' +
+                      'This action cannot be undone.\n')
+            answer = prompt_utils.user_choice('Do you want to proceed with deletion?', 'yn', 'n')
+            if answer.lower() not in ('y', 'yes'):
+                return
 
         batch = batch_management.BatchManagement(loader=context.enterprise_loader, logger=self)
         users_to_delete = [enterprise_management.UserEdit(enterprise_user_id=x.enterprise_user_id) for x in users]
