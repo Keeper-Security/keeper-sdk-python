@@ -15,13 +15,6 @@ from keepersdk.helpers import router_utils, gateway_utils
 logger = api.get_logger()
 
 # Constants
-# FORMAT_TABLE = 'table'
-# FORMAT_JSON = 'json'
-
-# STATUS_ONLINE = 'ONLINE'
-# STATUS_OFFLINE = 'OFFLINE'
-# STATUS_UNKNOWN = 'UNKNOWN'
-
 DATETIME_FORMAT = '%Y-%m-%d %H:%M:%S'
 MILLISECONDS_TO_SECONDS = 1000
 VERSION_SEPARATOR = ';'
@@ -41,14 +34,12 @@ MESSAGE_NO_GATEWAYS_JSON = "This Enterprise does not have Gateways yet."
 HEADER_KSM_APP_NAME_UID = 'ksm_app_name_uid'
 HEADER_GATEWAY_NAME = 'gateway_name'
 HEADER_GATEWAY_UID = 'gateway_uid'
-# HEADER_STATUS = 'status'
 HEADER_GATEWAY_VERSION = 'gateway_version'
 HEADER_DEVICE_NAME = 'device_name'
 HEADER_DEVICE_TOKEN = 'device_token'
 HEADER_CREATED_ON = 'created_on'
 HEADER_LAST_MODIFIED = 'last_modified'
 HEADER_NODE_ID = 'node_id'
-# HEADER_OS = 'os'
 HEADER_OS_RELEASE = 'os_release'
 HEADER_MACHINE_TYPE = 'machine_type'
 HEADER_OS_VERSION = 'os_version'
@@ -57,14 +48,12 @@ HEADER_OS_VERSION = 'os_version'
 DISPLAY_HEADER_KSM_APP_NAME_UID = 'KSM Application Name (UID)'
 DISPLAY_HEADER_GATEWAY_NAME = 'Gateway Name'
 DISPLAY_HEADER_GATEWAY_UID = 'Gateway UID'
-# DISPLAY_HEADER_STATUS = 'Status'
 DISPLAY_HEADER_GATEWAY_VERSION = 'Gateway Version'
 DISPLAY_HEADER_DEVICE_NAME = 'Device Name'
 DISPLAY_HEADER_DEVICE_TOKEN = 'Device Token'
 DISPLAY_HEADER_CREATED_ON = 'Created On'
 DISPLAY_HEADER_LAST_MODIFIED = 'Last Modified'
 DISPLAY_HEADER_NODE_ID = 'Node ID'
-# DISPLAY_HEADER_OS = 'OS'
 DISPLAY_HEADER_OS_RELEASE = 'OS Release'
 DISPLAY_HEADER_MACHINE_TYPE = 'Machine Type'
 DISPLAY_HEADER_OS_VERSION = 'OS Version'
