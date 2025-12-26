@@ -90,6 +90,12 @@ class PedmApproval(storage_types.IUid[str]):
         return self.approval_uid
 
 
+@attrs.define(kw_only=True, frozen=True)
+class PedmUpdateApproval:
+    approval_uid: str
+    expire_in: int
+
+
 @attrs.define(kw_only=True)
 class AddDeployment:
     name: str

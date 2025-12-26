@@ -813,3 +813,19 @@ class PedmPlugin(IPedmAdmin):
         self._need_sync = True
         assert status_rs is not None
         return admin_types.ModifyStatus.from_proto(status_rs)
+
+    def extend_approvals(self, *, to_extend: Optional[List[admin_types.PedmUpdateApproval]] = None) -> admin_types.ModifyStatus:
+        auth = self.loader.keeper_auth
+
+        rq = pedm_pb2.ModifyApprovalRequest()
+        if isinstance(to_extend, list):
+            for update in to_extend:
+                au = pedm_pb2.ApprovalExtendData()
+                au.approvalUid = utils.base64_url_decode(update.approval_uid)
+                au.expireIn = update.expire_in
+                rq.extendApproval.append(au)
+
+        status_rs = auth.execute_router('pedm/modify_approval', rq, response_type=pedm_pb2.PedmStatusResponse)
+        self._need_sync = True
+        assert status_rs is not None
+        return admin_types.ModifyStatus.from_proto(status_rs)
