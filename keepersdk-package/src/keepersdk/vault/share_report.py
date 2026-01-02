@@ -16,23 +16,12 @@ Usage:
 
 import dataclasses
 import datetime
-import logging
-from enum import Enum
 from typing import Optional, List, Dict, Any, Iterable, Set
 
-logger = logging.getLogger(__name__)
-
-from . import vault_online, vault_data, vault_types, vault_utils, vault_record
+from . import vault_online, vault_types, vault_utils
 from . import share_management_utils
 from ..authentication import keeper_auth
 from ..enterprise import enterprise_data as enterprise_data_types
-
-
-class SharePermissionType(Enum):
-    """Types of share permissions."""
-    USER = 'user'
-    TEAM = 'team'
-    SHARED_FOLDER = 'shared_folder'
 
 
 @dataclasses.dataclass
@@ -139,16 +128,11 @@ class ShareReportGenerator:
             auth: Optional KeeperAuth for API calls (defaults to vault.keeper_auth)
             config: Configuration options for report generation
         """
-        if vault is None:
-            raise ValueError("vault cannot be None")
         self._vault = vault
         self._enterprise = enterprise
         self._auth = auth or vault.keeper_auth
         self._config = config or ShareReportConfig()
         self._share_info_cache: Optional[Dict[str, RecordShareInfo]] = None
-        
-        # Log vault state for debugging
-        logger.debug(f"ShareReportGenerator initialized with vault: shared_folder_count={vault.vault_data.shared_folder_count}")
 
     @property
     def config(self) -> ShareReportConfig:
@@ -173,27 +157,16 @@ class ShareReportGenerator:
         """
         entries: List[SharedFolderReportEntry] = []
         
-        # Get all shared folders from vault
-        shared_folders_list = list(self._vault.vault_data.shared_folders())
-        logger.debug(f"Found {len(shared_folders_list)} shared folders in vault")
-        
-        for sf_info in shared_folders_list:
-            logger.debug(f"Processing shared folder: {sf_info.shared_folder_uid} - {sf_info.name} (users: {sf_info.users}, teams: {sf_info.teams})")
-            
+        for sf_info in self._vault.vault_data.shared_folders():
             sf = self._vault.vault_data.load_shared_folder(sf_info.shared_folder_uid)
             if not sf:
-                logger.debug(f"  Could not load shared folder {sf_info.shared_folder_uid}")
                 continue
-            
-            logger.debug(f"  Loaded shared folder with {len(sf.user_permissions)} user permissions")
             
             folder_path = vault_utils.get_folder_path(self._vault.vault_data, sf.shared_folder_uid)
             
-            # Process user permissions
             for perm in sf.user_permissions:
                 permissions = self._format_folder_permissions(perm)
                 shared_to = perm.name or perm.user_uid
-                logger.debug(f"  Permission: user_type={perm.user_type}, user_uid={perm.user_uid}, name={perm.name}, shared_to={shared_to}, permissions={permissions}")
                 
                 if perm.user_type == vault_types.SharedFolderUserType.Team:
                     shared_to = f'(Team) {shared_to}'
@@ -221,131 +194,237 @@ class ShareReportGenerator:
         return entries
 
     def generate_records_report(self) -> List[ShareReportEntry]:
-        """Generate a report of shared records.
-        
-        Returns:
-            List of ShareReportEntry objects containing record share information
-        """
-        # If specific records are requested, resolve them directly
+        """Generate a report of shared records."""
         if self._config.record_filter:
             record_uids = self._resolve_record_uids(self._config.record_filter)
         else:
-            # For general reports, get all records and let API filter
             record_uids = {r.record_uid for r in self._vault.vault_data.records()}
         
         if not record_uids:
             return []
         
-        share_info_map = self._fetch_share_info(list(record_uids))
-        if not share_info_map:
-            return []
-        
+        share_info_map = self._fetch_share_info(list(record_uids)) or {}
         entries: List[ShareReportEntry] = []
+        processed_uids: Set[str] = set()
+        
+        user_filter_lower = {u.lower() for u in self._config.user_filter} if self._config.user_filter else None
         
         for uid, share_info in share_info_map.items():
-            # Skip records that aren't actually shared (no permissions besides owner)
-            non_owner_perms = [p for p in share_info.user_permissions if not p.is_owner]
-            if not non_owner_perms and not self._config.record_filter:
+            if not self._should_include_record(share_info):
                 continue
             
-            entry = self._build_share_entry(share_info)
+            if user_filter_lower and not self._record_matches_user_filter(share_info, user_filter_lower):
+                continue
             
-            # Apply user filter if specified
-            if self._config.user_filter:
-                user_filter_lower = {u.lower() for u in self._config.user_filter}
-                if not self._record_matches_user_filter(share_info, user_filter_lower):
-                    continue
-            
-            entries.append(entry)
+            entries.append(self._build_share_entry(share_info))
+            processed_uids.add(uid)
+        
+        self._add_shared_folder_records(entries, processed_uids, share_info_map, user_filter_lower)
         
         return entries
+    
+    def _should_include_record(self, share_info: RecordShareInfo) -> bool:
+        """Check if a record should be included in the report."""
+        non_owner_perms = [p for p in share_info.user_permissions if not p.is_owner]
+        has_owner = any(p.is_owner for p in share_info.user_permissions)
+        
+        if self._config.record_filter:
+            return True
+        
+        if not non_owner_perms:
+            return False
+        
+        return has_owner
+    
+    def _add_shared_folder_records(
+        self,
+        entries: List[ShareReportEntry],
+        processed_uids: Set[str],
+        share_info_map: Dict[str, RecordShareInfo],
+        user_filter_lower: Optional[Set[str]]
+    ) -> None:
+        """Add records from shared folders that weren't returned by the share API."""
+        should_include = (
+            self._config.user_filter or 
+            self._config.show_ownership or 
+            not self._config.record_filter
+        )
+        
+        if not should_include:
+            return
+        
+        sf_records = (
+            self._get_shared_folder_records_for_user(user_filter_lower)
+            if user_filter_lower
+            else self._get_all_shared_folder_records()
+        )
+        
+        for record_uid in sf_records:
+            if record_uid in processed_uids:
+                continue
+            
+            record_info = self._vault.vault_data.get_record(record_uid)
+            if not record_info:
+                continue
+            
+            folder_paths = self._get_folder_paths(record_uid)
+            owner = self._get_owner_from_share_info(share_info_map, record_uid)
+            
+            entries.append(ShareReportEntry(
+                record_uid=record_uid,
+                record_title=record_info.title,
+                record_owner=owner,
+                shared_with='',
+                shared_with_count=0,
+                folder_paths=folder_paths
+            ))
+            processed_uids.add(record_uid)
+    
+    def _get_folder_paths(self, record_uid: str) -> List[str]:
+        """Get folder paths for a record."""
+        paths = []
+        for folder in vault_utils.get_folders_for_record(self._vault.vault_data, record_uid):
+            path = vault_utils.get_folder_path(self._vault.vault_data, folder.folder_uid)
+            if path:
+                paths.append(path)
+        return paths
+    
+    def _get_owner_from_share_info(self, share_info_map: Dict[str, RecordShareInfo], record_uid: str) -> str:
+        """Extract owner username from share info if available."""
+        if record_uid not in share_info_map:
+            return ''
+        for perm in share_info_map[record_uid].user_permissions:
+            if perm.is_owner:
+                return perm.username
+        return ''
+    
+    def _get_all_shared_folder_records(self) -> Set[str]:
+        """Get all records in all shared folders."""
+        return self._get_shared_folder_records_for_user(None)
+    
+    def _get_shared_folder_records_for_user(self, user_filter: Optional[Set[str]]) -> Set[str]:
+        """Get records in shared folders, optionally filtered by user access."""
+        result: Set[str] = set()
+        
+        for sf_info in self._vault.vault_data.shared_folders():
+            if user_filter:
+                sf = self._vault.vault_data.load_shared_folder(sf_info.shared_folder_uid)
+                if not sf or not self._user_has_sf_access(sf, user_filter):
+                    continue
+            
+            self._collect_folder_records(sf_info.shared_folder_uid, result)
+        
+        return result
+    
+    def _user_has_sf_access(self, sf: vault_types.SharedFolder, user_filter: Set[str]) -> bool:
+        """Check if any user in the filter has access to the shared folder."""
+        for perm in sf.user_permissions:
+            target = (perm.name or perm.user_uid or '').lower()
+            if target in user_filter:
+                return True
+        return False
+    
+    def _collect_folder_records(self, folder_uid: str, result: Set[str]) -> None:
+        """Collect all records from a folder and its subfolders."""
+        folder = self._vault.vault_data.get_folder(folder_uid)
+        if not folder:
+            return
+        
+        result.update(folder.records)
+        
+        def collect(f: vault_types.Folder) -> None:
+            result.update(f.records)
+        
+        vault_utils.traverse_folder_tree(self._vault.vault_data, folder, collect)
 
     def generate_summary_report(self) -> List[ShareSummaryEntry]:
-        """Generate a summary report showing share counts by target.
+        """Generate a summary report showing share counts by target user."""
+        record_shares: Dict[str, Set[str]] = {}
+        sf_shares: Dict[str, Set[str]] = {}
         
-        This matches the old Commander logic:
-        1. Get ALL shared records (both owned by user AND shared with user)
-        2. For each record, collect ALL other users who have access
-        3. Group by user and count records/shared folders
+        sf_user_map, sf_records_map = self._build_shared_folder_maps()
+        self._aggregate_shared_folder_access(sf_user_map, sf_records_map, record_shares, sf_shares)
+        self._aggregate_direct_shares(record_shares)
+        self._remove_current_user(record_shares, sf_shares)
         
-        The report shows: "Who else has access to records that I have access to"
-        This includes:
-        - Records I own and have shared with others
-        - Records others own and have shared with me (shows other recipients)
-        
-        Returns:
-            List of ShareSummaryEntry objects with aggregated share counts
-        """
-        record_shares: Dict[str, Set[str]] = {}  # user -> set of record UIDs
-        sf_shares: Dict[str, Set[str]] = {}      # user -> set of shared folder UIDs
-        
-        # Step 1: Build shared folder user map AND track sf_shares per user
-        sf_user_map: Dict[str, Set[str]] = {}  # SF UID -> users
-        sf_records_map: Dict[str, Set[str]] = {}  # SF UID -> records in that folder
+        return self._build_summary_entries(record_shares, sf_shares)
+    
+    def _build_shared_folder_maps(self) -> tuple:
+        """Build maps of shared folder users and records."""
+        sf_user_map: Dict[str, Set[str]] = {}
+        sf_records_map: Dict[str, Set[str]] = {}
         
         for sf_info in self._vault.vault_data.shared_folders():
             sf = self._vault.vault_data.load_shared_folder(sf_info.shared_folder_uid)
-            if sf:
-                # Get ALL users in this shared folder (including current user for tracking)
-                users_in_sf: Set[str] = set()
-                for perm in sf.user_permissions:
-                    target = perm.name or perm.user_uid
-                    if target:
-                        users_in_sf.add(target)
-                sf_user_map[sf_info.shared_folder_uid] = users_in_sf
-                
-                # Get records in this shared folder
-                folder = self._vault.vault_data.get_folder(sf_info.shared_folder_uid)
-                if folder and folder.records:
-                    sf_records_map[sf_info.shared_folder_uid] = set(folder.records)
+            if not sf:
+                continue
+            
+            users_in_sf: Set[str] = set()
+            for perm in sf.user_permissions:
+                target = perm.name or perm.user_uid
+                if target:
+                    users_in_sf.add(target)
+            sf_user_map[sf_info.shared_folder_uid] = users_in_sf
+            
+            folder = self._vault.vault_data.get_folder(sf_info.shared_folder_uid)
+            if folder and folder.records:
+                sf_records_map[sf_info.shared_folder_uid] = set(folder.records)
         
-        # Step 2: For each shared folder, add its records to each OTHER user's count
+        return sf_user_map, sf_records_map
+    
+    def _aggregate_shared_folder_access(
+        self,
+        sf_user_map: Dict[str, Set[str]],
+        sf_records_map: Dict[str, Set[str]],
+        record_shares: Dict[str, Set[str]],
+        sf_shares: Dict[str, Set[str]]
+    ) -> None:
+        """Aggregate record and folder counts from shared folder access."""
         for sf_uid, users in sf_user_map.items():
             records_in_sf = sf_records_map.get(sf_uid, set())
             for target in users:
                 if target == self.current_username:
-                    continue  # Skip current user
-                # Track shared folders per user
+                    continue
                 sf_shares.setdefault(target, set()).add(sf_uid)
-                # Track records per user via shared folder access
                 for record_uid in records_in_sf:
                     record_shares.setdefault(target, set()).add(record_uid)
-        
-        # Step 3: Get ALL records user has access to and fetch share info
-        # This includes both records the user owns AND records shared with the user
+    
+    def _aggregate_direct_shares(self, record_shares: Dict[str, Set[str]]) -> None:
+        """Aggregate record counts from direct share permissions."""
         all_record_uids = [r.record_uid for r in self._vault.vault_data.records()]
+        if not all_record_uids:
+            return
         
-        if all_record_uids:
-            share_info_map = self._fetch_share_info(all_record_uids)
-            
-            for uid, share_info in share_info_map.items():
-                # Add ALL users from user_permissions (not just non-owners)
-                # This shows everyone who has access to records I can see
-                for perm in share_info.user_permissions:
-                    target = perm.username
-                    # Skip current user only
-                    if target == self.current_username:
-                        continue
-                    record_shares.setdefault(target, set()).add(uid)
-        
-        # Step 4: Remove current user from results (matches old code lines 1222-1225)
-        if self.current_username in record_shares:
-            del record_shares[self.current_username]
-        if self.current_username in sf_shares:
-            del sf_shares[self.current_username]
-        
-        # Step 5: Build summary entries
+        share_info_map = self._fetch_share_info(all_record_uids)
+        for uid, share_info in share_info_map.items():
+            for perm in share_info.user_permissions:
+                if perm.username != self.current_username:
+                    record_shares.setdefault(perm.username, set()).add(uid)
+    
+    def _remove_current_user(
+        self,
+        record_shares: Dict[str, Set[str]],
+        sf_shares: Dict[str, Set[str]]
+    ) -> None:
+        """Remove current user from share counts."""
+        record_shares.pop(self.current_username, None)
+        sf_shares.pop(self.current_username, None)
+    
+    def _build_summary_entries(
+        self,
+        record_shares: Dict[str, Set[str]],
+        sf_shares: Dict[str, Set[str]]
+    ) -> List[ShareSummaryEntry]:
+        """Build sorted list of summary entries."""
         all_targets = set(record_shares.keys()) | set(sf_shares.keys())
-        entries: List[ShareSummaryEntry] = []
-        
-        for target in sorted(all_targets):
-            entries.append(ShareSummaryEntry(
+        return [
+            ShareSummaryEntry(
                 shared_to=target,
                 record_count=len(record_shares.get(target, set())) or None,
                 shared_folder_count=len(sf_shares.get(target, set())) or None
-            ))
-        
-        return entries
+            )
+            for target in sorted(all_targets)
+        ]
 
     def generate_report_rows(self) -> Iterable[List[Any]]:
         """Generate report rows suitable for tabular output.
@@ -383,51 +462,17 @@ class ShareReportGenerator:
             return ['record_owner', 'record_uid', 'record_title', 'shared_with', 'folder_path']
         return ['shared_to', 'records', 'shared_folders']
 
-    def _get_filtered_record_uids(self) -> Set[str]:
-        """Get record UIDs based on configured filters.
-        
-        Returns:
-            Set of record UIDs matching the filter criteria
-        """
-        vault_data_instance = self._vault.vault_data
-        
-        # If specific records are requested
-        if self._config.record_filter:
-            return self._resolve_record_uids(self._config.record_filter)
-        
-        # Default: all shared records (check using IsShared flag)
-        all_records = set()
-        for record_info in vault_data_instance.records():
-            if record_info.flags & vault_record.RecordFlags.IsShared:
-                all_records.add(record_info.record_uid)
-        
-        # Apply container filter if specified
-        if self._config.container_filter:
-            contained_records = self._get_contained_records(self._config.container_filter)
-            all_records = all_records.intersection(contained_records)
-        
-        return all_records
-
     def _resolve_record_uids(self, record_refs: List[str]) -> Set[str]:
-        """Resolve record names or UIDs to actual UIDs.
-        
-        Args:
-            record_refs: List of record names or UIDs
-            
-        Returns:
-            Set of resolved record UIDs
-        """
+        """Resolve record names or UIDs to actual UIDs."""
         result: Set[str] = set()
         vault_data_instance = self._vault.vault_data
         
         for ref in record_refs:
-            # Check if it's a direct UID
             record = vault_data_instance.get_record(ref)
             if record:
                 result.add(ref)
                 continue
             
-            # Try to find by title
             for record_info in vault_data_instance.records():
                 if record_info.title.lower() == ref.lower():
                     result.add(record_info.record_uid)
@@ -435,239 +480,132 @@ class ShareReportGenerator:
         
         return result
 
-    def _get_contained_records(self, container_refs: List[str]) -> Set[str]:
-        """Get all records contained in specified folders.
-        
-        Args:
-            container_refs: List of folder paths or UIDs
-            
-        Returns:
-            Set of record UIDs in the specified containers
-        """
-        result: Set[str] = set()
-        vault_data_instance = self._vault.vault_data
-        
-        for ref in container_refs:
-            folder = vault_data_instance.get_folder(ref)
-            if folder:
-                result.update(folder.records)
-                # Include records from subfolders
-                def collect_records(f: vault_types.Folder) -> None:
-                    result.update(f.records)
-                vault_utils.traverse_folder_tree(vault_data_instance, folder, collect_records)
-        
-        return result
-
     def _fetch_share_info(self, record_uids: List[str]) -> Dict[str, RecordShareInfo]:
-        """Fetch share information for records using the API.
-        
-        Args:
-            record_uids: List of record UIDs to fetch share info for
-            
-        Returns:
-            Dictionary mapping record UIDs to RecordShareInfo objects
-        """
+        """Fetch share information for records using the API."""
         if not record_uids:
             return {}
         
         result: Dict[str, RecordShareInfo] = {}
         
         try:
-            # Fetch raw share data from API
             shares_data = share_management_utils.get_record_shares(
                 self._vault, record_uids, is_share_admin=False
             )
             
-            if shares_data is None:
-                # API returned None - return empty result
+            if not shares_data:
                 return result
             
-            # Process the raw share data
             for share_record in shares_data:
                 record_uid = share_record.get('record_uid')
                 if not record_uid:
                     continue
                 
-                # Get record info
                 record_info = self._vault.vault_data.get_record(record_uid)
-                record_title = record_info.title if record_info else record_uid
-                
-                # Get folder paths
-                folder_paths = []
-                folders = vault_utils.get_folders_for_record(self._vault.vault_data, record_uid)
-                if folders:
-                    for folder in folders:
-                        path = vault_utils.get_folder_path(self._vault.vault_data, folder.folder_uid)
-                        if path:
-                            folder_paths.append(path)
-                
-                # Process user permissions
-                user_permissions: List[UserPermissionInfo] = []
                 shares = share_record.get('shares', {})
-                for up in shares.get('user_permissions', []):
-                    exp = up.get('expiration', 0)
-                    if isinstance(exp, str):
-                        try:
-                            exp = int(exp)
-                        except ValueError:
-                            exp = 0
-                    user_permissions.append(UserPermissionInfo(
-                        username=up.get('username', ''),
-                        is_owner=up.get('owner', False),
-                        is_share_admin=up.get('share_admin', False),
-                        can_share=up.get('shareable', False),
-                        can_edit=up.get('editable', False),
-                        expiration=exp
-                    ))
-                
-                # Get shared folder UIDs
-                sf_uids = [sp.get('shared_folder_uid') for sp in shares.get('shared_folder_permissions', [])]
-                sf_uids = [uid for uid in sf_uids if uid]
                 
                 result[record_uid] = RecordShareInfo(
                     record_uid=record_uid,
-                    record_title=record_title,
-                    folder_paths=folder_paths,
-                    user_permissions=user_permissions,
-                    shared_folder_uids=sf_uids
+                    record_title=record_info.title if record_info else record_uid,
+                    folder_paths=self._get_folder_paths(record_uid),
+                    user_permissions=self._parse_user_permissions(shares),
+                    shared_folder_uids=[
+                        sp.get('shared_folder_uid') 
+                        for sp in shares.get('shared_folder_permissions', [])
+                        if sp.get('shared_folder_uid')
+                    ]
                 )
-                
         except Exception:
-            # Continue with whatever result we have
             pass
         
         return result
+    
+    def _parse_user_permissions(self, shares: Dict) -> List[UserPermissionInfo]:
+        """Parse user permissions from share data."""
+        permissions = []
+        for up in shares.get('user_permissions', []):
+            exp = up.get('expiration', 0)
+            if isinstance(exp, str):
+                try:
+                    exp = int(exp)
+                except ValueError:
+                    exp = 0
+            permissions.append(UserPermissionInfo(
+                username=up.get('username', ''),
+                is_owner=up.get('owner', False),
+                is_share_admin=up.get('share_admin', False),
+                can_share=up.get('shareable', False),
+                can_edit=up.get('editable', False),
+                expiration=exp
+            ))
+        return permissions
 
     def _build_share_entry(self, share_info: RecordShareInfo) -> ShareReportEntry:
-        """Build a ShareReportEntry from RecordShareInfo.
-        
-        Args:
-            share_info: The RecordShareInfo to convert
-            
-        Returns:
-            ShareReportEntry containing the share information
-        """
-        # Get owner info
-        owner = ''
-        for perm in share_info.user_permissions:
-            if perm.is_owner:
-                owner = perm.username
-                break
-        
-        # Count non-owner shares
+        """Build a ShareReportEntry from RecordShareInfo."""
+        owner = self._get_owner_from_share_info({share_info.record_uid: share_info}, share_info.record_uid)
         non_owner_shares = [p for p in share_info.user_permissions if not p.is_owner]
-        shared_with_count = len(non_owner_shares)
         
-        # Build shared_with info
+        shared_with = ''
         if self._config.verbose:
-            shared_with = self._format_verbose_permissions(share_info, owner)
-        else:
-            shared_with = ''
+            shared_with = self._format_verbose_permissions(share_info)
         
         return ShareReportEntry(
             record_uid=share_info.record_uid,
             record_title=share_info.record_title,
             record_owner=owner,
             shared_with=shared_with,
-            shared_with_count=shared_with_count,
+            shared_with_count=len(non_owner_shares),
             folder_paths=share_info.folder_paths
         )
 
-    def _format_verbose_permissions(self, share_info: RecordShareInfo, owner: str) -> str:
-        """Format detailed permission information.
-        
-        Args:
-            share_info: The RecordShareInfo to format
-            owner: The record owner (may or may not be included based on config)
-            
-        Returns:
-            Formatted string with detailed permissions (usernames only)
-        """
+    def _format_verbose_permissions(self, share_info: RecordShareInfo) -> str:
+        """Format user permissions as newline-separated usernames."""
         lines: List[str] = []
-        
-        # Show all users who have access (including owner for record detail view)
         for perm in share_info.user_permissions:
             lines.append(perm.username)
-            
             if perm.expiration > 0:
                 dt = datetime.datetime.fromtimestamp(perm.expiration // 1000)
                 lines.append(f'\t(expires on {dt})')
-        
         return '\n'.join(lines)
 
-    def _format_permission_text(self, perm: UserPermissionInfo) -> str:
-        """Format permission as text."""
-        if perm.can_edit and perm.can_share:
-            return 'Can Edit & Share'
-        elif perm.can_edit:
-            return 'Can Edit'
-        elif perm.can_share:
-            return 'Can Share'
-        else:
-            return 'Read Only'
-
     def _format_folder_permissions(self, perm: vault_types.SharedFolderPermission) -> str:
-        """Format shared folder permissions.
-        
-        Args:
-            perm: The SharedFolderPermission object
-            
-        Returns:
-            Formatted permissions string
-        """
-        if not perm.manage_users and not perm.manage_records:
-            return "No User Permissions"
-        elif not perm.manage_users and perm.manage_records:
-            return "Can Manage Records"
-        elif perm.manage_users and not perm.manage_records:
-            return "Can Manage Users"
-        else:
+        """Format shared folder permissions as human-readable text."""
+        if perm.manage_users and perm.manage_records:
             return "Can Manage Users & Records"
+        if perm.manage_records:
+            return "Can Manage Records"
+        if perm.manage_users:
+            return "Can Manage Users"
+        return "No User Permissions"
 
     def _record_matches_user_filter(self, share_info: RecordShareInfo, user_filter: Set[str]) -> bool:
-        """Check if a shared record matches the user filter.
-        
-        This matches old Commander logic - checks if user has access via:
-        1. Direct shares (user_permissions)
-        2. Shared folder membership
-        
-        Args:
-            share_info: The RecordShareInfo to check
-            user_filter: Set of lowercase user names to match
-            
-        Returns:
-            True if the record has shares matching the filter
-        """
-        # Check direct shares
+        """Check if user has access via direct shares or shared folder membership."""
         for perm in share_info.user_permissions:
             if perm.username.lower() in user_filter:
                 return True
         
-        # Check shared folder memberships
-        for sf_uid in share_info.shared_folder_uids:
-            sf = self._vault.vault_data.load_shared_folder(sf_uid)
-            if sf:
-                for perm in sf.user_permissions:
-                    target = (perm.name or perm.user_uid or '').lower()
-                    if target in user_filter:
-                        return True
+        for folder in vault_utils.get_folders_for_record(self._vault.vault_data, share_info.record_uid):
+            sf_uid = self._get_shared_folder_uid(folder)
+            if sf_uid:
+                sf = self._vault.vault_data.load_shared_folder(sf_uid)
+                if sf and self._user_has_sf_access(sf, user_filter):
+                    return True
         
         return False
+    
+    def _get_shared_folder_uid(self, folder: vault_types.Folder) -> Optional[str]:
+        """Get the shared folder UID for a folder."""
+        if folder.folder_type == 'shared_folder':
+            return folder.folder_uid
+        if folder.folder_type == 'shared_folder_folder' and folder.folder_scope_uid:
+            return folder.folder_scope_uid
+        return None
 
     def _get_team_members(self, team_uid: str) -> List[str]:
-        """Get team member usernames.
-        
-        Args:
-            team_uid: The team UID to get members for
-            
-        Returns:
-            List of team member usernames
-        """
+        """Get team member usernames."""
         if not self._enterprise:
             return []
         
         members: List[str] = []
-        
         try:
             for team_user in self._enterprise.team_users.get_all_links():
                 if team_user.team_uid == team_uid:
@@ -687,18 +625,7 @@ def generate_share_report(
     user_filter: Optional[List[str]] = None,
     verbose: bool = False
 ) -> List[ShareReportEntry]:
-    """Convenience function to generate a share report.
-    
-    Args:
-        vault: The VaultOnline instance
-        enterprise: Optional EnterpriseData for team expansion
-        record_filter: Optional list of record UIDs/names to filter
-        user_filter: Optional list of user emails to filter
-        verbose: Include detailed permission information
-        
-    Returns:
-        List of ShareReportEntry objects
-    """
+    """Generate a share report for records."""
     config = ShareReportConfig(
         record_filter=record_filter,
         user_filter=user_filter,
@@ -712,18 +639,6 @@ def generate_shared_folders_report(
     enterprise: Optional[enterprise_data_types.EnterpriseData] = None,
     show_team_users: bool = False
 ) -> List[SharedFolderReportEntry]:
-    """Convenience function to generate a shared folders report.
-    
-    Args:
-        vault: The VaultOnline instance
-        enterprise: Optional EnterpriseData for team member expansion
-        show_team_users: Expand team memberships in the report
-        
-    Returns:
-        List of SharedFolderReportEntry objects
-    """
-    config = ShareReportConfig(
-        folders_only=True,
-        show_team_users=show_team_users
-    )
+    """Generate a report of shared folders and their permissions."""
+    config = ShareReportConfig(folders_only=True, show_team_users=show_team_users)
     return ShareReportGenerator(vault, enterprise, config=config).generate_shared_folders_report()
