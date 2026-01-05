@@ -4,7 +4,7 @@ import base64
 import dataclasses
 import json
 from json import JSONDecodeError
-from typing import Optional, List, Dict, Any, Iterable, Tuple
+from typing import Optional, List, Dict, Any, Iterable
 
 from cryptography.hazmat.primitives.asymmetric import rsa, ec
 

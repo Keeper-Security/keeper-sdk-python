@@ -42,6 +42,11 @@ class SecurityAuditReportCommand(base.ArgparseCommand, enterprise_utils.Enterpri
             description='Run a security audit report.',
             parents=[base.report_output_parser]
         )
+        SecurityAuditReportCommand.add_arguments_to_parser(parser)
+        super().__init__(parser)
+    
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
         parser.add_argument(
             '--syntax-help',
             dest='syntax_help',
@@ -88,7 +93,6 @@ class SecurityAuditReportCommand(base.ArgparseCommand, enterprise_utils.Enterpri
             action='store_true',
             help='skip confirmation prompts (non-interactive mode)'
         )
-        super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> Any:
         base.require_login(context)
