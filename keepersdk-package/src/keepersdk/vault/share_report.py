@@ -16,7 +16,7 @@ Usage:
 
 import dataclasses
 import datetime
-from typing import Optional, List, Dict, Any, Iterable, Set
+from typing import Optional, List, Dict, Any, Iterable, Set, NamedTuple
 
 from . import vault_online, vault_types, vault_utils
 from . import share_management_utils
@@ -100,6 +100,12 @@ class RecordShareInfo:
     shared_folder_uids: List[str]
 
 
+class SharedFolderMaps(NamedTuple):
+    """Maps for shared folder users and records."""
+    user_map: Dict[str, Set[str]]
+    records_map: Dict[str, Set[str]]
+
+
 class ShareReportGenerator:
     """Generates share reports for records and shared folders.
     
@@ -127,7 +133,12 @@ class ShareReportGenerator:
             enterprise: Optional EnterpriseData for team expansion and share date queries
             auth: Optional KeeperAuth for API calls (defaults to vault.keeper_auth)
             config: Configuration options for report generation
+            
+        Raises:
+            ValueError: If vault is None
         """
+        if vault is None:
+            raise ValueError("vault parameter is required")
         self._vault = vault
         self._enterprise = enterprise
         self._auth = auth or vault.keeper_auth
@@ -342,15 +353,19 @@ class ShareReportGenerator:
         record_shares: Dict[str, Set[str]] = {}
         sf_shares: Dict[str, Set[str]] = {}
         
-        sf_user_map, sf_records_map = self._build_shared_folder_maps()
-        self._aggregate_shared_folder_access(sf_user_map, sf_records_map, record_shares, sf_shares)
+        sf_maps = self._build_shared_folder_maps()
+        self._aggregate_shared_folder_access(sf_maps.user_map, sf_maps.records_map, record_shares, sf_shares)
         self._aggregate_direct_shares(record_shares)
         self._remove_current_user(record_shares, sf_shares)
         
         return self._build_summary_entries(record_shares, sf_shares)
     
-    def _build_shared_folder_maps(self) -> tuple:
-        """Build maps of shared folder users and records."""
+    def _build_shared_folder_maps(self) -> SharedFolderMaps:
+        """Build maps of shared folder users and records.
+        
+        Returns:
+            SharedFolderMaps containing user_map and records_map
+        """
         sf_user_map: Dict[str, Set[str]] = {}
         sf_records_map: Dict[str, Set[str]] = {}
         
@@ -370,7 +385,7 @@ class ShareReportGenerator:
             if folder and folder.records:
                 sf_records_map[sf_info.shared_folder_uid] = set(folder.records)
         
-        return sf_user_map, sf_records_map
+        return SharedFolderMaps(user_map=sf_user_map, records_map=sf_records_map)
     
     def _aggregate_shared_folder_access(
         self,
@@ -625,7 +640,21 @@ def generate_share_report(
     user_filter: Optional[List[str]] = None,
     verbose: bool = False
 ) -> List[ShareReportEntry]:
-    """Generate a share report for records."""
+    """Generate a share report for records.
+    
+    Args:
+        vault: The VaultOnline instance (required)
+        enterprise: Optional EnterpriseData for team expansion
+        record_filter: Optional list of record UIDs or names to filter by
+        user_filter: Optional list of user emails to filter by
+        verbose: Include detailed permission information
+        
+    Returns:
+        List of ShareReportEntry objects
+        
+    Raises:
+        ValueError: If vault is None
+    """
     config = ShareReportConfig(
         record_filter=record_filter,
         user_filter=user_filter,
@@ -639,6 +668,18 @@ def generate_shared_folders_report(
     enterprise: Optional[enterprise_data_types.EnterpriseData] = None,
     show_team_users: bool = False
 ) -> List[SharedFolderReportEntry]:
-    """Generate a report of shared folders and their permissions."""
+    """Generate a report of shared folders and their permissions.
+    
+    Args:
+        vault: The VaultOnline instance (required)
+        enterprise: Optional EnterpriseData for team expansion
+        show_team_users: Expand team memberships in the report
+        
+    Returns:
+        List of SharedFolderReportEntry objects
+        
+    Raises:
+        ValueError: If vault is None
+    """
     config = ShareReportConfig(folders_only=True, show_team_users=show_team_users)
     return ShareReportGenerator(vault, enterprise, config=config).generate_shared_folders_report()

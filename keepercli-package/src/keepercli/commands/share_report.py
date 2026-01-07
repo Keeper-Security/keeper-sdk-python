@@ -20,6 +20,16 @@ class ShareReportCommand(base.ArgparseCommand):
             description='Generates a report of shared records',
             parents=[base.report_output_parser]
         )
+        self.add_arguments(parser)
+        super().__init__(parser)
+
+    @staticmethod
+    def add_arguments(parser: argparse.ArgumentParser) -> None:
+        """Add command arguments to the parser.
+        
+        Args:
+            parser: The argument parser to add arguments to
+        """
         parser.add_argument(
             '-r', '--record',
             dest='record',
@@ -78,14 +88,13 @@ class ShareReportCommand(base.ArgparseCommand):
             action='store',
             help='path(s) or UID(s) of container(s) by which to filter records'
         )
-        super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> Any:
         """Execute the share-report command."""
         base.require_login(context)
         
         if context.vault is None:
-            raise base.CommandError('Vault data not available. Please run sync-down first.')
+            raise base.CommandError('Vault is not initialized. Login to initialize vault.')
 
         output_format = kwargs.get('format', 'table')
         output_file = kwargs.get('output')
@@ -103,7 +112,7 @@ class ShareReportCommand(base.ArgparseCommand):
             show_team_users=show_team_users
         )
 
-        enterprise = getattr(context, 'enterprise_data', None)
+        enterprise = context.enterprise_data
         generator = share_report.ShareReportGenerator(
             vault=context.vault,
             enterprise=enterprise,

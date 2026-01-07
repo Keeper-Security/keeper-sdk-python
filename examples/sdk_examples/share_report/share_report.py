@@ -172,24 +172,43 @@ def generate_share_reports(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
         keeper_auth_context.close()
 
 
+def _create_report_generator(
+    vault: vault_online.VaultOnline,
+    *,
+    show_ownership: bool = False,
+    folders_only: bool = False
+) -> share_report.ShareReportGenerator:
+    """Create a ShareReportGenerator with the specified configuration.
+    
+    Args:
+        vault: The VaultOnline instance
+        show_ownership: Include ownership information in the report
+        folders_only: Generate report for shared folders only
+        
+    Returns:
+        Configured ShareReportGenerator instance
+    """
+    return share_report.ShareReportGenerator(
+        vault=vault,
+        config=share_report.ShareReportConfig(
+            show_ownership=show_ownership,
+            folders_only=folders_only,
+        ),
+    )
+
+
 def _generate_all_reports(vault: vault_online.VaultOnline) -> None:
     """Generate all three report types."""
     print("\nGenerating shared records report...")
-    records_generator = share_report.ShareReportGenerator(
-        vault=vault,
-        config=share_report.ShareReportConfig(show_ownership=True)
-    )
+    records_generator = _create_report_generator(vault, show_ownership=True)
     print_records_report(records_generator.generate_records_report())
     
     print("\nGenerating shared folders report...")
-    folders_generator = share_report.ShareReportGenerator(
-        vault=vault,
-        config=share_report.ShareReportConfig(folders_only=True)
-    )
+    folders_generator = _create_report_generator(vault, folders_only=True)
     print_folders_report(folders_generator.generate_shared_folders_report())
     
     print("\nGenerating share summary report...")
-    summary_generator = share_report.ShareReportGenerator(vault=vault, config=share_report.ShareReportConfig())
+    summary_generator = _create_report_generator(vault)
     print_summary_report(summary_generator.generate_summary_report())
 
 
