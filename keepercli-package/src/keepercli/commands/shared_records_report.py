@@ -21,6 +21,12 @@ class SharedRecordsReportCommand(base.ArgparseCommand):
             description='Report shared records for a logged-in user',
             parents=[base.report_output_parser]
         )
+        SharedRecordsReportCommand.add_arguments_to_parser(parser)
+        super().__init__(parser)
+
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser) -> None:
+        """Add command-specific arguments to the parser."""
         parser.add_argument(
             '-tu', '--show-team-users',
             dest='show_team_users',
@@ -39,14 +45,14 @@ class SharedRecordsReportCommand(base.ArgparseCommand):
             nargs='*',
             help='Optional (w/ multiple values allowed). Path or UID of folder containing the records to be shown'
         )
-        super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> Any:
         """Execute the shared-records-report command."""
         base.require_login(context)
+        base.require_enterprise_admin(context)
 
         if context.vault is None:
-            raise base.CommandError('Vault data not available. Please run sync-down first.')
+            raise base.CommandError('Vault not initialized, login to initialize vault.')
 
         logger = api.get_logger()
         output_format = kwargs.get('format', 'table')

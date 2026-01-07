@@ -114,6 +114,8 @@ def main() -> None:
             )
             enterprise = enterprise_loader.EnterpriseLoader(keeper_auth_context, enterprise_storage)
             enterprise_data = enterprise.enterprise_data
+        else:
+            print("Admin access is not present, use an admin account for full team expansion features.")
         
         # Generate report (default: owned records only)
         config = shared_records_report.SharedRecordsReportConfig(

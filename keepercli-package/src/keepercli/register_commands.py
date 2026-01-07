@@ -82,7 +82,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('trash', trash.TrashCommand(), base.CommandScope.Vault)
         commands.register_command('verify-shared-folders', verify_records.VerifySharedFoldersCommand(), base.CommandScope.Vault)
         commands.register_command('verify-records', verify_records.VerifyRecordsCommand(), base.CommandScope.Vault)
-        commands.register_command('share-report', share_report.ShareReportCommand(), base.CommandScope.Vault) 
+        commands.register_command('shared-records-report', shared_records_report.SharedRecordsReportCommand(), base.CommandScope.Vault) 
 
 
     if not scopes or bool(scopes & base.CommandScope.Enterprise):
