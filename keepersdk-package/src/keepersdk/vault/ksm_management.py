@@ -15,7 +15,7 @@ from ..proto.APIRequest_pb2 import (
     GetAppInfoResponse, RemoveAppClientsRequest, Device, AddAppClientRequest, 
     AppShareAdd, AddAppSharesRequest, RemoveAppSharesRequest
 )
-from ..proto.enterprise_pb2 import GENERAL
+from ..proto.enterprise_pb2 import GENERAL, AppClientType
 from ..proto.record_pb2 import ApplicationAddRequest
 
 URL_GET_SUMMARY_API = 'vault/get_applications_summary'
@@ -503,7 +503,8 @@ class KSMClientManagement:
             first_access_expire_duration_ms: int,
             access_expire_in_ms: Optional[int],
             master_key: bytes,
-            server: str) -> dict:
+            server: str,
+            client_type: AppClientType) -> dict:
         """Generate a single client device and return token info and output string."""
         
         # Generate secret and client ID
@@ -523,7 +524,8 @@ class KSMClientManagement:
             client_id=client_id,
             client_name=client_name,
             count=count,
-            index=index
+            index=index,
+            client_type=client_type
         )
         
         # Generate token with server prefix
@@ -539,7 +541,7 @@ class KSMClientManagement:
             first_access_expire_duration_ms=first_access_expire_duration_ms,
             access_expire_in_ms=access_expire_in_ms
         )
-        
+
         return {
             'token_info': {
                 'oneTimeToken': token_with_prefix,
@@ -568,7 +570,8 @@ class KSMClientManagement:
             client_id: bytes,
             client_name: str,
             count: int,
-            index: int) -> Device:
+            index: int,
+            client_type: AppClientType) -> Device:
         """Create and send client request to server."""
         
         request = AddAppClientRequest()
@@ -576,7 +579,7 @@ class KSMClientManagement:
         request.encryptedAppKey = encrypted_master_key
         request.lockIp = not unlock_ip
         request.firstAccessExpireOn = first_access_expire_duration_ms
-        request.appClientType = GENERAL
+        request.appClientType = client_type
         request.clientId = client_id
         
         if access_expire_in_ms:

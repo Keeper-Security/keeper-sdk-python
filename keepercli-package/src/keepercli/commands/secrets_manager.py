@@ -385,7 +385,8 @@ class SecretsManagerClientCommand(base.ArgparseCommand):
                 first_access_expire_duration_ms=first_access_expire_duration_ms,
                 access_expire_in_ms=access_expire_in_ms,
                 master_key=master_key,
-                server=server
+                server=server,
+                client_type=GENERAL
             )
             
             tokens.append(token_data['token_info'])

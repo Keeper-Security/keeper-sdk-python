@@ -108,3 +108,4 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('team-approve', enterprise_team.TeamApproveCommand(), base.CommandScope.Enterprise)
         commands.register_command('user-report', user_report.UserReportCommand(), base.CommandScope.Enterprise, 'ur')
         commands.register_command('security-audit-report', security_audit_report.SecurityAuditReportCommand(), base.CommandScope.Enterprise, 'sar')
+        commands.register_command('pam', keeper_pam.PAMControllerCommand(), base.CommandScope.Enterprise)

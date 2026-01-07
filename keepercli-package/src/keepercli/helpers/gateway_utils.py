@@ -2,7 +2,7 @@ from time import time
 from typing import List
 
 from keepersdk.vault import vault_online
-from keepersdk.proto import pam_pb2
+from keepersdk.proto import pam_pb2, enterprise_pb2
 from keepersdk.vault import ksm_management
 
 
@@ -69,7 +69,8 @@ def create_gateway(
         first_access_expire_duration_ms=first_access_expire_duration_ms,
         access_expire_in_ms=None,
         master_key=master_key,
-        server=vault.keeper_auth.keeper_endpoint.server
+        server=vault.keeper_auth.keeper_endpoint.server,
+        client_type=enterprise_pb2.DISCOVERY_AND_ROTATION_CONTROLLER
     )
 
     return _extract_one_time_token(one_time_token_dict)
