@@ -20,11 +20,11 @@ class ShareReportCommand(base.ArgparseCommand):
             description='Generates a report of shared records',
             parents=[base.report_output_parser]
         )
-        self.add_arguments(parser)
+        self.add_arguments_to_parser(parser)
         super().__init__(parser)
 
     @staticmethod
-    def add_arguments(parser: argparse.ArgumentParser) -> None:
+    def add_arguments_to_parser(parser: argparse.ArgumentParser) -> None:
         """Add command arguments to the parser.
         
         Args:
@@ -92,6 +92,9 @@ class ShareReportCommand(base.ArgparseCommand):
     def execute(self, context: KeeperParams, **kwargs) -> Any:
         """Execute the share-report command."""
         base.require_login(context)
+
+        if kwargs.get('share_date'):
+            base.require_enterprise_admin(context)
         
         if context.vault is None:
             raise base.CommandError('Vault is not initialized. Login to initialize vault.')
