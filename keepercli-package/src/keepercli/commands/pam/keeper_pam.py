@@ -14,7 +14,7 @@ from ..record_edit import RecordEditMixin
 from keepersdk import utils
 from keepersdk.proto import pam_pb2, record_pb2
 from keepersdk.helpers import router_utils, gateway_utils, config_utils
-from keepersdk.vault import vault_online, vault_utils, vault_record, record_management
+from keepersdk.vault import ksm_management, vault_online, vault_utils, vault_record, record_management
 from keepersdk.helpers.pam_config_facade import PamConfigurationRecordFacade
 from keepersdk.helpers.tunnel.tunnel_graph import TunnelDAG, tunnel_utils
 from .. import record_edit
@@ -550,7 +550,8 @@ class PAMGatewayNewCommand(base.ArgparseCommand):
         token_expire_in_min = kwargs.get('token_expire_in_min')
 
         self._log_gateway_creation_params(gateway_name, ksm_app, token_expire_in_min)
-        one_time_token = gateway_utils.create_gateway(vault, gateway_name, ksm_app, token_expire_in_min)
+        ksm_app_info = ksm_management.get_secrets_manager_app(vault, ksm_app)
+        one_time_token = gateway_utils.create_gateway(vault, gateway_name, ksm_app_info.uid, token_expire_in_min)
 
         if is_return_value:
             return one_time_token

@@ -70,7 +70,7 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
             '-f', '--force', dest='force', action='store_true', help='Force add or remove app'
             )
         parser.add_argument(
-            '--email', action='store', type=str, dest='email', help='Email of user to grant / remove application access to / from'
+            '--email', '-e', action='store', type=str, dest='email', help='Email of user to grant / remove application access to / from'
             )
         parser.add_argument(
             '--admin', action='store_true', help='Allow share recipient to manage application'
@@ -366,7 +366,7 @@ class SecretsManagerClientCommand(base.ArgparseCommand):
             current_time_ms + first_access_expire_duration * MILLISECONDS_PER_MINUTE
         )
         access_expire_in_ms = (
-            access_expire_in_min * MILLISECONDS_PER_MINUTE 
+            (current_time_ms + access_expire_in_min * MILLISECONDS_PER_MINUTE) 
             if access_expire_in_min else None
         )
         

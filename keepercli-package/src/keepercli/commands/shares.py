@@ -154,6 +154,8 @@ class ShareRecordCommand(base.ArgparseCommand):
         share_expiration = share_management_utils.get_share_expiration(
             kwargs.get('expire_at'), kwargs.get('expire_in')
         )
+
+        dry_run = kwargs.get('dry_run', False)
         
         request = RecordShares.prep_request(
             vault=vault, 
@@ -162,12 +164,12 @@ class ShareRecordCommand(base.ArgparseCommand):
             emails=emails, 
             share_expiration=share_expiration, 
             action=action, 
-            dry_run=kwargs.get('dry_run', False), 
+            dry_run=dry_run, 
             can_edit=kwargs.get('can_edit'), 
             can_share=kwargs.get('can_share'), 
             recursive=kwargs.get('recursive')
         )
-        if request:
+        if request and not dry_run:
             success_responses, failed_responses = RecordShares.send_requests(vault, [request])
             if success_responses:
                 logger.info(f'{len(success_responses)} share requests were successfully processed')
@@ -176,6 +178,10 @@ class ShareRecordCommand(base.ArgparseCommand):
                 for failed_response in failed_responses:
                     logger.error(f'Failed to process share request: {failed_response}')
             vault.sync_down()
+        elif request and dry_run:
+            ShareRecordCommand._print_share_table(request, vault)
+        else:
+            logger.info('Nothing to do')
     
     def _validate_and_replace_contacts(self, vault, emails: list, force: bool) -> list:
         """Validate emails against known contacts and optionally replace with matches."""
@@ -222,7 +228,39 @@ class ShareRecordCommand(base.ArgparseCommand):
                 return contact
                 
         return None
-
+    
+    @staticmethod
+    def _print_share_table(request: record_pb2.RecordShareUpdateRequest, vault: vault_online.VaultOnline) -> None:
+            headers = ['Username', 'Record UID', 'Title', 'Share Action', 'Expiration']
+            table = []
+            for attr in ['addSharedRecord', 'updateSharedRecord', 'removeSharedRecord']:
+                if hasattr(request, attr):
+                    for obj in getattr(request, attr):
+                        record_uid = utils.base64_url_encode(obj.recordUid)
+                        username = obj.toUsername
+                        record = vault.vault_data.get_record(record_uid=record_uid)
+                        row = [username, record_uid, record.title]
+                        if attr in ['addSharedRecord', 'updateSharedRecord']:
+                            if obj.transfer:
+                                row.append('Transfer Ownership')
+                            elif obj.editable or obj.shareable:
+                                if obj.editable and obj.shareable:
+                                    row.append('Can Edit & Share')
+                                elif obj.editable:
+                                    row.append('Can Edit')
+                                else:
+                                    row.append('Can Share')
+                            else:
+                                row.append('Read Only')
+                        else:
+                            row.append('Remove Share')
+                        if obj.expiration > 0:
+                            dt = datetime.datetime.fromtimestamp(obj.expiration//1000)
+                            row.append(str(dt))
+                        else:
+                            row.append(None)
+                        table.append(row)
+            report_utils.dump_report_data(table, headers, row_number=True, group_by=0)
 
 class ShareFolderCommand(base.ArgparseCommand):
     def __init__(self):
