@@ -29,7 +29,8 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
     if not scopes or bool(scopes & base.CommandScope.Vault):
         from .commands import (vault_folder, vault, vault_record, record_edit, importer_commands, breachwatch,
                                record_type, secrets_manager, shares, password_report, trash, record_file_report,
-                               record_handling_commands, register, password_generate, verify_records)
+                               record_handling_commands, register, password_generate, verify_records,
+                               shared_records_report, share_report)
         
         commands.register_command('sync-down', vault.SyncDownCommand(), base.CommandScope.Vault, 'd')
         commands.register_command('cd', vault_folder.FolderCdCommand(), base.CommandScope.Vault)
@@ -80,7 +81,9 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('record-permission', record_handling_commands.RecordPermissionCommand(), base.CommandScope.Vault)
         commands.register_command('trash', trash.TrashCommand(), base.CommandScope.Vault)
         commands.register_command('verify-shared-folders', verify_records.VerifySharedFoldersCommand(), base.CommandScope.Vault)
-        commands.register_command('verify-records', verify_records.VerifyRecordsCommand(), base.CommandScope.Vault) 
+        commands.register_command('verify-records', verify_records.VerifyRecordsCommand(), base.CommandScope.Vault)
+        commands.register_command('shared-records-report', shared_records_report.SharedRecordsReportCommand(), base.CommandScope.Vault) 
+        commands.register_command('share-report', share_report.ShareReportCommand(), base.CommandScope.Vault) 
 
 
     if not scopes or bool(scopes & base.CommandScope.Enterprise):
@@ -108,3 +111,4 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('team-approve', enterprise_team.TeamApproveCommand(), base.CommandScope.Enterprise)
         commands.register_command('user-report', user_report.UserReportCommand(), base.CommandScope.Enterprise, 'ur')
         commands.register_command('security-audit-report', security_audit_report.SecurityAuditReportCommand(), base.CommandScope.Enterprise, 'sar')
+        commands.register_command('pam', keeper_pam.PAMControllerCommand(), base.CommandScope.Enterprise)
