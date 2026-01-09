@@ -26,6 +26,32 @@ class Node:
     encrypted_data: Optional[str] = None
     name: str = ''
 
+    def get_path(self, enterprise_data: 'IEnterpriseData', omit_root: bool = False) -> str:
+        """Get the full path for this node as a backslash-separated string.
+
+        Args:
+            enterprise_data: The enterprise data containing nodes and enterprise info.
+            omit_root: If True, exclude the root node from the path.
+
+        Returns:
+            The node path as a backslash-separated string.
+        """
+        nodes: List[str] = []
+        n_id = self.node_id
+        while isinstance(n_id, int) and n_id > 0:
+            node = enterprise_data.nodes.get_entity(n_id)
+            if not node:
+                break
+            n_id = node.parent_id or 0
+            if not omit_root or n_id > 0:
+                node_name = node.name
+                if not node_name and node.node_id == enterprise_data.root_node.node_id:
+                    node_name = enterprise_data.enterprise_info.enterprise_name
+                nodes.append(node_name)
+        nodes.reverse()
+        return '\\'.join(nodes)
+
+
 @attrs.define(frozen=True)
 class INode(Node):
     pass
