@@ -117,6 +117,7 @@ class BasePushNotifications(abc.ABC, FanOut[Dict[str, Any]]):
             if url.startswith('wss://'):
                 ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
                 if not endpoint.get_certificate_check():
+                    ssl_context.check_hostname = False
                     ssl_context.verify_mode = ssl.CERT_NONE
             try:
                 async with websockets.connect(
