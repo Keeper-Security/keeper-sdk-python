@@ -1,16 +1,12 @@
-"""Enterprise password aging report functionality for Keeper SDK.
-
-Uses the same approach as the old aging-report command (Untitled-1 lines 1806-2032):
-1. Get record data (title, owner, shared) from compliance API (like sox_data)
-2. Get timestamps from audit events using span reports for efficiency
-"""
+"""Enterprise password aging report functionality for Keeper SDK."""
 
 import dataclasses
 import datetime
 import json
 import logging
 import os
-from typing import Optional, List, Dict, Any, Iterable, Tuple
+import traceback
+from typing import Optional, List, Dict, Any, Iterable, Tuple, Set
 
 from ..authentication import keeper_auth
 from ..proto import enterprise_pb2
@@ -19,7 +15,8 @@ from . import enterprise_types
 
 
 API_EVENT_SUMMARY_ROW_LIMIT = 1000
-DEFAULT_PERIOD_DAYS = 90  # Default: 3 months
+DEFAULT_PERIOD_DAYS = 90
+SEARCH_HISTORY_YEARS = 5
 logger = logging.getLogger(__name__)
 
 
@@ -33,7 +30,7 @@ class AgingReportEntry:
     record_created: Optional[datetime.datetime] = None
     shared: bool = False
     record_url: str = ''
-    shared_folder_uid: Optional[str] = None
+    shared_folder_uid: Optional[List[str]] = None  # List of shared folder UIDs
     in_trash: bool = False
 
 
@@ -52,12 +49,7 @@ class AgingReportConfig:
 
 
 class AgingReportGenerator:
-    """Generates password aging reports for enterprise records.
-    
-    Uses the same approach as the old code (Untitled-1 lines 1868-1932):
-    1. Get record data from compliance API (title, owner, shared)
-    2. Get timestamps from audit events using span reports
-    """
+    """Generates password aging reports for enterprise records."""
     
     def __init__(
         self,
@@ -72,9 +64,8 @@ class AgingReportGenerator:
         self._vault = vault
         self._email_to_user_id: Optional[Dict[str, int]] = None
         self._user_id_to_email: Optional[Dict[int, str]] = None
-        
-        # Record data storage (similar to sox_data)
         self._records: Dict[str, Dict[str, Any]] = {}
+        self._record_shared_folders: Dict[str, List[str]] = {}
     
     @property
     def enterprise_data(self) -> enterprise_types.IEnterpriseData:
@@ -126,64 +117,51 @@ class AgingReportGenerator:
             return None
         return self._config.username.lower()
     
-    def _get_tree_key(self) -> bytes:
-        """Get the enterprise tree key for decryption."""
-        return self._enterprise_data.enterprise_info.tree_key
+    def _get_search_min_timestamp(self) -> int:
+        """Get minimum timestamp for historical searches."""
+        return int((datetime.datetime.now() - datetime.timedelta(days=365 * SEARCH_HISTORY_YEARS)).timestamp())
+    
+    def get_record_sfs(self, record_uid: str) -> List[str]:
+        """Get list of shared folder UIDs where the record exists."""
+        return self._record_shared_folders.get(record_uid, [])
+    
+    def _get_ec_private_key(self):
+        """Get the enterprise EC private key for decryption."""
+        return self._enterprise_data.enterprise_info.ec_private_key
     
     def _decrypt_record_data(self, encrypted_data: bytes) -> Dict[str, Any]:
-        """Decrypt record data using tree key.
+        """Decrypt record data using EC private key."""
+        if not encrypted_data:
+            return {}
         
-        Similar to old code's sox_data decryption.
-        """
+        ec_key = self._get_ec_private_key()
+        if ec_key is None:
+            return {}
+        
         try:
-            tree_key = self._get_tree_key()
-            if not tree_key or not encrypted_data:
-                return {}
-            
-            # Try AES-GCM v2 first (12 byte nonce), then v1
-            try:
-                decrypted = crypto.decrypt_aes_v2(encrypted_data, tree_key)
-            except Exception:
-                try:
-                    decrypted = crypto.decrypt_aes_v1(encrypted_data, tree_key)
-                except Exception:
-                    return {}
-            
-            return json.loads(decrypted.decode('utf-8'))
-        except Exception:
+            data_json = crypto.decrypt_ec(encrypted_data, ec_key)
+            return json.loads(data_json.decode('utf-8'))
+        except Exception as e:
+            logger.debug(f'Failed to decrypt record data: {e}')
             return {}
     
     def _fetch_compliance_data(self, user_ids: Optional[List[int]] = None) -> None:
-        """Fetch record data from compliance API.
-        
-        Calls enterprise/get_preliminary_compliance_data to get all records
-        with their encrypted data (title, etc.), similar to old code's
-        get_prelim_data/get_compliance_data (Untitled-1 line 1868-1872).
-        """
-        # If no specific user_ids provided, get ALL enterprise users
-        # (old code line 1893: user_uids = None means get all)
+        """Fetch record data from compliance API."""
         if user_ids is None:
-            user_ids = []
-            for user in self._enterprise_data.users.get_all_entities():
-                user_ids.append(user.enterprise_user_id)
+            user_ids = [u.enterprise_user_id for u in self._enterprise_data.users.get_all_entities()]
         
         if not user_ids:
             logger.warning('No enterprise users found')
             return
         
-        logger.debug(f'Fetching compliance data for {len(user_ids)} user(s)')
-        
         rq = enterprise_pb2.PreliminaryComplianceDataRequest()
         rq.includeNonShared = True
         rq.includeTotalMatchingRecordsInFirstResponse = True
-        
-        # Always provide user IDs explicitly
         for uid in user_ids:
             rq.enterpriseUserIds.append(uid)
         
         has_more = True
         continuation_token = None
-        total_records = 0
         
         while has_more:
             if continuation_token:
@@ -193,99 +171,74 @@ class AgingReportGenerator:
                 rs = self._auth.execute_auth_rest(
                     'enterprise/get_preliminary_compliance_data',
                     rq,
-                    rs_type=enterprise_pb2.PreliminaryComplianceDataResponse
+                    response_type=enterprise_pb2.PreliminaryComplianceDataResponse
                 )
                 
-                # Process user records
                 for user_data in rs.auditUserData:
                     user_id = user_data.enterpriseUserId
                     owner_email = self._user_id_to_email.get(user_id, '')
                     
                     for record in user_data.auditUserRecords:
                         record_uid = utils.base64_url_encode(record.recordUid)
-                        
-                        # Decrypt record data to get title
                         record_data = self._decrypt_record_data(record.encryptedData)
-                        title = record_data.get('title', '')
                         
                         self._records[record_uid] = {
                             'record_uid': record_uid,
                             'owner_email': owner_email,
                             'owner_user_id': user_id,
-                            'title': title,
+                            'title': record_data.get('title', ''),
                             'shared': record.shared,
                             'created_ts': 0,
                             'pw_changed_ts': 0,
                             'in_trash': record_data.get('in_trash', False)
                         }
-                        total_records += 1
                 
-                has_more = rs.hasMore
-                if has_more and rs.continuationToken:
+                has_more = rs.hasMore and rs.continuationToken
+                if has_more:
                     continuation_token = rs.continuationToken
-                else:
-                    has_more = False
                     
             except Exception as e:
                 logger.warning(f'Error fetching compliance data: {e}')
-                import traceback
                 logger.debug(traceback.format_exc())
-                has_more = False
+                break
         
-        logger.debug(f'Fetched {total_records} records from compliance API')
+        logger.debug(f'Fetched {len(self._records)} records from compliance API')
     
     def _update_timestamps_from_audit_events(self) -> None:
-        """Update records with timestamps from audit events.
-        
-        Uses span reports with aggregation for efficiency
-        (old code lines 1962-2012).
-        """
-        # Search from 5 years back
-        search_min_ts = int((datetime.datetime.now() - datetime.timedelta(days=365 * 5)).timestamp())
-        
+        """Update records with timestamps from audit events using span reports."""
+        search_min_ts = self._get_search_min_timestamp()
         filter_period: Dict[str, Any] = {'min': search_min_ts}
-        audit_filter: Dict[str, Any] = {
-            'audit_event_type': ['record_add', 'record_password_change', 'folder_add_record'],
-            'created': filter_period
-        }
         
-        limit = API_EVENT_SUMMARY_ROW_LIMIT
-        
-        # Use span report with aggregation - efficient (old code lines 1965-1972)
         rq = {
             'command': 'get_audit_event_reports',
             'scope': 'enterprise',
             'report_type': 'span',
             'columns': ['record_uid', 'audit_event_type'],
             'aggregate': ['last_created'],
-            'filter': audit_filter,
-            'limit': limit
+            'filter': {
+                'audit_event_type': ['record_add', 'record_password_change', 'folder_add_record'],
+                'created': filter_period
+            },
+            'limit': API_EVENT_SUMMARY_ROW_LIMIT
         }
         
-        # Track timestamps
         created_lookup: Dict[str, int] = {}
         folder_add_lookup: Dict[str, int] = {}
         pw_change_lookup: Dict[str, int] = {}
         
         done = False
-        
         while not done:
             try:
                 rs = self._auth.execute_auth_command(rq)
                 events = rs.get('audit_event_overview_report_rows', [])
-                done = len(events) < limit
+                done = len(events) < API_EVENT_SUMMARY_ROW_LIMIT
                 
                 if not done and events:
-                    # Pagination using max filter (old code line 2001)
                     filter_period['max'] = int(events[-1].get('last_created', 0)) + 1
                 
                 for event in events:
                     record_uid = event.get('record_uid', '')
-                    if not record_uid:
-                        continue
-                    
-                    # Only process records we know about from compliance data
-                    if record_uid not in self._records:
+                    if not record_uid or record_uid not in self._records:
                         continue
                     
                     event_type = event.get('audit_event_type', '')
@@ -296,18 +249,21 @@ class AgingReportGenerator:
                     elif event_type == 'folder_add_record':
                         folder_add_lookup[record_uid] = event_ts
                     elif event_type == 'record_password_change':
-                        existing = pw_change_lookup.get(record_uid, 0)
-                        if event_ts > existing:
+                        if event_ts > pw_change_lookup.get(record_uid, 0):
                             pw_change_lookup[record_uid] = event_ts
-                            
             except Exception:
                 break
         
-        # Apply folder_add as fallback for created (old code lines 2006-2007)
+        # Use folder_add as fallback for created timestamp
         for record_uid, ts in folder_add_lookup.items():
             created_lookup.setdefault(record_uid, ts)
         
-        # Update records with timestamps
+        if self._config.in_shared_folder:
+            self._fetch_shared_folder_mappings()
+        
+        if self._config.exclude_deleted:
+            self._fetch_deleted_records()
+        
         for record_uid, ts in created_lookup.items():
             if record_uid in self._records:
                 rec = self._records[record_uid]
@@ -318,22 +274,11 @@ class AgingReportGenerator:
             if record_uid in self._records:
                 self._records[record_uid]['pw_changed_ts'] = ts
     
-    def _fetch_records_from_audit_events(self) -> None:
-        """Fallback: Fetch records from audit events if compliance API fails.
-        
-        Uses raw audit events to get record info (owner, timestamps).
-        Titles may be missing with this approach.
-        """
-        logger.debug('Fetching records from audit events as fallback')
-        
-        # Search from 5 years back
-        search_min_ts = int((datetime.datetime.now() - datetime.timedelta(days=365 * 5)).timestamp())
-        
-        limit = API_EVENT_SUMMARY_ROW_LIMIT
-        
-        # Query both record_add and folder_add_record
+    def _fetch_deleted_records(self) -> None:
+        """Fetch deleted records from audit events for --exclude-deleted filtering."""
+        search_min_ts = self._get_search_min_timestamp()
         audit_filter: Dict[str, Any] = {
-            'audit_event_type': ['record_add', 'folder_add_record'],
+            'audit_event_type': ['record_delete'],
             'created': {'min': search_min_ts}
         }
         
@@ -342,7 +287,50 @@ class AgingReportGenerator:
             'scope': 'enterprise',
             'report_type': 'raw',
             'filter': audit_filter,
-            'limit': limit,
+            'limit': API_EVENT_SUMMARY_ROW_LIMIT,
+            'order': 'ascending'
+        }
+        
+        deleted_records: Set[str] = set()
+        done = False
+        last_ts = search_min_ts
+        
+        while not done:
+            try:
+                rs = self._auth.execute_auth_command(rq)
+                events = rs.get('audit_event_overview_report_rows', [])
+                done = len(events) < API_EVENT_SUMMARY_ROW_LIMIT
+                
+                for event in events:
+                    record_uid = event.get('record_uid', '')
+                    if record_uid:
+                        deleted_records.add(record_uid)
+                    last_ts = max(last_ts, int(event.get('created', 0)))
+                
+                if not done and events:
+                    audit_filter['created'] = {'min': last_ts}
+            except Exception as e:
+                logger.debug(f'Error fetching deleted records: {e}')
+                break
+        
+        for record_uid in deleted_records:
+            if record_uid in self._records:
+                self._records[record_uid]['in_trash'] = True
+    
+    def _fetch_shared_folder_mappings(self) -> None:
+        """Fetch shared folder mappings for --in-shared-folder filtering."""
+        search_min_ts = self._get_search_min_timestamp()
+        audit_filter: Dict[str, Any] = {
+            'audit_event_type': ['folder_add_record'],
+            'created': {'min': search_min_ts}
+        }
+        
+        rq = {
+            'command': 'get_audit_event_reports',
+            'scope': 'enterprise',
+            'report_type': 'raw',
+            'filter': audit_filter,
+            'limit': API_EVENT_SUMMARY_ROW_LIMIT,
             'order': 'ascending'
         }
         
@@ -353,9 +341,51 @@ class AgingReportGenerator:
             try:
                 rs = self._auth.execute_auth_command(rq)
                 events = rs.get('audit_event_overview_report_rows', [])
+                done = len(events) < API_EVENT_SUMMARY_ROW_LIMIT
                 
-                if len(events) < limit:
-                    done = True
+                for event in events:
+                    record_uid = event.get('record_uid', '')
+                    shared_folder_uid = event.get('shared_folder_uid', '')
+                    
+                    if record_uid and shared_folder_uid:
+                        if record_uid not in self._record_shared_folders:
+                            self._record_shared_folders[record_uid] = []
+                        if shared_folder_uid not in self._record_shared_folders[record_uid]:
+                            self._record_shared_folders[record_uid].append(shared_folder_uid)
+                    
+                    last_ts = max(last_ts, int(event.get('created', 0)))
+                
+                if not done and events:
+                    audit_filter['created'] = {'min': last_ts}
+            except Exception as e:
+                logger.debug(f'Error fetching shared folder mappings: {e}')
+                break
+    
+    def _fetch_records_from_audit_events(self) -> None:
+        """Fallback: Fetch records from audit events if compliance API fails."""
+        search_min_ts = self._get_search_min_timestamp()
+        audit_filter: Dict[str, Any] = {
+            'audit_event_type': ['record_add', 'folder_add_record'],
+            'created': {'min': search_min_ts}
+        }
+        
+        rq = {
+            'command': 'get_audit_event_reports',
+            'scope': 'enterprise',
+            'report_type': 'raw',
+            'filter': audit_filter,
+            'limit': API_EVENT_SUMMARY_ROW_LIMIT,
+            'order': 'ascending'
+        }
+        
+        done = False
+        last_ts = search_min_ts
+        
+        while not done:
+            try:
+                rs = self._auth.execute_auth_command(rq)
+                events = rs.get('audit_event_overview_report_rows', [])
+                done = len(events) < API_EVENT_SUMMARY_ROW_LIMIT
                 
                 for event in events:
                     record_uid = event.get('record_uid', '')
@@ -372,7 +402,7 @@ class AgingReportGenerator:
                             'record_uid': record_uid,
                             'owner_email': username,
                             'owner_user_id': 0,
-                            'title': '',  # Title not available from audit events
+                            'title': '',
                             'shared': bool(shared_folder_uid),
                             'created_ts': event_ts if event_type == 'record_add' else 0,
                             'pw_changed_ts': 0,
@@ -380,11 +410,11 @@ class AgingReportGenerator:
                         }
                     else:
                         rec = self._records[record_uid]
-                        if event_type == 'record_add':
-                            if event_ts > 0 and (rec['created_ts'] == 0 or event_ts < rec['created_ts']):
+                        if event_type == 'record_add' and event_ts > 0:
+                            if rec['created_ts'] == 0 or event_ts < rec['created_ts']:
                                 rec['created_ts'] = event_ts
-                                if username:
-                                    rec['owner_email'] = username
+                            if username:
+                                rec['owner_email'] = username
                         if shared_folder_uid:
                             rec['shared'] = True
                         if rec['created_ts'] == 0 and event_ts > 0:
@@ -392,36 +422,32 @@ class AgingReportGenerator:
                     
                     last_ts = max(last_ts, event_ts)
                 
-                # Pagination
                 if not done and events:
                     audit_filter['created'] = {'min': last_ts}
-                    
             except Exception as e:
                 logger.debug(f'Error fetching audit events: {e}')
-                done = True
+                break
         
         logger.debug(f'Fetched {len(self._records)} records from audit events')
     
     def _get_record_title_from_vault(self, record_uid: str) -> str:
-        """Try to get record title from vault as fallback."""
+        """Try to get record title from vault."""
         if self._vault is None:
             return ''
         try:
             vault_data = getattr(self._vault, 'vault_data', None)
-            if vault_data is None:
-                return ''
-            record = vault_data.get_record(record_uid)
-            if record and hasattr(record, 'title'):
-                return record.title or ''
+            if vault_data:
+                record = vault_data.get_record(record_uid)
+                if record and hasattr(record, 'title'):
+                    return record.title or ''
         except Exception:
             pass
         return ''
     
     def _enrich_titles_from_vault(self) -> None:
-        """Enrich records with titles from vault for records missing titles."""
+        """Enrich records missing titles from vault data."""
         if self._vault is None:
             return
-        
         for record_uid, data in self._records.items():
             if not data.get('title'):
                 title = self._get_record_title_from_vault(record_uid)
@@ -429,77 +455,53 @@ class AgingReportGenerator:
                     data['title'] = title
     
     def generate_report(self) -> List[AgingReportEntry]:
-        """Generate the password aging report.
-        
-        Similar to old code (Untitled-1 lines 1893-1923).
-        """
+        """Generate the password aging report."""
         cutoff_ts = self._get_cutoff_timestamp()
         target_username = self._get_target_username()
         
-        # Build user lookups
         self._build_user_lookups()
         
-        # Validate username if provided
         if target_username and target_username not in self._email_to_user_id:
             return []
         
-        # Get user IDs to query (filter by username if specified)
         user_ids = None
         if target_username:
             user_id = self._email_to_user_id.get(target_username)
             if user_id:
                 user_ids = [user_id]
         
-        # Step 1: Try to fetch record data from compliance API
         self._fetch_compliance_data(user_ids)
         
-        # If compliance API returned no records, fallback to audit events
         if not self._records:
-            logger.debug('No records from compliance API, falling back to audit events')
             self._fetch_records_from_audit_events()
         
-        # Step 2: Update timestamps from audit events
         self._update_timestamps_from_audit_events()
-        
-        # Step 3: Try to enrich titles from vault as fallback
         self._enrich_titles_from_vault()
-        
-        logger.debug(f'Total records after processing: {len(self._records)}')
         
         report_entries: List[AgingReportEntry] = []
         
         for record_uid, data in self._records.items():
             owner_email = data.get('owner_email', '')
             
-            # Filter by username if specified (should already be filtered, but double-check)
             if target_username and owner_email.lower() != target_username:
                 continue
             
-            # Exclude deleted records if specified (old code line 1910)
             if self._config.exclude_deleted and data.get('in_trash'):
+                continue
+            
+            record_sfs = self.get_record_sfs(record_uid)
+            if self._config.in_shared_folder and not record_sfs:
                 continue
             
             created_ts = data.get('created_ts', 0)
             pw_changed_ts = data.get('pw_changed_ts', 0)
             
-            # Effective timestamp for filtering (old code lines 1906-1909)
-            created_after_date = created_ts and (created_ts >= cutoff_ts)
-            pw_changed_after_date = pw_changed_ts and (pw_changed_ts >= cutoff_ts)
-            
-            # Skip if created or password changed after cutoff
-            if created_after_date or pw_changed_after_date:
+            if (created_ts and created_ts >= cutoff_ts) or (pw_changed_ts and pw_changed_ts >= cutoff_ts):
                 continue
             
-            # Build datetime objects (old code line 1917)
             ts = pw_changed_ts or created_ts
             change_dt = datetime.datetime.fromtimestamp(ts) if ts else None
-            
-            created_dt = None
-            if created_ts:
-                created_dt = datetime.datetime.fromtimestamp(created_ts)
-            
-            # Record URL (old code line 1918)
-            record_url = f'https://{self._config.server}/vault/#detail/{record_uid}'
+            created_dt = datetime.datetime.fromtimestamp(created_ts) if created_ts else None
             
             entry = AgingReportEntry(
                 record_uid=record_uid,
@@ -508,24 +510,23 @@ class AgingReportGenerator:
                 last_changed=change_dt,
                 record_created=created_dt,
                 shared=data.get('shared', False),
-                record_url=record_url,
-                shared_folder_uid=None,
+                record_url=f'https://{self._config.server}/vault/#detail/{record_uid}',
+                shared_folder_uid=record_sfs or None,
                 in_trash=data.get('in_trash', False)
             )
-            
             report_entries.append(entry)
         
-        # Sort by last_changed date (old code lines 1926-1930)
-        def sort_key(x: AgingReportEntry) -> Tuple[int, float]:
-            if x.last_changed:
-                return (0, x.last_changed.timestamp())
-            elif x.record_created:
-                return (1, x.record_created.timestamp())
-            return (2, 0)
-        
-        report_entries.sort(key=sort_key)
-        
+        report_entries.sort(key=self._sort_key)
         return report_entries
+    
+    @staticmethod
+    def _sort_key(entry: AgingReportEntry) -> Tuple[int, float]:
+        """Sort key for report entries by date."""
+        if entry.last_changed:
+            return (0, entry.last_changed.timestamp())
+        if entry.record_created:
+            return (1, entry.record_created.timestamp())
+        return (2, 0)
     
     def cleanup(self, enterprise_id: int) -> None:
         """Clean up cache if no_cache option is set."""
@@ -533,33 +534,16 @@ class AgingReportGenerator:
             self.delete_local_cache(enterprise_id)
     
     def generate_report_rows(self, include_shared_folder: bool = False) -> Iterable[List[Any]]:
-        """Generate report rows suitable for tabular output.
-        
-        Returns datetime objects for date columns (old code line 1917),
-        letting dump_report_data handle formatting.
-        """
+        """Generate report rows for tabular output."""
         for entry in self.generate_report():
-            # Row format matches old code line 1919
-            row = [
-                entry.owner_email,
-                entry.title,
-                entry.last_changed,  # datetime object
-                entry.shared,
-                entry.record_url
-            ]
-            
-            # Only add shared_folder_uid if requested (old code lines 1920-1922)
+            row = [entry.owner_email, entry.title, entry.last_changed, entry.shared, entry.record_url]
             if include_shared_folder:
                 row.append(entry.shared_folder_uid or '')
-            
             yield row
     
     @staticmethod
     def get_headers(include_shared_folder: bool = False) -> List[str]:
-        """Get column headers for the report.
-        
-        Returns lowercase headers (old code line 1896).
-        """
+        """Get column headers for the report."""
         headers = ['owner', 'title', 'password_changed', 'shared', 'record_url']
         if include_shared_folder:
             headers.append('shared_folder_uid')
@@ -567,38 +551,24 @@ class AgingReportGenerator:
 
 
 def parse_period(period_str: str) -> Optional[int]:
-    """Parse period string (e.g., '3m', '10d', '1y') to days.
-    
-    Same logic as old code (Untitled-1 lines 1813-1835).
-    """
-    if not period_str:
+    """Parse period string (e.g., '3m', '10d', '1y') to days."""
+    if not period_str or len(period_str.strip()) < 2:
         return None
     
     period_str = period_str.strip().lower()
-    if len(period_str) < 2:
-        return None
-    
     unit = period_str[-1]
+    
     try:
         value = abs(int(period_str[:-1]))
     except ValueError:
         return None
     
-    if unit == 'd':
-        return value
-    elif unit == 'm':
-        return value * 30
-    elif unit == 'y':
-        return value * 365
-    else:
-        return None
+    multipliers = {'d': 1, 'm': 30, 'y': 365}
+    return value * multipliers.get(unit)
 
 
 def parse_date(date_str: str) -> Optional[datetime.datetime]:
-    """Parse date string in various formats.
-    
-    Same formats as old code (Untitled-1 lines 1837-1846).
-    """
+    """Parse date string in various formats."""
     formats = ['%Y-%m-%d', '%Y.%m.%d', '%Y/%m/%d', '%m-%d-%Y', '%m.%d.%Y', '%m/%d/%Y']
     for fmt in formats:
         try:
