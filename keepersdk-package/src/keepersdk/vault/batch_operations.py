@@ -588,6 +588,7 @@ class BatchVaultOperations(IBatchVaultOperation):
                 if folder_node:
                     if folder_node.folder_type == 'user_folder':
                         tra_rq.folder_type = record_pb2.RecordFolderType.user_folder
+                        shared_folder_uid = None
                     elif folder_node.folder_type == 'shared_folder':
                         tra_rq.folder_type = record_pb2.RecordFolderType.shared_folder
                         shared_folder_uid = folder_node.folder_uid

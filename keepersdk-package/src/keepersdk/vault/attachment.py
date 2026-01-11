@@ -14,6 +14,7 @@ from .vault_extensions import resolve_record_access_path
 from .vault_record import FileRecord, PasswordRecord, TypedRecord, AttachmentFile, AttachmentFileThumb
 from .. import utils, crypto
 from ..proto import record_pb2
+from ..authentication import endpoint
 
 
 class AttachmentDownloadRequest:
@@ -212,7 +213,7 @@ def upload_attachments(vault: vault_online.VaultOnline,
                     files = {
                         uo['file_parameter']: (attachment_id, crypto_stream, 'application/octet-stream')
                     }
-                    response = requests.post(uo['url'], files=files, data=uo['parameters'])
+                    response = requests.post(uo['url'], files=files, data=uo['parameters'], verify=endpoint.get_certificate_check())
                     if response.status_code == uo['success_status_code']:
                         atta.id = attachment_id
                         atta.name = task.name or ''
@@ -237,7 +238,7 @@ def upload_attachments(vault: vault_online.VaultOnline,
                             files = {
                                 tuo['file_parameter']: (tuo['file_id'], crypto_stream, 'application/octet-stream')
                             }
-                            response = requests.post(tuo['url'], files=files, data=tuo['parameters'])
+                            response = requests.post(tuo['url'], files=files, data=tuo['parameters'], verify=endpoint.get_certificate_check())
                             if response.status_code == uo['success_status_code']:
                                 thumb = AttachmentFileThumb()
                                 thumb.id = tuo['file_id']
@@ -301,7 +302,7 @@ def upload_attachments(vault: vault_online.VaultOnline,
                     files = {
                         'file': (file_ref, crypto_stream, 'application/octet-stream')
                     }
-                    response = requests.post(uo.url, files=files, data=json.loads(uo.parameters))
+                    response = requests.post(uo.url, files=files, data=json.loads(uo.parameters), verify=endpoint.get_certificate_check())
                     if response.status_code == uo.success_status_code:
                         facade.file_ref.append(file_ref)
                         if record.linked_keys is None:
