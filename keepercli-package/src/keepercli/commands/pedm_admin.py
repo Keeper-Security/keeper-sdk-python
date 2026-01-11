@@ -577,7 +577,7 @@ class PedmAgentListCommand(base.ArgparseCommand):
 
         verbose = kwargs.get('verbose') is True
         table = []
-        headers = ['agent_uid', 'machine_name', 'deployment', 'disabled', 'created']
+        headers = ['agent_uid', 'machine_name', 'deployment', 'disabled', 'created', 'last_seen']
         active_agents: Set[str] = set()
         if verbose:
             headers.extend(('active', 'properties'))
@@ -595,7 +595,8 @@ class PedmAgentListCommand(base.ArgparseCommand):
             machine_name = ''
             if isinstance(agent.properties, dict):
                 machine_name = agent.properties.get('MachineName') or ''
-            row: List[Any] = [agent.agent_uid, machine_name, deployment_name, agent.disabled, time_created]
+            row: List[Any] = [agent.agent_uid, machine_name, deployment_name, agent.disabled, time_created,
+                              plugin.agent_last_seen(agent.agent_uid)]
             if verbose:
                 row.append(agent.agent_uid in active_agents)
                 props: Optional[List[str]] = None

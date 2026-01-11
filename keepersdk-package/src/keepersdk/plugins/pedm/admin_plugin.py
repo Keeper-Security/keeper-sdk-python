@@ -158,6 +158,7 @@ class PedmPlugin(IPedmAdmin):
         self._push_notifications.register_callback(self.on_push_message)
         self._push_notifications.connect_to_push_channel()
         self._need_sync = True
+        self._last_seen: Optional[Dict[str, int]] = None
         self.logger = utils.get_logger()
 
     def on_push_message(self, message: Dict[str, Any]):
@@ -814,6 +815,29 @@ class PedmPlugin(IPedmAdmin):
         assert status_rs is not None
         return admin_types.ModifyStatus.from_proto(status_rs)
 
+    def load_last_seen(self) -> None:
+        if self._last_seen is None:
+            self._last_seen = {}
+        else:
+            self._last_seen.clear()
+        auth = self.loader.keeper_auth
+        rq = pedm_pb2.GetAgentLastSeenRequest()
+        rq.activeOnly = True
+        last_seen_rs = auth.execute_router(
+            'pedm/get_agent_last_seen', rq, response_type=pedm_pb2.GetAgentLastSeenResponse)
+        assert last_seen_rs is not None
+        for ls in last_seen_rs.lastSeen:
+            self._last_seen[utils.base64_url_encode(ls.agentUid)] = ls.lastSeen
+
+    def agent_last_seen(self, agent_uid: str) -> Optional[datetime.datetime]:
+        if self._last_seen is None:
+            self.load_last_seen()
+
+        if agent_uid in self._last_seen:
+            millis = self._last_seen[agent_uid]
+            return datetime.datetime.fromtimestamp(millis / 1000)
+
+        return None
     def extend_approvals(self, *, to_extend: Optional[List[admin_types.PedmUpdateApproval]] = None) -> admin_types.ModifyStatus:
         auth = self.loader.keeper_auth
 
