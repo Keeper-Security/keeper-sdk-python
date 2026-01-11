@@ -18,9 +18,10 @@ from keepersdk import utils
 from keepersdk.plugins.pedm import admin_plugin, pedm_shared, admin_types, admin_storage
 from keepersdk.plugins.pedm.pedm_shared import CollectionType
 from keepersdk.proto import NotificationCenter_pb2, pedm_pb2
+from keepersdk.vault import share_management_utils
 from . import base, pedm_aram
 from .. import prompt_utils, api
-from ..helpers import report_utils, share_utils
+from ..helpers import report_utils
 from ..params import KeeperParams
 
 
@@ -1761,7 +1762,7 @@ class PedmApprovalExtendCommand(base.ArgparseCommand, PedmUtils):
         plugin = context.pedm_plugin
         logger = api.get_logger()
 
-        share_expiration = share_utils.get_share_expiration(kwargs.get('expire_at'), kwargs.get('expire_in'))
+        share_expiration = share_management_utils.get_share_expiration(kwargs.get('expire_at'), kwargs.get('expire_in'))
         if share_expiration > 0:
             share_expiration = share_expiration - int(datetime.datetime.now().timestamp())
         if share_expiration < 100:
