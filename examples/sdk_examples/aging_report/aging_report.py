@@ -1,10 +1,4 @@
-"""Example script demonstrating the aging report SDK functionality.
-
-Usage:
-    python aging_report.py
-
-Runs the password aging report with default settings (3 month period).
-"""
+"""Example: Password aging report using Keeper SDK."""
 
 import datetime
 import getpass
@@ -23,7 +17,6 @@ HEADERS = ['Owner', 'Title', 'Password Changed', 'Shared', 'Record URL']
 
 
 def login():
-    """Handle login with persistent session support."""
     config = configuration.JsonConfigurationStorage()
     server = config.get().last_server or 'keepersecurity.com'
     
@@ -59,7 +52,6 @@ def login():
 
 
 def format_row(values):
-    """Format a row of values according to column widths."""
     return ' '.join(
         f"{str(val or '')[:w-1]:<{w}}"
         for val, w in zip(values, COL_WIDTHS + (20,) * (len(values) - len(COL_WIDTHS)))
@@ -67,7 +59,6 @@ def format_row(values):
 
 
 def print_report(rows, title):
-    """Print the aging report in table format."""
     print(f"\n{title}")
     print('=' * TABLE_WIDTH)
     print(format_row(HEADERS))
@@ -83,7 +74,6 @@ def print_report(rows, title):
 
 
 def generate_report(auth: keeper_auth.KeeperAuth, server: str):
-    """Generate enterprise password aging report."""
     if not auth.auth_context.is_enterprise_admin:
         print("ERROR: This operation requires enterprise admin privileges.")
         return 1
@@ -122,12 +112,10 @@ def generate_report(auth: keeper_auth.KeeperAuth, server: str):
 
 
 def main():
-    """Main entry point."""
     auth, server = login()
     if not auth:
         print("Login failed. Unable to generate aging report.")
         return 1
-    
     return generate_report(auth, server)
 
 
