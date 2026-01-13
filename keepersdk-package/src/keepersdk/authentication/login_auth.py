@@ -189,8 +189,8 @@ class LoginContext:
     def __init__(self) -> None:
         self.username = ''
         self.passwords: List[str] = []
-        self.clone_code = b''
-        self.device_token = b''
+        self.clone_code: Optional[bytes] = None
+        self.device_token: Optional[bytes] = None
         self.device_private_key: Optional[ec.EllipticCurvePrivateKey] = None
         self.message_session_uid: bytes = crypto.get_random_bytes(16)
         self.account_type: AccountAuthType = AccountAuthType.Regular
@@ -247,6 +247,9 @@ class LoginAuth:
         try:
             try:
                 _ensure_device_token_loaded(self)
+                _start_login(self)
+            except errors.InvalidDeviceTokenError:
+                _ensure_device_token_loaded(self, new_device=True)
                 _start_login(self)
             except errors.RegionRedirectError as rr:
                 _redirect_to_region(self, rr.region_host)
@@ -377,7 +380,7 @@ def _tfa_channel_info_keeper_to_sdk(channel_info: APIRequest_pb2.TwoFactorChanne
     return info
 
 
-def _ensure_device_token_loaded(login: LoginAuth) -> None:
+def _ensure_device_token_loaded(login: LoginAuth, *, new_device=False) -> None:
     logger = utils.get_logger()
     attempt = 0
 
@@ -385,6 +388,13 @@ def _ensure_device_token_loaded(login: LoginAuth) -> None:
     context.clone_code = b''
     config = login.keeper_endpoint.get_configuration_storage().get()
     server = login.keeper_endpoint.server
+    if new_device:
+        context.device_token = None
+        context.device_private_key = None
+        all_devices = [x.device_token for x in config.devices().list()]
+        for device_token in all_devices:
+            config.devices().delete(device_token)
+        logger.info('Registering a new device')
     while attempt < 6:
         attempt += 1
 

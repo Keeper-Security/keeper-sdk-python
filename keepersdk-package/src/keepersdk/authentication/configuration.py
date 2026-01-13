@@ -3,7 +3,7 @@ import io
 import json
 import os
 from typing import Type, Union, TypeVar, Optional, Generic, Iterator, List, Dict
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit
 
 from .. import utils
 from ..constants import DEFAULT_KEEPER_SERVER
@@ -15,6 +15,8 @@ def adjust_username(username: str) -> str:
 
 def adjust_servername(server: str) -> str:
     if server:
+        if '://' not in server:
+            server = '//' + server
         url = urlparse(server)
         if url.netloc:
             return url.netloc.lower()
