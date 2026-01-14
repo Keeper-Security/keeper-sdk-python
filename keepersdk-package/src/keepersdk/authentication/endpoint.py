@@ -150,7 +150,7 @@ class KeeperEndpoint(object):
         logger.debug('>>> [ROUTER] POST Request: [%s]', url)
         if payload is not None:
             payload = crypto.encrypt_aes_v2(payload, transmission_key)
-        response = requests.post(url, headers=headers, data=payload)
+        response = requests.post(url, headers=headers, data=payload, verify=get_certificate_check())
         logger.debug('<<<  [ROUTER] Response Code: [%d]', response.status_code)
 
         if response.status_code == 200:
