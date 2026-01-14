@@ -3,7 +3,7 @@
 import dataclasses
 import datetime
 import logging
-from collections import defaultdict
+from collections import defaultdict, deque
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from ..authentication import keeper_auth
@@ -150,10 +150,10 @@ class ActionReportGenerator:
     def _get_descendant_nodes(self, node_id: int) -> Set[int]:
         children_lookup = self._build_node_children_lookup()
         descendants = {node_id}
-        queue = [node_id]
+        queue = deque([node_id])
         
         while queue:
-            current_id = queue.pop(0)
+            current_id = queue.popleft()
             child_ids = children_lookup.get(current_id, set())
             for child_id in child_ids:
                 if child_id not in descendants:

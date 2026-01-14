@@ -17,6 +17,7 @@ from . import enterprise_types
 API_EVENT_SUMMARY_ROW_LIMIT = 1000
 DEFAULT_PERIOD_DAYS = 90
 SEARCH_HISTORY_YEARS = 5
+MAX_PAGINATION_ITERATIONS = 10000  # Safety limit to prevent infinite loops
 logger = logging.getLogger(__name__)
 
 
@@ -49,7 +50,16 @@ class AgingReportConfig:
 
 
 class AgingReportGenerator:
-    """Generates password aging reports for enterprise records."""
+    """Generates password aging reports for enterprise records.
+    
+    This class identifies records whose passwords have not been changed
+    within a specified period. It fetches data from the compliance API
+    and falls back to audit events if needed.
+    
+    Usage:
+        generator = AgingReportGenerator(enterprise_data, auth, config)
+        entries = generator.generate_report()
+    """
     
     def __init__(
         self,
@@ -121,11 +131,69 @@ class AgingReportGenerator:
         """Get minimum timestamp for historical searches."""
         return int((datetime.datetime.now() - datetime.timedelta(days=365 * SEARCH_HISTORY_YEARS)).timestamp())
     
+    def _fetch_paginated_audit_events(
+        self,
+        event_types: List[str],
+        report_type: str = 'raw'
+    ) -> Iterable[Dict[str, Any]]:
+        """Fetch paginated audit events. Yields individual events."""
+        search_min_ts = self._get_search_min_timestamp()
+        audit_filter: Dict[str, Any] = {
+            'audit_event_type': event_types,
+            'created': {'min': search_min_ts}
+        }
+        
+        rq: Dict[str, Any] = {
+            'command': 'get_audit_event_reports',
+            'scope': 'enterprise',
+            'report_type': report_type,
+            'filter': audit_filter,
+            'limit': API_EVENT_SUMMARY_ROW_LIMIT,
+            'order': 'ascending'
+        }
+        
+        if report_type == 'span':
+            rq['columns'] = ['record_uid', 'audit_event_type']
+            rq['aggregate'] = ['last_created']
+            del rq['order']
+        
+        last_ts = search_min_ts
+        iteration_count = 0
+        
+        while True:
+            iteration_count += 1
+            if iteration_count > MAX_PAGINATION_ITERATIONS:
+                logger.warning(f'Reached maximum pagination iterations ({MAX_PAGINATION_ITERATIONS}). Stopping to prevent infinite loop.')
+                break
+            
+            try:
+                rs = self._auth.execute_auth_command(rq)
+                events = rs.get('audit_event_overview_report_rows', [])
+                
+                if not events:
+                    break
+                
+                for event in events:
+                    yield event
+                    ts_field = 'last_created' if report_type == 'span' else 'created'
+                    last_ts = max(last_ts, int(event.get(ts_field, 0)))
+                
+                if len(events) < API_EVENT_SUMMARY_ROW_LIMIT:
+                    break
+                
+                if report_type == 'span':
+                    audit_filter['created']['max'] = last_ts + 1
+                else:
+                    audit_filter['created'] = {'min': last_ts}
+            except Exception as e:
+                logger.debug(f'Error fetching audit events: {e}')
+                break
+    
     def get_record_sfs(self, record_uid: str) -> List[str]:
         """Get list of shared folder UIDs where the record exists."""
         return self._record_shared_folders.get(record_uid, [])
     
-    def _get_ec_private_key(self):
+    def _get_ec_private_key(self) -> Optional[bytes]:
         """Get the enterprise EC private key for decryption."""
         return self._enterprise_data.enterprise_info.ec_private_key
     
@@ -206,55 +274,27 @@ class AgingReportGenerator:
     
     def _update_timestamps_from_audit_events(self) -> None:
         """Update records with timestamps from audit events using span reports."""
-        search_min_ts = self._get_search_min_timestamp()
-        filter_period: Dict[str, Any] = {'min': search_min_ts}
-        
-        rq = {
-            'command': 'get_audit_event_reports',
-            'scope': 'enterprise',
-            'report_type': 'span',
-            'columns': ['record_uid', 'audit_event_type'],
-            'aggregate': ['last_created'],
-            'filter': {
-                'audit_event_type': ['record_add', 'record_password_change', 'folder_add_record'],
-                'created': filter_period
-            },
-            'limit': API_EVENT_SUMMARY_ROW_LIMIT
-        }
-        
         created_lookup: Dict[str, int] = {}
         folder_add_lookup: Dict[str, int] = {}
         pw_change_lookup: Dict[str, int] = {}
         
-        done = False
-        while not done:
-            try:
-                rs = self._auth.execute_auth_command(rq)
-                events = rs.get('audit_event_overview_report_rows', [])
-                done = len(events) < API_EVENT_SUMMARY_ROW_LIMIT
-                
-                if not done and events:
-                    filter_period['max'] = int(events[-1].get('last_created', 0)) + 1
-                
-                for event in events:
-                    record_uid = event.get('record_uid', '')
-                    if not record_uid or record_uid not in self._records:
-                        continue
-                    
-                    event_type = event.get('audit_event_type', '')
-                    event_ts = int(event.get('last_created', 0))
-                    
-                    if event_type == 'record_add':
-                        created_lookup.setdefault(record_uid, event_ts)
-                    elif event_type == 'folder_add_record':
-                        folder_add_lookup[record_uid] = event_ts
-                    elif event_type == 'record_password_change':
-                        if event_ts > pw_change_lookup.get(record_uid, 0):
-                            pw_change_lookup[record_uid] = event_ts
-            except Exception:
-                break
+        event_types = ['record_add', 'record_password_change', 'folder_add_record']
+        for event in self._fetch_paginated_audit_events(event_types, report_type='span'):
+            record_uid = event.get('record_uid', '')
+            if not record_uid or record_uid not in self._records:
+                continue
+            
+            event_type = event.get('audit_event_type', '')
+            event_ts = int(event.get('last_created', 0))
+            
+            if event_type == 'record_add':
+                created_lookup.setdefault(record_uid, event_ts)
+            elif event_type == 'folder_add_record':
+                folder_add_lookup[record_uid] = event_ts
+            elif event_type == 'record_password_change':
+                if event_ts > pw_change_lookup.get(record_uid, 0):
+                    pw_change_lookup[record_uid] = event_ts
         
-        # Use folder_add as fallback for created timestamp
         for record_uid, ts in folder_add_lookup.items():
             created_lookup.setdefault(record_uid, ts)
         
@@ -276,157 +316,57 @@ class AgingReportGenerator:
     
     def _fetch_deleted_records(self) -> None:
         """Fetch deleted records from audit events for --exclude-deleted filtering."""
-        search_min_ts = self._get_search_min_timestamp()
-        audit_filter: Dict[str, Any] = {
-            'audit_event_type': ['record_delete'],
-            'created': {'min': search_min_ts}
-        }
-        
-        rq = {
-            'command': 'get_audit_event_reports',
-            'scope': 'enterprise',
-            'report_type': 'raw',
-            'filter': audit_filter,
-            'limit': API_EVENT_SUMMARY_ROW_LIMIT,
-            'order': 'ascending'
-        }
-        
-        deleted_records: Set[str] = set()
-        done = False
-        last_ts = search_min_ts
-        
-        while not done:
-            try:
-                rs = self._auth.execute_auth_command(rq)
-                events = rs.get('audit_event_overview_report_rows', [])
-                done = len(events) < API_EVENT_SUMMARY_ROW_LIMIT
-                
-                for event in events:
-                    record_uid = event.get('record_uid', '')
-                    if record_uid:
-                        deleted_records.add(record_uid)
-                    last_ts = max(last_ts, int(event.get('created', 0)))
-                
-                if not done and events:
-                    audit_filter['created'] = {'min': last_ts}
-            except Exception as e:
-                logger.debug(f'Error fetching deleted records: {e}')
-                break
-        
-        for record_uid in deleted_records:
-            if record_uid in self._records:
+        for event in self._fetch_paginated_audit_events(['record_delete']):
+            record_uid = event.get('record_uid', '')
+            if record_uid and record_uid in self._records:
                 self._records[record_uid]['in_trash'] = True
     
     def _fetch_shared_folder_mappings(self) -> None:
         """Fetch shared folder mappings for --in-shared-folder filtering."""
-        search_min_ts = self._get_search_min_timestamp()
-        audit_filter: Dict[str, Any] = {
-            'audit_event_type': ['folder_add_record'],
-            'created': {'min': search_min_ts}
-        }
-        
-        rq = {
-            'command': 'get_audit_event_reports',
-            'scope': 'enterprise',
-            'report_type': 'raw',
-            'filter': audit_filter,
-            'limit': API_EVENT_SUMMARY_ROW_LIMIT,
-            'order': 'ascending'
-        }
-        
-        done = False
-        last_ts = search_min_ts
-        
-        while not done:
-            try:
-                rs = self._auth.execute_auth_command(rq)
-                events = rs.get('audit_event_overview_report_rows', [])
-                done = len(events) < API_EVENT_SUMMARY_ROW_LIMIT
-                
-                for event in events:
-                    record_uid = event.get('record_uid', '')
-                    shared_folder_uid = event.get('shared_folder_uid', '')
-                    
-                    if record_uid and shared_folder_uid:
-                        if record_uid not in self._record_shared_folders:
-                            self._record_shared_folders[record_uid] = []
-                        if shared_folder_uid not in self._record_shared_folders[record_uid]:
-                            self._record_shared_folders[record_uid].append(shared_folder_uid)
-                    
-                    last_ts = max(last_ts, int(event.get('created', 0)))
-                
-                if not done and events:
-                    audit_filter['created'] = {'min': last_ts}
-            except Exception as e:
-                logger.debug(f'Error fetching shared folder mappings: {e}')
-                break
+        for event in self._fetch_paginated_audit_events(['folder_add_record']):
+            record_uid = event.get('record_uid', '')
+            shared_folder_uid = event.get('shared_folder_uid', '')
+            
+            if record_uid and shared_folder_uid:
+                if record_uid not in self._record_shared_folders:
+                    self._record_shared_folders[record_uid] = []
+                if shared_folder_uid not in self._record_shared_folders[record_uid]:
+                    self._record_shared_folders[record_uid].append(shared_folder_uid)
     
     def _fetch_records_from_audit_events(self) -> None:
         """Fallback: Fetch records from audit events if compliance API fails."""
-        search_min_ts = self._get_search_min_timestamp()
-        audit_filter: Dict[str, Any] = {
-            'audit_event_type': ['record_add', 'folder_add_record'],
-            'created': {'min': search_min_ts}
-        }
-        
-        rq = {
-            'command': 'get_audit_event_reports',
-            'scope': 'enterprise',
-            'report_type': 'raw',
-            'filter': audit_filter,
-            'limit': API_EVENT_SUMMARY_ROW_LIMIT,
-            'order': 'ascending'
-        }
-        
-        done = False
-        last_ts = search_min_ts
-        
-        while not done:
-            try:
-                rs = self._auth.execute_auth_command(rq)
-                events = rs.get('audit_event_overview_report_rows', [])
-                done = len(events) < API_EVENT_SUMMARY_ROW_LIMIT
-                
-                for event in events:
-                    record_uid = event.get('record_uid', '')
-                    if not record_uid:
-                        continue
-                    
-                    event_ts = int(event.get('created', 0))
-                    username = event.get('username', '')
-                    event_type = event.get('audit_event_type', '')
-                    shared_folder_uid = event.get('shared_folder_uid', '')
-                    
-                    if record_uid not in self._records:
-                        self._records[record_uid] = {
-                            'record_uid': record_uid,
-                            'owner_email': username,
-                            'owner_user_id': 0,
-                            'title': '',
-                            'shared': bool(shared_folder_uid),
-                            'created_ts': event_ts if event_type == 'record_add' else 0,
-                            'pw_changed_ts': 0,
-                            'in_trash': False
-                        }
-                    else:
-                        rec = self._records[record_uid]
-                        if event_type == 'record_add' and event_ts > 0:
-                            if rec['created_ts'] == 0 or event_ts < rec['created_ts']:
-                                rec['created_ts'] = event_ts
-                            if username:
-                                rec['owner_email'] = username
-                        if shared_folder_uid:
-                            rec['shared'] = True
-                        if rec['created_ts'] == 0 and event_ts > 0:
-                            rec['created_ts'] = event_ts
-                    
-                    last_ts = max(last_ts, event_ts)
-                
-                if not done and events:
-                    audit_filter['created'] = {'min': last_ts}
-            except Exception as e:
-                logger.debug(f'Error fetching audit events: {e}')
-                break
+        for event in self._fetch_paginated_audit_events(['record_add', 'folder_add_record']):
+            record_uid = event.get('record_uid', '')
+            if not record_uid:
+                continue
+            
+            event_ts = int(event.get('created', 0))
+            username = event.get('username', '')
+            event_type = event.get('audit_event_type', '')
+            shared_folder_uid = event.get('shared_folder_uid', '')
+            
+            if record_uid not in self._records:
+                self._records[record_uid] = {
+                    'record_uid': record_uid,
+                    'owner_email': username,
+                    'owner_user_id': 0,
+                    'title': '',
+                    'shared': bool(shared_folder_uid),
+                    'created_ts': event_ts if event_type == 'record_add' else 0,
+                    'pw_changed_ts': 0,
+                    'in_trash': False
+                }
+            else:
+                rec = self._records[record_uid]
+                if event_type == 'record_add' and event_ts > 0:
+                    if rec['created_ts'] == 0 or event_ts < rec['created_ts']:
+                        rec['created_ts'] = event_ts
+                    if username:
+                        rec['owner_email'] = username
+                if shared_folder_uid:
+                    rec['shared'] = True
+                if rec['created_ts'] == 0 and event_ts > 0:
+                    rec['created_ts'] = event_ts
         
         logger.debug(f'Fetched {len(self._records)} records from audit events')
     
@@ -551,7 +491,17 @@ class AgingReportGenerator:
 
 
 def parse_period(period_str: str) -> Optional[int]:
-    """Parse period string (e.g., '3m', '10d', '1y') to days."""
+    """Parse period string (e.g., '3m', '10d', '1y') to days.
+    
+    Args:
+        period_str: Period string with format '<number><unit>' where unit is:
+            - 'd' for days
+            - 'm' for months (30 days)
+            - 'y' for years (365 days)
+    
+    Returns:
+        Number of days, or None if parsing fails.
+    """
     if not period_str or len(period_str.strip()) < 2:
         return None
     
@@ -564,7 +514,11 @@ def parse_period(period_str: str) -> Optional[int]:
         return None
     
     multipliers = {'d': 1, 'm': 30, 'y': 365}
-    return value * multipliers.get(unit)
+    multiplier = multipliers.get(unit)
+    if multiplier is None:
+        return None
+    
+    return value * multiplier
 
 
 def parse_date(date_str: str) -> Optional[datetime.datetime]:
