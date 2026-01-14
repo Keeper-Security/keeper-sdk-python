@@ -272,7 +272,6 @@ class RawAuditReport(AuditReportCommon):
 
 
 SUMMARY_REPORTS = ('hour', 'day', 'week', 'month', 'span')
-AGGREGATES = ('occurrences', 'first_created', 'last_created')
 
 
 class SummaryAuditReport(AuditReportCommon):
@@ -286,6 +285,7 @@ class SummaryAuditReport(AuditReportCommon):
     @property
     def summary_type(self) -> str:
         return self._summary_type
+    
     @summary_type.setter
     def summary_type(self, value: str):
         if value in SUMMARY_REPORTS:

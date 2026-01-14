@@ -5,8 +5,8 @@ import datetime
 import os
 from typing import Any, List
 
-from keepersdk.enterprise import aging_report
-
+from keepersdk.enterprise import aging_report, enterprise_types
+from keepersdk.authentication import keeper_auth
 from . import base
 from ..helpers import report_utils
 from ..params import KeeperParams
@@ -22,7 +22,11 @@ class AgingReportCommand(base.ArgparseCommand):
             description='Run a password aging report',
             parents=[base.report_output_parser]
         )
-        
+        AgingReportCommand.add_arguments_to_parser(parser)
+        super().__init__(parser)
+    
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
         parser.add_argument('-r', '--rebuild', dest='rebuild', action='store_true',
                             help='Rebuild record database')
         parser.add_argument('--delete', dest='delete', action='store_true',
@@ -32,36 +36,34 @@ class AgingReportCommand(base.ArgparseCommand):
         parser.add_argument('-s', '--sort', dest='sort_by', action='store', default='last_changed',
                             choices=['owner', 'title', 'last_changed', 'shared'],
                             help='Sort output by column')
-        
         temporal_group = parser.add_mutually_exclusive_group()
         temporal_group.add_argument('--period', dest='period', action='store',
                                     help='Period password has not been modified (e.g., 10d, 3m, 1y)')
         temporal_group.add_argument('--cutoff-date', dest='cutoff_date', action='store',
                                     help='Date since password has not been modified (e.g., 2024-01-01)')
-        
         parser.add_argument('--username', dest='username', action='store',
                             help='Report expired passwords for user')
         parser.add_argument('--exclude-deleted', dest='exclude_deleted', action='store_true',
                             help='Exclude deleted records from report')
         parser.add_argument('--in-shared-folder', dest='in_shared_folder', action='store_true',
                             help='Limit report to records in shared folders')
-        
-        super().__init__(parser)
     
     def execute(self, context: KeeperParams, **kwargs) -> Any:
         base.require_login(context)
         base.require_enterprise_admin(context)
         
         logger = api.get_logger()
-        enterprise_id = self._get_enterprise_id(context)
+        enterprise_data = context.enterprise_data
+        auth = context.auth
+        enterprise_id = self._get_enterprise_id(auth)
         
         if kwargs.get('delete'):
-            return self._handle_delete(context, enterprise_id, logger)
+            return self._handle_delete(enterprise_data, auth, enterprise_id, logger)
         
         period_days, cutoff_date = self._parse_temporal_args(kwargs, logger)
         
         username = kwargs.get('username')
-        if username and not self._validate_username(context, username, logger):
+        if username and not self._validate_username(enterprise_data, username, logger):
             return
         
         config = aging_report.AgingReportConfig(
@@ -92,18 +94,14 @@ class AgingReportCommand(base.ArgparseCommand):
                 generator.cleanup(enterprise_id)
                 logger.info('Local cache has been removed.')
     
-    def _get_enterprise_id(self, context: KeeperParams) -> int:
+    def _get_enterprise_id(self, auth: keeper_auth.KeeperAuth) -> int:
         """Extract enterprise ID from context."""
-        if hasattr(context, 'enterprise_data') and context.enterprise_data:
-            info = getattr(context.enterprise_data, 'enterprise_info', None)
-            if info:
-                return getattr(info, 'enterprise_id', 0)
-        return 0
+        return auth.auth_context.enterprise_id
     
-    def _handle_delete(self, context: KeeperParams, enterprise_id: int, logger) -> None:
+    def _handle_delete(self, enterprise_data: enterprise_types.IEnterpriseData, auth: keeper_auth.KeeperAuth, enterprise_id: int, logger) -> None:
         """Handle --delete option."""
         config = aging_report.AgingReportConfig()
-        generator = aging_report.AgingReportGenerator(context.enterprise_data, context.auth, config)
+        generator = aging_report.AgingReportGenerator(enterprise_data, auth, config)
         if generator.delete_local_cache(enterprise_id):
             logger.info('Local encrypted storage has been deleted.')
         else:
@@ -135,9 +133,9 @@ class AgingReportCommand(base.ArgparseCommand):
         
         return period_days, cutoff_date
     
-    def _validate_username(self, context: KeeperParams, username: str, logger) -> bool:
+    def _validate_username(self, enterprise_data: enterprise_types.IEnterpriseData, username: str, logger) -> bool:
         """Validate username exists in enterprise."""
-        for user in context.enterprise_data.users.get_all_entities():
+        for user in enterprise_data.users.get_all_entities():
             if user.username.lower() == username.lower():
                 return True
         logger.info(f'User {username} is not a valid enterprise user')

@@ -6,12 +6,13 @@ import json
 import logging
 import os
 import traceback
-from typing import Optional, List, Dict, Any, Iterable, Tuple, Set
+from typing import Optional, List, Dict, Any, Iterable, Tuple
 
 from ..authentication import keeper_auth
 from ..proto import enterprise_pb2
 from .. import crypto, utils
 from . import enterprise_types
+from ..vault import vault_online
 
 
 API_EVENT_SUMMARY_ROW_LIMIT = 1000
@@ -31,7 +32,7 @@ class AgingReportEntry:
     record_created: Optional[datetime.datetime] = None
     shared: bool = False
     record_url: str = ''
-    shared_folder_uid: Optional[List[str]] = None  # List of shared folder UIDs
+    shared_folder_uid: Optional[List[str]] = None
     in_trash: bool = False
 
 
@@ -66,7 +67,7 @@ class AgingReportGenerator:
         enterprise_data: enterprise_types.IEnterpriseData,
         auth: keeper_auth.KeeperAuth,
         config: Optional[AgingReportConfig] = None,
-        vault: Optional[Any] = None
+        vault: Optional[vault_online.VaultOnline] = None
     ) -> None:
         self._enterprise_data = enterprise_data
         self._auth = auth
@@ -375,10 +376,10 @@ class AgingReportGenerator:
         if self._vault is None:
             return ''
         try:
-            vault_data = getattr(self._vault, 'vault_data', None)
+            vault_data = self._vault.vault_data
             if vault_data:
                 record = vault_data.get_record(record_uid)
-                if record and hasattr(record, 'title'):
+                if record:
                     return record.title or ''
         except Exception:
             pass
