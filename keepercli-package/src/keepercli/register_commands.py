@@ -89,7 +89,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
     if not scopes or bool(scopes & base.CommandScope.Enterprise):
         from .commands import (enterprise_info, enterprise_node, enterprise_role, enterprise_team, enterprise_user, enterprise_create_user,
                                importer_commands, audit_report, audit_alert, audit_log, transfer_account, pedm_admin, msp, user_report,
-                               aging_report, action_report)
+                               aging_report, action_report, security_audit_report)
         from .commands.pam import keeper_pam
 
         commands.register_command('create-user', enterprise_create_user.CreateEnterpriseUserCommand(), base.CommandScope.Enterprise, 'ecu')
