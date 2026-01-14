@@ -83,12 +83,10 @@ class ActionReportGenerator:
         self,
         enterprise_data: enterprise_types.IEnterpriseData,
         auth: keeper_auth.KeeperAuth,
-        loader: Optional[enterprise_types.IEnterpriseLoader] = None,
         config: Optional[ActionReportConfig] = None
     ) -> None:
         self._enterprise_data = enterprise_data
         self._auth = auth
-        self._loader = loader
         self._config = config or ActionReportConfig()
         self._user_teams: Optional[Dict[int, Set[str]]] = None
         self._user_roles: Optional[Dict[int, Set[int]]] = None
@@ -247,7 +245,7 @@ class ActionReportGenerator:
     
     @staticmethod
     def get_user_transfer_status_text(user: enterprise_types.User) -> str:
-        transfer_status = getattr(user, 'transfer_acceptance_status', None)
+        transfer_status = user.transfer_acceptance_status
         if transfer_status is not None:
             status_map = {1: '', 2: 'Not accepted', 3: 'Partially accepted', 4: 'Transfer accepted'}
             if transfer_status in status_map:

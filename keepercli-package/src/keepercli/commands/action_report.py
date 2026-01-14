@@ -5,7 +5,7 @@ import os
 from typing import Any, List, Optional
 
 from keepersdk.authentication import keeper_auth
-from keepersdk.enterprise import action_report, account_transfer, batch_management, enterprise_management
+from keepersdk.enterprise import action_report, account_transfer, batch_management, enterprise_management, enterprise_types
 
 from . import base
 from .. import api, prompt_utils
@@ -20,7 +20,12 @@ class ActionReportCommand(base.ArgparseCommand, enterprise_management.IEnterpris
             description='Run an action report based on user activity.',
             parents=[base.report_output_parser]
         )
-        
+        ActionReportCommand.add_arguments_to_parser(parser)
+        super().__init__(parser)
+        self.logger = api.get_logger()
+    
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser) -> None:
         parser.add_argument(
             '--target', '-t',
             dest='target_user_status',
@@ -78,9 +83,6 @@ class ActionReportCommand(base.ArgparseCommand, enterprise_management.IEnterpris
             action='store',
             help='Filter users by node (node name or ID)'
         )
-        
-        super().__init__(parser)
-        self.logger = api.get_logger()
     
     def warning(self, message: str) -> None:
         self.logger.warning(message)
@@ -127,9 +129,9 @@ class ActionReportCommand(base.ArgparseCommand, enterprise_management.IEnterpris
             dry_run=dry_run,
             force=force
         )
-        
+
         generator = action_report.ActionReportGenerator(
-            context.enterprise_data, context.auth, loader=context.enterprise_loader, config=config
+            context.enterprise_data, context.auth, config=config
         )
         
         report_entries = generator.generate_report()
@@ -225,9 +227,9 @@ class ActionReportCommand(base.ArgparseCommand, enterprise_management.IEnterpris
         
         try:
             if action == 'lock':
-                return self._lock_users(context, entries)
+                return self._lock_users(context.enterprise_loader, entries)
             elif action == 'delete':
-                return self._delete_users(context, entries)
+                return self._delete_users(context.enterprise_loader, entries)
             elif action == 'transfer':
                 return self._transfer_users(context, entries, config.target_user)
             return action_report.ActionResult(action=action, status='unknown', affected_count=0)
@@ -238,9 +240,9 @@ class ActionReportCommand(base.ArgparseCommand, enterprise_management.IEnterpris
             )
     
     def _lock_users(
-        self, context: KeeperParams, entries: List[action_report.ActionReportEntry]
+        self, loader: enterprise_types.IEnterpriseLoader, entries: List[action_report.ActionReportEntry]
     ) -> action_report.ActionResult:
-        batch = batch_management.BatchManagement(loader=context.enterprise_loader, logger=self)
+        batch = batch_management.BatchManagement(loader=loader, logger=self)
         user_ids = [e.enterprise_user_id for e in entries]
         batch.user_actions(to_lock=user_ids)
         
@@ -260,9 +262,9 @@ class ActionReportCommand(base.ArgparseCommand, enterprise_management.IEnterpris
             )
     
     def _delete_users(
-        self, context: KeeperParams, entries: List[action_report.ActionReportEntry]
+        self, loader: enterprise_types.IEnterpriseLoader, entries: List[action_report.ActionReportEntry]
     ) -> action_report.ActionResult:
-        batch = batch_management.BatchManagement(loader=context.enterprise_loader, logger=self)
+        batch = batch_management.BatchManagement(loader=loader, logger=self)
         users_to_delete = [
             enterprise_management.UserEdit(enterprise_user_id=e.enterprise_user_id)
             for e in entries
