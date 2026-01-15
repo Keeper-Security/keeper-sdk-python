@@ -14,6 +14,7 @@ from ..params import KeeperParams
 
 syslog_templates: Optional[Dict[str, str]] = None
 
+
 def load_syslog_templates(auth: keeper_auth.KeeperAuth) -> None:
     global syslog_templates
     if syslog_templates is None:
@@ -53,6 +54,11 @@ def get_event_message(event: Dict[str, Any]) -> str:
 class EnterpriseAuditReport(base.ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(prog='audit-report', parents=[base.report_output_parser], description='Run an audit trail report.')
+        EnterpriseAuditReport.add_arguments_to_parser(parser)
+        super().__init__(parser)
+    
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
         parser.add_argument('--syntax-help', dest='syntax_help', action='store_true', help='display help')
         parser.add_argument('--report-type', dest='report_type', action='store',
                             choices=['raw', 'dim', 'hour', 'day', 'week', 'month', 'span'],
@@ -89,17 +95,19 @@ class EnterpriseAuditReport(base.ArgparseCommand):
                             help='Filter: Geo location')
         parser.add_argument('--device-type', dest='device_type', action='store',
                             help='Filter: Device type')
-        super().__init__(parser)
-
+    
     def execute(self, context: KeeperParams, **kwargs) -> Any:
         base.require_login(context)
         base.require_enterprise_admin(context)
+
+        auth = context.auth
+        enterprise_data = context.enterprise_data
 
         report_type = kwargs.get('report_type')
         if kwargs.get('syntax_help') is True or not report_type:
             prompt_utils.output_text(audit_report_description)
             if not report_type:
-                dim_report = audit_report.DimAuditReport(context.auth)
+                dim_report = audit_report.DimAuditReport(auth)
                 events = dim_report.execute_dimension_report('audit_event_type')
                 table = []
                 for event in events:
@@ -110,7 +118,7 @@ class EnterpriseAuditReport(base.ArgparseCommand):
             return
 
         has_aram = False
-        keeper_license = next(iter(context.enterprise_data.licenses.get_all_entities()), None)
+        keeper_license = next(iter(enterprise_data.licenses.get_all_entities()), None)
         if keeper_license and keeper_license.add_ons:
             has_aram = any((True for x in keeper_license.add_ons if x.name.lower() == 'enterprise_audit_and_reporting'))
 
@@ -125,7 +133,7 @@ class EnterpriseAuditReport(base.ArgparseCommand):
                 raise base.CommandError('"dim" reports expect one "columns" parameter')
 
             column = columns[0]
-            dimension = EnterpriseAuditReport.load_audit_dimension(context.auth, column)
+            dimension = EnterpriseAuditReport.load_audit_dimension(auth, column)
             if dimension:
                 table = []
                 if column == 'audit_event_type':
@@ -150,9 +158,9 @@ class EnterpriseAuditReport(base.ArgparseCommand):
                 return report_utils.dump_report_data(table, fields, fmt=fmt, filename=kwargs.get('output'))
 
         elif report_type == 'raw':
-            raw_report = audit_report.RawAuditReport(context.auth)
+            raw_report = audit_report.RawAuditReport(auth)
             if has_aram:
-                raw_report.filter = self.get_report_filter(context.auth, **kwargs)
+                raw_report.filter = self.get_report_filter(auth, **kwargs)
                 limit = kwargs.get('limit')
                 if isinstance(limit, int):
                     raw_report.limit = limit
@@ -174,7 +182,7 @@ class EnterpriseAuditReport(base.ArgparseCommand):
             misc_fields: Set[str] = set()
             if report_format == 'message':
                 fields.append('message')
-                load_syslog_templates(context.auth)
+                load_syslog_templates(auth)
             else:
                 misc_fields.update(MISC_FIELDS)
 
@@ -198,9 +206,9 @@ class EnterpriseAuditReport(base.ArgparseCommand):
         else:
             if not has_aram:
                 raise base.CommandError('Audit Reporting addon is not enabled')
-            summary_report = audit_report.SummaryAuditReport(context.auth)
+            summary_report = audit_report.SummaryAuditReport(auth)
             summary_report.summary_type = report_type
-            summary_report.filter = self.get_report_filter(context.auth, **kwargs)
+            summary_report.filter = self.get_report_filter(auth, **kwargs)
             limit = kwargs.get('limit')
             if isinstance(limit, int):
                 if not (0 <= limit <= 2000):
@@ -264,7 +272,6 @@ class EnterpriseAuditReport(base.ArgparseCommand):
                     return dt.strftime('%Y-%m-%d @%H:00')
                 return dt
         return value
-
 
     @staticmethod
     def convert_date_filter(value):
@@ -575,7 +582,6 @@ Filters                 Supported: '=', '>', '<', '>=', '<=', 'IN(<>,<>,<>)'. De
                         Example: "Commander", "Web App, 16.3.4"    
                         audit-report --report-type=dim --columns=device_type                     
 '''
-in_pattern = re.compile(r"\s*in\s*\(\s*(.*)\s*\)", re.IGNORECASE)
 between_pattern = re.compile(r"\s*between\s+(\S*)\s+and\s+(.*)", re.IGNORECASE)
 
 RAW_FIELDS = ('created', 'audit_event_type', 'username', 'ip_address', 'keeper_version', 'geo_location')
