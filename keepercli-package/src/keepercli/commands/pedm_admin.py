@@ -18,6 +18,7 @@ from keepersdk import utils
 from keepersdk.plugins.pedm import admin_plugin, pedm_shared, admin_types, admin_storage
 from keepersdk.plugins.pedm.pedm_shared import CollectionType
 from keepersdk.proto import NotificationCenter_pb2, pedm_pb2
+from keepersdk.vault import share_management_utils
 from . import base, pedm_aram
 from .. import prompt_utils, api
 from ..helpers import report_utils
@@ -154,6 +155,20 @@ class PedmUtils:
                 else:
                     found_collections[c.collection_uid] = c
         return list(found_collections.values())
+
+    @staticmethod
+    def resolve_existing_approvals(pedm: admin_plugin.PedmPlugin, approval_names: Any) -> List[admin_types.PedmApproval]:
+        found_approvals: Dict[str, admin_types.PedmApproval] = {}
+        p: Optional[admin_types.PedmApproval]
+        if isinstance(approval_names, list):
+            for approval_name in approval_names:
+                a = pedm.approvals.get_entity(approval_name)
+                if a is None:
+                    raise base.CommandError(f'Approval "{approval_name}" is not found')
+                found_approvals[a.approval_uid] = a
+        if len(found_approvals) == 0:
+            raise base.CommandError('No approvals were found')
+        return list(found_approvals.values())
 
 
 class PedmCommand(base.GroupCommand):
@@ -562,7 +577,7 @@ class PedmAgentListCommand(base.ArgparseCommand):
 
         verbose = kwargs.get('verbose') is True
         table = []
-        headers = ['agent_uid', 'machine_name', 'deployment', 'disabled', 'created']
+        headers = ['agent_uid', 'machine_name', 'deployment', 'disabled', 'created', 'last_seen']
         active_agents: Set[str] = set()
         if verbose:
             headers.extend(('active', 'properties'))
@@ -580,7 +595,8 @@ class PedmAgentListCommand(base.ArgparseCommand):
             machine_name = ''
             if isinstance(agent.properties, dict):
                 machine_name = agent.properties.get('MachineName') or ''
-            row: List[Any] = [agent.agent_uid, machine_name, deployment_name, agent.disabled, time_created]
+            row: List[Any] = [agent.agent_uid, machine_name, deployment_name, agent.disabled, time_created,
+                              plugin.agent_last_seen(agent.agent_uid)]
             if verbose:
                 row.append(agent.agent_uid in active_agents)
                 props: Optional[List[str]] = None
@@ -1688,6 +1704,7 @@ class PedmApprovalCommand(base.GroupCommand):
         super().__init__('Manage PEDM approval requests')
         self.register_command(PedmApprovalListCommand(), 'list', 'l')
         self.register_command(PedmApprovalStatusCommand(), 'action', 'a')
+        self.register_command(PedmApprovalExtendCommand(), 'extend')
         self.default_verb = 'list'
 
 
@@ -1730,6 +1747,39 @@ class PedmApprovalListCommand(base.ArgparseCommand):
         if fmt != 'json':
             headers = [report_utils.field_to_title(x) for x in headers]
         return report_utils.dump_report_data(table, headers, fmt=fmt, filename=kwargs.get('output'))
+
+
+class PedmApprovalExtendCommand(base.ArgparseCommand, PedmUtils):
+    def __init__(self):
+        parser = argparse.ArgumentParser(prog='extend', description='Extend PEDM approval request expiration time')
+        expiration = parser.add_mutually_exclusive_group()
+        expiration.add_argument('--expire-at', dest='expire_at', action='store', help='UTC datetime')
+        expiration.add_argument('--expire-in', dest='expire_in', action='store',
+                                help='expiration period (<NUMBER>[(mi)nutes|(h)ours|(d)ays|(mo)nths|(y)ears])')
+        parser.add_argument('approval', nargs='+', help='Approval UID or Name')
+        super().__init__(parser)
+
+    def execute(self, context: KeeperParams, **kwargs) -> None:
+        plugin = context.pedm_plugin
+        logger = api.get_logger()
+
+        share_expiration = share_management_utils.get_share_expiration(kwargs.get('expire_at'), kwargs.get('expire_in'))
+        if share_expiration > 0:
+            share_expiration = share_expiration - int(datetime.datetime.now().timestamp())
+        if share_expiration < 100:
+            raise base.CommandError('Expiration time must be at least 1 minute')
+        expire_in = share_expiration // 60
+        approvals = PedmUtils.resolve_existing_approvals(plugin, kwargs.get('approval'))
+
+        to_extend: List[admin_types.PedmUpdateApproval] = []
+        for approval in approvals:
+            to_extend.append(admin_types.PedmUpdateApproval(approval_uid=approval.approval_uid, expire_in=expire_in))
+        status_rs = plugin.extend_approvals(to_extend=to_extend)
+        if status_rs.update:
+            for status in status_rs.update:
+                if not status.success:
+                    if isinstance(status, admin_types.EntityStatus):
+                        logger.warning(f'Failed to extend  approval "{status.entity_uid}": {status.message}')
 
 
 class PedmApprovalStatusCommand(base.ArgparseCommand):
