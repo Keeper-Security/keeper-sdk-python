@@ -205,19 +205,3 @@ def yubikey_register(request, force_pin=False, user_interaction: Optional[UserIn
             pass
     finally:
         evt.set()
-
-
-warned_on_fido_package = False
-install_fido_package_warning = """
-    You can use Security Key with KeeperSDK:
-    Upgrade your Python interpreter to 3.10 or newer
-    and make sure fido2 package is 2.0.0 or newer
-"""
-
-
-def display_fido2_warning():
-    global warned_on_fido_package
-
-    if not warned_on_fido_package:
-        logging.warning(install_fido_package_warning)
-    warned_on_fido_package = True

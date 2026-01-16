@@ -9,7 +9,7 @@ from .. import api, prompt_utils
 
 from keepersdk import utils
 from keepersdk.proto import APIRequest_pb2
-from keepersdk.vault import two_fa_utils
+from keepersdk.authentication import two_fa_utils
 from keepersdk.errors import KeeperApiError
 
 logger = api.get_logger()
@@ -442,7 +442,6 @@ class AddTwoFaCommand(base.ArgparseCommand):
             )
             logger.info(MSG_2FA_METHOD_ADDED)
         except ImportError as e:
-            from keepersdk.authentication.yubikey import display_fido2_warning
             logger.warning(e)
             display_fido2_warning()
         except Exception as e:
@@ -499,6 +498,23 @@ class AddTwoFaCommand(base.ArgparseCommand):
                     )
             except KeyboardInterrupt:
                 return
+
+
+warned_on_fido_package = False
+install_fido_package_warning = """
+    You can use Security Key with KeeperSDK:
+    Upgrade your Python interpreter to 3.10 or newer
+    and make sure fido2 package is 2.0.0 or newer
+"""
+
+
+def display_fido2_warning():
+    global warned_on_fido_package
+
+    if not warned_on_fido_package:
+        logger.warning(install_fido_package_warning)
+    warned_on_fido_package = True
+
 
 class DeleteTwoFaCommand(base.ArgparseCommand):
 
