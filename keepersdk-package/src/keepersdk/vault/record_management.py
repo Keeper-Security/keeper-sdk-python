@@ -610,7 +610,7 @@ def move_vault_objects(vault: vault_online.VaultOnline,
                                             t_record_key = crypto.encrypt_aes_v2(record_key, dst_encryption_key)
                                         else:
                                             t_record_key = crypto.encrypt_aes_v1(record_key, dst_encryption_key)
-                                        transition_keys[f.folder_uid] = utils.base64_url_encode(t_record_key)
+                                        transition_keys[record_uid] = utils.base64_url_encode(t_record_key)
                 vault_utils.traverse_folder_tree(vault.vault_data, folder, prepare_transition_keys)
             parent_folder = vault.vault_data.get_folder(folder.parent_uid) if folder.parent_uid else vault.vault_data.root_folder
             assert parent_folder is not None
