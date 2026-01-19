@@ -14,7 +14,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
     if not scopes or bool(scopes & base.CommandScope.Account):
         from .commands import account_commands
         from .biometric import BiometricCommand
-        from .commands import account_commands
+        from .commands import account_commands, two_fa
         commands.register_command('server',
                                   base.GetterSetterCommand('server', 'Sets or displays current Keeper region'),
                                   base.CommandScope.Account)
@@ -24,6 +24,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('this-device', account_commands.ThisDeviceCommand(), base.CommandScope.Account)
         commands.register_command('whoami', account_commands.WhoamiCommand(), base.CommandScope.Account)
         commands.register_command('reset-password', account_commands.ResetPasswordCommand(), base.CommandScope.Account)
+        commands.register_command('2fa', two_fa.TwoFaCommand(), base.CommandScope.Account)
 
 
     if not scopes or bool(scopes & base.CommandScope.Vault):
