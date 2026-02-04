@@ -111,6 +111,7 @@ class SharedFolderReportEntry:
     team_uid: Optional[List[str]] = None
     team_name: Optional[List[str]] = None
     record_uid: Optional[List[str]] = None
+    record_title: Optional[List[str]] = None
     email: Optional[List[str]] = None
 
 
@@ -895,11 +896,18 @@ class ComplianceReportGenerator:
             
             teams_list = [team_names.get(uid, uid) for uid in folder_teams] if folder_teams else None
             
+            record_titles = []
+            if folder_records:
+                for rec_uid in folder_records:
+                    title = self._records.get(rec_uid, {}).get('title', '')
+                    record_titles.append(title)
+            
             entry = SharedFolderReportEntry(
                 shared_folder_uid=folder_uid,
                 team_uid=folder_teams if folder_teams else None,
                 team_name=teams_list,
                 record_uid=folder_records if folder_records else None,
+                record_title=record_titles if record_titles else None,
                 email=emails if emails else None
             )
             entries.append(entry)
@@ -931,7 +939,7 @@ class ComplianceReportGenerator:
         elif report_type == 'summary':
             return ['email', 'total_items', 'total_owned', 'active_owned', 'deleted_owned']
         elif report_type == 'shared_folder':
-            return ['shared_folder_uid', 'team_uid', 'team_name', 'record_uid', 'email']
+            return ['shared_folder_uid', 'team_uid', 'team_name', 'record_uid', 'record_title', 'email']
         else:
             return []
     
@@ -1015,6 +1023,7 @@ class ComplianceReportGenerator:
                     entry.team_uid,
                     entry.team_name,
                     entry.record_uid,
+                    entry.record_title,
                     entry.email
                 ]
 
