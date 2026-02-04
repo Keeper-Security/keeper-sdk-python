@@ -4,8 +4,11 @@ import dataclasses
 import datetime
 import json
 import logging
+import sys
+import threading
+import time
 from collections import defaultdict
-from typing import Optional, List, Dict, Any, Iterable, Set, Tuple
+from typing import Optional, List, Dict, Any, Iterable, Set, Tuple, Callable
 
 from ..authentication import keeper_auth
 from ..proto import enterprise_pb2
@@ -14,7 +17,48 @@ from . import enterprise_types
 
 
 API_EVENT_SUMMARY_ROW_LIMIT = 1000
+MAX_RECORDS_PER_REQUEST = 1000
 logger = logging.getLogger(__name__)
+
+
+class ProgressSpinner:
+    """Animated spinner for progress display."""
+    
+    def __init__(self):
+        self._spinner_chars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+        self._current = 0
+        self._running = False
+        self._thread = None
+        self._message = ''
+        self._lock = threading.Lock()
+    
+    def start(self, message: str = '') -> None:
+        self._message = message
+        self._running = True
+        self._thread = threading.Thread(target=self._spin, daemon=True)
+        self._thread.start()
+    
+    def update(self, message: str) -> None:
+        with self._lock:
+            self._message = message
+    
+    def stop(self, final_message: str = '') -> None:
+        self._running = False
+        if self._thread:
+            self._thread.join(timeout=0.5)
+        sys.stdout.write('\r' + ' ' * 80 + '\r')
+        if final_message:
+            sys.stdout.write(final_message + '\n')
+        sys.stdout.flush()
+    
+    def _spin(self) -> None:
+        while self._running:
+            with self._lock:
+                char = self._spinner_chars[self._current % len(self._spinner_chars)]
+                sys.stdout.write(f'\r{char} {self._message}')
+                sys.stdout.flush()
+            self._current += 1
+            time.sleep(0.1)
 
 
 PERMISSION_OWNER = 1
@@ -148,20 +192,23 @@ class ComplianceReportGenerator:
         enterprise_data: enterprise_types.IEnterpriseData,
         auth: keeper_auth.KeeperAuth,
         config: Optional[ComplianceReportConfig] = None,
-        vault_storage: Optional[Any] = None
+        vault_storage: Optional[Any] = None,
+        show_progress: bool = False
     ) -> None:
         self._enterprise_data = enterprise_data
         self._auth = auth
         self._config = config or ComplianceReportConfig()
         self._vault_storage = vault_storage
+        self._show_progress = show_progress
+        self._spinner = ProgressSpinner() if show_progress else None
         self._user_teams: Optional[Dict[int, Set[str]]] = None
         self._records: Dict[str, Dict[str, Any]] = {}
         self._record_shared_folders: Dict[str, List[str]] = {}
         self._shared_folders: Dict[str, Dict[str, Any]] = {}
         self._email_to_user_id: Optional[Dict[str, int]] = None
         self._user_id_to_email: Optional[Dict[int, str]] = None
-        self._record_permissions: Dict[Tuple[str, int], int] = {}  # (record_uid, user_id) -> permission_bits
-        self._team_members: Dict[str, Set[int]] = {}  # team_uid -> set of user_ids
+        self._record_permissions: Dict[Tuple[str, int], int] = {}
+        self._team_members: Dict[str, Set[int]] = {}
     
     @property
     def enterprise_data(self) -> enterprise_types.IEnterpriseData:
@@ -236,6 +283,8 @@ class ComplianceReportGenerator:
             logger.warning('No enterprise users found')
             return
         
+        total_users = len(user_ids)
+        
         rq = enterprise_pb2.PreliminaryComplianceDataRequest()
         rq.includeNonShared = not self._config.shared
         rq.includeTotalMatchingRecordsInFirstResponse = True
@@ -244,98 +293,147 @@ class ComplianceReportGenerator:
         
         has_more = True
         continuation_token = None
+        total_records = 0
+        loaded_records = 0
+        current_batch = 0
+        users_processed = 0
+        processed_user_ids = set()
         
-        while has_more:
-            if continuation_token:
-                rq.continuationToken = continuation_token
-            
-            try:
-                rs = self._auth.execute_auth_rest(
-                    'enterprise/get_preliminary_compliance_data',
-                    rq,
-                    response_type=enterprise_pb2.PreliminaryComplianceDataResponse
-                )
+        if self._show_progress and self._spinner:
+            self._spinner.start(f'Loading record information - Users: 0/{total_users}, Records: 0/0')
+        
+        try:
+            while has_more:
+                if continuation_token:
+                    rq.continuationToken = continuation_token
                 
-                for user_data in rs.auditUserData:
-                    user_id = user_data.enterpriseUserId
-                    owner_email = self._user_id_to_email.get(user_id, '')
-                    
-                    for record in user_data.auditUserRecords:
-                        record_uid = utils.base64_url_encode(record.recordUid)
-                        record_data = self._decrypt_record_data(record.encryptedData)
-                        
-                        shared_folder_uid = record_data.get('shared_folder_uid') or record_data.get('folder_uid')
-                        if shared_folder_uid and record.shared:
-                            if record_uid not in self._record_shared_folders:
-                                self._record_shared_folders[record_uid] = []
-                            if shared_folder_uid not in self._record_shared_folders[record_uid]:
-                                self._record_shared_folders[record_uid].append(shared_folder_uid)
-                        
-                        self._records[record_uid] = {
-                            'record_uid': record_uid,
-                            'record_uid_bytes': record.recordUid,
-                            'owner_email': owner_email,
-                            'owner_user_id': user_id,
-                            'title': record_data.get('title', ''),
-                            'record_type': record_data.get('record_type', ''),
-                            'url': record_data.get('url', ''),
-                            'shared': record.shared,
-                            'in_trash': record_data.get('in_trash', False),
-                            'has_attachments': record_data.get('has_attachments', False),
-                            'shared_folder_uid': shared_folder_uid
-                        }
-                        
-                        self._update_permissions_lookup(
-                            record_uid, 
-                            user_id, 
-                            PERMISSION_OWNER | PERMISSION_EDIT | PERMISSION_SHARE | PERMISSION_SHARE_ADMIN
-                        )
+                current_batch += 1
                 
-                has_more = rs.hasMore and rs.continuationToken
-                if has_more:
-                    continuation_token = rs.continuationToken
+                try:
+                    rs = self._auth.execute_auth_rest(
+                        'enterprise/get_preliminary_compliance_data',
+                        rq,
+                        response_type=enterprise_pb2.PreliminaryComplianceDataResponse
+                    )
                     
-            except Exception as e:
-                logger.warning(f'Error fetching preliminary compliance data: {e}')
-                break
+                    if rs.totalMatchingRecords > 0 and total_records == 0:
+                        total_records = rs.totalMatchingRecords
+                    
+                    for user_data in rs.auditUserData:
+                        user_id = user_data.enterpriseUserId
+                        owner_email = self._user_id_to_email.get(user_id, '')
+                        
+                        if user_id not in processed_user_ids:
+                            processed_user_ids.add(user_id)
+                            users_processed = len(processed_user_ids)
+                        
+                        for record in user_data.auditUserRecords:
+                            record_uid = utils.base64_url_encode(record.recordUid)
+                            record_data = self._decrypt_record_data(record.encryptedData)
+                            
+                            shared_folder_uid = record_data.get('shared_folder_uid') or record_data.get('folder_uid')
+                            if shared_folder_uid and record.shared:
+                                if record_uid not in self._record_shared_folders:
+                                    self._record_shared_folders[record_uid] = []
+                                if shared_folder_uid not in self._record_shared_folders[record_uid]:
+                                    self._record_shared_folders[record_uid].append(shared_folder_uid)
+                            
+                            self._records[record_uid] = {
+                                'record_uid': record_uid,
+                                'record_uid_bytes': record.recordUid,
+                                'owner_email': owner_email,
+                                'owner_user_id': user_id,
+                                'title': record_data.get('title', ''),
+                                'record_type': record_data.get('record_type', ''),
+                                'url': record_data.get('url', ''),
+                                'shared': record.shared,
+                                'in_trash': record_data.get('in_trash', False),
+                                'has_attachments': record_data.get('has_attachments', False),
+                                'shared_folder_uid': shared_folder_uid
+                            }
+                            
+                            self._update_permissions_lookup(
+                                record_uid, 
+                                user_id, 
+                                PERMISSION_OWNER | PERMISSION_EDIT | PERMISSION_SHARE | PERMISSION_SHARE_ADMIN
+                            )
+                            loaded_records += 1
+                    
+                    if self._show_progress and self._spinner:
+                        total_display = total_records if total_records > 0 else loaded_records
+                        self._spinner.update(f'Loading record information - Users: {users_processed}/{total_users}, Records: {loaded_records}/{total_display}')
+                    
+                    has_more = rs.hasMore and rs.continuationToken
+                    if has_more:
+                        continuation_token = rs.continuationToken
+                        
+                except Exception as e:
+                    logger.warning(f'Error fetching preliminary compliance data: {e}')
+                    break
+        finally:
+            if self._show_progress and self._spinner:
+                self._spinner.stop('Preliminary compliance data loaded.')
     
     def _fetch_full_compliance_data(self) -> None:
         """Fetch full compliance data including permissions and shared folders."""
+        all_record_bytes = [info['record_uid_bytes'] for info in self._records.values() if 'record_uid_bytes' in info]
+        total_records = len(all_record_bytes)
+        
+        if total_records == 0:
+            return
+        
+        user_ids = [u.enterprise_user_id for u in self._enterprise_data.users.get_all_entities()]
+        total_users = len(user_ids)
+        node_id = self._config.node_id if self._config.node_id else self._enterprise_data.root_node.node_id
+        
+        batches = [all_record_bytes[i:i + MAX_RECORDS_PER_REQUEST] for i in range(0, total_records, MAX_RECORDS_PER_REQUEST)]
+        total_batches = len(batches)
+        
+        if self._show_progress and self._spinner:
+            self._spinner.start(f'Loading compliance data - Users: {total_users}/{total_users}, Current Batch: 0/{total_batches}')
+        
         try:
-            rq = enterprise_pb2.ComplianceReportRequest()
-            rq.saveReport = False
-            rq.reportName = f'Compliance Report on {datetime.datetime.now()}'
-            
-            report_run = rq.complianceReportRun
-            user_ids = [u.enterprise_user_id for u in self._enterprise_data.users.get_all_entities()]
-            report_run.users.extend(user_ids)
-            
-            for record_info in self._records.values():
-                if 'record_uid_bytes' in record_info:
-                    report_run.records.append(record_info['record_uid_bytes'])
-            
-            caf = report_run.reportCriteriaAndFilter
-            caf.nodeId = self._config.node_id if self._config.node_id else self._enterprise_data.root_node.node_id
-            caf.criteria.includeNonShared = not self._config.shared
-            
-            rs = self._auth.execute_auth_rest(
-                'enterprise/run_compliance_report',
-                rq,
-                response_type=enterprise_pb2.ComplianceReportResponse
-            )
-            
-            self._process_audit_records(rs.auditRecords)
-            self._process_shared_folder_records(rs.sharedFolderRecords)
-            self._process_user_record_permissions(rs.userRecords)
-            self._process_shared_folder_users(rs.sharedFolderUsers)
-            self._process_shared_folder_teams(rs.sharedFolderTeams)
-            
-        except Exception as e:
-            error_msg = str(e)
-            if 'access_denied' in error_msg or 'no run compliance reports privilege' in error_msg:
-                self._build_permissions_from_enterprise_data()
-            else:
-                logger.warning(f'Error fetching full compliance data: {e}')
+            for batch_idx, record_batch in enumerate(batches):
+                try:
+                    rq = enterprise_pb2.ComplianceReportRequest()
+                    rq.saveReport = False
+                    rq.reportName = f'Compliance Report on {datetime.datetime.now()}'
+                    
+                    report_run = rq.complianceReportRun
+                    report_run.users.extend(user_ids)
+                    report_run.records.extend(record_batch)
+                    
+                    caf = report_run.reportCriteriaAndFilter
+                    caf.nodeId = node_id
+                    caf.criteria.includeNonShared = not self._config.shared
+                    
+                    rs = self._auth.execute_auth_rest(
+                        'enterprise/run_compliance_report',
+                        rq,
+                        response_type=enterprise_pb2.ComplianceReportResponse
+                    )
+                    
+                    self._process_audit_records(rs.auditRecords)
+                    self._process_shared_folder_records(rs.sharedFolderRecords)
+                    self._process_user_record_permissions(rs.userRecords)
+                    self._process_shared_folder_users(rs.sharedFolderUsers)
+                    self._process_shared_folder_teams(rs.sharedFolderTeams)
+                    
+                    if self._show_progress and self._spinner:
+                        pct = ((batch_idx + 1) / total_batches) * 100
+                        self._spinner.update(f'Loading compliance data - Users: {total_users}/{total_users}, Current Batch: {batch_idx + 1}/{total_batches} ({pct:.2f}%)')
+                    
+                except Exception as e:
+                    error_msg = str(e)
+                    if 'access_denied' in error_msg or 'no run compliance reports privilege' in error_msg:
+                        self._build_permissions_from_enterprise_data()
+                        break
+                    else:
+                        logger.warning(f'Error fetching full compliance data batch {batch_idx + 1}/{total_batches}: {e}')
+                        continue
+        finally:
+            if self._show_progress and self._spinner:
+                self._spinner.stop()
     
     def _build_permissions_from_enterprise_data(self) -> None:
         """Build permissions from vault data when full compliance API isn't available."""

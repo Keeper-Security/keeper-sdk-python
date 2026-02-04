@@ -130,7 +130,8 @@ class ComplianceReportCommand(base.ArgparseCommand):
             context.enterprise_data,
             context.auth,
             config,
-            vault_storage=vault_storage
+            vault_storage=vault_storage,
+            show_progress=True
         )
         
         rows = list(generator.generate_report_rows('default', blank_duplicate_uids=(output_format == 'table')))
@@ -199,11 +200,11 @@ class ComplianceTeamReportCommand(base.ArgparseCommand):
             node_id=node_id
         )
         
-        logger.info('Loading team access data...')
         generator = compliance.ComplianceReportGenerator(
             context.enterprise_data,
             context.auth,
-            config
+            config,
+            show_progress=True
         )
         
         rows = list(generator.generate_report_rows('team'))
@@ -291,13 +292,12 @@ class ComplianceRecordAccessReportCommand(base.ArgparseCommand):
         if context.vault:
             vault_storage = context.vault.vault_data.storage
         
-        logger.info(f'Generating {report_type} record access report...')
-        
         generator = compliance.ComplianceReportGenerator(
             context.enterprise_data,
             context.auth,
             config,
-            vault_storage=vault_storage
+            vault_storage=vault_storage,
+            show_progress=True
         )
         
         # Generate report with specified type
@@ -372,11 +372,11 @@ class ComplianceSummaryReportCommand(base.ArgparseCommand):
         
         config = compliance.ComplianceReportConfig(node_id=node_id)
         
-        logger.info('Loading summary data...')
         generator = compliance.ComplianceReportGenerator(
             context.enterprise_data,
             context.auth,
-            config
+            config,
+            show_progress=True
         )
         
         rows = list(generator.generate_report_rows('summary'))
@@ -465,11 +465,11 @@ class ComplianceSharedFolderReportCommand(base.ArgparseCommand):
             node_id=node_id
         )
         
-        logger.info('Loading shared folder data...')
         generator = compliance.ComplianceReportGenerator(
             context.enterprise_data,
             context.auth,
-            config
+            config,
+            show_progress=True
         )
         
         rows = list(generator.generate_report_rows('shared_folder'))
