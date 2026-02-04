@@ -85,7 +85,7 @@ class StorageRecordPermissions:
     """User permissions on records."""
     record_uid: str = ''
     user_uid: int = 0
-    permissions: int = 0  # Bit flags: 1=owner, 2=mask, 4=edit, 8=share, 16=share_admin
+    permissions: int = 0
 
 
 @dataclasses.dataclass

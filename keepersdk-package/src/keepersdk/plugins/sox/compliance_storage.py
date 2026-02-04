@@ -24,7 +24,6 @@ class SqliteComplianceStorage:
         self.database_name = None
         self.close_connection = None
         
-        # Schema definitions for all 12 tables
         metadata_schema = sqlite_dao.TableSchema.load_schema(
             storage_types.Metadata, [], owner_column='account_uid')
         
@@ -76,7 +75,6 @@ class SqliteComplianceStorage:
         shared_folder_schema = sqlite_dao.TableSchema.load_schema(
             storage_types.StorageSharedFolder, 'folder_uid')
         
-        # Verify and create tables
         sqlite_dao.verify_database(
             self.get_connection(),
             (metadata_schema, user_schema, record_schema, record_aging_schema,
@@ -85,7 +83,6 @@ class SqliteComplianceStorage:
              shared_folder_user_schema, shared_folder_team_schema,
              shared_folder_schema))
         
-        # Initialize storage objects
         self._metadata = sqlite.SqliteRecordStorage(self.get_connection, metadata_schema, owner)
         self._users = sqlite.SqliteEntityStorage(self.get_connection, user_schema)
         self._records = sqlite.SqliteEntityStorage(self.get_connection, record_schema)
@@ -108,7 +105,6 @@ class SqliteComplianceStorage:
             history.account_uid = ''
         return history
     
-    # Timestamp properties
     @property
     def last_prelim_data_update(self) -> int:
         """Timestamp of last preliminary data sync."""
@@ -134,7 +130,6 @@ class SqliteComplianceStorage:
         """Flag indicating if only shared records cached."""
         return self._get_history().shared_records_only
     
-    # Update methods
     def set_prelim_data_updated(self, ts: Optional[int] = None) -> None:
         """Mark preliminary data as updated."""
         ts = int(datetime.datetime.now().timestamp()) if ts is None else ts
@@ -167,7 +162,6 @@ class SqliteComplianceStorage:
         history.shared_records_only = value
         self._metadata.store(history)
     
-    # Storage accessors
     @property
     def users(self):
         return self._users
@@ -216,7 +210,6 @@ class SqliteComplianceStorage:
     def shared_folders(self):
         return self._shared_folders
     
-    # Clear methods
     def clear_aging_data(self) -> None:
         """Clear only aging data."""
         self._record_aging.delete_all()
@@ -261,20 +254,11 @@ class SqliteComplianceStorage:
 
 
 def get_compliance_database_name(config_path: str, enterprise_id: int) -> str:
-    """Get the compliance database file path.
-    
-    Args:
-        config_path: Path to config file directory
-        enterprise_id: Enterprise ID
-        
-    Returns:
-        Full path to the compliance database file
-    """
+    """Get the compliance database file path."""
     path = os.path.dirname(os.path.abspath(config_path or ''))
     return os.path.join(path, f'compliance_{enterprise_id}.db')
 
 
-# Module-level connection cache to ensure single connection per database
 _connection_cache = {}  # type: dict[str, sqlite3.Connection]
 
 

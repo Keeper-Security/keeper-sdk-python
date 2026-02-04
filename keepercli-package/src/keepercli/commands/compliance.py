@@ -13,17 +13,27 @@ from ..params import KeeperParams
 from .. import api
 
 
-def filter_rows(rows: List[List[Any]], patterns: List[str], use_regex: bool = False) -> List[List[Any]]:
-    """Filter rows based on patterns.
+def get_node_id(context: KeeperParams, name: str) -> int:
+    """Resolve node ID from name or numeric ID."""
+    if isinstance(name, str) and name.isdecimal():
+        name = int(name)
     
-    Args:
-        rows: List of rows to filter
-        patterns: List of search patterns
-        use_regex: Whether to use regular expression matching
-        
-    Returns:
-        Filtered list of rows
-    """
+    nodes = list(context.enterprise_data.nodes.get_all_entities())
+    if not nodes:
+        return 0
+    
+    node_ids = {n.node_id for n in nodes}
+    node_id_lookup = {n.name: n.node_id for n in nodes if n.name}
+    
+    if isinstance(name, str) and name in node_id_lookup:
+        return node_id_lookup[name]
+    elif isinstance(name, int) and name in node_ids:
+        return name
+    return nodes[0].node_id
+
+
+def filter_rows(rows: List[List[Any]], patterns: List[str], use_regex: bool = False) -> List[List[Any]]:
+    """Filter rows based on search patterns."""
     if not patterns:
         return rows
     
@@ -31,15 +41,10 @@ def filter_rows(rows: List[List[Any]], patterns: List[str], use_regex: bool = Fa
     for row in rows:
         row_text = ' '.join(str(cell) for cell in row if cell is not None)
         for pattern in patterns:
-            if use_regex:
-                if re.search(pattern, row_text, re.IGNORECASE):
-                    filtered.append(row)
-                    break
-            else:
-                if pattern.lower() in row_text.lower():
-                    filtered.append(row)
-                    break
-    
+            match = re.search(pattern, row_text, re.IGNORECASE) if use_regex else pattern.lower() in row_text.lower()
+            if match:
+                filtered.append(row)
+                break
     return filtered
 
 
@@ -74,7 +79,7 @@ class ComplianceReportCommand(base.ArgparseCommand):
         rebuild_group.add_argument('--rebuild', '-r', action='store_true',
                                   help='rebuild local data from source')
         rebuild_group.add_argument('--no-rebuild', '-nr', action='store_true',
-                                  help='prevent remote data fetching if local cache present')
+                                  help='prevent remote data fetching if local cache present (invalid with --rebuild flag)')
         parser.add_argument('--no-cache', '-nc', action='store_true',
                            help='remove any local non-memory storage of data after report is generated')
         parser.add_argument('--node', action='store',
@@ -105,19 +110,8 @@ class ComplianceReportCommand(base.ArgparseCommand):
         base.require_login(context)
         base.require_enterprise_admin(context)
         
-        logger = api.get_logger()
         output_format = kwargs.get('format', 'table')
-        output_file = kwargs.get('output')
-        
-        # Parse node filter
-        node_id = None
-        node_name = kwargs.get('node')
-        if node_name:
-            # Try to find node by name or ID
-            for node in context.enterprise_data.nodes.get_all_entities():
-                if str(node.node_id) == node_name or node.name == node_name:
-                    node_id = node.node_id
-                    break
+        node_id = get_node_id(context, kwargs['node']) if kwargs.get('node') else None
         
         config = compliance.ComplianceReportConfig(
             username=kwargs.get('username'),
@@ -131,13 +125,7 @@ class ComplianceReportCommand(base.ArgparseCommand):
             node_id=node_id
         )
         
-        logger.info('Loading compliance data...')
-        
-        # Get vault storage for shared folder extraction
-        vault_storage = None
-        if context.vault:
-            vault_storage = context.vault.vault_data.storage
-        
+        vault_storage = context.vault.vault_data.storage if context.vault else None
         generator = compliance.ComplianceReportGenerator(
             context.enterprise_data,
             context.auth,
@@ -145,31 +133,23 @@ class ComplianceReportCommand(base.ArgparseCommand):
             vault_storage=vault_storage
         )
         
-        # For table format, blank duplicate record UIDs for better readability
-        blank_dupes = (output_format == 'table')
-        rows = list(generator.generate_report_rows('default', blank_duplicate_uids=blank_dupes))
+        rows = list(generator.generate_report_rows('default', blank_duplicate_uids=(output_format == 'table')))
         headers = compliance.ComplianceReportGenerator.get_headers('default')
         
         if output_format != 'json':
             headers = [report_utils.field_to_title(h) for h in headers]
         
-        # Apply pattern filter if specified
-        patterns = kwargs.get('pattern', [])
-        if patterns:
-            rows = filter_rows(rows, patterns, use_regex=kwargs.get('regex'))
+        if kwargs.get('pattern'):
+            rows = filter_rows(rows, kwargs['pattern'], use_regex=kwargs.get('regex'))
         
-        result = report_utils.dump_report_data(
-            rows, headers, fmt=output_format, filename=output_file,
+        if node_id:
+            print(f'Output is limited to "{kwargs["node"]}" node')
+            print()
+        
+        return report_utils.dump_report_data(
+            rows, headers, fmt=output_format, filename=kwargs.get('output'),
             title='Compliance Report'
         )
-        
-        if output_file:
-            _, ext = os.path.splitext(output_file)
-            if not ext:
-                output_file += '.json' if output_format == 'json' else '.csv'
-            logger.info(f'Report saved to: {os.path.abspath(output_file)}')
-        
-        return result
 
 
 class ComplianceTeamReportCommand(base.ArgparseCommand):
@@ -181,14 +161,21 @@ class ComplianceTeamReportCommand(base.ArgparseCommand):
             description='Run a report showing which shared folders enterprise teams have access to',
             parents=[base.report_output_parser]
         )
-        parser.add_argument('-tu', '--show-team-users', action='store_true',
-                           help='show all members of each team')
+        rebuild_group = parser.add_mutually_exclusive_group()
+        rebuild_group.add_argument('--rebuild', '-r', action='store_true',
+                                  help='rebuild local data from source')
+        rebuild_group.add_argument('--no-rebuild', '-nr', action='store_true',
+                                  help='prevent remote data fetching if local cache present (invalid with --rebuild flag)')
+        parser.add_argument('--no-cache', '-nc', action='store_true',
+                           help='remove any local non-memory storage of data after report is generated')
         parser.add_argument('--node', action='store',
                            help='ID or name of node (defaults to root node)')
         parser.add_argument('--regex', action='store_true',
                            help='Allow use of regular expressions in search criteria')
+        parser.add_argument('-tu', '--show-team-users', action='store_true',
+                           help='show all members of each team')
         parser.add_argument('pattern', type=str, nargs='*',
-                           help='Search string / pattern to filter results by')
+                           help='Search string / pattern to filter results by. Multiple values allowed.')
         super().__init__(parser)
     
     def execute(self, context: KeeperParams, **kwargs) -> Any:
@@ -200,9 +187,16 @@ class ComplianceTeamReportCommand(base.ArgparseCommand):
         output_file = kwargs.get('output')
         show_team_users = kwargs.get('show_team_users', False)
         
+        # Parse node filter using helper function
+        node_id = None
+        node_name = kwargs.get('node')
+        if node_name:
+            node_id = get_node_id(context, node_name)
+        
         config = compliance.ComplianceReportConfig(
             shared=True,
-            show_team_users=show_team_users
+            show_team_users=show_team_users,
+            node_id=node_id
         )
         
         logger.info('Loading team access data...')
@@ -246,19 +240,26 @@ class ComplianceRecordAccessReportCommand(base.ArgparseCommand):
             description='Run a report showing all records a user has accessed or can access',
             parents=[base.report_output_parser]
         )
-        parser.add_argument('--email', '-e', action='append', type=str,
-                           help='username(s) or ID(s). Set to "@all" to run report for all users')
-        parser.add_argument('--report-type', action='store', choices=['history', 'vault'],
-                           default='history',
-                           help='select type of record-access data (defaults to "history")')
-        parser.add_argument('--aging', action='store_true',
-                           help='include record-aging data')
+        rebuild_group = parser.add_mutually_exclusive_group()
+        rebuild_group.add_argument('--rebuild', '-r', action='store_true',
+                                  help='rebuild local data from source')
+        rebuild_group.add_argument('--no-rebuild', '-nr', action='store_true',
+                                  help='prevent remote data fetching if local cache present (invalid with --rebuild flag)')
+        parser.add_argument('--no-cache', '-nc', action='store_true',
+                           help='remove any local non-memory storage of data after report is generated')
         parser.add_argument('--node', action='store',
                            help='ID or name of node (defaults to root node)')
         parser.add_argument('--regex', action='store_true',
                            help='Allow use of regular expressions in search criteria')
+        parser.add_argument('--email', '-e', action='append', type=str,
+                           help='username(s) or ID(s). Set once for each user to include. Set to "@all" to run report for all users')
+        parser.add_argument('--report-type', action='store', choices=['history', 'vault'],
+                           default='history',
+                           help='select type of record-access data to include in report (defaults to "history"). Set to "history" to view past record-access activity, "vault" to view current vault contents')
+        parser.add_argument('--aging', action='store_true',
+                           help='include record-aging data (last modified, created, and last password rotation dates)')
         parser.add_argument('pattern', type=str, nargs='*',
-                           help='Search string / pattern to filter results by')
+                           help='Search string / pattern to filter results by. Multiple values allowed.')
         super().__init__(parser)
     
     def execute(self, context: KeeperParams, **kwargs) -> Any:
@@ -268,11 +269,67 @@ class ComplianceRecordAccessReportCommand(base.ArgparseCommand):
         logger = api.get_logger()
         output_format = kwargs.get('format', 'table')
         output_file = kwargs.get('output')
+        report_type = kwargs.get('report_type', 'history')
+        emails = kwargs.get('email', [])
         
-        logger.warning('Record access report functionality requires additional audit log integration.')
-        logger.info('Please use the aging-report command for password aging analysis.')
+        # Parse node filter
+        node_id = None
+        node_name = kwargs.get('node')
+        if node_name:
+            for node in context.enterprise_data.nodes.get_all_entities():
+                if str(node.node_id) == node_name or node.name == node_name:
+                    node_id = node.node_id
+                    break
         
-        return None
+        config = compliance.ComplianceReportConfig(
+            username=emails if emails and '@all' not in emails else None,
+            node_id=node_id
+        )
+        
+        # Get vault storage for additional data
+        vault_storage = None
+        if context.vault:
+            vault_storage = context.vault.vault_data.storage
+        
+        logger.info(f'Generating {report_type} record access report...')
+        
+        generator = compliance.ComplianceReportGenerator(
+            context.enterprise_data,
+            context.auth,
+            config,
+            vault_storage=vault_storage
+        )
+        
+        # Generate report with specified type
+        rows = list(generator.generate_report_rows('record_access', report_type=report_type))
+        headers = compliance.ComplianceReportGenerator.get_headers('record_access')
+        
+        if output_format != 'json':
+            headers = [report_utils.field_to_title(h) for h in headers]
+        
+        # Apply pattern filter if specified
+        patterns = kwargs.get('pattern', [])
+        if patterns:
+            rows = filter_rows(rows, patterns, use_regex=kwargs.get('regex'))
+        
+        # Sort rows by vault_owner for better grouping
+        rows.sort(key=lambda r: (r[0] if r[0] else '', r[1] if len(r) > 1 else ''))
+        
+        result = report_utils.dump_report_data(
+            rows, headers, fmt=output_format, filename=output_file,
+            title=f'Record Access Report ({report_type})',
+            group_by=0,  # Group by first column (vault_owner)
+            column_width=30,  # Truncate long columns at 30 chars
+            sort_by=0  # Sort by vault_owner column
+        )
+        
+        if output_file:
+            _, ext = os.path.splitext(output_file)
+            if not ext:
+                output_file += '.json' if output_format == 'json' else '.csv'
+            logger.info(f'Report saved to: {os.path.abspath(output_file)}')
+        
+        return result
 
 
 class ComplianceSummaryReportCommand(base.ArgparseCommand):
@@ -284,12 +341,19 @@ class ComplianceSummaryReportCommand(base.ArgparseCommand):
             description='Run a summary compliance report',
             parents=[base.report_output_parser]
         )
+        rebuild_group = parser.add_mutually_exclusive_group()
+        rebuild_group.add_argument('--rebuild', '-r', action='store_true',
+                                  help='rebuild local data from source')
+        rebuild_group.add_argument('--no-rebuild', '-nr', action='store_true',
+                                  help='prevent remote data fetching if local cache present (invalid with --rebuild flag)')
+        parser.add_argument('--no-cache', '-nc', action='store_true',
+                           help='remove any local non-memory storage of data after report is generated')
         parser.add_argument('--node', action='store',
                            help='ID or name of node (defaults to root node)')
         parser.add_argument('--regex', action='store_true',
                            help='Allow use of regular expressions in search criteria')
         parser.add_argument('pattern', type=str, nargs='*',
-                           help='Search string / pattern to filter results by')
+                           help='Search string / pattern to filter results by. Multiple values allowed.')
         super().__init__(parser)
     
     def execute(self, context: KeeperParams, **kwargs) -> Any:
@@ -300,14 +364,11 @@ class ComplianceSummaryReportCommand(base.ArgparseCommand):
         output_format = kwargs.get('format', 'table')
         output_file = kwargs.get('output')
         
-        # Parse node filter
+        # Parse node filter using helper function
         node_id = None
         node_name = kwargs.get('node')
         if node_name:
-            for node in context.enterprise_data.nodes.get_all_entities():
-                if str(node.node_id) == node_name or node.name == node_name:
-                    node_id = node.node_id
-                    break
+            node_id = get_node_id(context, node_name)
         
         config = compliance.ComplianceReportConfig(node_id=node_id)
         
@@ -320,6 +381,20 @@ class ComplianceSummaryReportCommand(base.ArgparseCommand):
         
         rows = list(generator.generate_report_rows('summary'))
         headers = compliance.ComplianceReportGenerator.get_headers('summary')
+        
+        # Display node limitation message if filtering by node
+        if node_id:
+            print(f'Output is limited to "{node_id}" node')
+            print()
+        
+        # Calculate totals
+        total_items = sum(row[1] for row in rows if len(row) > 1)
+        total_owned = sum(row[2] for row in rows if len(row) > 2)
+        active_owned = sum(row[3] for row in rows if len(row) > 3)
+        deleted_owned = sum(row[4] for row in rows if len(row) > 4)
+        
+        # Add TOTAL row
+        rows.append(['TOTAL', total_items, total_owned, active_owned, deleted_owned])
         
         if output_format != 'json':
             headers = [report_utils.field_to_title(h) for h in headers]
@@ -352,14 +427,21 @@ class ComplianceSharedFolderReportCommand(base.ArgparseCommand):
             description='Run an enterprise-wide shared-folder report',
             parents=[base.report_output_parser]
         )
-        parser.add_argument('-tu', '--show-team-users', action='store_true',
-                           help='show all members of each team')
+        rebuild_group = parser.add_mutually_exclusive_group()
+        rebuild_group.add_argument('--rebuild', '-r', action='store_true',
+                                  help='rebuild local data from source')
+        rebuild_group.add_argument('--no-rebuild', '-nr', action='store_true',
+                                  help='prevent remote data fetching if local cache present (invalid with --rebuild flag)')
+        parser.add_argument('--no-cache', '-nc', action='store_true',
+                           help='remove any local non-memory storage of data after report is generated')
         parser.add_argument('--node', action='store',
                            help='ID or name of node (defaults to root node)')
         parser.add_argument('--regex', action='store_true',
                            help='Allow use of regular expressions in search criteria')
+        parser.add_argument('-tu', '--show-team-users', action='store_true',
+                           help='show all members of each team')
         parser.add_argument('pattern', type=str, nargs='*',
-                           help='Search string / pattern to filter results by')
+                           help='Search string / pattern to filter results by. Multiple values allowed.')
         super().__init__(parser)
     
     def execute(self, context: KeeperParams, **kwargs) -> Any:
@@ -371,9 +453,16 @@ class ComplianceSharedFolderReportCommand(base.ArgparseCommand):
         output_file = kwargs.get('output')
         show_team_users = kwargs.get('show_team_users', False)
         
+        # Parse node filter using helper function
+        node_id = None
+        node_name = kwargs.get('node')
+        if node_name:
+            node_id = get_node_id(context, node_name)
+        
         config = compliance.ComplianceReportConfig(
             shared=True,
-            show_team_users=show_team_users
+            show_team_users=show_team_users,
+            node_id=node_id
         )
         
         logger.info('Loading shared folder data...')
@@ -383,8 +472,8 @@ class ComplianceSharedFolderReportCommand(base.ArgparseCommand):
             config
         )
         
-        rows = list(generator.generate_report_rows('shared-folder'))
-        headers = compliance.ComplianceReportGenerator.get_headers('shared-folder')
+        rows = list(generator.generate_report_rows('shared_folder'))
+        headers = compliance.ComplianceReportGenerator.get_headers('shared_folder')
         
         if output_format != 'json':
             headers = [report_utils.field_to_title(h) for h in headers]
