@@ -215,6 +215,9 @@ class ComplianceReportGenerator:
         self._user_id_to_email: Optional[Dict[int, str]] = None
         self._record_permissions: Dict[Tuple[str, int], int] = {}
         self._team_members: Dict[str, Set[int]] = {}
+        self._team_uid_to_name: Dict[str, str] = {}
+        self._team_name_to_uid: Dict[str, str] = {}
+        self._team_filter_user_ids: Optional[Set[int]] = None
     
     @property
     def enterprise_data(self) -> enterprise_types.IEnterpriseData:
@@ -241,6 +244,14 @@ class ComplianceReportGenerator:
             return self._user_teams
         
         self._user_teams = defaultdict(set)
+        self._team_uid_to_name = {}
+        self._team_name_to_uid = {}
+        
+        # Build team name/UID mappings
+        for team in self._enterprise_data.teams.get_all_entities():
+            self._team_uid_to_name[team.team_uid] = team.name
+            self._team_name_to_uid[team.name.lower()] = team.team_uid
+        
         for team_user in self._enterprise_data.team_users.get_all_links():
             self._user_teams[team_user.enterprise_user_id].add(team_user.team_uid)
             if team_user.team_uid not in self._team_members:
@@ -248,6 +259,37 @@ class ComplianceReportGenerator:
             self._team_members[team_user.team_uid].add(team_user.enterprise_user_id)
         
         return self._user_teams
+    
+    def _get_team_filter_user_ids(self) -> Optional[Set[int]]:
+        """Get user IDs that match the team filter.
+        
+        Resolves team names or UIDs to the set of user IDs that are members of those teams.
+        Returns None if no team filter is configured.
+        """
+        if not self._config.team:
+            return None
+        
+        if self._team_filter_user_ids is not None:
+            return self._team_filter_user_ids
+        
+        # Ensure team lookups are built
+        self._build_user_teams_lookup()
+        
+        self._team_filter_user_ids = set()
+        
+        for team_ref in self._config.team:
+            # Check if it's a team UID first
+            if team_ref in self._team_members:
+                self._team_filter_user_ids.update(self._team_members[team_ref])
+            # Check if it's a team name (case-insensitive)
+            elif team_ref.lower() in self._team_name_to_uid:
+                team_uid = self._team_name_to_uid[team_ref.lower()]
+                if team_uid in self._team_members:
+                    self._team_filter_user_ids.update(self._team_members[team_uid])
+            else:
+                logger.warning(f'Team not found: {team_ref}')
+        
+        return self._team_filter_user_ids
     
     def _is_prelim_cache_fresh(self) -> bool:
         """Check if preliminary data cache is still valid."""
@@ -902,6 +944,29 @@ class ComplianceReportGenerator:
             return False
         if config.active_items and entry.in_trash:
             return False
+        
+        # Team filter: only include entries for users who are members of specified teams
+        if config.team:
+            team_user_ids = self._get_team_filter_user_ids()
+            if team_user_ids:
+                user_id = self._email_to_user_id.get(entry.username.lower())
+                if user_id is None or user_id not in team_user_ids:
+                    return False
+        
+        # Job title filter
+        if config.job_title:
+            user_id = self._email_to_user_id.get(entry.username.lower())
+            if user_id is not None:
+                user = None
+                for u in self._enterprise_data.users.get_all_entities():
+                    if u.enterprise_user_id == user_id:
+                        user = u
+                        break
+                if user is None:
+                    return False
+                user_job_title = getattr(user, 'job_title', '') or ''
+                if not any(jt.lower() in user_job_title.lower() for jt in config.job_title):
+                    return False
         
         return True
     
