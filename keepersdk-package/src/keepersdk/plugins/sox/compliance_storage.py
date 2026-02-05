@@ -25,7 +25,7 @@ class SqliteComplianceStorage:
         self.close_connection = None
         
         metadata_schema = sqlite_dao.TableSchema.load_schema(
-            storage_types.Metadata, [], owner_column='account_uid')
+            storage_types.Metadata, 'account_uid')
         
         user_schema = sqlite_dao.TableSchema.load_schema(
             storage_types.StorageUser, 'user_uid')
@@ -83,7 +83,7 @@ class SqliteComplianceStorage:
              shared_folder_user_schema, shared_folder_team_schema,
              shared_folder_schema))
         
-        self._metadata = sqlite.SqliteRecordStorage(self.get_connection, metadata_schema, owner)
+        self._metadata = sqlite.SqliteEntityStorage(self.get_connection, metadata_schema)
         self._users = sqlite.SqliteEntityStorage(self.get_connection, user_schema)
         self._records = sqlite.SqliteEntityStorage(self.get_connection, record_schema)
         self._record_aging = sqlite.SqliteEntityStorage(self.get_connection, record_aging_schema)
@@ -99,10 +99,11 @@ class SqliteComplianceStorage:
     
     def _get_history(self) -> storage_types.Metadata:
         """Get or create metadata record."""
-        history = self._metadata.get()
+        # Use a fixed key for the singleton metadata record
+        history = self._metadata.get_entity('_default_')
         if history is None:
             history = storage_types.Metadata()
-            history.account_uid = ''
+            history.account_uid = '_default_'
         return history
     
     @property
@@ -135,32 +136,32 @@ class SqliteComplianceStorage:
         ts = int(datetime.datetime.now().timestamp()) if ts is None else ts
         history = self._get_history()
         history.prelim_data_last_update = ts
-        self._metadata.store(history)
+        self._metadata.put_entities([history])
     
     def set_compliance_data_updated(self, ts: Optional[int] = None) -> None:
         """Mark compliance data as updated."""
         ts = int(datetime.datetime.now().timestamp()) if ts is None else ts
         history = self._get_history()
         history.compliance_data_last_update = ts
-        self._metadata.store(history)
+        self._metadata.put_entities([history])
     
     def set_records_dated(self, ts: int) -> None:
         """Set records dated timestamp."""
         history = self._get_history()
         history.records_dated = ts
-        self._metadata.store(history)
+        self._metadata.put_entities([history])
     
     def set_last_pw_audit(self, ts: int) -> None:
         """Set last password audit timestamp."""
         history = self._get_history()
         history.last_pw_audit = ts
-        self._metadata.store(history)
+        self._metadata.put_entities([history])
     
     def set_shared_records_only(self, value: bool) -> None:
         """Set shared records only flag."""
         history = self._get_history()
         history.shared_records_only = value
-        self._metadata.store(history)
+        self._metadata.put_entities([history])
     
     @property
     def users(self):

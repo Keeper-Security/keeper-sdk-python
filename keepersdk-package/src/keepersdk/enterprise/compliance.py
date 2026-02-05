@@ -174,6 +174,10 @@ class ComplianceReportConfig:
     report_type: str = 'history'
     aging: bool = False
     node_id: Optional[int] = None
+    rebuild: bool = False
+    no_rebuild: bool = False
+    no_cache: bool = False
+    cache_max_age_days: int = 1
 
 
 class ComplianceReportGenerator:
@@ -193,7 +197,8 @@ class ComplianceReportGenerator:
         auth: keeper_auth.KeeperAuth,
         config: Optional[ComplianceReportConfig] = None,
         vault_storage: Optional[Any] = None,
-        show_progress: bool = False
+        show_progress: bool = False,
+        compliance_storage: Optional[Any] = None
     ) -> None:
         self._enterprise_data = enterprise_data
         self._auth = auth
@@ -201,6 +206,7 @@ class ComplianceReportGenerator:
         self._vault_storage = vault_storage
         self._show_progress = show_progress
         self._spinner = ProgressSpinner() if show_progress else None
+        self._compliance_storage = compliance_storage
         self._user_teams: Optional[Dict[int, Set[str]]] = None
         self._records: Dict[str, Dict[str, Any]] = {}
         self._record_shared_folders: Dict[str, List[str]] = {}
@@ -243,6 +249,244 @@ class ComplianceReportGenerator:
         
         return self._user_teams
     
+    def _is_prelim_cache_fresh(self) -> bool:
+        """Check if preliminary data cache is still valid."""
+        if not self._compliance_storage:
+            return False
+        if self._config.rebuild:
+            return False
+        if self._config.no_rebuild:
+            return self._compliance_storage.last_prelim_data_update > 0
+        
+        max_age = datetime.timedelta(days=self._config.cache_max_age_days)
+        min_ts = int((datetime.datetime.now() - max_age).timestamp())
+        return self._compliance_storage.last_prelim_data_update >= min_ts
+    
+    def _is_compliance_cache_fresh(self) -> bool:
+        """Check if full compliance data cache is still valid."""
+        if not self._compliance_storage:
+            return False
+        if self._config.rebuild:
+            return False
+        if self._config.no_rebuild:
+            return self._compliance_storage.last_compliance_data_update > 0
+        
+        max_age = datetime.timedelta(days=self._config.cache_max_age_days)
+        min_ts = int((datetime.datetime.now() - max_age).timestamp())
+        return self._compliance_storage.last_compliance_data_update >= min_ts
+    
+    def _load_prelim_from_cache(self) -> bool:
+        """Load preliminary data from SQLite cache."""
+        if not self._compliance_storage:
+            return False
+        
+        try:
+            import json
+            
+            records = list(self._compliance_storage.records.get_all_entities())
+            if not records:
+                return False
+            
+            for entity in records:
+                # Parse stored record metadata from encrypted_data (JSON)
+                record_data = {}
+                if entity.encrypted_data:
+                    try:
+                        record_data = json.loads(entity.encrypted_data.decode('utf-8'))
+                    except Exception:
+                        pass
+                
+                self._records[entity.record_uid] = {
+                    'record_uid': entity.record_uid,
+                    'record_uid_bytes': entity.record_uid_bytes,
+                    'owner_email': '',
+                    'owner_user_id': 0,
+                    'title': record_data.get('title', ''),
+                    'record_type': record_data.get('record_type', ''),
+                    'url': record_data.get('url', ''),
+                    'shared': entity.shared,
+                    'in_trash': entity.in_trash,
+                    'has_attachments': entity.has_attachments,
+                    'shared_folder_uid': None
+                }
+            
+            links = list(self._compliance_storage.user_record_links.get_all_links())
+            for link in links:
+                if link.record_uid in self._records:
+                    self._records[link.record_uid]['owner_user_id'] = link.user_uid
+                    self._records[link.record_uid]['owner_email'] = self._user_id_to_email.get(link.user_uid, '')
+                    self._update_permissions_lookup(
+                        link.record_uid,
+                        link.user_uid,
+                        PERMISSION_OWNER | PERMISSION_EDIT | PERMISSION_SHARE | PERMISSION_SHARE_ADMIN
+                    )
+            
+            if self._show_progress and self._spinner:
+                self._spinner.stop('Loaded from cache.')
+            return True
+        except Exception as e:
+            logger.debug(f'Error loading from cache: {e}')
+            return False
+    
+    def _load_compliance_from_cache(self) -> bool:
+        """Load full compliance data from SQLite cache."""
+        if not self._compliance_storage:
+            return False
+        
+        try:
+            perms = self._compliance_storage.record_permissions.get_all_links()
+            for link in perms:
+                self._update_permissions_lookup(link.record_uid, link.user_uid, link.permissions)
+            
+            sf_records = self._compliance_storage.sf_record_links.get_all_links()
+            for link in sf_records:
+                if link.folder_uid not in self._shared_folders:
+                    self._shared_folders[link.folder_uid] = {
+                        'folder_uid': link.folder_uid,
+                        'records': {},
+                        'users': set(),
+                        'teams': set()
+                    }
+                self._shared_folders[link.folder_uid]['records'][link.record_uid] = link.permissions
+                
+                if link.record_uid not in self._record_shared_folders:
+                    self._record_shared_folders[link.record_uid] = []
+                if link.folder_uid not in self._record_shared_folders[link.record_uid]:
+                    self._record_shared_folders[link.record_uid].append(link.folder_uid)
+                
+                if link.record_uid in self._records:
+                    self._records[link.record_uid]['shared'] = True
+            
+            sf_users = self._compliance_storage.sf_user_links.get_all_links()
+            for link in sf_users:
+                if link.folder_uid in self._shared_folders:
+                    self._shared_folders[link.folder_uid]['users'].add(link.user_uid)
+            
+            sf_teams = self._compliance_storage.sf_team_links.get_all_links()
+            for link in sf_teams:
+                if link.folder_uid in self._shared_folders:
+                    self._shared_folders[link.folder_uid]['teams'].add(link.team_uid)
+            
+            team_users = self._compliance_storage.team_user_links.get_all_links()
+            for link in team_users:
+                if link.team_uid not in self._team_members:
+                    self._team_members[link.team_uid] = set()
+                self._team_members[link.team_uid].add(link.user_uid)
+            
+            return True
+        except Exception as e:
+            logger.debug(f'Error loading compliance from cache: {e}')
+            return False
+    
+    def _save_prelim_to_cache(self) -> None:
+        """Save preliminary data to SQLite cache."""
+        if not self._compliance_storage:
+            return
+        
+        try:
+            import json
+            from ..plugins.sox import storage_types as st
+            
+            self._compliance_storage.clear_non_aging_data()
+            
+            records = []
+            links = []
+            for record_uid, info in self._records.items():
+                entity = st.StorageRecord()
+                entity.record_uid = record_uid
+                entity.record_uid_bytes = info.get('record_uid_bytes', b'')
+                # Store record metadata as JSON in encrypted_data
+                record_metadata = {
+                    'title': info.get('title', ''),
+                    'record_type': info.get('record_type', ''),
+                    'url': info.get('url', '')
+                }
+                entity.encrypted_data = json.dumps(record_metadata).encode('utf-8')
+                entity.shared = info.get('shared', False)
+                entity.in_trash = info.get('in_trash', False)
+                entity.has_attachments = info.get('has_attachments', False)
+                records.append(entity)
+                
+                if info.get('owner_user_id'):
+                    link = st.StorageUserRecordLink()
+                    link.record_uid = record_uid
+                    link.user_uid = info['owner_user_id']
+                    links.append(link)
+            
+            self._compliance_storage.records.put_entities(records)
+            self._compliance_storage.user_record_links.put_links(links)
+            self._compliance_storage.set_prelim_data_updated()
+        except Exception as e:
+            logger.debug(f'Error saving to cache: {e}')
+    
+    def _save_compliance_to_cache(self) -> None:
+        """Save full compliance data to SQLite cache."""
+        if not self._compliance_storage:
+            return
+        
+        try:
+            from ..plugins.sox import storage_types as st
+            
+            perms = []
+            for (record_uid, user_id), bits in self._record_permissions.items():
+                link = st.StorageRecordPermissions()
+                link.record_uid = record_uid
+                link.user_uid = user_id
+                link.permissions = bits
+                perms.append(link)
+            self._compliance_storage.record_permissions.put_links(perms)
+            
+            sf_records = []
+            sf_users = []
+            sf_teams = []
+            for folder_uid, info in self._shared_folders.items():
+                for record_uid, perm_bits in info.get('records', {}).items():
+                    link = st.StorageSharedFolderRecordLink()
+                    link.folder_uid = folder_uid
+                    link.record_uid = record_uid
+                    link.permissions = perm_bits
+                    sf_records.append(link)
+                
+                for user_id in info.get('users', set()):
+                    link = st.StorageSharedFolderUserLink()
+                    link.folder_uid = folder_uid
+                    link.user_uid = user_id
+                    sf_users.append(link)
+                
+                for team_uid in info.get('teams', set()):
+                    link = st.StorageSharedFolderTeamLink()
+                    link.folder_uid = folder_uid
+                    link.team_uid = team_uid
+                    sf_teams.append(link)
+            
+            self._compliance_storage.sf_record_links.put_links(sf_records)
+            self._compliance_storage.sf_user_links.put_links(sf_users)
+            self._compliance_storage.sf_team_links.put_links(sf_teams)
+            
+            team_users = []
+            for team_uid, user_ids in self._team_members.items():
+                for user_id in user_ids:
+                    link = st.StorageTeamUserLink()
+                    link.team_uid = team_uid
+                    link.user_uid = user_id
+                    team_users.append(link)
+            self._compliance_storage.team_user_links.put_links(team_users)
+            
+            records = []
+            for record_uid, info in self._records.items():
+                entity = self._compliance_storage.records.get_entity(record_uid)
+                if entity:
+                    entity.in_trash = info.get('in_trash', False)
+                    entity.has_attachments = info.get('has_attachments', False)
+                    entity.shared = info.get('shared', False)
+                    records.append(entity)
+            if records:
+                self._compliance_storage.records.put_entities(records)
+            
+            self._compliance_storage.set_compliance_data_updated()
+        except Exception as e:
+            logger.debug(f'Error saving compliance to cache: {e}')
+    
     def _get_ec_private_key(self) -> Optional[bytes]:
         """Get the enterprise EC private key for decryption."""
         return self._enterprise_data.enterprise_info.ec_private_key
@@ -275,7 +519,13 @@ class ComplianceReportGenerator:
         self._record_permissions[lookup_key] = existing_bits | permission_bits
     
     def _fetch_preliminary_compliance_data(self, user_ids: Optional[List[int]] = None) -> None:
-        """Fetch basic record information from compliance API."""
+        """Fetch basic record information from compliance API or cache."""
+        if self._is_prelim_cache_fresh():
+            if self._show_progress and self._spinner:
+                self._spinner.start('Loading from cache...')
+            if self._load_prelim_from_cache():
+                return
+        
         if user_ids is None:
             user_ids = [u.enterprise_user_id for u in self._enterprise_data.users.get_all_entities()]
         
@@ -370,12 +620,18 @@ class ComplianceReportGenerator:
                 except Exception as e:
                     logger.warning(f'Error fetching preliminary compliance data: {e}')
                     break
+            
+            self._save_prelim_to_cache()
         finally:
             if self._show_progress and self._spinner:
                 self._spinner.stop('Preliminary compliance data loaded.')
     
     def _fetch_full_compliance_data(self) -> None:
-        """Fetch full compliance data including permissions and shared folders."""
+        """Fetch full compliance data including permissions and shared folders or load from cache."""
+        if self._is_compliance_cache_fresh():
+            if self._load_compliance_from_cache():
+                return
+        
         all_record_bytes = [info['record_uid_bytes'] for info in self._records.values() if 'record_uid_bytes' in info]
         total_records = len(all_record_bytes)
         
@@ -431,6 +687,8 @@ class ComplianceReportGenerator:
                     else:
                         logger.warning(f'Error fetching full compliance data batch {batch_idx + 1}/{total_batches}: {e}')
                         continue
+            
+            self._save_compliance_to_cache()
         finally:
             if self._show_progress and self._spinner:
                 self._spinner.stop()
