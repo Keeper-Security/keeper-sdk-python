@@ -948,7 +948,10 @@ class ComplianceReportGenerator:
         # Team filter: only include entries for users who are members of specified teams
         if config.team:
             team_user_ids = self._get_team_filter_user_ids()
-            if team_user_ids:
+            # If team filter is specified but no matching users found, exclude all entries
+            if team_user_ids is not None:
+                if not team_user_ids:  # Empty set - no matching team members
+                    return False
                 user_id = self._email_to_user_id.get(entry.username.lower())
                 if user_id is None or user_id not in team_user_ids:
                     return False
