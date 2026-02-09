@@ -246,8 +246,7 @@ class ComplianceReportGenerator:
         self._user_teams = defaultdict(set)
         self._team_uid_to_name = {}
         self._team_name_to_uid = {}
-        
-        # Build team name/UID mappings
+
         for team in self._enterprise_data.teams.get_all_entities():
             self._team_uid_to_name[team.team_uid] = team.name
             self._team_name_to_uid[team.name.lower()] = team.team_uid
@@ -261,27 +260,19 @@ class ComplianceReportGenerator:
         return self._user_teams
     
     def _get_team_filter_user_ids(self) -> Optional[Set[int]]:
-        """Get user IDs that match the team filter.
-        
-        Resolves team names or UIDs to the set of user IDs that are members of those teams.
-        Returns None if no team filter is configured.
-        """
+        """Get user IDs that match the team filter."""
         if not self._config.team:
             return None
         
         if self._team_filter_user_ids is not None:
             return self._team_filter_user_ids
         
-        # Ensure team lookups are built
         self._build_user_teams_lookup()
-        
         self._team_filter_user_ids = set()
         
         for team_ref in self._config.team:
-            # Check if it's a team UID first
             if team_ref in self._team_members:
                 self._team_filter_user_ids.update(self._team_members[team_ref])
-            # Check if it's a team name (case-insensitive)
             elif team_ref.lower() in self._team_name_to_uid:
                 team_uid = self._team_name_to_uid[team_ref.lower()]
                 if team_uid in self._team_members:
@@ -330,7 +321,6 @@ class ComplianceReportGenerator:
                 return False
             
             for entity in records:
-                # Parse stored record metadata from encrypted_data (JSON)
                 record_data = {}
                 if entity.encrypted_data:
                     try:
@@ -437,7 +427,6 @@ class ComplianceReportGenerator:
                 entity = st.StorageRecord()
                 entity.record_uid = record_uid
                 entity.record_uid_bytes = info.get('record_uid_bytes', b'')
-                # Store record metadata as JSON in encrypted_data
                 record_metadata = {
                     'title': info.get('title', ''),
                     'record_type': info.get('record_type', ''),
@@ -926,15 +915,15 @@ class ComplianceReportGenerator:
         config = self._config
         
         if config.username:
-            if not any(pattern.lower() in entry.username.lower() for pattern in config.username):
+            if not any(p.lower() == entry.username.lower() for p in config.username):
                 return False
         
         if config.record:
-            if not any(pattern in entry.record_uid for pattern in config.record):
+            if not any(p == entry.record_uid for p in config.record):
                 return False
         
         if config.url:
-            if not any(pattern.lower() in entry.url.lower() for pattern in config.url):
+            if not any(p.lower() in entry.url.lower() for p in config.url):
                 return False
         
         if config.shared and not entry.shared:
@@ -942,33 +931,28 @@ class ComplianceReportGenerator:
         
         if config.deleted_items and not entry.in_trash:
             return False
+        
         if config.active_items and entry.in_trash:
             return False
         
-        # Team filter: only include entries for users who are members of specified teams
         if config.team:
             team_user_ids = self._get_team_filter_user_ids()
-            # If team filter is specified but no matching users found, exclude all entries
             if team_user_ids is not None:
-                if not team_user_ids:  # Empty set - no matching team members
+                if not team_user_ids:
                     return False
                 user_id = self._email_to_user_id.get(entry.username.lower())
                 if user_id is None or user_id not in team_user_ids:
                     return False
         
-        # Job title filter
         if config.job_title:
             user_id = self._email_to_user_id.get(entry.username.lower())
             if user_id is not None:
-                user = None
-                for u in self._enterprise_data.users.get_all_entities():
-                    if u.enterprise_user_id == user_id:
-                        user = u
-                        break
+                user = next((u for u in self._enterprise_data.users.get_all_entities() 
+                            if u.enterprise_user_id == user_id), None)
                 if user is None:
                     return False
-                user_job_title = getattr(user, 'job_title', '') or ''
-                if not any(jt.lower() in user_job_title.lower() for jt in config.job_title):
+                job_title = getattr(user, 'job_title', '') or ''
+                if not any(jt.lower() in job_title.lower() for jt in config.job_title):
                     return False
         
         return True
