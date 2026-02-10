@@ -63,7 +63,18 @@ def login():
 
 
 def get_compliance_storage(config_path: str, enterprise_id: int):
-    """Create SQLite compliance storage for caching."""
+    """Create SQLite compliance storage for caching.
+    
+    The database file will be created in the directory of config_path as compliance_{enterprise_id}.db.
+    config_path should be a trusted path (e.g. the application's config file path).
+    
+    Args:
+        config_path: Path to the config file (trusted location)
+        enterprise_id: Enterprise ID for the database name
+        
+    Returns:
+        SqliteComplianceStorage instance with connection management
+    """
     db_name = cs.get_compliance_database_name(config_path, enterprise_id)
     storage = cs.SqliteComplianceStorage(lambda: cs.get_cached_connection(db_name), enterprise_id)
     storage.database_name = db_name

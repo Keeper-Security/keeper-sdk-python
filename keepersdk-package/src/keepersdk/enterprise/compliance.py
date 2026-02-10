@@ -18,6 +18,16 @@ from . import enterprise_types
 
 API_EVENT_SUMMARY_ROW_LIMIT = 1000
 MAX_RECORDS_PER_REQUEST = 1000
+
+# Report type constants
+REPORT_TYPE_DEFAULT = 'default'
+REPORT_TYPE_TEAM = 'team'
+REPORT_TYPE_RECORD_ACCESS = 'record_access'
+REPORT_TYPE_SUMMARY = 'summary'
+REPORT_TYPE_SHARED_FOLDER = 'shared_folder'
+REPORT_TYPE_HISTORY = 'history'
+REPORT_TYPE_VAULT = 'vault'
+
 logger = logging.getLogger(__name__)
 
 
@@ -227,6 +237,19 @@ class ComplianceReportGenerator:
     def config(self) -> ComplianceReportConfig:
         return self._config
     
+    def get_preliminary_records(self) -> Dict[str, Dict[str, Any]]:
+        """Build user lookups and fetch preliminary compliance data; return records dict.
+        
+        Call this when only basic record metadata is needed (e.g. for caching or inspection).
+        For full reports use generate_default_report() or other generate_* methods.
+        
+        Returns:
+            Dictionary mapping record UIDs to their basic information
+        """
+        self._build_user_lookups()
+        self._fetch_preliminary_compliance_data()
+        return dict(self._records)
+    
     def _build_user_lookups(self) -> None:
         """Build lookups between email and enterprise_user_id."""
         if self._email_to_user_id is None:
@@ -314,8 +337,6 @@ class ComplianceReportGenerator:
             return False
         
         try:
-            import json
-            
             records = list(self._compliance_storage.records.get_all_entities())
             if not records:
                 return False
@@ -325,8 +346,8 @@ class ComplianceReportGenerator:
                 if entity.encrypted_data:
                     try:
                         record_data = json.loads(entity.encrypted_data.decode('utf-8'))
-                    except Exception:
-                        pass
+                    except (json.JSONDecodeError, UnicodeDecodeError) as decode_err:
+                        logger.debug('Failed to parse record data during cache load: %s', decode_err)
                 
                 self._records[entity.record_uid] = {
                     'record_uid': entity.record_uid,
@@ -416,7 +437,6 @@ class ComplianceReportGenerator:
             return
         
         try:
-            import json
             from ..plugins.sox import storage_types as st
             
             self._compliance_storage.clear_non_aging_data()
@@ -535,7 +555,7 @@ class ComplianceReportGenerator:
             data_json = crypto.decrypt_ec(encrypted_data, ec_key)
             return json.loads(data_json.decode('utf-8'))
         except Exception as e:
-            logger.debug(f'Failed to decrypt record data: {e}')
+            logger.debug('Failed to decrypt record data: %s', e)
             return {}
     
     def _update_permissions_lookup(
@@ -742,8 +762,8 @@ class ComplianceReportGenerator:
                         self._record_shared_folders[link.record_uid] = []
                     if folder.shared_folder_uid not in self._record_shared_folders[link.record_uid]:
                         self._record_shared_folders[link.record_uid].append(folder.shared_folder_uid)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error('Error extracting shared folders from vault: %s', e)
     
     def _process_audit_records(self, audit_records) -> None:
         """Process audit records to extract trash and attachment flags."""
@@ -996,7 +1016,7 @@ class ComplianceReportGenerator:
         
         return entries
     
-    def generate_record_access_report(self, report_type: str = 'history') -> List[RecordAccessReportEntry]:
+    def generate_record_access_report(self, report_type: str = REPORT_TYPE_HISTORY) -> List[RecordAccessReportEntry]:
         """Generate record access report with usage history."""
         self._build_user_lookups()
         self._fetch_preliminary_compliance_data()
@@ -1020,7 +1040,7 @@ class ComplianceReportGenerator:
                     if not any(pattern.lower() in email.lower() for pattern in self._config.username):
                         continue
                 
-                if report_type == 'vault':
+                if report_type == REPORT_TYPE_VAULT:
                     has_direct_access = (record_uid, user_id) in self._record_permissions
                     if not has_direct_access:
                         continue
@@ -1163,7 +1183,7 @@ class ComplianceReportGenerator:
                 try:
                     user_filter: Dict[str, Any] = {'username': email}
                     
-                    if report_type == 'vault':
+                    if report_type == REPORT_TYPE_VAULT:
                         user_records = []
                         user_id = self._email_to_user_id.get(email.lower())
                         if user_id:
@@ -1353,7 +1373,7 @@ class ComplianceReportGenerator:
     
     def generate_report_rows(self, report_category: str, blank_duplicate_uids: bool = False, **kwargs) -> Iterable[List[Any]]:
         """Generate report rows for the specified report category."""
-        if report_category == 'default':
+        if report_category == REPORT_TYPE_DEFAULT:
             entries = self.generate_default_report()
             entries.sort(key=lambda e: e.record_uid)
             
@@ -1375,7 +1395,7 @@ class ComplianceReportGenerator:
                     entry.shared_folder_uid
                 ]
         
-        elif report_category == 'team':
+        elif report_category == REPORT_TYPE_TEAM:
             entries = self.generate_team_report()
             for entry in entries:
                 row = [
@@ -1390,8 +1410,8 @@ class ComplianceReportGenerator:
                     row.append(entry.team_users)
                 yield row
         
-        elif report_category == 'record_access':
-            access_report_type = kwargs.get('report_type', 'history')
+        elif report_category == REPORT_TYPE_RECORD_ACCESS:
+            access_report_type = kwargs.get('report_type', REPORT_TYPE_HISTORY)
             entries = self.generate_record_access_report(report_type=access_report_type)
             for entry in entries:
                 yield [
@@ -1412,7 +1432,7 @@ class ComplianceReportGenerator:
                     entry.last_rotation if entry.last_rotation else ''
                 ]
         
-        elif report_category == 'summary':
+        elif report_category == REPORT_TYPE_SUMMARY:
             entries = self.generate_summary_report()
             for entry in entries:
                 yield [
@@ -1423,7 +1443,7 @@ class ComplianceReportGenerator:
                     entry.deleted_owned
                 ]
         
-        elif report_category == 'shared_folder':
+        elif report_category == REPORT_TYPE_SHARED_FOLDER:
             entries = self.generate_shared_folder_report()
             for entry in entries:
                 yield [
@@ -1439,7 +1459,7 @@ class ComplianceReportGenerator:
 def get_preliminary_compliance_data(
     enterprise_data: enterprise_types.IEnterpriseData,
     auth: keeper_auth.KeeperAuth
-) -> Dict[str, Any]:
+) -> Dict[str, Dict[str, Any]]:
     """Convenience function to fetch preliminary compliance data.
     
     Args:
@@ -1447,9 +1467,7 @@ def get_preliminary_compliance_data(
         auth: Keeper authentication
         
     Returns:
-        Dictionary of records with basic information
+        Dictionary mapping record UIDs to their basic information
     """
     generator = ComplianceReportGenerator(enterprise_data, auth)
-    generator._build_user_lookups()
-    generator._fetch_preliminary_compliance_data()
-    return generator._records
+    return generator.get_preliminary_records()

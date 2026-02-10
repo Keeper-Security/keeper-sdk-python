@@ -4,6 +4,7 @@ import datetime
 import logging
 import os
 import sqlite3
+import threading
 from typing import Callable, Optional
 
 from keepersdk import sqlite_dao
@@ -255,26 +256,53 @@ class SqliteComplianceStorage:
 
 
 def get_compliance_database_name(config_path: str, enterprise_id: int) -> str:
-    """Get the compliance database file path."""
+    """Get the compliance database file path.
+    
+    The database file is placed in the directory of config_path as compliance_{enterprise_id}.db.
+    config_path should be a trusted path (e.g. application config file path).
+    
+    Args:
+        config_path: Path to config file directory
+        enterprise_id: Enterprise ID
+        
+    Returns:
+        Full path to the compliance database file
+    """
     path = os.path.dirname(os.path.abspath(config_path or ''))
     return os.path.join(path, f'compliance_{enterprise_id}.db')
 
 
-_connection_cache = {}  # type: dict[str, sqlite3.Connection]
+# Module-level connection cache to ensure single connection per database (thread-safe)
+_connection_cache: dict[str, sqlite3.Connection] = {}
+_connection_cache_lock = threading.Lock()
 
 
 def get_cached_connection(database_name: str) -> sqlite3.Connection:
-    """Get or create a cached connection for the given database."""
-    if database_name not in _connection_cache:
-        _connection_cache[database_name] = sqlite3.connect(database_name)
-    return _connection_cache[database_name]
+    """Get or create a cached connection for the given database (thread-safe).
+    
+    Args:
+        database_name: Full path to the database file
+        
+    Returns:
+        SQLite connection object
+    """
+    with _connection_cache_lock:
+        if database_name not in _connection_cache:
+            _connection_cache[database_name] = sqlite3.connect(database_name)
+        return _connection_cache[database_name]
 
 
 def close_cached_connection(database_name: str) -> None:
-    """Close and remove a cached connection."""
-    if database_name in _connection_cache:
+    """Close and remove a cached connection (thread-safe).
+    
+    Args:
+        database_name: Full path to the database file
+    """
+    with _connection_cache_lock:
+        if database_name not in _connection_cache:
+            return
         try:
             _connection_cache[database_name].close()
-        except Exception:
-            pass
+        except sqlite3.Error as e:
+            logger.debug('Error closing cached connection for %s: %s', database_name, e)
         del _connection_cache[database_name]
