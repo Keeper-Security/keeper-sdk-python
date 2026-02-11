@@ -1,9 +1,9 @@
 """SOX Storage Types for Compliance Reporting."""
 
-import dataclasses
+from dataclasses import dataclass
 
 
-@dataclasses.dataclass
+@dataclass
 class Metadata:
     """Metadata tracking cache timestamps."""
     account_uid: str = ''
@@ -14,7 +14,7 @@ class Metadata:
     shared_records_only: bool = False
 
 
-@dataclasses.dataclass
+@dataclass
 class StorageUser:
     """Enterprise user information."""
     user_uid: int = 0
@@ -25,7 +25,7 @@ class StorageUser:
     node_id: int = 0
 
 
-@dataclasses.dataclass
+@dataclass
 class StorageRecord:
     """Record information."""
     record_uid: str = ''
@@ -36,7 +36,7 @@ class StorageRecord:
     has_attachments: bool = False
 
 
-@dataclasses.dataclass
+@dataclass
 class StorageRecordAging:
     """Record aging/lifecycle data."""
     record_uid: str = ''
@@ -46,14 +46,14 @@ class StorageRecordAging:
     last_rotation: int = 0
 
 
-@dataclasses.dataclass
+@dataclass
 class StorageUserRecordLink:
     """Link users to records they own."""
     record_uid: str = ''
     user_uid: int = 0
 
 
-@dataclasses.dataclass
+@dataclass
 class StorageTeam:
     """Enterprise team information."""
     team_uid: str = ''
@@ -62,14 +62,14 @@ class StorageTeam:
     restrict_share: bool = False
 
 
-@dataclasses.dataclass
+@dataclass
 class StorageTeamUserLink:
     """Link teams to member users."""
     team_uid: str = ''
     user_uid: int = 0
 
 
-@dataclasses.dataclass
+@dataclass
 class StorageRole:
     """Enterprise role information."""
     role_id: int = 0
@@ -80,7 +80,7 @@ class StorageRole:
     restrict_mask_passwords_while_editing: bool = False
 
 
-@dataclasses.dataclass
+@dataclass
 class StorageRecordPermissions:
     """User permissions on records."""
     record_uid: str = ''
@@ -88,7 +88,7 @@ class StorageRecordPermissions:
     permissions: int = 0
 
 
-@dataclasses.dataclass
+@dataclass
 class StorageSharedFolderRecordLink:
     """Link shared folders to records."""
     folder_uid: str = ''
@@ -96,21 +96,21 @@ class StorageSharedFolderRecordLink:
     permissions: int = 0
 
 
-@dataclasses.dataclass
+@dataclass
 class StorageSharedFolderUserLink:
     """Link shared folders to users."""
     folder_uid: str = ''
     user_uid: int = 0
 
 
-@dataclasses.dataclass
+@dataclass
 class StorageSharedFolderTeamLink:
     """Link shared folders to teams."""
     folder_uid: str = ''
     team_uid: str = ''
 
 
-@dataclasses.dataclass
+@dataclass
 class StorageSharedFolder:
     """Shared folder information."""
     folder_uid: str = ''

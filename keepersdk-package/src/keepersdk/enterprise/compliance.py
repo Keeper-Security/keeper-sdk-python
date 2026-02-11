@@ -4,9 +4,6 @@ import dataclasses
 import datetime
 import json
 import logging
-import sys
-import threading
-import time
 from collections import defaultdict
 from typing import Optional, List, Dict, Any, Iterable, Set, Tuple, Callable
 
@@ -29,46 +26,6 @@ REPORT_TYPE_HISTORY = 'history'
 REPORT_TYPE_VAULT = 'vault'
 
 logger = logging.getLogger(__name__)
-
-
-class ProgressSpinner:
-    """Animated spinner for progress display."""
-    
-    def __init__(self):
-        self._spinner_chars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
-        self._current = 0
-        self._running = False
-        self._thread = None
-        self._message = ''
-        self._lock = threading.Lock()
-    
-    def start(self, message: str = '') -> None:
-        self._message = message
-        self._running = True
-        self._thread = threading.Thread(target=self._spin, daemon=True)
-        self._thread.start()
-    
-    def update(self, message: str) -> None:
-        with self._lock:
-            self._message = message
-    
-    def stop(self, final_message: str = '') -> None:
-        self._running = False
-        if self._thread:
-            self._thread.join(timeout=0.5)
-        sys.stdout.write('\r' + ' ' * 80 + '\r')
-        if final_message:
-            sys.stdout.write(final_message + '\n')
-        sys.stdout.flush()
-    
-    def _spin(self) -> None:
-        while self._running:
-            with self._lock:
-                char = self._spinner_chars[self._current % len(self._spinner_chars)]
-                sys.stdout.write(f'\r{char} {self._message}')
-                sys.stdout.flush()
-            self._current += 1
-            time.sleep(0.1)
 
 
 PERMISSION_OWNER = 1
@@ -208,14 +165,14 @@ class ComplianceReportGenerator:
         config: Optional[ComplianceReportConfig] = None,
         vault_storage: Optional[Any] = None,
         show_progress: bool = False,
-        compliance_storage: Optional[Any] = None
+        compliance_storage: Optional[Any] = None,
+        progress_callback: Optional[Callable[[str], None]] = None
     ) -> None:
         self._enterprise_data = enterprise_data
         self._auth = auth
         self._config = config or ComplianceReportConfig()
         self._vault_storage = vault_storage
-        self._show_progress = show_progress
-        self._spinner = ProgressSpinner() if show_progress else None
+        self._progress_callback = progress_callback
         self._compliance_storage = compliance_storage
         self._user_teams: Optional[Dict[int, Set[str]]] = None
         self._records: Dict[str, Dict[str, Any]] = {}
@@ -374,8 +331,8 @@ class ComplianceReportGenerator:
                         PERMISSION_OWNER | PERMISSION_EDIT | PERMISSION_SHARE | PERMISSION_SHARE_ADMIN
                     )
             
-            if self._show_progress and self._spinner:
-                self._spinner.stop('Loaded from cache.')
+            if self._progress_callback:
+                self._progress_callback('Loaded from cache.')
             return True
         except Exception as e:
             logger.debug(f'Error loading from cache: {e}')
@@ -572,8 +529,8 @@ class ComplianceReportGenerator:
     def _fetch_preliminary_compliance_data(self, user_ids: Optional[List[int]] = None) -> None:
         """Fetch basic record information from compliance API or cache."""
         if self._is_prelim_cache_fresh():
-            if self._show_progress and self._spinner:
-                self._spinner.start('Loading from cache...')
+            if self._progress_callback:
+                self._progress_callback('Loading from cache...')
             if self._load_prelim_from_cache():
                 return
         
@@ -600,8 +557,8 @@ class ComplianceReportGenerator:
         users_processed = 0
         processed_user_ids = set()
         
-        if self._show_progress and self._spinner:
-            self._spinner.start(f'Loading record information - Users: 0/{total_users}, Records: 0/0')
+        if self._progress_callback:
+            self._progress_callback(f'Loading record information - Users: 0/{total_users}, Records: 0/0')
         
         try:
             while has_more:
@@ -660,9 +617,9 @@ class ComplianceReportGenerator:
                             )
                             loaded_records += 1
                     
-                    if self._show_progress and self._spinner:
+                    if self._progress_callback:
                         total_display = total_records if total_records > 0 else loaded_records
-                        self._spinner.update(f'Loading record information - Users: {users_processed}/{total_users}, Records: {loaded_records}/{total_display}')
+                        self._progress_callback(f'Loading record information - Users: {users_processed}/{total_users}, Records: {loaded_records}/{total_display}')
                     
                     has_more = rs.hasMore and rs.continuationToken
                     if has_more:
@@ -674,8 +631,8 @@ class ComplianceReportGenerator:
             
             self._save_prelim_to_cache()
         finally:
-            if self._show_progress and self._spinner:
-                self._spinner.stop('Preliminary compliance data loaded.')
+            if self._progress_callback:
+                self._progress_callback('Preliminary compliance data loaded.')
     
     def _fetch_full_compliance_data(self) -> None:
         """Fetch full compliance data including permissions and shared folders or load from cache."""
@@ -696,8 +653,8 @@ class ComplianceReportGenerator:
         batches = [all_record_bytes[i:i + MAX_RECORDS_PER_REQUEST] for i in range(0, total_records, MAX_RECORDS_PER_REQUEST)]
         total_batches = len(batches)
         
-        if self._show_progress and self._spinner:
-            self._spinner.start(f'Loading compliance data - Users: {total_users}/{total_users}, Current Batch: 0/{total_batches}')
+        if self._progress_callback:
+            self._progress_callback(f'Loading compliance data - Users: {total_users}/{total_users}, Current Batch: 0/{total_batches}')
         
         try:
             for batch_idx, record_batch in enumerate(batches):
@@ -726,9 +683,9 @@ class ComplianceReportGenerator:
                     self._process_shared_folder_users(rs.sharedFolderUsers)
                     self._process_shared_folder_teams(rs.sharedFolderTeams)
                     
-                    if self._show_progress and self._spinner:
+                    if self._progress_callback:
                         pct = ((batch_idx + 1) / total_batches) * 100
-                        self._spinner.update(f'Loading compliance data - Users: {total_users}/{total_users}, Current Batch: {batch_idx + 1}/{total_batches} ({pct:.2f}%)')
+                        self._progress_callback(f'Loading compliance data - Users: {total_users}/{total_users}, Current Batch: {batch_idx + 1}/{total_batches} ({pct:.2f}%)')
                     
                 except Exception as e:
                     error_msg = str(e)
@@ -741,8 +698,8 @@ class ComplianceReportGenerator:
             
             self._save_compliance_to_cache()
         finally:
-            if self._show_progress and self._spinner:
-                self._spinner.stop()
+            if self._progress_callback:
+                self._progress_callback('')
     
     def _build_permissions_from_enterprise_data(self) -> None:
         """Build permissions from vault data when full compliance API isn't available."""

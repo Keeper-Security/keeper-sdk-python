@@ -7,8 +7,8 @@ import sqlite3
 import threading
 from typing import Callable, Optional
 
-from keepersdk import sqlite_dao
-from keepersdk.storage import sqlite
+from ... import sqlite_dao
+from ...storage import sqlite
 
 from . import storage_types
 

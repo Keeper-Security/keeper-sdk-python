@@ -4,6 +4,9 @@ import argparse
 import os
 import re
 import sqlite3
+import sys
+import threading
+import time
 from typing import Any, List, Optional
 
 from keepersdk.enterprise import compliance
@@ -13,6 +16,46 @@ from . import base
 from ..helpers import report_utils
 from ..params import KeeperParams
 from .. import api
+
+
+class ProgressSpinner:
+    """Animated spinner for progress display."""
+    
+    def __init__(self):
+        self._spinner_chars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+        self._current = 0
+        self._running = False
+        self._thread = None
+        self._message = ''
+        self._lock = threading.Lock()
+    
+    def start(self, message: str = '') -> None:
+        self._message = message
+        self._running = True
+        self._thread = threading.Thread(target=self._spin, daemon=True)
+        self._thread.start()
+    
+    def update(self, message: str) -> None:
+        with self._lock:
+            self._message = message
+    
+    def stop(self, final_message: str = '') -> None:
+        self._running = False
+        if self._thread:
+            self._thread.join(timeout=0.5)
+        sys.stdout.write('\r' + ' ' * 80 + '\r')
+        if final_message:
+            sys.stdout.write(final_message + '\n')
+        sys.stdout.flush()
+    
+    def _spin(self) -> None:
+        while self._running:
+            with self._lock:
+                char = self._spinner_chars[self._current % len(self._spinner_chars)]
+                sys.stdout.write(f'\r{char} {self._message}')
+                sys.stdout.flush()
+            self._current += 1
+            time.sleep(0.1)
 
 
 def get_compliance_storage(context: KeeperParams) -> Optional[cs.SqliteComplianceStorage]:
@@ -157,17 +200,27 @@ class ComplianceReportCommand(base.ArgparseCommand):
         compliance_storage = None if no_cache else get_compliance_storage(context)
         
         vault_storage = context.vault.vault_data.storage if context.vault else None
+        spinner = ProgressSpinner()
+        spinner.start('Loading...')
+        
+        def progress_callback(msg):
+            if msg:
+                spinner.update(msg)
+            else:
+                spinner.stop()
+        
         generator = compliance.ComplianceReportGenerator(
             context.enterprise_data,
             context.auth,
             config,
             vault_storage=vault_storage,
-            show_progress=True,
-            compliance_storage=compliance_storage
+            compliance_storage=compliance_storage,
+            progress_callback=progress_callback
         )
         
         try:
             rows = list(generator.generate_report_rows('default', blank_duplicate_uids=(output_format == 'table')))
+            spinner.stop()
             headers = compliance.ComplianceReportGenerator.get_headers('default')
             
             if output_format != 'json':
@@ -242,13 +295,23 @@ class ComplianceTeamReportCommand(base.ArgparseCommand):
         )
         
         compliance_storage = None if no_cache else get_compliance_storage(context)
+        spinner = ProgressSpinner()
+        spinner.start('Loading...')
+        
+        def progress_callback(msg):
+            if msg:
+                spinner.update(msg)
+            else:
+                spinner.stop()
+        
         generator = compliance.ComplianceReportGenerator(
             context.enterprise_data, context.auth, config,
-            show_progress=True, compliance_storage=compliance_storage
+            compliance_storage=compliance_storage, progress_callback=progress_callback
         )
         
         try:
             rows = list(generator.generate_report_rows('team'))
+            spinner.stop()
             headers = compliance.ComplianceReportGenerator.get_headers('team', show_team_users)
             if output_format != 'json':
                 headers = [report_utils.field_to_title(h) for h in headers]
@@ -324,13 +387,24 @@ class ComplianceRecordAccessReportCommand(base.ArgparseCommand):
         compliance_storage = None if no_cache else get_compliance_storage(context)
         vault_storage = context.vault.vault_data.storage if context.vault else None
         
+        spinner = ProgressSpinner()
+        spinner.start('Loading...')
+        
+        def progress_callback(msg):
+            if msg:
+                spinner.update(msg)
+            else:
+                spinner.stop()
+        
         generator = compliance.ComplianceReportGenerator(
             context.enterprise_data, context.auth, config,
-            vault_storage=vault_storage, show_progress=True, compliance_storage=compliance_storage
+            vault_storage=vault_storage, compliance_storage=compliance_storage,
+            progress_callback=progress_callback
         )
         
         try:
             rows = list(generator.generate_report_rows('record_access', report_type=report_type))
+            spinner.stop()
             headers = compliance.ComplianceReportGenerator.get_headers('record_access')
             if output_format != 'json':
                 headers = [report_utils.field_to_title(h) for h in headers]
@@ -398,13 +472,23 @@ class ComplianceSummaryReportCommand(base.ArgparseCommand):
         )
         
         compliance_storage = None if no_cache else get_compliance_storage(context)
+        spinner = ProgressSpinner()
+        spinner.start('Loading...')
+        
+        def progress_callback(msg):
+            if msg:
+                spinner.update(msg)
+            else:
+                spinner.stop()
+        
         generator = compliance.ComplianceReportGenerator(
             context.enterprise_data, context.auth, config,
-            show_progress=True, compliance_storage=compliance_storage
+            compliance_storage=compliance_storage, progress_callback=progress_callback
         )
         
         try:
             rows = list(generator.generate_report_rows('summary'))
+            spinner.stop()
             headers = compliance.ComplianceReportGenerator.get_headers('summary')
             
             if node_id:
@@ -482,13 +566,23 @@ class ComplianceSharedFolderReportCommand(base.ArgparseCommand):
         )
         
         compliance_storage = None if no_cache else get_compliance_storage(context)
+        spinner = ProgressSpinner()
+        spinner.start('Loading...')
+        
+        def progress_callback(msg):
+            if msg:
+                spinner.update(msg)
+            else:
+                spinner.stop()
+        
         generator = compliance.ComplianceReportGenerator(
             context.enterprise_data, context.auth, config,
-            show_progress=True, compliance_storage=compliance_storage
+            compliance_storage=compliance_storage, progress_callback=progress_callback
         )
         
         try:
             rows = list(generator.generate_report_rows('shared_folder'))
+            spinner.stop()
             headers = compliance.ComplianceReportGenerator.get_headers('shared_folder')
             if output_format != 'json':
                 headers = [report_utils.field_to_title(h) for h in headers]

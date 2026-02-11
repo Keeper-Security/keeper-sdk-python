@@ -146,10 +146,14 @@ def generate_record_access_report(keeper_auth_context: keeper_auth.KeeperAuth):
         
         print("\nLoading enterprise data...")
         
+        def progress_callback(msg):
+            if msg:
+                print(f"\r{msg}", end='', flush=True)
+        
         config = compliance.ComplianceReportConfig(no_rebuild=True, cache_max_age_days=1)
         generator = compliance.ComplianceReportGenerator(
             enterprise.enterprise_data, keeper_auth_context, config,
-            show_progress=True, compliance_storage=compliance_storage
+            compliance_storage=compliance_storage, progress_callback=progress_callback
         )
         
         rows = list(generator.generate_report_rows('record_access', report_type='history'))
