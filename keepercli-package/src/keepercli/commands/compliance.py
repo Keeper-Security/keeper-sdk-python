@@ -81,12 +81,12 @@ def get_compliance_storage(context: KeeperParams) -> Optional[cs.SqliteComplianc
     return storage
 
 
-def get_node_id(context: KeeperParams, name: str) -> int:
+def get_node_id(enterprise_data, name: str) -> int:
     """Resolve node ID from name or numeric ID."""
     if isinstance(name, str) and name.isdecimal():
         name = int(name)
     
-    nodes = list(context.enterprise_data.nodes.get_all_entities())
+    nodes = list(enterprise_data.nodes.get_all_entities())
     if not nodes:
         return 0
     
@@ -196,7 +196,7 @@ class ComplianceReportCommand(base.ArgparseCommand):
         
         output_format = kwargs.get('format', 'table')
         no_cache = kwargs.get('no_cache', False)
-        node_id = get_node_id(context, kwargs['node']) if kwargs.get('node') else None
+        node_id = get_node_id(context.enterprise_data, kwargs['node']) if kwargs.get('node') else None
         
         config = compliance.ComplianceReportConfig(
             username=kwargs.get('username'),
@@ -269,7 +269,7 @@ class ComplianceTeamReportCommand(base.ArgparseCommand):
         output_file = kwargs.get('output')
         no_cache = kwargs.get('no_cache', False)
         show_team_users = kwargs.get('show_team_users', False)
-        node_id = get_node_id(context, kwargs.get('node')) if kwargs.get('node') else None
+        node_id = get_node_id(context.enterprise_data, kwargs.get('node')) if kwargs.get('node') else None
         
         config = compliance.ComplianceReportConfig(
             shared=True,
@@ -341,7 +341,7 @@ class ComplianceRecordAccessReportCommand(base.ArgparseCommand):
         no_cache = kwargs.get('no_cache', False)
         aging = kwargs.get('aging', False)
         emails = kwargs.get('email', [])
-        node_id = get_node_id(context, kwargs.get('node')) if kwargs.get('node') else None
+        node_id = get_node_id(context.enterprise_data, kwargs.get('node')) if kwargs.get('node') else None
         
         config = compliance.ComplianceReportConfig(
             username=emails if emails and '@all' not in emails else None,
@@ -404,7 +404,7 @@ class ComplianceSummaryReportCommand(base.ArgparseCommand):
         output_format = kwargs.get('format', 'table')
         output_file = kwargs.get('output')
         no_cache = kwargs.get('no_cache', False)
-        node_id = get_node_id(context, kwargs.get('node')) if kwargs.get('node') else None
+        node_id = get_node_id(context.enterprise_data, kwargs.get('node')) if kwargs.get('node') else None
         
         config = compliance.ComplianceReportConfig(
             node_id=node_id,
@@ -477,7 +477,7 @@ class ComplianceSharedFolderReportCommand(base.ArgparseCommand):
         output_file = kwargs.get('output')
         no_cache = kwargs.get('no_cache', False)
         show_team_users = kwargs.get('show_team_users', False)
-        node_id = get_node_id(context, kwargs.get('node')) if kwargs.get('node') else None
+        node_id = get_node_id(context.enterprise_data, kwargs.get('node')) if kwargs.get('node') else None
         
         config = compliance.ComplianceReportConfig(
             shared=True,

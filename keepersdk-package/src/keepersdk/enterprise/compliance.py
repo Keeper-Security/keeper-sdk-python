@@ -618,6 +618,8 @@ class ComplianceReportGenerator:
                     has_more = rs.hasMore and rs.continuationToken
                     if has_more:
                         continuation_token = rs.continuationToken
+                    else:
+                        continuation_token = None
                         
                 except Exception as e:
                     logger.warning(f'Error fetching preliminary compliance data: {e}')
