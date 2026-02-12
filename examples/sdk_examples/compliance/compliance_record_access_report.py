@@ -1,10 +1,14 @@
 """
 Compliance Record Access Report SDK Example
 
-Usage: python compliance_record_access_report.py
+Usage: 
+    python compliance_record_access_report.py           # Default (11 columns)
+    python compliance_record_access_report.py --aging   # Include aging columns (15 columns)
 """
 
+import argparse
 import getpass
+import logging
 import os
 import sqlite3
 import traceback
@@ -15,8 +19,12 @@ from keepersdk.errors import KeeperApiError
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
 from keepersdk.plugins.sox import compliance_storage as cs
 
+logging.basicConfig(level=logging.INFO, format='%(message)s')
+logger = logging.getLogger(__name__)
+
 TABLE_WIDTH = 250
-COL_WIDTHS = (34, 22, 30, 14, 25, 8, 8, 8, 15, 15, 12, 12, 12, 12, 12)
+COL_WIDTHS_DEFAULT = (34, 22, 30, 14, 25, 8, 8, 34, 15, 15, 20)
+COL_WIDTHS_AGING = (34, 22, 30, 14, 25, 8, 8, 34, 15, 15, 20, 12, 12, 12, 12)
 
 
 def login():
@@ -24,9 +32,9 @@ def login():
     config = configuration.JsonConfigurationStorage()
     
     if not config.get().last_server:
-        print("Available server options:")
+        logger.info("Available server options:")
         for region, host in KEEPER_PUBLIC_HOSTS.items():
-            print(f"  {region}: {host}")
+            logger.info(f"  {region}: {host}")
         server = input('Enter server (default: keepersecurity.com): ').strip() or 'keepersecurity.com'
         config.get().last_server = server
     else:
@@ -43,7 +51,7 @@ def login():
     while not login_auth_context.login_step.is_final():
         if isinstance(login_auth_context.login_step, login_auth.LoginStepDeviceApproval):
             login_auth_context.login_step.send_push(login_auth.DeviceApprovalChannel.KeeperPush)
-            print("Device approval request sent. Approve this device and press Enter to continue.")
+            logger.info("Device approval request sent. Approve this device and press Enter to continue.")
             input()
         elif isinstance(login_auth_context.login_step, login_auth.LoginStepPassword):
             login_auth_context.login_step.verify_password(getpass.getpass('Enter password: '))
@@ -55,7 +63,7 @@ def login():
         logged_in_with_persistent = False
     
     if logged_in_with_persistent:
-        print("Successfully logged in with persistent login")
+        logger.info("Successfully logged in with persistent login")
     
     if isinstance(login_auth_context.login_step, login_auth.LoginStepConnected):
         return login_auth_context.login_step.take_keeper_auth()
@@ -63,18 +71,7 @@ def login():
 
 
 def get_compliance_storage(config_path: str, enterprise_id: int):
-    """Create SQLite compliance storage for caching.
-    
-    The database file will be created in the directory of config_path as compliance_{enterprise_id}.db.
-    config_path should be a trusted path (e.g. the application's config file path).
-    
-    Args:
-        config_path: Path to the config file (trusted location)
-        enterprise_id: Enterprise ID for the database name
-        
-    Returns:
-        SqliteComplianceStorage instance with connection management
-    """
+    """Create SQLite compliance storage for caching."""
     db_name = cs.get_compliance_database_name(config_path, enterprise_id)
     storage = cs.SqliteComplianceStorage(lambda: cs.get_cached_connection(db_name), enterprise_id)
     storage.database_name = db_name
@@ -82,7 +79,18 @@ def get_compliance_storage(config_path: str, enterprise_id: int):
     return storage
 
 
-def format_row(values, widths=COL_WIDTHS):
+def format_value(val):
+    """Format a single cell value for display."""
+    if val is None:
+        return ''
+    if isinstance(val, bool):
+        return 'Yes' if val else ''
+    if isinstance(val, list):
+        return ', '.join(str(v) for v in val) if val else ''
+    return str(val)
+
+
+def format_row(values, widths):
     """Format a row of values according to column widths."""
     formatted = []
     for i, val in enumerate(values):
@@ -93,42 +101,32 @@ def format_row(values, widths=COL_WIDTHS):
     return ' '.join(formatted)
 
 
-def print_report(rows, headers):
+def print_report(rows, headers, col_widths):
     """Print the record access report in table format."""
-    print("\n" + "=" * TABLE_WIDTH)
-    print("RECORD ACCESS REPORT")
-    print("=" * TABLE_WIDTH)
+    logger.info("\n" + "=" * TABLE_WIDTH)
+    logger.info("RECORD ACCESS REPORT")
+    logger.info("=" * TABLE_WIDTH)
     
     display_headers = [h.replace('_', ' ').title() for h in headers]
-    print(format_row(display_headers))
-    print("-" * TABLE_WIDTH)
+    logger.info(format_row(display_headers, col_widths))
+    logger.info("-" * TABLE_WIDTH)
     
     for row in rows:
-        formatted_row = []
-        for val in row:
-            if val is None:
-                formatted_row.append('')
-            elif isinstance(val, bool):
-                formatted_row.append('Yes' if val else '')
-            elif isinstance(val, list):
-                formatted_row.append(', '.join(str(v) for v in val) if val else '')
-            else:
-                formatted_row.append(str(val))
-        print(format_row(formatted_row))
+        logger.info(format_row([format_value(v) for v in row], col_widths))
     
-    print("=" * TABLE_WIDTH)
-    print(f"\nTotal Entries: {len(rows)}")
+    logger.info("=" * TABLE_WIDTH)
+    logger.info(f"\nTotal Entries: {len(rows)}")
     
     if rows:
         unique_users = len(set(r[0] for r in rows if len(r) > 0 and r[0]))
         unique_records = len(set(r[1] for r in rows if len(r) > 1 and r[1]))
-        print(f"\nSummary: {unique_users} vault owners, {unique_records} records")
+        logger.info(f"\nSummary: {unique_users} vault owners, {unique_records} records")
 
 
-def generate_record_access_report(keeper_auth_context: keeper_auth.KeeperAuth):
+def generate_record_access_report(keeper_auth_context: keeper_auth.KeeperAuth, aging: bool = False):
     """Generate record access report with SQLite caching."""
     if not keeper_auth_context.auth_context.is_enterprise_admin:
-        print("ERROR: Enterprise admin privileges required.")
+        logger.error("ERROR: Enterprise admin privileges required.")
         keeper_auth_context.close()
         return
     
@@ -144,26 +142,27 @@ def generate_record_access_report(keeper_auth_context: keeper_auth.KeeperAuth):
         config_path = os.path.expanduser('~/.keeper/config.json')
         compliance_storage = get_compliance_storage(config_path, enterprise_id)
         
-        print("\nLoading enterprise data...")
+        logger.info("\nLoading enterprise data...")
         
         def progress_callback(msg):
             if msg:
                 print(f"\r{msg}", end='', flush=True)
         
-        config = compliance.ComplianceReportConfig(no_rebuild=True, cache_max_age_days=1)
+        config = compliance.ComplianceReportConfig(no_rebuild=True, cache_max_age_days=1, aging=aging)
         generator = compliance.ComplianceReportGenerator(
             enterprise.enterprise_data, keeper_auth_context, config,
             compliance_storage=compliance_storage, progress_callback=progress_callback
         )
         
         rows = list(generator.generate_report_rows('record_access', report_type='history'))
-        headers = compliance.ComplianceReportGenerator.get_headers('record_access')
-        print_report(rows, headers)
+        headers = compliance.ComplianceReportGenerator.get_headers('record_access', aging=aging)
+        col_widths = COL_WIDTHS_AGING if aging else COL_WIDTHS_DEFAULT
+        print_report(rows, headers, col_widths)
         
     except KeeperApiError as e:
-        print(f"\nAPI Error: {e}")
+        logger.error(f"\nAPI Error: {e}")
     except Exception as e:
-        print(f"\nError: {e}")
+        logger.error(f"\nError: {e}")
         traceback.print_exc()
     finally:
         if compliance_storage and hasattr(compliance_storage, 'close_connection'):
@@ -174,15 +173,22 @@ def generate_record_access_report(keeper_auth_context: keeper_auth.KeeperAuth):
 
 
 def main():
-    print("=" * 60)
-    print("Keeper Compliance Record Access Report")
-    print("=" * 60 + "\n")
+    parser = argparse.ArgumentParser(description='Keeper Compliance Record Access Report')
+    parser.add_argument('--aging', action='store_true',
+                        help='Include aging columns (Created, Last Pw Change, Last Modified, Last Rotation)')
+    args = parser.parse_args()
+    
+    logger.info("=" * 60)
+    logger.info("Keeper Compliance Record Access Report")
+    if args.aging:
+        logger.info("(Including aging columns)")
+    logger.info("=" * 60 + "\n")
     
     keeper_auth_context = login()
     if keeper_auth_context:
-        generate_record_access_report(keeper_auth_context)
+        generate_record_access_report(keeper_auth_context, aging=args.aging)
     else:
-        print("Login failed.")
+        logger.error("Login failed.")
 
 
 if __name__ == "__main__":

@@ -1,10 +1,10 @@
 """Enterprise compliance report functionality for Keeper SDK."""
 
-import dataclasses
 import datetime
 import json
 import logging
 from collections import defaultdict
+from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any, Iterable, Set, Tuple, Callable
 
 from ..authentication import keeper_auth
@@ -36,14 +36,7 @@ PERMISSION_SHARE_ADMIN = 16
 
 
 def permissions_to_string(permission_bits: int) -> str:
-    """Convert permission bits to human-readable string.
-    
-    Args:
-        permission_bits: Integer with permission flags
-        
-    Returns:
-        Comma-separated permission string (e.g., "owner,edit,share")
-    """
+    """Convert permission bits to human-readable string."""
     permission_masks = {
         PERMISSION_OWNER: 'owner',
         PERMISSION_MASK: 'mask', 
@@ -59,7 +52,7 @@ def permissions_to_string(permission_bits: int) -> str:
     return ','.join(permissions)
 
 
-@dataclasses.dataclass
+@dataclass
 class ComplianceReportEntry:
     """Represents a single record entry in the compliance report."""
     record_uid: str
@@ -73,7 +66,7 @@ class ComplianceReportEntry:
     shared_folder_uid: Optional[List[str]] = None
 
 
-@dataclasses.dataclass
+@dataclass
 class TeamReportEntry:
     """Represents a team's access to shared folders."""
     team_name: str
@@ -85,7 +78,7 @@ class TeamReportEntry:
     team_users: Optional[List[str]] = None
 
 
-@dataclasses.dataclass
+@dataclass
 class RecordAccessReportEntry:
     """Represents record access history for a user."""
     vault_owner: str
@@ -105,7 +98,7 @@ class RecordAccessReportEntry:
     last_rotation: Optional[datetime.datetime] = None
 
 
-@dataclasses.dataclass
+@dataclass
 class SummaryReportEntry:
     """Represents summary statistics for a user."""
     email: str
@@ -115,7 +108,7 @@ class SummaryReportEntry:
     deleted_owned: int = 0
 
 
-@dataclasses.dataclass
+@dataclass
 class SharedFolderReportEntry:
     """Represents shared folder access details."""
     shared_folder_uid: str
@@ -126,7 +119,7 @@ class SharedFolderReportEntry:
     email: Optional[List[str]] = None
 
 
-@dataclasses.dataclass
+@dataclass
 class ComplianceReportConfig:
     """Configuration for compliance report generation."""
     username: Optional[List[str]] = None
@@ -145,6 +138,32 @@ class ComplianceReportConfig:
     no_rebuild: bool = False
     no_cache: bool = False
     cache_max_age_days: int = 1
+
+
+@dataclass
+class RecordInfo:
+    """Internal representation of record data."""
+    record_uid: str = ''
+    record_uid_bytes: bytes = b''
+    encrypted_data: bytes = b''  # API's EC-encrypted data for cache storage
+    owner_email: str = ''
+    owner_user_id: int = 0
+    title: str = ''
+    record_type: str = ''
+    url: str = ''
+    shared: bool = False
+    in_trash: bool = False
+    has_attachments: bool = False
+    shared_folder_uid: Optional[str] = None
+
+
+@dataclass
+class SharedFolderInfo:
+    """Internal representation of shared folder data."""
+    folder_uid: str = ''
+    records: Dict[str, int] = field(default_factory=dict)
+    users: Set[int] = field(default_factory=set)
+    teams: Set[str] = field(default_factory=set)
 
 
 class ComplianceReportGenerator:
@@ -175,9 +194,9 @@ class ComplianceReportGenerator:
         self._progress_callback = progress_callback
         self._compliance_storage = compliance_storage
         self._user_teams: Optional[Dict[int, Set[str]]] = None
-        self._records: Dict[str, Dict[str, Any]] = {}
+        self._records: Dict[str, RecordInfo] = {}
         self._record_shared_folders: Dict[str, List[str]] = {}
-        self._shared_folders: Dict[str, Dict[str, Any]] = {}
+        self._shared_folders: Dict[str, SharedFolderInfo] = {}
         self._email_to_user_id: Optional[Dict[str, int]] = None
         self._user_id_to_email: Optional[Dict[int, str]] = None
         self._record_permissions: Dict[Tuple[str, int], int] = {}
@@ -195,14 +214,7 @@ class ComplianceReportGenerator:
         return self._config
     
     def get_preliminary_records(self) -> Dict[str, Dict[str, Any]]:
-        """Build user lookups and fetch preliminary compliance data; return records dict.
-        
-        Call this when only basic record metadata is needed (e.g. for caching or inspection).
-        For full reports use generate_default_report() or other generate_* methods.
-        
-        Returns:
-            Dictionary mapping record UIDs to their basic information
-        """
+        """Build user lookups and fetch preliminary compliance data."""
         self._build_user_lookups()
         self._fetch_preliminary_compliance_data()
         return dict(self._records)
@@ -299,32 +311,24 @@ class ComplianceReportGenerator:
                 return False
             
             for entity in records:
-                record_data = {}
-                if entity.encrypted_data:
-                    try:
-                        record_data = json.loads(entity.encrypted_data.decode('utf-8'))
-                    except (json.JSONDecodeError, UnicodeDecodeError) as decode_err:
-                        logger.debug('Failed to parse record data during cache load: %s', decode_err)
-                
-                self._records[entity.record_uid] = {
-                    'record_uid': entity.record_uid,
-                    'record_uid_bytes': entity.record_uid_bytes,
-                    'owner_email': '',
-                    'owner_user_id': 0,
-                    'title': record_data.get('title', ''),
-                    'record_type': record_data.get('record_type', ''),
-                    'url': record_data.get('url', ''),
-                    'shared': entity.shared,
-                    'in_trash': entity.in_trash,
-                    'has_attachments': entity.has_attachments,
-                    'shared_folder_uid': None
-                }
+                record_data = self._decrypt_record_data(entity.encrypted_data)
+                self._records[entity.record_uid] = RecordInfo(
+                    record_uid=entity.record_uid,
+                    record_uid_bytes=entity.record_uid_bytes,
+                    encrypted_data=entity.encrypted_data,
+                    title=record_data.get('title', ''),
+                    record_type=record_data.get('record_type', ''),
+                    url=record_data.get('url', ''),
+                    shared=entity.shared,
+                    in_trash=entity.in_trash,
+                    has_attachments=entity.has_attachments
+                )
             
             links = list(self._compliance_storage.user_record_links.get_all_links())
             for link in links:
                 if link.record_uid in self._records:
-                    self._records[link.record_uid]['owner_user_id'] = link.user_uid
-                    self._records[link.record_uid]['owner_email'] = self._user_id_to_email.get(link.user_uid, '')
+                    self._records[link.record_uid].owner_user_id = link.user_uid
+                    self._records[link.record_uid].owner_email = self._user_id_to_email.get(link.user_uid, '')
                     self._update_permissions_lookup(
                         link.record_uid,
                         link.user_uid,
@@ -351,13 +355,8 @@ class ComplianceReportGenerator:
             sf_records = self._compliance_storage.sf_record_links.get_all_links()
             for link in sf_records:
                 if link.folder_uid not in self._shared_folders:
-                    self._shared_folders[link.folder_uid] = {
-                        'folder_uid': link.folder_uid,
-                        'records': {},
-                        'users': set(),
-                        'teams': set()
-                    }
-                self._shared_folders[link.folder_uid]['records'][link.record_uid] = link.permissions
+                    self._shared_folders[link.folder_uid] = SharedFolderInfo(folder_uid=link.folder_uid)
+                self._shared_folders[link.folder_uid].records[link.record_uid] = link.permissions
                 
                 if link.record_uid not in self._record_shared_folders:
                     self._record_shared_folders[link.record_uid] = []
@@ -365,17 +364,17 @@ class ComplianceReportGenerator:
                     self._record_shared_folders[link.record_uid].append(link.folder_uid)
                 
                 if link.record_uid in self._records:
-                    self._records[link.record_uid]['shared'] = True
+                    self._records[link.record_uid].shared = True
             
             sf_users = self._compliance_storage.sf_user_links.get_all_links()
             for link in sf_users:
                 if link.folder_uid in self._shared_folders:
-                    self._shared_folders[link.folder_uid]['users'].add(link.user_uid)
+                    self._shared_folders[link.folder_uid].users.add(link.user_uid)
             
             sf_teams = self._compliance_storage.sf_team_links.get_all_links()
             for link in sf_teams:
                 if link.folder_uid in self._shared_folders:
-                    self._shared_folders[link.folder_uid]['teams'].add(link.team_uid)
+                    self._shared_folders[link.folder_uid].teams.add(link.team_uid)
             
             team_users = self._compliance_storage.team_user_links.get_all_links()
             for link in team_users:
@@ -403,22 +402,17 @@ class ComplianceReportGenerator:
             for record_uid, info in self._records.items():
                 entity = st.StorageRecord()
                 entity.record_uid = record_uid
-                entity.record_uid_bytes = info.get('record_uid_bytes', b'')
-                record_metadata = {
-                    'title': info.get('title', ''),
-                    'record_type': info.get('record_type', ''),
-                    'url': info.get('url', '')
-                }
-                entity.encrypted_data = json.dumps(record_metadata).encode('utf-8')
-                entity.shared = info.get('shared', False)
-                entity.in_trash = info.get('in_trash', False)
-                entity.has_attachments = info.get('has_attachments', False)
+                entity.record_uid_bytes = info.record_uid_bytes
+                entity.encrypted_data = info.encrypted_data
+                entity.shared = info.shared
+                entity.in_trash = info.in_trash
+                entity.has_attachments = info.has_attachments
                 records.append(entity)
                 
-                if info.get('owner_user_id'):
+                if info.owner_user_id:
                     link = st.StorageUserRecordLink()
                     link.record_uid = record_uid
-                    link.user_uid = info['owner_user_id']
+                    link.user_uid = info.owner_user_id
                     links.append(link)
             
             self._compliance_storage.records.put_entities(records)
@@ -448,20 +442,20 @@ class ComplianceReportGenerator:
             sf_users = []
             sf_teams = []
             for folder_uid, info in self._shared_folders.items():
-                for record_uid, perm_bits in info.get('records', {}).items():
+                for record_uid, perm_bits in info.records.items():
                     link = st.StorageSharedFolderRecordLink()
                     link.folder_uid = folder_uid
                     link.record_uid = record_uid
                     link.permissions = perm_bits
                     sf_records.append(link)
                 
-                for user_id in info.get('users', set()):
+                for user_id in info.users:
                     link = st.StorageSharedFolderUserLink()
                     link.folder_uid = folder_uid
                     link.user_uid = user_id
                     sf_users.append(link)
                 
-                for team_uid in info.get('teams', set()):
+                for team_uid in info.teams:
                     link = st.StorageSharedFolderTeamLink()
                     link.folder_uid = folder_uid
                     link.team_uid = team_uid
@@ -484,9 +478,9 @@ class ComplianceReportGenerator:
             for record_uid, info in self._records.items():
                 entity = self._compliance_storage.records.get_entity(record_uid)
                 if entity:
-                    entity.in_trash = info.get('in_trash', False)
-                    entity.has_attachments = info.get('has_attachments', False)
-                    entity.shared = info.get('shared', False)
+                    entity.in_trash = info.in_trash
+                    entity.has_attachments = info.has_attachments
+                    entity.shared = info.shared
                     records.append(entity)
             if records:
                 self._compliance_storage.records.put_entities(records)
@@ -596,19 +590,20 @@ class ComplianceReportGenerator:
                                 if shared_folder_uid not in self._record_shared_folders[record_uid]:
                                     self._record_shared_folders[record_uid].append(shared_folder_uid)
                             
-                            self._records[record_uid] = {
-                                'record_uid': record_uid,
-                                'record_uid_bytes': record.recordUid,
-                                'owner_email': owner_email,
-                                'owner_user_id': user_id,
-                                'title': record_data.get('title', ''),
-                                'record_type': record_data.get('record_type', ''),
-                                'url': record_data.get('url', ''),
-                                'shared': record.shared,
-                                'in_trash': record_data.get('in_trash', False),
-                                'has_attachments': record_data.get('has_attachments', False),
-                                'shared_folder_uid': shared_folder_uid
-                            }
+                            self._records[record_uid] = RecordInfo(
+                                record_uid=record_uid,
+                                record_uid_bytes=record.recordUid,
+                                encrypted_data=record.encryptedData,
+                                owner_email=owner_email,
+                                owner_user_id=user_id,
+                                title=record_data.get('title', ''),
+                                record_type=record_data.get('record_type', ''),
+                                url=record_data.get('url', ''),
+                                shared=record.shared,
+                                in_trash=record_data.get('in_trash', False),
+                                has_attachments=record_data.get('has_attachments', False),
+                                shared_folder_uid=shared_folder_uid
+                            )
                             
                             self._update_permissions_lookup(
                                 record_uid, 
@@ -640,7 +635,7 @@ class ComplianceReportGenerator:
             if self._load_compliance_from_cache():
                 return
         
-        all_record_bytes = [info['record_uid_bytes'] for info in self._records.values() if 'record_uid_bytes' in info]
+        all_record_bytes = [info.record_uid_bytes for info in self._records.values() if info.record_uid_bytes]
         total_records = len(all_record_bytes)
         
         if total_records == 0:
@@ -730,19 +725,19 @@ class ComplianceReportGenerator:
                 if record_uid not in self._records:
                     continue
                 
-                self._records[record_uid]['in_trash'] = audit_record.inTrash
-                self._records[record_uid]['has_attachments'] = audit_record.hasAttachments
+                self._records[record_uid].in_trash = audit_record.inTrash
+                self._records[record_uid].has_attachments = audit_record.hasAttachments
                 
                 if audit_record.auditData:
                     audit_data = self._decrypt_record_data(audit_record.auditData)
                     if audit_data:
                         record = self._records[record_uid]
-                        if not record.get('title'):
-                            record['title'] = audit_data.get('title', '')
-                        if not record.get('record_type'):
-                            record['record_type'] = audit_data.get('record_type', '')
-                        if not record.get('url'):
-                            record['url'] = audit_data.get('url', '')
+                        if not record.title:
+                            record.title = audit_data.get('title', '')
+                        if not record.record_type:
+                            record.record_type = audit_data.get('record_type', '')
+                        if not record.url:
+                            record.url = audit_data.get('url', '')
             except Exception:
                 continue
     
@@ -752,16 +747,11 @@ class ComplianceReportGenerator:
             folder_uid = utils.base64_url_encode(folder.sharedFolderUid)
             
             if folder_uid not in self._shared_folders:
-                self._shared_folders[folder_uid] = {
-                    'folder_uid': folder_uid,
-                    'records': {},
-                    'users': set(),
-                    'teams': set()
-                }
+                self._shared_folders[folder_uid] = SharedFolderInfo(folder_uid=folder_uid)
             
             for rp in folder.recordPermissions:
                 record_uid = utils.base64_url_encode(rp.recordUid)
-                self._shared_folders[folder_uid]['records'][record_uid] = rp.permissionBits
+                self._shared_folders[folder_uid].records[record_uid] = rp.permissionBits
                 
                 if record_uid not in self._record_shared_folders:
                     self._record_shared_folders[record_uid] = []
@@ -769,7 +759,7 @@ class ComplianceReportGenerator:
                     self._record_shared_folders[record_uid].append(folder_uid)
                 
                 if record_uid in self._records:
-                    self._records[record_uid]['shared'] = True
+                    self._records[record_uid].shared = True
             
             for sar in folder.shareAdminRecords:
                 for idx in sar.recordPermissionIndexes:
@@ -799,9 +789,9 @@ class ComplianceReportGenerator:
             if folder_uid not in self._shared_folders:
                 continue
             
-            folder_records = self._shared_folders[folder_uid]['records']
+            folder_records = self._shared_folders[folder_uid].records
             for user_id in sf_user.enterpriseUserIds:
-                self._shared_folders[folder_uid]['users'].add(user_id)
+                self._shared_folders[folder_uid].users.add(user_id)
                 for record_uid, perm_bits in folder_records.items():
                     self._update_permissions_lookup(record_uid, user_id, perm_bits)
         
@@ -815,9 +805,9 @@ class ComplianceReportGenerator:
                 continue
             
             team_uid = utils.base64_url_encode(sf_team.teamUid)
-            self._shared_folders[folder_uid]['teams'].add(team_uid)
+            self._shared_folders[folder_uid].teams.add(team_uid)
             
-            folder_records = self._shared_folders[folder_uid]['records']
+            folder_records = self._shared_folders[folder_uid].records
             team_members = self._team_members.get(team_uid, set())
             for record_uid, perm_bits in folder_records.items():
                 for user_id in team_members:
@@ -826,11 +816,7 @@ class ComplianceReportGenerator:
         logger.debug(f'Processed {len(sf_teams)} shared folder team links')
     
     def _build_permissions_lookup(self) -> Dict[Tuple[str, str], str]:
-        """Build final permissions lookup from all sources.
-        
-        Returns:
-            Dict mapping (record_uid, email) to permission string
-        """
+        """Build final permissions lookup from all sources."""
         permissions_lookup = {}
         
         for (record_uid, user_id), permission_bits in self._record_permissions.items():
@@ -872,13 +858,13 @@ class ComplianceReportGenerator:
                 
                 entry = ComplianceReportEntry(
                     record_uid=record_uid,
-                    title=record_info.get('title', ''),
-                    record_type=record_info.get('record_type', ''),
+                    title=record_info.title,
+                    record_type=record_info.record_type,
                     username=email,
                     permissions=permissions_lookup.get((record_uid, email), 'read-only'),
-                    url=record_info.get('url', ''),
-                    in_trash=record_info.get('in_trash', False),
-                    shared=record_info.get('shared', False),
+                    url=record_info.url,
+                    in_trash=record_info.in_trash,
+                    shared=record_info.shared,
                     shared_folder_uid=self._get_record_shared_folders(record_uid) or None
                 )
 
@@ -945,8 +931,8 @@ class ComplianceReportGenerator:
         team_names = {team.team_uid: team.name for team in self._enterprise_data.teams.get_all_entities()}
         
         for folder_uid, folder_info in self._shared_folders.items():
-            folder_teams = folder_info.get('teams', set())
-            folder_records = folder_info.get('records', {})
+            folder_teams = folder_info.teams
+            folder_records = folder_info.records
             
             for team_uid in folder_teams:
                 team_name = team_names.get(team_uid, team_uid)
@@ -1009,12 +995,12 @@ class ComplianceReportGenerator:
                 entry = RecordAccessReportEntry(
                     vault_owner=email,
                     record_uid=record_uid,
-                    record_title=record_info.get('title', ''),
-                    record_type=record_info.get('record_type', ''),
-                    record_url=record_info.get('url', ''),
-                    has_attachments=record_info.get('has_attachments'),
-                    in_trash=record_info.get('in_trash', False),
-                    record_owner=record_info.get('owner_email', ''),
+                    record_title=record_info.title,
+                    record_type=record_info.record_type,
+                    record_url=record_info.url,
+                    has_attachments=record_info.has_attachments,
+                    in_trash=record_info.in_trash,
+                    record_owner=record_info.owner_email,
                     ip_address=access_event.get('ip_address', '') or '',
                     device=access_event.get('keeper_version', '') or '',
                     last_access=self._ts_to_datetime(access_event.get('last_created')) if access_event else None,
@@ -1213,9 +1199,9 @@ class ComplianceReportGenerator:
                 }
         
         for record_uid, record_info in self._records.items():
-            owner_email = record_info.get('owner_email', '')
-            owner_user_id = self._email_to_user_id.get(owner_email.lower(), None)
-            in_trash = record_info.get('in_trash', False)
+            owner_email = record_info.owner_email
+            owner_user_id = self._email_to_user_id.get(owner_email.lower(), None) if owner_email else None
+            in_trash = record_info.in_trash
             
             if filtered_user_ids is not None and owner_user_id not in filtered_user_ids:
                 continue
@@ -1260,9 +1246,9 @@ class ComplianceReportGenerator:
         team_names = {team.team_uid: team.name for team in self._enterprise_data.teams.get_all_entities()}
         
         for folder_uid, folder_info in self._shared_folders.items():
-            folder_teams = list(folder_info.get('teams', set()))
-            folder_users = list(folder_info.get('users', set()))
-            folder_records = list(folder_info.get('records', {}).keys())
+            folder_teams = list(folder_info.teams)
+            folder_users = list(folder_info.users)
+            folder_records = list(folder_info.records.keys())
             
             emails = []
             
@@ -1284,7 +1270,8 @@ class ComplianceReportGenerator:
             record_titles = []
             if folder_records:
                 for rec_uid in folder_records:
-                    title = self._records.get(rec_uid, {}).get('title', '')
+                    record = self._records.get(rec_uid)
+                    title = record.title if record else ''
                     record_titles.append(title)
             
             entry = SharedFolderReportEntry(
@@ -1300,16 +1287,8 @@ class ComplianceReportGenerator:
         return entries
     
     @staticmethod
-    def get_headers(report_type: str, show_team_users: bool = False) -> List[str]:
-        """Get column headers for the specified report type.
-        
-        Args:
-            report_type: Type of report ('default', 'team', 'record_access', 'summary', 'shared_folder')
-            show_team_users: For 'team' report, whether to include team_users column (default: False)
-            
-        Returns:
-            List of column header names
-        """
+    def get_headers(report_type: str, show_team_users: bool = False, aging: bool = False) -> List[str]:
+        """Get column headers for the specified report type."""
         if report_type == 'default':
             return ['record_uid', 'title', 'record_type', 'username', 'permissions', 'url', 'in_trash', 'shared_folder_uid']
         elif report_type == 'team':
@@ -1318,9 +1297,11 @@ class ComplianceReportGenerator:
                 headers.append('team_users')
             return headers
         elif report_type == 'record_access':
-            return ['vault_owner', 'record_uid', 'record_title', 'record_type', 'record_url', 'has_attachments', 
-                    'in_trash', 'record_owner', 'ip_address', 'device', 'last_access', 'created', 
-                    'last_pw_change', 'last_modified', 'last_rotation']
+            headers = ['vault_owner', 'record_uid', 'record_title', 'record_type', 'record_url', 'has_attachments', 
+                       'in_trash', 'record_owner', 'ip_address', 'device', 'last_access']
+            if aging:
+                headers.extend(['created', 'last_pw_change', 'last_modified', 'last_rotation'])
+            return headers
         elif report_type == 'summary':
             return ['email', 'total_items', 'total_owned', 'active_owned', 'deleted_owned']
         elif report_type == 'shared_folder':
@@ -1369,9 +1350,10 @@ class ComplianceReportGenerator:
         
         elif report_category == REPORT_TYPE_RECORD_ACCESS:
             access_report_type = kwargs.get('report_type', REPORT_TYPE_HISTORY)
+            include_aging = self._config.aging
             entries = self.generate_record_access_report(report_type=access_report_type)
             for entry in entries:
-                yield [
+                row = [
                     entry.vault_owner or '',
                     entry.record_uid or '',
                     entry.record_title or '',
@@ -1382,12 +1364,16 @@ class ComplianceReportGenerator:
                     entry.record_owner or '',
                     entry.ip_address or '',
                     entry.device or '',
-                    entry.last_access if entry.last_access else '',
-                    entry.created if entry.created else '',
-                    entry.last_pw_change if entry.last_pw_change else '',
-                    entry.last_modified if entry.last_modified else '',
-                    entry.last_rotation if entry.last_rotation else ''
+                    entry.last_access if entry.last_access else ''
                 ]
+                if include_aging:
+                    row.extend([
+                        entry.created if entry.created else '',
+                        entry.last_pw_change if entry.last_pw_change else '',
+                        entry.last_modified if entry.last_modified else '',
+                        entry.last_rotation if entry.last_rotation else ''
+                    ])
+                yield row
         
         elif report_category == REPORT_TYPE_SUMMARY:
             entries = self.generate_summary_report()

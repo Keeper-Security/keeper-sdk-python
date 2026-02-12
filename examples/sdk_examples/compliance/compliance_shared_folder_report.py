@@ -5,6 +5,7 @@ Usage: python compliance_shared_folder_report.py
 """
 
 import getpass
+import logging
 import os
 import sqlite3
 import traceback
@@ -15,6 +16,9 @@ from keepersdk.errors import KeeperApiError
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
 from keepersdk.plugins.sox import compliance_storage as cs
 
+logging.basicConfig(level=logging.INFO, format='%(message)s')
+logger = logging.getLogger(__name__)
+
 TABLE_WIDTH = 180
 COL_WIDTHS = (22, 12, 12, 22, 50, 34)
 
@@ -24,9 +28,9 @@ def login():
     config = configuration.JsonConfigurationStorage()
     
     if not config.get().last_server:
-        print("Available server options:")
+        logger.info("Available server options:")
         for region, host in KEEPER_PUBLIC_HOSTS.items():
-            print(f"  {region}: {host}")
+            logger.info(f"  {region}: {host}")
         server = input('Enter server (default: keepersecurity.com): ').strip() or 'keepersecurity.com'
         config.get().last_server = server
     else:
@@ -43,7 +47,7 @@ def login():
     while not login_auth_context.login_step.is_final():
         if isinstance(login_auth_context.login_step, login_auth.LoginStepDeviceApproval):
             login_auth_context.login_step.send_push(login_auth.DeviceApprovalChannel.KeeperPush)
-            print("Device approval request sent. Approve this device and press Enter to continue.")
+            logger.info("Device approval request sent. Approve this device and press Enter to continue.")
             input()
         elif isinstance(login_auth_context.login_step, login_auth.LoginStepPassword):
             login_auth_context.login_step.verify_password(getpass.getpass('Enter password: '))
@@ -55,7 +59,7 @@ def login():
         logged_in_with_persistent = False
     
     if logged_in_with_persistent:
-        print("Successfully logged in with persistent login")
+        logger.info("Successfully logged in with persistent login")
     
     if isinstance(login_auth_context.login_step, login_auth.LoginStepConnected):
         return login_auth_context.login_step.take_keeper_auth()
@@ -82,29 +86,23 @@ def format_row(values, widths=COL_WIDTHS):
     return ' '.join(formatted)
 
 
+def to_list(val):
+    """Convert a value to a list if not already."""
+    if isinstance(val, list):
+        return val
+    return [val] if val else []
+
+
 def flatten_rows(rows):
-    """Flatten rows with list values into individual rows (like CLI output)."""
+    """Flatten rows with list values into individual rows."""
     flattened = []
     for row in rows:
-        # row format: (shared_folder_uid, team_uid, team_name, record_uid, record_title, email)
         sf_uid = row[0] if len(row) > 0 else ''
-        team_uid = row[1] if len(row) > 1 else ''
-        team_name = row[2] if len(row) > 2 else ''
-        record_uids = row[3] if len(row) > 3 else []
-        record_titles = row[4] if len(row) > 4 else []
-        emails = row[5] if len(row) > 5 else []
-        
-        # Convert to lists if not already
-        if not isinstance(record_uids, list):
-            record_uids = [record_uids] if record_uids else []
-        if not isinstance(record_titles, list):
-            record_titles = [record_titles] if record_titles else []
-        if not isinstance(emails, list):
-            emails = [emails] if emails else []
-        if not isinstance(team_uid, list):
-            team_uid = [team_uid] if team_uid else []
-        if not isinstance(team_name, list):
-            team_name = [team_name] if team_name else []
+        team_uid = to_list(row[1] if len(row) > 1 else '')
+        team_name = to_list(row[2] if len(row) > 2 else '')
+        record_uids = to_list(row[3] if len(row) > 3 else [])
+        record_titles = to_list(row[4] if len(row) > 4 else [])
+        emails = to_list(row[5] if len(row) > 5 else [])
         
         max_rows = max(len(record_uids), len(record_titles), len(emails), 1)
         
@@ -122,30 +120,27 @@ def flatten_rows(rows):
 
 def print_report(rows, headers):
     """Print the shared folder report in table format."""
-    print("\n" + "=" * TABLE_WIDTH)
-    print("SHARED FOLDER REPORT")
-    print("=" * TABLE_WIDTH)
+    logger.info("\n" + "=" * TABLE_WIDTH)
+    logger.info("SHARED FOLDER REPORT")
+    logger.info("=" * TABLE_WIDTH)
     
-    display_headers = [h.replace('_', ' ').title() for h in headers]
-    print(format_row(display_headers))
-    print("-" * TABLE_WIDTH)
+    logger.info(format_row([h.replace('_', ' ').title() for h in headers]))
+    logger.info("-" * TABLE_WIDTH)
     
     flattened = flatten_rows(rows)
     for row in flattened:
-        print(format_row([str(v) if v else '' for v in row]))
+        logger.info(format_row([str(v) if v else '' for v in row]))
     
-    print("=" * TABLE_WIDTH)
-    
-    unique_folders = len(set(r[0] for r in flattened if r[0]))
-    unique_records = len(set(r[3] for r in flattened if r[3]))
-    print(f"\nTotal Rows: {len(flattened)}")
-    print(f"Summary: {unique_folders} shared folders, {unique_records} records")
+    logger.info("=" * TABLE_WIDTH)
+    logger.info(f"\nTotal Rows: {len(flattened)}")
+    logger.info(f"Summary: {len(set(r[0] for r in flattened if r[0]))} shared folders, "
+                f"{len(set(r[3] for r in flattened if r[3]))} records")
 
 
 def generate_shared_folder_report(keeper_auth_context: keeper_auth.KeeperAuth):
     """Generate shared folder report with SQLite caching."""
     if not keeper_auth_context.auth_context.is_enterprise_admin:
-        print("ERROR: Enterprise admin privileges required.")
+        logger.error("ERROR: Enterprise admin privileges required.")
         keeper_auth_context.close()
         return
     
@@ -161,7 +156,7 @@ def generate_shared_folder_report(keeper_auth_context: keeper_auth.KeeperAuth):
         config_path = os.path.expanduser('~/.keeper/config.json')
         compliance_storage = get_compliance_storage(config_path, enterprise_id)
         
-        print("\nLoading enterprise data...")
+        logger.info("\nLoading enterprise data...")
         
         def progress_callback(msg):
             if msg:
@@ -178,9 +173,9 @@ def generate_shared_folder_report(keeper_auth_context: keeper_auth.KeeperAuth):
         print_report(rows, headers)
         
     except KeeperApiError as e:
-        print(f"\nAPI Error: {e}")
+        logger.error(f"\nAPI Error: {e}")
     except Exception as e:
-        print(f"\nError: {e}")
+        logger.error(f"\nError: {e}")
         traceback.print_exc()
     finally:
         if compliance_storage and hasattr(compliance_storage, 'close_connection'):
@@ -191,15 +186,15 @@ def generate_shared_folder_report(keeper_auth_context: keeper_auth.KeeperAuth):
 
 
 def main():
-    print("=" * 60)
-    print("Keeper Compliance Shared Folder Report")
-    print("=" * 60 + "\n")
+    logger.info("=" * 60)
+    logger.info("Keeper Compliance Shared Folder Report")
+    logger.info("=" * 60 + "\n")
     
     keeper_auth_context = login()
     if keeper_auth_context:
         generate_shared_folder_report(keeper_auth_context)
     else:
-        print("Login failed.")
+        logger.error("Login failed.")
 
 
 if __name__ == "__main__":

@@ -17,6 +17,8 @@ from ..helpers import report_utils
 from ..params import KeeperParams
 from .. import api
 
+logger = api.get_logger()
+
 
 class ProgressSpinner:
     """Animated spinner for progress display."""
@@ -114,6 +116,33 @@ def filter_rows(rows: List[List[Any]], patterns: List[str], use_regex: bool = Fa
     return filtered
 
 
+def add_common_arguments(parser: argparse.ArgumentParser):
+    """Add common arguments shared by all compliance subcommands."""
+    rebuild_group = parser.add_mutually_exclusive_group()
+    rebuild_group.add_argument('--rebuild', '-r', action='store_true',
+                              help='rebuild local data from source')
+    rebuild_group.add_argument('--no-rebuild', '-nr', action='store_true',
+                              help='prevent remote data fetching if local cache present')
+    parser.add_argument('--no-cache', '-nc', action='store_true',
+                       help='remove any local non-memory storage of data after report is generated')
+    parser.add_argument('--node', action='store',
+                       help='ID or name of node (defaults to root node)')
+    parser.add_argument('--regex', action='store_true',
+                       help='Allow use of regular expressions in search criteria')
+    parser.add_argument('pattern', type=str, nargs='*',
+                       help='Search string / pattern to filter results by. Multiple values allowed.')
+
+
+def create_progress_callback(spinner: ProgressSpinner):
+    """Create a progress callback function for the spinner."""
+    def callback(msg):
+        if msg:
+            spinner.update(msg)
+        else:
+            spinner.stop()
+    return callback
+
+
 class ComplianceCommand(base.GroupCommand):
     """Group command for all compliance reporting functions."""
     
@@ -136,24 +165,13 @@ class ComplianceReportCommand(base.ArgparseCommand):
             description='Run a compliance report.',
             parents=[base.report_output_parser]
         )
+        add_common_arguments(parser)
         ComplianceReportCommand.add_arguments_to_parser(parser)
         super().__init__(parser)
     
     @staticmethod
     def add_arguments_to_parser(parser: argparse.ArgumentParser):
-        rebuild_group = parser.add_mutually_exclusive_group()
-        rebuild_group.add_argument('--rebuild', '-r', action='store_true',
-                                  help='rebuild local data from source')
-        rebuild_group.add_argument('--no-rebuild', '-nr', action='store_true',
-                                  help='prevent remote data fetching if local cache present (invalid with --rebuild flag)')
-        parser.add_argument('--no-cache', '-nc', action='store_true',
-                           help='remove any local non-memory storage of data after report is generated')
-        parser.add_argument('--node', action='store',
-                           help='ID or name of node (defaults to root node)')
-        parser.add_argument('--regex', action='store_true',
-                           help='Allow use of regular expressions in search criteria')
-        parser.add_argument('pattern', type=str, nargs='*',
-                           help='Search string / pattern to filter results by. Multiple values allowed.')
+        """Add compliance report specific arguments."""
         parser.add_argument('--username', '-u', action='append',
                            help='user(s) whose records are to be included in report')
         parser.add_argument('--job-title', '-jt', action='append',
@@ -177,10 +195,8 @@ class ComplianceReportCommand(base.ArgparseCommand):
         base.require_enterprise_admin(context)
         
         output_format = kwargs.get('format', 'table')
-        node_id = get_node_id(context, kwargs['node']) if kwargs.get('node') else None
-        rebuild = kwargs.get('rebuild', False)
-        no_rebuild = kwargs.get('no_rebuild', False)
         no_cache = kwargs.get('no_cache', False)
+        node_id = get_node_id(context, kwargs['node']) if kwargs.get('node') else None
         
         config = compliance.ComplianceReportConfig(
             username=kwargs.get('username'),
@@ -192,62 +208,38 @@ class ComplianceReportCommand(base.ArgparseCommand):
             deleted_items=kwargs.get('deleted_items', False),
             active_items=kwargs.get('active_items', False),
             node_id=node_id,
-            rebuild=rebuild,
-            no_rebuild=no_rebuild,
+            rebuild=kwargs.get('rebuild', False),
+            no_rebuild=kwargs.get('no_rebuild', False),
             no_cache=no_cache
         )
         
-        compliance_storage = None if no_cache else get_compliance_storage(context)
-        
-        vault_storage = context.vault.vault_data.storage if context.vault else None
         spinner = ProgressSpinner()
         spinner.start('Loading...')
         
-        def progress_callback(msg):
-            if msg:
-                spinner.update(msg)
-            else:
-                spinner.stop()
-        
         generator = compliance.ComplianceReportGenerator(
-            context.enterprise_data,
-            context.auth,
-            config,
-            vault_storage=vault_storage,
-            compliance_storage=compliance_storage,
-            progress_callback=progress_callback
+            context.enterprise_data, context.auth, config,
+            vault_storage=context.vault.vault_data.storage if context.vault else None,
+            compliance_storage=None if no_cache else get_compliance_storage(context),
+            progress_callback=create_progress_callback(spinner)
         )
         
-        try:
-            rows = list(generator.generate_report_rows('default', blank_duplicate_uids=(output_format == 'table')))
-            spinner.stop()
-            headers = compliance.ComplianceReportGenerator.get_headers('default')
-            
-            if output_format != 'json':
-                headers = [report_utils.field_to_title(h) for h in headers]
-            
-            if kwargs.get('pattern'):
-                rows = filter_rows(rows, kwargs['pattern'], use_regex=kwargs.get('regex'))
-            
-            if node_id:
-                print(f'Output is limited to "{kwargs["node"]}" node')
-                print()
-            
-            return report_utils.dump_report_data(
-                rows, headers, fmt=output_format, filename=kwargs.get('output'),
-                title='Compliance Report'
-            )
-        finally:
-            if compliance_storage:
-                if hasattr(compliance_storage, 'close_connection'):
-                    compliance_storage.close_connection()
-                if no_cache and hasattr(compliance_storage, 'database_name'):
-                    db_name = compliance_storage.database_name
-                    if db_name and os.path.exists(db_name):
-                        try:
-                            os.remove(db_name)
-                        except Exception:
-                            pass
+        rows = list(generator.generate_report_rows('default', blank_duplicate_uids=(output_format == 'table')))
+        spinner.stop()
+        
+        headers = compliance.ComplianceReportGenerator.get_headers('default')
+        if output_format != 'json':
+            headers = [report_utils.field_to_title(h) for h in headers]
+        
+        if kwargs.get('pattern'):
+            rows = filter_rows(rows, kwargs['pattern'], use_regex=kwargs.get('regex'))
+        
+        if node_id:
+            logger.info(f'Output is limited to "{kwargs["node"]}" node')
+        
+        return report_utils.dump_report_data(
+            rows, headers, fmt=output_format, filename=kwargs.get('output'),
+            title='Compliance Report'
+        )
 
 
 class ComplianceTeamReportCommand(base.ArgparseCommand):
@@ -259,85 +251,61 @@ class ComplianceTeamReportCommand(base.ArgparseCommand):
             description='Run a report showing which shared folders enterprise teams have access to',
             parents=[base.report_output_parser]
         )
-        rebuild_group = parser.add_mutually_exclusive_group()
-        rebuild_group.add_argument('--rebuild', '-r', action='store_true',
-                                  help='rebuild local data from source')
-        rebuild_group.add_argument('--no-rebuild', '-nr', action='store_true',
-                                  help='prevent remote data fetching if local cache present')
-        parser.add_argument('--no-cache', '-nc', action='store_true',
-                           help='remove any local non-memory storage of data after report is generated')
-        parser.add_argument('--node', action='store', help='ID or name of node')
-        parser.add_argument('--regex', action='store_true', help='Allow use of regular expressions')
-        parser.add_argument('-tu', '--show-team-users', action='store_true', help='show all members of each team')
-        parser.add_argument('pattern', type=str, nargs='*', help='Search pattern to filter results')
+        add_common_arguments(parser)
+        ComplianceTeamReportCommand.add_arguments_to_parser(parser)
         super().__init__(parser)
+    
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
+        """Add team report specific arguments."""
+        parser.add_argument('-tu', '--show-team-users', action='store_true',
+                           help='show all members of each team')
     
     def execute(self, context: KeeperParams, **kwargs) -> Any:
         base.require_login(context)
         base.require_enterprise_admin(context)
         
-        logger = api.get_logger()
         output_format = kwargs.get('format', 'table')
         output_file = kwargs.get('output')
-        show_team_users = kwargs.get('show_team_users', False)
-        rebuild = kwargs.get('rebuild', False)
-        no_rebuild = kwargs.get('no_rebuild', False)
         no_cache = kwargs.get('no_cache', False)
+        show_team_users = kwargs.get('show_team_users', False)
         node_id = get_node_id(context, kwargs.get('node')) if kwargs.get('node') else None
         
         config = compliance.ComplianceReportConfig(
             shared=True,
             show_team_users=show_team_users,
             node_id=node_id,
-            rebuild=rebuild,
-            no_rebuild=no_rebuild,
+            rebuild=kwargs.get('rebuild', False),
+            no_rebuild=kwargs.get('no_rebuild', False),
             no_cache=no_cache
         )
         
-        compliance_storage = None if no_cache else get_compliance_storage(context)
         spinner = ProgressSpinner()
         spinner.start('Loading...')
         
-        def progress_callback(msg):
-            if msg:
-                spinner.update(msg)
-            else:
-                spinner.stop()
-        
         generator = compliance.ComplianceReportGenerator(
             context.enterprise_data, context.auth, config,
-            compliance_storage=compliance_storage, progress_callback=progress_callback
+            compliance_storage=None if no_cache else get_compliance_storage(context),
+            progress_callback=create_progress_callback(spinner)
         )
         
-        try:
-            rows = list(generator.generate_report_rows('team'))
-            spinner.stop()
-            headers = compliance.ComplianceReportGenerator.get_headers('team', show_team_users)
-            if output_format != 'json':
-                headers = [report_utils.field_to_title(h) for h in headers]
-            
-            patterns = kwargs.get('pattern', [])
-            if patterns:
-                rows = filter_rows(rows, patterns, use_regex=kwargs.get('regex'))
-            
-            result = report_utils.dump_report_data(
-                rows, headers, fmt=output_format, filename=output_file, title='Team Access Report'
-            )
-            
-            if output_file:
-                logger.info(f'Report saved to: {os.path.abspath(output_file)}')
-            return result
-        finally:
-            if compliance_storage:
-                if hasattr(compliance_storage, 'close_connection'):
-                    compliance_storage.close_connection()
-                if no_cache and hasattr(compliance_storage, 'database_name'):
-                    db_name = compliance_storage.database_name
-                    if db_name and os.path.exists(db_name):
-                        try:
-                            os.remove(db_name)
-                        except Exception:
-                            pass
+        rows = list(generator.generate_report_rows('team'))
+        spinner.stop()
+        
+        headers = compliance.ComplianceReportGenerator.get_headers('team', show_team_users)
+        if output_format != 'json':
+            headers = [report_utils.field_to_title(h) for h in headers]
+        
+        if kwargs.get('pattern'):
+            rows = filter_rows(rows, kwargs['pattern'], use_regex=kwargs.get('regex'))
+        
+        result = report_utils.dump_report_data(
+            rows, headers, fmt=output_format, filename=output_file, title='Team Access Report'
+        )
+        
+        if output_file:
+            logger.info(f'Report saved to: {os.path.abspath(output_file)}')
+        return result
 
 
 class ComplianceRecordAccessReportCommand(base.ArgparseCommand):
@@ -349,92 +317,72 @@ class ComplianceRecordAccessReportCommand(base.ArgparseCommand):
             description='Run a report showing all records a user has accessed or can access',
             parents=[base.report_output_parser]
         )
-        rebuild_group = parser.add_mutually_exclusive_group()
-        rebuild_group.add_argument('--rebuild', '-r', action='store_true', help='rebuild local data from source')
-        rebuild_group.add_argument('--no-rebuild', '-nr', action='store_true', help='prevent remote data fetching if local cache present')
-        parser.add_argument('--no-cache', '-nc', action='store_true', help='remove local storage after report')
-        parser.add_argument('--node', action='store', help='ID or name of node')
-        parser.add_argument('--regex', action='store_true', help='Allow use of regular expressions')
-        parser.add_argument('--email', '-e', action='append', type=str, help='username(s) or ID(s), use "@all" for all users')
+        add_common_arguments(parser)
+        ComplianceRecordAccessReportCommand.add_arguments_to_parser(parser)
+        super().__init__(parser)
+    
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
+        """Add record access report specific arguments."""
+        parser.add_argument('--email', '-e', action='append', type=str,
+                           help='username(s) or ID(s), use "@all" for all users')
         parser.add_argument('--report-type', action='store', choices=['history', 'vault'], default='history',
                            help='type of record-access data: "history" or "vault"')
-        parser.add_argument('--aging', action='store_true', help='include record-aging data')
-        parser.add_argument('pattern', type=str, nargs='*', help='Search pattern to filter results')
-        super().__init__(parser)
+        parser.add_argument('--aging', action='store_true',
+                           help='include record-aging data')
     
     def execute(self, context: KeeperParams, **kwargs) -> Any:
         base.require_login(context)
         base.require_enterprise_admin(context)
         
-        logger = api.get_logger()
         output_format = kwargs.get('format', 'table')
         output_file = kwargs.get('output')
         report_type = kwargs.get('report_type', 'history')
-        emails = kwargs.get('email', [])
-        rebuild = kwargs.get('rebuild', False)
-        no_rebuild = kwargs.get('no_rebuild', False)
         no_cache = kwargs.get('no_cache', False)
+        aging = kwargs.get('aging', False)
+        emails = kwargs.get('email', [])
         node_id = get_node_id(context, kwargs.get('node')) if kwargs.get('node') else None
         
         config = compliance.ComplianceReportConfig(
             username=emails if emails and '@all' not in emails else None,
             node_id=node_id,
-            rebuild=rebuild,
-            no_rebuild=no_rebuild,
-            no_cache=no_cache
+            rebuild=kwargs.get('rebuild', False),
+            no_rebuild=kwargs.get('no_rebuild', False),
+            no_cache=no_cache,
+            aging=aging
         )
-        
-        compliance_storage = None if no_cache else get_compliance_storage(context)
-        vault_storage = context.vault.vault_data.storage if context.vault else None
         
         spinner = ProgressSpinner()
         spinner.start('Loading...')
         
-        def progress_callback(msg):
-            if msg:
-                spinner.update(msg)
-            else:
-                spinner.stop()
-        
         generator = compliance.ComplianceReportGenerator(
             context.enterprise_data, context.auth, config,
-            vault_storage=vault_storage, compliance_storage=compliance_storage,
-            progress_callback=progress_callback
+            vault_storage=context.vault.vault_data.storage if context.vault else None,
+            compliance_storage=None if no_cache else get_compliance_storage(context),
+            progress_callback=create_progress_callback(spinner)
         )
         
-        try:
-            rows = list(generator.generate_report_rows('record_access', report_type=report_type))
-            spinner.stop()
-            headers = compliance.ComplianceReportGenerator.get_headers('record_access')
-            if output_format != 'json':
-                headers = [report_utils.field_to_title(h) for h in headers]
-            
-            patterns = kwargs.get('pattern', [])
-            if patterns:
-                rows = filter_rows(rows, patterns, use_regex=kwargs.get('regex'))
-            
-            rows.sort(key=lambda r: (r[0] if r[0] else '', r[1] if len(r) > 1 else ''))
-            
-            result = report_utils.dump_report_data(
-                rows, headers, fmt=output_format, filename=output_file,
-                title=f'Record Access Report ({report_type})',
-                group_by=0, column_width=30, sort_by=0
-            )
-            
-            if output_file:
-                logger.info(f'Report saved to: {os.path.abspath(output_file)}')
-            return result
-        finally:
-            if compliance_storage:
-                if hasattr(compliance_storage, 'close_connection'):
-                    compliance_storage.close_connection()
-                if no_cache and hasattr(compliance_storage, 'database_name'):
-                    db_name = compliance_storage.database_name
-                    if db_name and os.path.exists(db_name):
-                        try:
-                            os.remove(db_name)
-                        except Exception:
-                            pass
+        rows = list(generator.generate_report_rows('record_access', report_type=report_type))
+        spinner.stop()
+        
+        headers = compliance.ComplianceReportGenerator.get_headers('record_access', aging=aging)
+        if output_format != 'json':
+            headers = [report_utils.field_to_title(h) for h in headers]
+        
+        if kwargs.get('pattern'):
+            rows = filter_rows(rows, kwargs['pattern'], use_regex=kwargs.get('regex'))
+        
+        rows.sort(key=lambda r: (r[0] or '', r[1] if len(r) > 1 else ''))
+        
+        result = report_utils.dump_report_data(
+            rows, headers, fmt=output_format, filename=output_file,
+            title=f'Record Access Report ({report_type})',
+            group_by=0, column_width=30, sort_by=0
+        )
+        
+        if output_file:
+            logger.info(f'Report saved to: {os.path.abspath(output_file)}')
+        return result
 
 
 class ComplianceSummaryReportCommand(base.ArgparseCommand):
@@ -446,86 +394,60 @@ class ComplianceSummaryReportCommand(base.ArgparseCommand):
             description='Run a summary compliance report',
             parents=[base.report_output_parser]
         )
-        rebuild_group = parser.add_mutually_exclusive_group()
-        rebuild_group.add_argument('--rebuild', '-r', action='store_true', help='rebuild local data from source')
-        rebuild_group.add_argument('--no-rebuild', '-nr', action='store_true', help='prevent remote data fetching if local cache present')
-        parser.add_argument('--no-cache', '-nc', action='store_true', help='remove local storage after report')
-        parser.add_argument('--node', action='store', help='ID or name of node')
-        parser.add_argument('--regex', action='store_true', help='Allow use of regular expressions')
-        parser.add_argument('pattern', type=str, nargs='*', help='Search pattern to filter results')
+        add_common_arguments(parser)
         super().__init__(parser)
     
     def execute(self, context: KeeperParams, **kwargs) -> Any:
         base.require_login(context)
         base.require_enterprise_admin(context)
         
-        logger = api.get_logger()
         output_format = kwargs.get('format', 'table')
         output_file = kwargs.get('output')
-        rebuild = kwargs.get('rebuild', False)
-        no_rebuild = kwargs.get('no_rebuild', False)
         no_cache = kwargs.get('no_cache', False)
         node_id = get_node_id(context, kwargs.get('node')) if kwargs.get('node') else None
         
         config = compliance.ComplianceReportConfig(
-            node_id=node_id, rebuild=rebuild, no_rebuild=no_rebuild, no_cache=no_cache
+            node_id=node_id,
+            rebuild=kwargs.get('rebuild', False),
+            no_rebuild=kwargs.get('no_rebuild', False),
+            no_cache=no_cache
         )
         
-        compliance_storage = None if no_cache else get_compliance_storage(context)
         spinner = ProgressSpinner()
         spinner.start('Loading...')
         
-        def progress_callback(msg):
-            if msg:
-                spinner.update(msg)
-            else:
-                spinner.stop()
-        
         generator = compliance.ComplianceReportGenerator(
             context.enterprise_data, context.auth, config,
-            compliance_storage=compliance_storage, progress_callback=progress_callback
+            compliance_storage=None if no_cache else get_compliance_storage(context),
+            progress_callback=create_progress_callback(spinner)
         )
         
-        try:
-            rows = list(generator.generate_report_rows('summary'))
-            spinner.stop()
-            headers = compliance.ComplianceReportGenerator.get_headers('summary')
-            
-            if node_id:
-                print(f'Output is limited to "{node_id}" node')
-                print()
-            
-            total_items = sum(row[1] for row in rows if len(row) > 1)
-            total_owned = sum(row[2] for row in rows if len(row) > 2)
-            active_owned = sum(row[3] for row in rows if len(row) > 3)
-            deleted_owned = sum(row[4] for row in rows if len(row) > 4)
-            rows.append(['TOTAL', total_items, total_owned, active_owned, deleted_owned])
-            
-            if output_format != 'json':
-                headers = [report_utils.field_to_title(h) for h in headers]
-            
-            patterns = kwargs.get('pattern', [])
-            if patterns:
-                rows = filter_rows(rows, patterns, use_regex=kwargs.get('regex'))
-            
-            result = report_utils.dump_report_data(
-                rows, headers, fmt=output_format, filename=output_file, title='Compliance Summary Report'
-            )
-            
-            if output_file:
-                logger.info(f'Report saved to: {os.path.abspath(output_file)}')
-            return result
-        finally:
-            if compliance_storage:
-                if hasattr(compliance_storage, 'close_connection'):
-                    compliance_storage.close_connection()
-                if no_cache and hasattr(compliance_storage, 'database_name'):
-                    db_name = compliance_storage.database_name
-                    if db_name and os.path.exists(db_name):
-                        try:
-                            os.remove(db_name)
-                        except Exception:
-                            pass
+        rows = list(generator.generate_report_rows('summary'))
+        spinner.stop()
+        
+        if node_id:
+            logger.info(f'Output is limited to "{node_id}" node')
+        
+        total_items = sum(row[1] for row in rows if len(row) > 1)
+        total_owned = sum(row[2] for row in rows if len(row) > 2)
+        active_owned = sum(row[3] for row in rows if len(row) > 3)
+        deleted_owned = sum(row[4] for row in rows if len(row) > 4)
+        rows.append(['TOTAL', total_items, total_owned, active_owned, deleted_owned])
+        
+        headers = compliance.ComplianceReportGenerator.get_headers('summary')
+        if output_format != 'json':
+            headers = [report_utils.field_to_title(h) for h in headers]
+        
+        if kwargs.get('pattern'):
+            rows = filter_rows(rows, kwargs['pattern'], use_regex=kwargs.get('regex'))
+        
+        result = report_utils.dump_report_data(
+            rows, headers, fmt=output_format, filename=output_file, title='Compliance Summary Report'
+        )
+        
+        if output_file:
+            logger.info(f'Report saved to: {os.path.abspath(output_file)}')
+        return result
 
 
 class ComplianceSharedFolderReportCommand(base.ArgparseCommand):
@@ -537,78 +459,61 @@ class ComplianceSharedFolderReportCommand(base.ArgparseCommand):
             description='Run an enterprise-wide shared-folder report',
             parents=[base.report_output_parser]
         )
-        rebuild_group = parser.add_mutually_exclusive_group()
-        rebuild_group.add_argument('--rebuild', '-r', action='store_true', help='rebuild local data from source')
-        rebuild_group.add_argument('--no-rebuild', '-nr', action='store_true', help='prevent remote data fetching if local cache present')
-        parser.add_argument('--no-cache', '-nc', action='store_true', help='remove local storage after report')
-        parser.add_argument('--node', action='store', help='ID or name of node')
-        parser.add_argument('--regex', action='store_true', help='Allow use of regular expressions')
-        parser.add_argument('-tu', '--show-team-users', action='store_true', help='show all members of each team')
-        parser.add_argument('pattern', type=str, nargs='*', help='Search pattern to filter results')
+        add_common_arguments(parser)
+        ComplianceSharedFolderReportCommand.add_arguments_to_parser(parser)
         super().__init__(parser)
+    
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
+        """Add shared folder report specific arguments."""
+        parser.add_argument('-tu', '--show-team-users', action='store_true',
+                           help='show all members of each team')
     
     def execute(self, context: KeeperParams, **kwargs) -> Any:
         base.require_login(context)
         base.require_enterprise_admin(context)
         
-        logger = api.get_logger()
         output_format = kwargs.get('format', 'table')
         output_file = kwargs.get('output')
-        show_team_users = kwargs.get('show_team_users', False)
-        rebuild = kwargs.get('rebuild', False)
-        no_rebuild = kwargs.get('no_rebuild', False)
         no_cache = kwargs.get('no_cache', False)
+        show_team_users = kwargs.get('show_team_users', False)
         node_id = get_node_id(context, kwargs.get('node')) if kwargs.get('node') else None
         
         config = compliance.ComplianceReportConfig(
-            shared=True, show_team_users=show_team_users, node_id=node_id,
-            rebuild=rebuild, no_rebuild=no_rebuild, no_cache=no_cache
+            shared=True,
+            show_team_users=show_team_users,
+            node_id=node_id,
+            rebuild=kwargs.get('rebuild', False),
+            no_rebuild=kwargs.get('no_rebuild', False),
+            no_cache=no_cache
         )
         
-        compliance_storage = None if no_cache else get_compliance_storage(context)
         spinner = ProgressSpinner()
         spinner.start('Loading...')
         
-        def progress_callback(msg):
-            if msg:
-                spinner.update(msg)
-            else:
-                spinner.stop()
-        
         generator = compliance.ComplianceReportGenerator(
             context.enterprise_data, context.auth, config,
-            compliance_storage=compliance_storage, progress_callback=progress_callback
+            compliance_storage=None if no_cache else get_compliance_storage(context),
+            progress_callback=create_progress_callback(spinner)
         )
         
-        try:
-            rows = list(generator.generate_report_rows('shared_folder'))
-            spinner.stop()
-            headers = compliance.ComplianceReportGenerator.get_headers('shared_folder')
-            if output_format != 'json':
-                headers = [report_utils.field_to_title(h) for h in headers]
-            
-            patterns = kwargs.get('pattern', [])
-            if patterns:
-                rows = filter_rows(rows, patterns, use_regex=kwargs.get('regex'))
-            
-            title = '(TU) denotes a user whose membership in a team grants them access' \
-                    if show_team_users else 'Shared Folder Report'
-            
-            result = report_utils.dump_report_data(
-                rows, headers, fmt=output_format, filename=output_file, title=title
-            )
-            
-            if output_file:
-                logger.info(f'Report saved to: {os.path.abspath(output_file)}')
-            return result
-        finally:
-            if compliance_storage:
-                if hasattr(compliance_storage, 'close_connection'):
-                    compliance_storage.close_connection()
-                if no_cache and hasattr(compliance_storage, 'database_name'):
-                    db_name = compliance_storage.database_name
-                    if db_name and os.path.exists(db_name):
-                        try:
-                            os.remove(db_name)
-                        except Exception:
-                            pass
+        rows = list(generator.generate_report_rows('shared_folder'))
+        spinner.stop()
+        
+        headers = compliance.ComplianceReportGenerator.get_headers('shared_folder')
+        if output_format != 'json':
+            headers = [report_utils.field_to_title(h) for h in headers]
+        
+        if kwargs.get('pattern'):
+            rows = filter_rows(rows, kwargs['pattern'], use_regex=kwargs.get('regex'))
+        
+        title = '(TU) denotes a user whose membership in a team grants them access' \
+                if show_team_users else 'Shared Folder Report'
+        
+        result = report_utils.dump_report_data(
+            rows, headers, fmt=output_format, filename=output_file, title=title
+        )
+        
+        if output_file:
+            logger.info(f'Report saved to: {os.path.abspath(output_file)}')
+        return result
