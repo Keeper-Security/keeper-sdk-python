@@ -218,7 +218,7 @@ class ComplianceReportCommand(base.ArgparseCommand):
         
         generator = compliance.ComplianceReportGenerator(
             context.enterprise_data, context.auth, config,
-            vault_storage=context.vault.vault_data.storage if context.vault else None,
+            vault_storage=context.vault.vault_data.storage,
             compliance_storage=None if no_cache else get_compliance_storage(context),
             progress_callback=create_progress_callback(spinner)
         )
@@ -357,7 +357,7 @@ class ComplianceRecordAccessReportCommand(base.ArgparseCommand):
         
         generator = compliance.ComplianceReportGenerator(
             context.enterprise_data, context.auth, config,
-            vault_storage=context.vault.vault_data.storage if context.vault else None,
+            vault_storage=context.vault.vault_data.storage,
             compliance_storage=None if no_cache else get_compliance_storage(context),
             progress_callback=create_progress_callback(spinner)
         )

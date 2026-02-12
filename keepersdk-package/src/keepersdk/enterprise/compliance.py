@@ -183,7 +183,6 @@ class ComplianceReportGenerator:
         auth: keeper_auth.KeeperAuth,
         config: Optional[ComplianceReportConfig] = None,
         vault_storage: Optional[Any] = None,
-        show_progress: bool = False,
         compliance_storage: Optional[Any] = None,
         progress_callback: Optional[Callable[[str], None]] = None
     ) -> None:
@@ -1309,7 +1308,12 @@ class ComplianceReportGenerator:
         else:
             return []
     
-    def generate_report_rows(self, report_category: str, blank_duplicate_uids: bool = False, **kwargs) -> Iterable[List[Any]]:
+    def generate_report_rows(
+        self,
+        report_category: str,
+        blank_duplicate_uids: bool = False,
+        report_type: str = REPORT_TYPE_HISTORY
+    ) -> Iterable[List[Any]]:
         """Generate report rows for the specified report category."""
         if report_category == REPORT_TYPE_DEFAULT:
             entries = self.generate_default_report()
@@ -1349,9 +1353,8 @@ class ComplianceReportGenerator:
                 yield row
         
         elif report_category == REPORT_TYPE_RECORD_ACCESS:
-            access_report_type = kwargs.get('report_type', REPORT_TYPE_HISTORY)
             include_aging = self._config.aging
-            entries = self.generate_record_access_report(report_type=access_report_type)
+            entries = self.generate_record_access_report(report_type=report_type)
             for entry in entries:
                 row = [
                     entry.vault_owner or '',

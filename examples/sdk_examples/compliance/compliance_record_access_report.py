@@ -1,12 +1,9 @@
 """
 Compliance Record Access Report SDK Example
 
-Usage: 
-    python compliance_record_access_report.py           # Default (11 columns)
-    python compliance_record_access_report.py --aging   # Include aging columns (15 columns)
+Usage: python compliance_record_access_report.py
 """
 
-import argparse
 import getpass
 import logging
 import os
@@ -172,21 +169,21 @@ def generate_record_access_report(keeper_auth_context: keeper_auth.KeeperAuth, a
         keeper_auth_context.close()
 
 
-def main():
-    parser = argparse.ArgumentParser(description='Keeper Compliance Record Access Report')
-    parser.add_argument('--aging', action='store_true',
-                        help='Include aging columns (Created, Last Pw Change, Last Modified, Last Rotation)')
-    args = parser.parse_args()
+def main(aging: bool = False):
+    """Run the compliance record access report.
     
+    Args:
+        aging: If True, include aging columns in the report
+    """
     logger.info("=" * 60)
     logger.info("Keeper Compliance Record Access Report")
-    if args.aging:
+    if aging:
         logger.info("(Including aging columns)")
     logger.info("=" * 60 + "\n")
     
     keeper_auth_context = login()
     if keeper_auth_context:
-        generate_record_access_report(keeper_auth_context, aging=args.aging)
+        generate_record_access_report(keeper_auth_context, aging=aging)
     else:
         logger.error("Login failed.")
 
