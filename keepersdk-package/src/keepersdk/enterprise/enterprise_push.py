@@ -12,8 +12,10 @@ from ..enterprise import enterprise_types
 from ..importer import keeper_format, import_utils
 from ..vault import vault_extensions, vault_online
 from ..authentication import keeper_auth
+from ..vault.record_management import TypedRecord
 
 PARAMETER_PATTERN = re.compile(r"\${(\w+)}")
+TRANSFER_RECORD_SUCCESS = "transfer_record_success"
 
 
 def _substitute_value(value: str, values: dict[str, str]) -> str:
@@ -62,7 +64,7 @@ def _get_substitution_values(enterprise: enterprise_types.IEnterpriseData, email
     """Build substitution map for a user: user_email, user_name, generate_password."""
     values = {
         "user_email": email,
-        "generate_password": generator.generate(length=32),
+        "generate_password": generator.KeeperPasswordGenerator(length=32).generate(),
     }
     for u in enterprise.users.get_all_entities():
         if u.username.lower() == email.lower():
@@ -148,7 +150,7 @@ def _build_typed_records_for_user(
     enterprise: enterprise_types.IEnterpriseData,
     email: str,
     record_data: list[dict[str, Any]],
-) -> list:
+) -> list[TypedRecord]:
     """Substitute template params and convert JSON templates to typed records."""
     user_records = []
     for template in record_data:
@@ -162,42 +164,57 @@ def _build_typed_records_for_user(
 
 def _build_records_add_request(
     auth: keeper_auth.KeeperAuth,
-    typed_records: list,
+    vault: vault_online.VaultOnline,
+    typed_records: list[TypedRecord],
     user_ec_key: Any,
     user_rsa_key: Any,
-    record_keys_out: dict[str, Any],
+    record_keys_out: dict[str, bytes],
 ) -> record_pb2.RecordsAddRequest:
     """Build RecordsAddRequest and fill record_keys_out with uid -> encrypted_key for transfer."""
     rq = record_pb2.RecordsAddRequest()
     for record in typed_records:
-        record.uid = utils.generate_uid()
-        record.record_key = utils.generate_aes_key()
-        if user_ec_key:
-            encrypted_record_key = crypto.encrypt_ec(record.record_key, user_ec_key)
-        else:
-            encrypted_record_key = crypto.encrypt_rsa(record.record_key, user_rsa_key)
-        record_keys_out[record.uid] = encrypted_record_key
-
-        add_record = record_pb2.RecordAdd()
-        add_record.record_uid = utils.base64_url_decode(record.uid)
-        add_record.record_key = crypto.encrypt_aes_v2(record.record_key, auth.auth_context.data_key)
-        add_record.client_modified_time = utils.current_milli_time()
-        add_record.folder_type = record_pb2.user_folder
-
-        data = vault_extensions.extract_typed_record_data(record)
-        json_data = vault_extensions.get_padded_json_bytes(data)
-        add_record.data = crypto.encrypt_aes_v2(json_data, record.record_key)
-
-        if auth.auth_context.enterprise_ec_public_key:
-            audit_data = vault_extensions.extract_audit_data(record)
-            if audit_data:
-                add_record.audit.version = 0
-                add_record.audit.data = crypto.encrypt_ec(
-                    json.dumps(audit_data).encode("utf-8"),
-                    auth.auth_context.enterprise_ec_public_key,
-                )
+        add_record, uid, encrypted_key = _build_single_record_add(
+            auth, vault, record, user_ec_key, user_rsa_key
+        )
+        record_keys_out[uid] = encrypted_key
         rq.records.append(add_record)
     return rq
+
+
+def _build_single_record_add(
+    auth: keeper_auth.KeeperAuth,
+    vault: vault_online.VaultOnline,
+    record: TypedRecord,
+    user_ec_key: Any,
+    user_rsa_key: Any,
+) -> tuple[record_pb2.RecordAdd, str, bytes]:
+    """Build one RecordAdd and return (add_record, record_uid, encrypted_record_key). Mutates record.uid and record.record_key."""
+    record.uid = utils.generate_uid()
+    record.record_key = utils.generate_aes_key()
+    if user_ec_key:
+        encrypted_record_key = crypto.encrypt_ec(record.record_key, user_ec_key)
+    else:
+        encrypted_record_key = crypto.encrypt_rsa(record.record_key, user_rsa_key)
+
+    add_record = record_pb2.RecordAdd()
+    add_record.record_uid = utils.base64_url_decode(record.uid)
+    add_record.record_key = crypto.encrypt_aes_v2(record.record_key, auth.auth_context.data_key)
+    add_record.client_modified_time = utils.current_milli_time()
+    add_record.folder_type = record_pb2.user_folder
+
+    data = vault_extensions.extract_typed_record_data(record, vault.vault_data.get_record_type_by_name(record.record_type))
+    json_data = vault_extensions.get_padded_json_bytes(data)
+    add_record.data = crypto.encrypt_aes_v2(json_data, record.record_key)
+
+    if auth.auth_context.enterprise_ec_public_key:
+        audit_data = vault_extensions.extract_audit_data(record)
+        if audit_data:
+            add_record.audit.version = 0
+            add_record.audit.data = crypto.encrypt_ec(
+                json.dumps(audit_data).encode("utf-8"),
+                auth.auth_context.enterprise_ec_public_key,
+            )
+    return add_record, record.uid, encrypted_record_key
 
 
 def _add_transfer_and_cleanup(
@@ -210,13 +227,15 @@ def _add_transfer_and_cleanup(
     rs = auth.execute_auth_rest(
         "vault/records_add", add_request, response_type=record_pb2.RecordsModifyResponse
     )
-    pre_delete_rq = {"command": "pre_delete", "objects": []}
+    if not rs:
+        raise ValueError("Failed to add records")
+    pre_delete_objects = []
     transfer_rq = record_pb2.RecordsOnwershipTransferRequest()
 
     for rec in rs.records:
         if rec.status == record_pb2.RS_SUCCESS:
             record_uid = utils.base64_url_encode(rec.record_uid)
-            pre_delete_rq["objects"].append({
+            pre_delete_objects.append({
                 "from_type": "user_folder",
                 "delete_resolution": "unlink",
                 "object_uid": record_uid,
@@ -245,11 +264,13 @@ def _add_transfer_and_cleanup(
         transfer_rq,
         response_type=record_pb2.RecordsOnwershipTransferResponse,
     )
+    if not rs1:
+        raise ValueError("Failed to transfer records")
     success_count = sum(
-        1 for trec in rs1.transferRecordStatus if trec.status == "transfer_record_success"
+        1 for trec in rs1.transferRecordStatus if trec.status == TRANSFER_RECORD_SUCCESS
     )
     for trec in rs1.transferRecordStatus:
-        if trec.status != "transfer_record_success":
+        if trec.status != TRANSFER_RECORD_SUCCESS:
             logging.warning("User: %s Transfer Record Error: (%s) %s", email, trec.status, trec.message)
     logging.info(
         'Pushed %d %s to "%s"',
@@ -258,13 +279,16 @@ def _add_transfer_and_cleanup(
         email,
     )
 
-    if not pre_delete_rq["objects"]:
+    if not pre_delete_objects:
         return
-    pre_delete_rs = auth.execute_auth_rest("vault/pre_delete", pre_delete_rq)
+    pre_delete_rq = {"command": "pre_delete", "objects": pre_delete_objects}
+    pre_delete_rs = auth.execute_auth_command(pre_delete_rq)
+    if not pre_delete_rs:
+        raise ValueError("Failed to process delete records request")
     if pre_delete_rs.get("result") == "success":
         pdr = pre_delete_rs["pre_delete_response"]
         delete_rq = {"command": "delete", "pre_delete_token": pdr["pre_delete_token"]}
-        auth.execute_auth_rest("vault/delete", delete_rq)
+        auth.execute_auth_command(delete_rq)
 
 
 def _process_one_recipient(
@@ -296,6 +320,7 @@ def _process_one_recipient(
     record_keys_for_user = {}
     add_request = _build_records_add_request(
         auth=auth,
+        vault=vault,
         typed_records=typed_records,
         user_ec_key=user_ec_key,
         user_rsa_key=user_rsa_key,
