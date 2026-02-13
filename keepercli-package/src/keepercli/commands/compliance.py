@@ -196,7 +196,8 @@ class ComplianceReportCommand(base.ArgparseCommand):
         
         output_format = kwargs.get('format', 'table')
         no_cache = kwargs.get('no_cache', False)
-        node_id = get_node_id(context.enterprise_data, kwargs['node']) if kwargs.get('node') else None
+        enterprise_data = context.enterprise_data
+        node_id = get_node_id(enterprise_data, kwargs['node']) if kwargs.get('node') else None
         
         config = compliance.ComplianceReportConfig(
             username=kwargs.get('username'),
@@ -217,7 +218,7 @@ class ComplianceReportCommand(base.ArgparseCommand):
         spinner.start('Loading...')
         
         generator = compliance.ComplianceReportGenerator(
-            context.enterprise_data, context.auth, config,
+            enterprise_data, context.auth, config,
             vault_storage=context.vault.vault_data.storage,
             compliance_storage=None if no_cache else get_compliance_storage(context),
             progress_callback=create_progress_callback(spinner)
@@ -269,7 +270,8 @@ class ComplianceTeamReportCommand(base.ArgparseCommand):
         output_file = kwargs.get('output')
         no_cache = kwargs.get('no_cache', False)
         show_team_users = kwargs.get('show_team_users', False)
-        node_id = get_node_id(context.enterprise_data, kwargs.get('node')) if kwargs.get('node') else None
+        enterprise_data = context.enterprise_data
+        node_id = get_node_id(enterprise_data, kwargs.get('node')) if kwargs.get('node') else None
         
         config = compliance.ComplianceReportConfig(
             shared=True,
@@ -284,7 +286,7 @@ class ComplianceTeamReportCommand(base.ArgparseCommand):
         spinner.start('Loading...')
         
         generator = compliance.ComplianceReportGenerator(
-            context.enterprise_data, context.auth, config,
+            enterprise_data, context.auth, config,
             compliance_storage=None if no_cache else get_compliance_storage(context),
             progress_callback=create_progress_callback(spinner)
         )
@@ -341,7 +343,8 @@ class ComplianceRecordAccessReportCommand(base.ArgparseCommand):
         no_cache = kwargs.get('no_cache', False)
         aging = kwargs.get('aging', False)
         emails = kwargs.get('email', [])
-        node_id = get_node_id(context.enterprise_data, kwargs.get('node')) if kwargs.get('node') else None
+        enterprise_data = context.enterprise_data
+        node_id = get_node_id(enterprise_data, kwargs.get('node')) if kwargs.get('node') else None
         
         config = compliance.ComplianceReportConfig(
             username=emails if emails and '@all' not in emails else None,
@@ -356,7 +359,7 @@ class ComplianceRecordAccessReportCommand(base.ArgparseCommand):
         spinner.start('Loading...')
         
         generator = compliance.ComplianceReportGenerator(
-            context.enterprise_data, context.auth, config,
+            enterprise_data, context.auth, config,
             vault_storage=context.vault.vault_data.storage,
             compliance_storage=None if no_cache else get_compliance_storage(context),
             progress_callback=create_progress_callback(spinner)
@@ -404,7 +407,8 @@ class ComplianceSummaryReportCommand(base.ArgparseCommand):
         output_format = kwargs.get('format', 'table')
         output_file = kwargs.get('output')
         no_cache = kwargs.get('no_cache', False)
-        node_id = get_node_id(context.enterprise_data, kwargs.get('node')) if kwargs.get('node') else None
+        enterprise_data = context.enterprise_data
+        node_id = get_node_id(enterprise_data, kwargs.get('node')) if kwargs.get('node') else None
         
         config = compliance.ComplianceReportConfig(
             node_id=node_id,
@@ -417,7 +421,7 @@ class ComplianceSummaryReportCommand(base.ArgparseCommand):
         spinner.start('Loading...')
         
         generator = compliance.ComplianceReportGenerator(
-            context.enterprise_data, context.auth, config,
+            enterprise_data, context.auth, config,
             compliance_storage=None if no_cache else get_compliance_storage(context),
             progress_callback=create_progress_callback(spinner)
         )
@@ -477,7 +481,8 @@ class ComplianceSharedFolderReportCommand(base.ArgparseCommand):
         output_file = kwargs.get('output')
         no_cache = kwargs.get('no_cache', False)
         show_team_users = kwargs.get('show_team_users', False)
-        node_id = get_node_id(context.enterprise_data, kwargs.get('node')) if kwargs.get('node') else None
+        enterprise_data = context.enterprise_data
+        node_id = get_node_id(enterprise_data, kwargs.get('node')) if kwargs.get('node') else None
         
         config = compliance.ComplianceReportConfig(
             shared=True,
@@ -492,7 +497,7 @@ class ComplianceSharedFolderReportCommand(base.ArgparseCommand):
         spinner.start('Loading...')
         
         generator = compliance.ComplianceReportGenerator(
-            context.enterprise_data, context.auth, config,
+            enterprise_data, context.auth, config,
             compliance_storage=None if no_cache else get_compliance_storage(context),
             progress_callback=create_progress_callback(spinner)
         )

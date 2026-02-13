@@ -11,6 +11,7 @@ from ..authentication import keeper_auth
 from ..proto import enterprise_pb2
 from .. import crypto, utils
 from . import enterprise_types
+from ..plugins.sox import storage_types as st
 
 
 API_EVENT_SUMMARY_ROW_LIMIT = 1000
@@ -426,8 +427,6 @@ class ComplianceReportGenerator:
             return
         
         try:
-            from ..plugins.sox import storage_types as st
-            
             perms = []
             for (record_uid, user_id), bits in self._record_permissions.items():
                 link = st.StorageRecordPermissions()
@@ -505,7 +504,7 @@ class ComplianceReportGenerator:
             data_json = crypto.decrypt_ec(encrypted_data, ec_key)
             return json.loads(data_json.decode('utf-8'))
         except Exception as e:
-            logger.debug('Failed to decrypt record data: %s', e)
+            logger.debug(f'Failed to decrypt record data: {e}')
             return {}
     
     def _update_permissions_lookup(
@@ -716,7 +715,7 @@ class ComplianceReportGenerator:
                     if folder.shared_folder_uid not in self._record_shared_folders[link.record_uid]:
                         self._record_shared_folders[link.record_uid].append(folder.shared_folder_uid)
         except Exception as e:
-            logger.error('Error extracting shared folders from vault: %s', e)
+            logger.error(f'Error extracting shared folders from vault: {e}')
     
     def _process_audit_records(self, audit_records) -> None:
         """Process audit records to extract trash and attachment flags."""
@@ -1290,22 +1289,22 @@ class ComplianceReportGenerator:
     @staticmethod
     def get_headers(report_type: str, show_team_users: bool = False, aging: bool = False) -> List[str]:
         """Get column headers for the specified report type."""
-        if report_type == 'default':
+        if report_type == REPORT_TYPE_DEFAULT:
             return ['record_uid', 'title', 'record_type', 'username', 'permissions', 'url', 'in_trash', 'shared_folder_uid']
-        elif report_type == 'team':
+        elif report_type == REPORT_TYPE_TEAM:
             headers = ['team_name', 'team_uid', 'shared_folder_name', 'shared_folder_uid', 'permissions', 'records']
             if show_team_users:
                 headers.append('team_users')
             return headers
-        elif report_type == 'record_access':
+        elif report_type == REPORT_TYPE_RECORD_ACCESS:
             headers = ['vault_owner', 'record_uid', 'record_title', 'record_type', 'record_url', 'has_attachments', 
                        'in_trash', 'record_owner', 'ip_address', 'device', 'last_access']
             if aging:
                 headers.extend(['created', 'last_pw_change', 'last_modified', 'last_rotation'])
             return headers
-        elif report_type == 'summary':
+        elif report_type == REPORT_TYPE_SUMMARY:
             return ['email', 'total_items', 'total_owned', 'active_owned', 'deleted_owned']
-        elif report_type == 'shared_folder':
+        elif report_type == REPORT_TYPE_SHARED_FOLDER:
             return ['shared_folder_uid', 'team_uid', 'team_name', 'record_uid', 'record_title', 'email']
         else:
             return []
