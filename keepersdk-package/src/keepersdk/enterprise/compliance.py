@@ -25,6 +25,7 @@ REPORT_TYPE_SUMMARY = 'summary'
 REPORT_TYPE_SHARED_FOLDER = 'shared_folder'
 REPORT_TYPE_HISTORY = 'history'
 REPORT_TYPE_VAULT = 'vault'
+REPORT_TYPE_EXTERNAL_SHARES = 'external_shares'
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +140,7 @@ class ComplianceReportConfig:
     no_rebuild: bool = False
     no_cache: bool = False
     cache_max_age_days: int = 1
+    external_share_type: str = 'all'
 
 
 @dataclass
@@ -677,6 +679,7 @@ class ComplianceReportGenerator:
                     self._process_user_record_permissions(rs.userRecords)
                     self._process_shared_folder_users(rs.sharedFolderUsers)
                     self._process_shared_folder_teams(rs.sharedFolderTeams)
+                    self._process_user_profiles(getattr(rs, 'userProfiles', []))
                     
                     if self._progress_callback:
                         pct = ((batch_idx + 1) / total_batches) * 100
@@ -814,7 +817,18 @@ class ComplianceReportGenerator:
                     self._update_permissions_lookup(record_uid, user_id, perm_bits)
         
         logger.debug(f'Processed {len(sf_teams)} shared folder team links')
-    
+
+    def _process_user_profiles(self, user_profiles) -> None:
+        """Merge user profiles (e.g. from compliance response) into email lookup for external users."""
+        for profile in user_profiles:
+            try:
+                user_id = profile.enterpriseUserId
+                email = getattr(profile, 'email', None) or getattr(profile, 'username', '')
+                if user_id and email:
+                    self._user_id_to_email[user_id] = email if isinstance(email, str) else email.decode('utf-8')
+            except Exception:
+                continue
+
     def _build_permissions_lookup(self) -> Dict[Tuple[str, str], str]:
         """Build final permissions lookup from all sources."""
         permissions_lookup = {}
@@ -1283,9 +1297,67 @@ class ComplianceReportGenerator:
                 email=emails if emails else None
             )
             entries.append(entry)
-        
+
         return entries
-    
+
+    def generate_external_shares_report(self, share_type: Optional[str] = None) -> List[List[Any]]:
+        if share_type is None:
+            share_type = getattr(self._config, 'external_share_type', 'all') or 'all'
+        self._build_user_lookups()
+        self._build_user_teams_lookup()
+        self._fetch_preliminary_compliance_data()
+        self._fetch_full_compliance_data()
+
+        enterprise_user_ids = {u.enterprise_user_id for u in self._enterprise_data.users.get_all_entities()}
+        all_user_ids = set()
+        for (_, user_id) in self._record_permissions:
+            all_user_ids.add(user_id)
+        for folder_info in self._shared_folders.values():
+            all_user_ids.update(folder_info.users)
+        external_user_ids = {uid for uid in all_user_ids if (uid >> 32) == 0 or uid not in enterprise_user_ids}
+
+        permissions_lookup = self._build_permissions_lookup()
+
+        def get_direct_shares():
+            rec_shares = {}
+            for (record_uid, user_id) in self._record_permissions:
+                if user_id not in external_user_ids:
+                    continue
+                if record_uid not in rec_shares:
+                    rec_shares[record_uid] = set()
+                rec_shares[record_uid].add(user_id)
+            return {uid: uids for uid, uids in rec_shares.items() if self._records.get(uid, None) and self._records[uid].shared}
+
+        def get_sf_shares():
+            sf_shares = {}
+            for folder_uid, folder_info in self._shared_folders.items():
+                ext_in_sf = external_user_ids & folder_info.users
+                if ext_in_sf:
+                    sf_shares[folder_uid] = ext_in_sf
+            return sf_shares
+
+        rows = []
+        if share_type in ('direct', 'all'):
+            direct_shares = get_direct_shares()
+            for record_uid, target_ids in direct_shares.items():
+                rec = self._records.get(record_uid)
+                name = (rec.title if rec else '') or ''
+                for target_id in target_ids:
+                    email = self._user_id_to_email.get(target_id, '')
+                    perms = permissions_lookup.get((record_uid, email), 'read-only')
+                    row = [record_uid, name, 'Direct', email, perms]
+                    rows.append(row)
+
+        if share_type in ('shared-folder', 'all'):
+            sf_shares = get_sf_shares()
+            for folder_uid, target_ids in sf_shares.items():
+                for target_id in target_ids:
+                    email = self._user_id_to_email.get(target_id, '')
+                    row = [folder_uid, '', 'Shared Folder', email, '']
+                    rows.append(row)
+
+        return rows
+
     @staticmethod
     def get_headers(report_type: str, show_team_users: bool = False, aging: bool = False) -> List[str]:
         """Get column headers for the specified report type."""
@@ -1306,6 +1378,8 @@ class ComplianceReportGenerator:
             return ['email', 'total_items', 'total_owned', 'active_owned', 'deleted_owned']
         elif report_type == REPORT_TYPE_SHARED_FOLDER:
             return ['shared_folder_uid', 'team_uid', 'team_name', 'record_uid', 'record_title', 'email']
+        elif report_type == REPORT_TYPE_EXTERNAL_SHARES:
+            return ['uid', 'name', 'type', 'shared_to', 'permissions']
         else:
             return []
     
@@ -1401,6 +1475,11 @@ class ComplianceReportGenerator:
                     entry.record_title,
                     entry.email
                 ]
+
+        elif report_category == REPORT_TYPE_EXTERNAL_SHARES:
+            rows = self.generate_external_shares_report()
+            for row in rows:
+                yield row
 
 
 def get_preliminary_compliance_data(
