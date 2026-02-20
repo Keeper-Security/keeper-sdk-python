@@ -90,7 +90,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
     if not scopes or bool(scopes & base.CommandScope.Enterprise):
         from .commands import (enterprise_info, enterprise_node, enterprise_role, enterprise_team, enterprise_user, enterprise_create_user,
                                importer_commands, audit_report, audit_alert, audit_log, transfer_account, pedm_admin, msp, user_report,
-                               aging_report, action_report, security_audit_report, enterprise_push)
+                               aging_report, action_report, security_audit_report, enterprise_push, compliance)
         from .commands.pam import keeper_pam
 
         commands.register_command('create-user', enterprise_create_user.CreateEnterpriseUserCommand(), base.CommandScope.Enterprise, 'ecu')
@@ -114,5 +114,6 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('security-audit-report', security_audit_report.SecurityAuditReportCommand(), base.CommandScope.Enterprise, 'sar')
         commands.register_command('aging-report', aging_report.AgingReportCommand(), base.CommandScope.Enterprise, 'ar')
         commands.register_command('action-report', action_report.ActionReportCommand(), base.CommandScope.Enterprise, 'acr')
+        commands.register_command('compliance', compliance.ComplianceCommand(), base.CommandScope.Enterprise, 'cr')
         commands.register_command('pam', keeper_pam.PAMControllerCommand(), base.CommandScope.Enterprise)
         commands.register_command('enterprise-push', enterprise_push.EnterprisePushCommand(), base.CommandScope.Enterprise, 'ep')
