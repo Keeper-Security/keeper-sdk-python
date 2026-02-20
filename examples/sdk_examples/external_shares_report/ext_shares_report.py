@@ -1,4 +1,4 @@
-"""External Shares Report SDK Example. Usage: python ext_shares_report.py"""
+"""External Shares Report SDK example."""
 
 import getpass
 import logging

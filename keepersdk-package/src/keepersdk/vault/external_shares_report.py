@@ -1,34 +1,15 @@
-"""External (one-time) shares report for Keeper SDK.
-
-Generates a report of all one-time share links (external shares) in the vault.
-Useful for auditing and listing share-create / share-list style links across all records.
-
-Usage:
-    from keepersdk.vault import external_shares_report
-
-    result = external_shares_report.run_external_shares_report(
-        vault, include_expired=False, share_type='all'
-    )
-    for row in result.rows:
-        print(row)
-"""
+"""One-time (external) shares report for Keeper SDK."""
 
 import dataclasses
 import datetime
-from typing import Any, List, Optional
+from typing import Any, List
 
-from . import vault_online, vault_record
+from . import vault_online
 from . import ksm_management, share_management_utils
 from .. import utils
 
-
-# Record versions that can have external shares (standard password/typed records)
 SUPPORTED_RECORD_VERSIONS = (2, 3)
-
-# Max record UIDs per get_app_info request (align with ksm_management / share-list)
 MAX_BATCH_SIZE = 990
-
-# Share type filter: direct = record has direct (user) shares; shared-folder = in a shared folder; all = both
 SHARE_TYPE_ALL = 'all'
 SHARE_TYPE_DIRECT = 'direct'
 SHARE_TYPE_SHARED_FOLDER = 'shared-folder'
@@ -49,15 +30,12 @@ REPORT_TITLE = 'External Shares Report (One-Time Share Links)'
 
 @dataclasses.dataclass
 class ExternalSharesReportResult:
-    """Result of running an external shares report."""
-
     rows: List[List[Any]]
     headers: List[str]
     report_title: str
 
 
 def _get_record_uids_for_report(vault: vault_online.VaultOnline) -> List[str]:
-    """Collect record UIDs that may have external shares (version 2 or 3)."""
     uids: List[str] = []
     for record_info in vault.vault_data.records():
         if record_info.version not in SUPPORTED_RECORD_VERSIONS:
@@ -67,13 +45,11 @@ def _get_record_uids_for_report(vault: vault_online.VaultOnline) -> List[str]:
 
 
 def _record_title(vault: vault_online.VaultOnline, record_uid: str) -> str:
-    """Return record title for a given UID."""
     rec = vault.vault_data.get_record(record_uid=record_uid)
     return rec.title if rec else ''
 
 
 def _record_share_type_mask(vault: vault_online.VaultOnline, record_uids: List[str]) -> dict:
-    """Return dict record_uid -> (has_direct_share, has_shared_folder)."""
     if not record_uids:
         return {}
     try:
@@ -106,7 +82,6 @@ def _build_report_rows(
     include_expired: bool,
     share_type: str = SHARE_TYPE_ALL,
 ) -> List[List[Any]]:
-    """Fetch app info for all records and build report rows for external shares only."""
     record_uids = _get_record_uids_for_report(vault)
     if not record_uids:
         return []
@@ -189,16 +164,6 @@ def run_external_shares_report(
     include_expired: bool = False,
     share_type: str = SHARE_TYPE_ALL,
 ) -> ExternalSharesReportResult:
-    """Generate a report of all external (one-time) share links in the vault.
-
-    Args:
-        vault: The VaultOnline instance (must be synced).
-        include_expired: If True, include expired share links in the report.
-        share_type: Filter by share type: 'direct', 'shared-folder', or 'all'.
-
-    Returns:
-        ExternalSharesReportResult with rows, headers, and report_title.
-    """
     rows = _build_report_rows(
         vault,
         include_expired=include_expired,

@@ -679,7 +679,7 @@ class ComplianceReportGenerator:
                     self._process_user_record_permissions(rs.userRecords)
                     self._process_shared_folder_users(rs.sharedFolderUsers)
                     self._process_shared_folder_teams(rs.sharedFolderTeams)
-                    self._process_user_profiles(getattr(rs, 'userProfiles', []))
+                    self._process_user_profiles(rs.userProfiles)
                     
                     if self._progress_callback:
                         pct = ((batch_idx + 1) / total_batches) * 100
@@ -1341,7 +1341,7 @@ class ComplianceReportGenerator:
             direct_shares = get_direct_shares()
             for record_uid, target_ids in direct_shares.items():
                 rec = self._records.get(record_uid)
-                name = (rec.title if rec else '') or ''
+                name = (rec.title or '') if rec else ''
                 for target_id in target_ids:
                     email = self._user_id_to_email.get(target_id, '')
                     perms = permissions_lookup.get((record_uid, email), 'read-only')
