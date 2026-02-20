@@ -2,13 +2,14 @@ import argparse
 import base64
 import getpass
 import json
-from typing import Any, Optional, Set
+from typing import Any, List, Optional, Set
 
+from keepersdk.enterprise import breachwatch_report
 from keepersdk.proto import breachwatch_pb2, client_pb2
 from keepersdk.vault import vault_online, vault_record
 from keepersdk import crypto, utils
 
-from . import base
+from . import base, enterprise_utils
 from .. import api
 from ..helpers import report_utils, record_utils
 from ..params import KeeperParams
@@ -22,6 +23,69 @@ STATUS_TO_TEXT: dict[int, str] = {
     }
 
 UPDATE_BW_RECORD_URL = 'breachwatch/update_record_data'
+BW_REPORT_DEFAULT_FORMAT = 'table'
+
+
+def _validate_breachwatch_report(context: KeeperParams) -> None:
+    base.require_login(context)
+    base.require_enterprise_admin(context)
+    if not context.auth.auth_context.license.get('breachWatchEnabled'):
+        raise base.CommandError(
+            'BreachWatch is not enabled for this enterprise. '
+            'Please contact your administrator to enable this feature.'
+        )
+
+
+def _format_report_headers(headers: List[str], fmt: str) -> List[str]:
+    return [report_utils.field_to_title(h) for h in headers] if fmt == BW_REPORT_DEFAULT_FORMAT else headers
+
+
+class BreachWatchReportCommand(base.ArgparseCommand, enterprise_utils.EnterpriseMixin):
+    def __init__(self):
+        parser = argparse.ArgumentParser(
+            prog='breachwatch report',
+            description='Run a BreachWatch security audit report (enterprise).',
+            parents=[base.report_output_parser]
+        )
+        super().__init__(parser)
+
+    def execute(self, context: KeeperParams, **kwargs) -> Any:
+        _validate_breachwatch_report(context)
+        logger.info('Generating BreachWatch security audit report...')
+
+        result = breachwatch_report.run_breachwatch_report(
+            context.enterprise_data, context.auth,
+            node_ids=None,
+            save_report=True,
+        )
+        fmt = kwargs.get('format', BW_REPORT_DEFAULT_FORMAT)
+        out = kwargs.get('output')
+
+        if result.has_errors:
+            report_result = report_utils.dump_report_data(
+                result.error_rows,
+                _format_report_headers(result.error_headers, fmt),
+                fmt=fmt,
+                filename=out,
+                title=result.error_title,
+            )
+            if report_result is None:
+                logger.error('\nNote: ' + result.fix_instructions)
+            else:
+                report_result += '\nNote: ' + result.fix_instructions
+            return report_result
+
+        if result.saved_count:
+            logger.info(f'Saved {result.saved_count} updated security report(s).')
+
+        return report_utils.dump_report_data(
+            result.rows,
+            _format_report_headers(result.headers, fmt),
+            fmt=fmt,
+            filename=out,
+            title=result.report_title,
+        )
+
 
 class BreachWatchCommand(base.GroupCommand):
     def __init__(self):
@@ -30,6 +94,7 @@ class BreachWatchCommand(base.GroupCommand):
         self.register_command(BreachWatchIgnoreCommand(), 'ignore')
         self.register_command(BreachWatchScanCommand(), 'scan')
         self.register_command(BreachWatchPasswordCommand(), 'password')
+        self.register_command(BreachWatchReportCommand(), 'report', 'r')
 
 class BreachWatchListCommand(base.ArgparseCommand):
     def __init__(self):
