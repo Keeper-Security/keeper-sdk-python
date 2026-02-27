@@ -290,6 +290,8 @@ class LoginFlow:
         ]
         if pyperclip:
             menu.append(("c", "Copy SSO Login URL to clipboard."))
+        else:
+            menu.append(("u", "Show SSO Login URL."))
         try:
             wb = webbrowser.get()
             menu.append(("o", "Navigate to SSO Login URL with the default web browser."))
@@ -297,6 +299,7 @@ class LoginFlow:
             wb = None
         if pyperclip:
             menu.append(("p", "Paste SSO Token from clipboard."))
+        menu.append(("t", "Enter SSO Token manually."))
         menu.append(("q", "Quit SSO authentication attempt and return to Commander prompt."))
 
         lines = [
@@ -305,7 +308,7 @@ class LoginFlow:
             step.sso_login_url,
             "Navigate to SSO Login URL with your browser and complete authentication.",
             "Copy a returned SSO Token into clipboard."
-            + (" Paste that token into Commander." if pyperclip else " Then paste the token below (or install pyperclip for clipboard support)."),
+            + (" Paste that token into Commander." if pyperclip else " Then use option 't' to enter the token manually."),
             'NOTE: To copy SSO Token please click "Copy authentication token" '
             'button on "SSO Connect" page.',
             "",
@@ -330,6 +333,12 @@ class LoginFlow:
                         print("Failed to copy SSO Login URL to clipboard.")
                 else:
                     print("Clipboard not available (install pyperclip).")
+            elif token == "u":
+                token = None
+                if not pyperclip:
+                    print("\nSSO Login URL:", step.sso_login_url, "\n")
+                else:
+                    print("Unsupported menu option (use 'c' to copy URL).")
             elif token == "o":
                 token = None
                 if wb:
@@ -345,8 +354,10 @@ class LoginFlow:
                         token = ""
                         print("Failed to paste from clipboard")
                 else:
-                    token = ""
-                    print("Clipboard not available (install pyperclip).")
+                    token = None
+                    print("Clipboard not available (use 't' to enter token manually).")
+            elif token == "t":
+                token = getpass.getpass("Enter SSO Token: ").strip()
             else:
                 if len(token) < 10:
                     print(f"Unsupported menu option: {token}")
@@ -395,6 +406,19 @@ class LoginFlow:
         return login_auth.TwoFactorDuration.EveryLogin
 
 
+def enable_persistent_login(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
+    """
+    Enable persistent login and register data key for device.
+    Sets persistent_login to on and logout_timer to 30 days.
+    """
+    keeper_auth.set_user_setting(keeper_auth_context, 'persistent_login', '1')
+    keeper_auth.register_data_key_for_device(keeper_auth_context)
+    mins_per_day = 60 * 24
+    timeout_in_minutes = mins_per_day * 30  # 30 days
+    keeper_auth.set_user_setting(keeper_auth_context, 'logout_timer', str(timeout_in_minutes))
+    print("Persistent login turned on successfully and device registered")
+
+
 def login():
     """
     Handle the login process including server selection, authentication,
@@ -406,6 +430,8 @@ def login():
     """
     flow = LoginFlow()
     keeper_auth_context = flow.run()
+    if keeper_auth_context:
+        enable_persistent_login(keeper_auth_context)
     keeper_endpoint = flow.endpoint if keeper_auth_context else None
     return keeper_auth_context, keeper_endpoint
 

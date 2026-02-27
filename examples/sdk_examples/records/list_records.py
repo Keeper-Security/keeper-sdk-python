@@ -287,6 +287,8 @@ class LoginFlow:
         ]
         if pyperclip:
             menu.append(("c", "Copy SSO Login URL to clipboard."))
+        else:
+            menu.append(("u", "Show SSO Login URL."))
         try:
             wb = webbrowser.get()
             menu.append(("o", "Navigate to SSO Login URL with the default web browser."))
@@ -294,6 +296,7 @@ class LoginFlow:
             wb = None
         if pyperclip:
             menu.append(("p", "Paste SSO Token from clipboard."))
+        menu.append(("t", "Enter SSO Token manually."))
         menu.append(("q", "Quit SSO authentication attempt and return to Commander prompt."))
 
         lines = [
@@ -301,8 +304,8 @@ class LoginFlow:
             "SSO Login URL:",
             step.sso_login_url,
             "Navigate to SSO Login URL with your browser and complete authentication.",
-            "Copy a returned SSO Token into clipboard.",
-            "Paste that token into Commander",
+            "Copy a returned SSO Token into clipboard."
+            + (" Paste that token into Commander." if pyperclip else " Then use option 't' to enter the token manually."),
             'NOTE: To copy SSO Token please click "Copy authentication token" '
             'button on "SSO Connect" page.',
             "",
@@ -327,6 +330,12 @@ class LoginFlow:
                         print("Failed to copy SSO Login URL to clipboard.")
                 else:
                     print("Clipboard not available (install pyperclip).")
+            elif token == "u":
+                token = None
+                if not pyperclip:
+                    print("\nSSO Login URL:", step.sso_login_url, "\n")
+                else:
+                    print("Unsupported menu option (use 'c' to copy URL).")
             elif token == "o":
                 token = None
                 if wb:
@@ -342,8 +351,10 @@ class LoginFlow:
                         token = ""
                         print("Failed to paste from clipboard")
                 else:
-                    token = ""
-                    print("Clipboard not available (install pyperclip).")
+                    token = None
+                    print("Clipboard not available (use 't' to enter token manually).")
+            elif token == "t":
+                token = getpass.getpass("Enter SSO Token: ").strip()
             else:
                 if len(token) < 10:
                     print(f"Unsupported menu option: {token}")
