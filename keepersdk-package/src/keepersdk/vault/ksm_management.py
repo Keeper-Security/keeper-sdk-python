@@ -4,7 +4,7 @@ import json
 import logging
 import os
 
-from typing import Callable, Optional, List, Union
+from typing import Callable, Optional, List, Union, Tuple, Set, Dict
 from urllib import parse
 
 from . import ksm, record_management, shares_management, share_management_utils, vault_online, vault_record, vault_types
@@ -163,7 +163,7 @@ def remove_secrets_manager_app(vault: vault_online.VaultOnline, uid_or_name: str
 
 
 def share_secrets_manager_app(vault: vault_online.VaultOnline, enterprise: enterprise_data.EnterpriseData, 
-                               app_uid: str, emails: list[str], action: str, can_edit: bool, can_share: bool) -> tuple[list, list]:
+                               app_uid: str, emails: List[str], action: str, can_edit: bool, can_share: bool) -> Tuple[List, List]:
 
     request = shares_management.RecordShares.prep_request(
         vault=vault, emails=emails, action=action, uid_or_name=app_uid, 
@@ -181,7 +181,7 @@ def share_secrets_manager_app(vault: vault_online.VaultOnline, enterprise: enter
     return success_responses.extend(success_responses_content), failed_responses.extend(failed_responses_content)  
 
 
-def _update_shares_user_permissions(vault: vault_online.VaultOnline, enterprise: enterprise_data.EnterpriseData, uid: str, removed: bool) -> tuple[list, list]:
+def _update_shares_user_permissions(vault: vault_online.VaultOnline, enterprise: enterprise_data.EnterpriseData, uid: str, removed: bool) -> Tuple[List, List]:
     
     # Get user permissions for the app
     user_perms = _get_app_user_permissions(vault=vault, uid=uid)
@@ -203,7 +203,7 @@ def _update_shares_user_permissions(vault: vault_online.VaultOnline, enterprise:
     )
 
 
-def _get_app_user_permissions(vault: vault_online.VaultOnline, uid: str) -> list:
+def _get_app_user_permissions(vault: vault_online.VaultOnline, uid: str) -> List:
     """Get user permissions for the application."""
     share_info = share_management_utils.get_record_shares(vault=vault, record_uids=[uid], is_share_admin=False)
     user_perms = []
@@ -240,7 +240,7 @@ def _separate_shared_items(vault: vault_online.VaultOnline, shared_secrets):
 
 
 def _process_share_updates(vault: vault_online.VaultOnline, enterprise: enterprise_data.EnterpriseData, 
-                            user_perms: list, shared_recs: list, shared_folders: list, removed: bool) -> tuple[list, list]:
+                            user_perms: List, shared_recs: List, shared_folders: List, removed: bool) -> Tuple[List, List]:
     """Process share updates for users."""
     app_users_map = _categorize_app_users(vault, user_perms)
     
@@ -251,7 +251,7 @@ def _process_share_updates(vault: vault_online.VaultOnline, enterprise: enterpri
     return _send_share_requests(vault, sf_requests, rec_requests)
 
 
-def _categorize_app_users(vault: vault_online.VaultOnline, user_perms: list) -> dict:
+def _categorize_app_users(vault: vault_online.VaultOnline, user_perms: List) -> Dict:
     """Categorize users into admins and viewers."""
     current_username = vault.keeper_auth.auth_context.username
     admins = [
@@ -266,8 +266,8 @@ def _categorize_app_users(vault: vault_online.VaultOnline, user_perms: list) -> 
 
 
 def _build_share_requests(vault: vault_online.VaultOnline, enterprise: enterprise_data.EnterpriseData,
-                            app_users_map: dict, shared_recs: list, shared_folders: list, 
-                            removed: bool) -> tuple:
+                            app_users_map: Dict, shared_recs: List, shared_folders: List,
+                            removed: bool) -> Tuple:
     """Build share requests for folders and records."""
     sf_requests = []
     rec_requests = []
@@ -296,7 +296,7 @@ def _build_share_requests(vault: vault_online.VaultOnline, enterprise: enterpris
     return sf_requests, rec_requests
 
 
-def _send_share_requests(vault: vault_online.VaultOnline, sf_requests: list, rec_requests: list) -> tuple[list, list]:
+def _send_share_requests(vault: vault_online.VaultOnline, sf_requests: List, rec_requests: List) -> Tuple[List, List]:
     """Send share requests to the server."""
     success_responses = []
     failed_responses = []
@@ -311,7 +311,7 @@ def _send_share_requests(vault: vault_online.VaultOnline, sf_requests: list, rec
     return success_responses, failed_responses
 
 
-def _user_needs_update(vault: vault_online.VaultOnline, user: str, share_uids: list, removed: bool) -> bool:
+def _user_needs_update(vault: vault_online.VaultOnline, user: str, share_uids: List, removed: bool) -> bool:
     """Check if a user needs share permission updates."""
     record_permissions = _get_record_permissions(vault, share_uids)
     record_cache = {x.record_uid: x for x in vault.vault_data.records()}
@@ -331,7 +331,7 @@ def _user_needs_update(vault: vault_online.VaultOnline, user: str, share_uids: l
     return False
 
 
-def _get_record_permissions(vault: vault_online.VaultOnline, share_uids: list) -> dict:
+def _get_record_permissions(vault: vault_online.VaultOnline, share_uids: List) -> Dict:
     """Get record permissions for given share UIDs."""
     record_share_info = share_management_utils.get_record_shares(
         vault=vault, 
@@ -351,7 +351,7 @@ def _get_record_permissions(vault: vault_online.VaultOnline, share_uids: list) -
 
 
 def _get_share_user_permissions(vault: vault_online.VaultOnline, share_uid: str, 
-                                record_cache: dict, record_permissions: dict) -> list:
+                                record_cache: Dict, record_permissions: Dict) -> List:
     """Get user permissions for a share (record or folder)."""
     is_record_share = share_uid in record_cache
     
@@ -365,8 +365,8 @@ def _get_share_user_permissions(vault: vault_online.VaultOnline, share_uid: str,
     return []
 
 
-def _create_folder_share_requests(vault: vault_online.VaultOnline, shared_folders: list, 
-                                users: list, removed: bool) -> list:
+def _create_folder_share_requests(vault: vault_online.VaultOnline, shared_folders: List,
+                                users: List, removed: bool) -> List:
     """Create folder share requests."""
     if not shared_folders:
         return []
@@ -386,7 +386,7 @@ def _create_folder_share_requests(vault: vault_online.VaultOnline, shared_folder
 
 
 def _build_folder_share_request(vault: vault_online.VaultOnline, folder_uid: str, 
-                                user: str, action: str) -> dict:
+                                user: str, action: str) -> Dict:
     """Build a single folder share request."""
     shared_folder = vault.vault_data.load_shared_folder(folder_uid)
     shared_folder_revision = vault.vault_data.storage.shared_folders.get_entity(folder_uid).revision
@@ -416,8 +416,8 @@ def _build_folder_share_request(vault: vault_online.VaultOnline, folder_uid: str
     )
 
 
-def _create_record_share_requests(vault: vault_online.VaultOnline, enterprise: enterprise_data.EnterpriseData, shared_recs: list, 
-                                users: list, removed: bool) -> list:
+def _create_record_share_requests(vault: vault_online.VaultOnline, enterprise: enterprise_data.EnterpriseData, shared_recs: List,
+                                users: List, removed: bool) -> List:
     """Create record share requests."""
     if not shared_recs or not vault:
         return []
@@ -503,7 +503,7 @@ class KSMClientManagement:
             first_access_expire_duration_ms: int,
             access_expire_in_ms: Optional[int],
             master_key: bytes,
-            server: str) -> dict:
+            server: str) -> Dict:
         """Generate a single client device and return token info and output string."""
         
         # Generate secret and client ID
@@ -664,7 +664,7 @@ class KSMClientManagement:
             return 'Invalid timestamp'
 
     @staticmethod
-    def remove_clients_from_ksm_app(vault: vault_online.VaultOnline, uid: str, client_names_and_ids: list[str], callable: Callable = None):
+    def remove_clients_from_ksm_app(vault: vault_online.VaultOnline, uid: str, client_names_and_ids: List[str], callable: Callable = None):
         """Remove client devices from a KSM application."""
         client_hashes = KSMClientManagement._convert_to_client_hashes(
             vault, uid, client_names_and_ids
@@ -682,7 +682,7 @@ class KSMClientManagement:
 
     @staticmethod
     def _convert_to_client_hashes(vault: vault_online.VaultOnline, uid: str, 
-                                    client_names_and_ids: list[str]) -> list[bytes]:
+                                    client_names_and_ids: List[str]) -> List[bytes]:
         """Convert client names/IDs to client ID hashes."""
         exact_matches, partial_matches = KSMClientManagement._categorize_client_matches(
             client_names_and_ids
@@ -707,7 +707,7 @@ class KSMClientManagement:
         return client_id_hashes_bytes
 
     @staticmethod
-    def _categorize_client_matches(client_names_and_ids: list[str]) -> tuple[set, set]:
+    def _categorize_client_matches(client_names_and_ids: List[str]) -> Tuple[Set, Set]:
         """Categorize client names/IDs into exact and partial matches."""
         exact_matches = set()
         partial_matches = set()
@@ -727,7 +727,7 @@ class KSMClientManagement:
 
     @staticmethod
     def _send_remove_client_request(vault: vault_online.VaultOnline, uid: str, 
-                                    client_hashes: list[bytes]) -> None:
+                                    client_hashes: List[bytes]) -> None:
         """Send remove client request to server."""
         request = RemoveAppClientsRequest()
         request.appRecordUid = utils.base64_url_decode(uid)
@@ -739,7 +739,7 @@ class KSMShareManagement:
 
     @staticmethod
     def add_secrets_to_ksm_app(vault: vault_online.VaultOnline, enterprise:enterprise_data.EnterpriseData, app_uid: str, master_key: bytes,
-                    secret_uids: list[str], is_editable: bool = False) -> list:
+                    secret_uids: List[str], is_editable: bool = False) -> List:
         """Share secrets with a KSM application."""
 
         app_shares, added_secret_info = KSMShareManagement._process_all_secrets(
@@ -760,8 +760,8 @@ class KSMShareManagement:
         return added_secret_info
 
     @staticmethod
-    def _process_all_secrets(vault: vault_online.VaultOnline, secret_uids: list[str], 
-                            master_key: bytes, is_editable: bool) -> tuple[list, list]:
+    def _process_all_secrets(vault: vault_online.VaultOnline, secret_uids: List[str],
+                            master_key: bytes, is_editable: bool) -> Tuple[List, List]:
         """Process all secrets and build share requests."""
         app_shares = []
         added_secret_info = []
@@ -779,7 +779,7 @@ class KSMShareManagement:
 
     @staticmethod
     def _process_secret(vault: vault_online.VaultOnline, secret_uid: str, 
-                              master_key: bytes, is_editable: bool) -> Optional[dict]:
+                              master_key: bytes, is_editable: bool) -> Optional[Dict]:
         """Process a single secret and create share request."""
         secret_info = KSMShareManagement._get_secret_info(vault, secret_uid)
         
@@ -802,7 +802,7 @@ class KSMShareManagement:
         }
 
     @staticmethod
-    def _get_secret_info(vault: vault_online.VaultOnline, secret_uid: str) -> Optional[tuple]:
+    def _get_secret_info(vault: vault_online.VaultOnline, secret_uid: str) -> Optional[Tuple]:
         """Get secret information (key, type, name) for a given UID."""
         is_record = secret_uid in vault.vault_data._records
         is_shared_folder = secret_uid in vault.vault_data._shared_folders
@@ -816,7 +816,7 @@ class KSMShareManagement:
             return None
 
     @staticmethod
-    def _get_record_secret_info(vault: vault_online.VaultOnline, secret_uid: str) -> Optional[tuple]:
+    def _get_record_secret_info(vault: vault_online.VaultOnline, secret_uid: str) -> Optional[Tuple]:
         """Get secret info for a record."""
         record = vault.vault_data.load_record(record_uid=secret_uid)
         if not isinstance(record, vault_record.TypedRecord):
@@ -829,7 +829,7 @@ class KSMShareManagement:
         return share_key_decrypted, share_type, secret_type_name
 
     @staticmethod
-    def _get_folder_secret_info(vault: vault_online.VaultOnline, secret_uid: str) -> tuple:
+    def _get_folder_secret_info(vault: vault_online.VaultOnline, secret_uid: str) -> Tuple:
         """Get secret info for a shared folder."""
         share_key_decrypted = vault.vault_data.get_shared_folder_key(shared_folder_uid=secret_uid)
         share_type = ApplicationShareType.SHARE_TYPE_FOLDER
@@ -858,7 +858,7 @@ class KSMShareManagement:
 
     @staticmethod
     def _send_share_request(vault: vault_online.VaultOnline, app_uid: str, 
-                          app_shares: list) -> bool:
+                          app_shares: List) -> bool:
         """Send the share request to the server."""
         request = KSMShareManagement._build_share_request(app_uid, app_shares)
 
@@ -866,7 +866,7 @@ class KSMShareManagement:
         return True
 
     @staticmethod
-    def _build_share_request(app_uid: str, app_shares: list) -> AddAppSharesRequest:
+    def _build_share_request(app_uid: str, app_shares: List) -> AddAppSharesRequest:
         """Build share request object."""
         request = AddAppSharesRequest()
         request.appRecordUid = utils.base64_url_decode(app_uid)
@@ -875,7 +875,7 @@ class KSMShareManagement:
 
     @staticmethod
     def remove_secrets_from_ksm_app(vault: vault_online.VaultOnline, app_uid: str, 
-                    secret_uids: list[str]) -> None:
+                    secret_uids: List[str]) -> None:
         """Send remove share request to server."""
         request = RemoveAppSharesRequest()
         request.appRecordUid = utils.base64_url_decode(app_uid)

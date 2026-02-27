@@ -1,6 +1,6 @@
 import argparse
 import json
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any, Tuple, Set
 
 from keepersdk import utils, crypto
 from keepersdk.enterprise import enterprise_types, batch_management, enterprise_management
@@ -573,7 +573,7 @@ class TeamApproveCommand(base.ArgparseCommand):
     def _collect_team_keys_and_users(
         self, queued_team_users, teams: Dict[str, Any], 
         added_teams: Dict[str, Any], active_users: Dict[int, str]
-    ) -> Tuple[Dict[str, Any], set]:
+    ) -> Tuple[Dict[str, Any], Set]:
         """Collect team UIDs that need keys loaded and all user emails."""
         team_keys = {}
         all_users = set()
@@ -595,7 +595,7 @@ class TeamApproveCommand(base.ArgparseCommand):
     
     def _load_team_and_user_keys(
         self, vault, team_keys: Dict[str, Any], 
-        added_team_keys: Dict[str, bytes], all_users: set
+        added_team_keys: Dict[str, bytes], all_users: Set
     ) -> None:
         """Load team keys and user public keys from the vault."""
         vault.keeper_auth.load_team_keys(list(team_keys.keys()))

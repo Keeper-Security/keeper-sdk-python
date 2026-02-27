@@ -3,7 +3,7 @@ import datetime
 import hashlib
 import json
 import re
-from typing import Optional, List
+from typing import Optional, List, Dict, Tuple
 import urllib
 
 from colorama import Fore, Back, Style
@@ -258,7 +258,7 @@ class ClipboardCommand(base.ArgparseCommand):
         else:
             return context.vault.vault_data.load_record(record_uid)
 
-    def _extract_record_data(self, record, kwargs) -> tuple[str, str]:
+    def _extract_record_data(self, record, kwargs) -> Tuple[str, str]:
         """Extract data from record based on command options."""
         if kwargs.get('copy_uid'):
             if kwargs.get('output', '') == 'clipboard':
@@ -273,7 +273,7 @@ class ClipboardCommand(base.ArgparseCommand):
         else:
             return self._extract_password_data(record)
 
-    def _extract_totp_data(self, record) -> tuple[str, str]:
+    def _extract_totp_data(self, record) -> Tuple[str, str]:
         """Extract TOTP data from record."""
         totp_url = None
         if isinstance(record, vault_record.PasswordRecord):
@@ -291,7 +291,7 @@ class ClipboardCommand(base.ArgparseCommand):
                 return 'TOTP Code', result[0]
         return 'TOTP Code', ''
 
-    def _extract_field_data(self, record, field_name: str) -> tuple[str, str]:
+    def _extract_field_data(self, record, field_name: str) -> Tuple[str, str]:
         """Extract custom field data from record."""
         if field_name == 'notes':
             notes = record.notes if hasattr(record, 'notes') else ''
@@ -299,7 +299,7 @@ class ClipboardCommand(base.ArgparseCommand):
         else:
             return self._extract_custom_field_data(record, field_name)
 
-    def _extract_custom_field_data(self, record, field_name: str) -> tuple[str, str]:
+    def _extract_custom_field_data(self, record, field_name: str) -> Tuple[str, str]:
         """Extract custom field data from record."""
         copy_item = f'Custom Field "{field_name}"'
         field_name, field_property = self._parse_field_name(field_name)
@@ -314,14 +314,14 @@ class ClipboardCommand(base.ArgparseCommand):
         
         return copy_item, ''
 
-    def _parse_field_name(self, field_name: str) -> tuple[str, str]:
+    def _parse_field_name(self, field_name: str) -> Tuple[str, str]:
         """Parse field name and property."""
         pre, sep, prop = field_name.rpartition(':')
         if sep == ':':
             return pre, prop
         return field_name, ''
 
-    def _extract_typed_field_data(self, record, field_name: str, field_property: str, copy_item: str) -> tuple[str, str]:
+    def _extract_typed_field_data(self, record, field_name: str, field_property: str, copy_item: str) -> Tuple[str, str]:
         """Extract data from typed field."""
         field_type, sep, field_label = field_name.partition('.')
         rf = record_types.RecordFields.get(field_type)
@@ -351,7 +351,7 @@ class ClipboardCommand(base.ArgparseCommand):
         else:
             return copy_item, '\n'.join(field.get_external_value())
 
-    def _extract_password_data(self, record) -> tuple[str, str]:
+    def _extract_password_data(self, record) -> Tuple[str, str]:
         """Extract password data from record."""
         if isinstance(record, vault_record.PasswordRecord):
             return 'Password', record.password
@@ -361,7 +361,7 @@ class ClipboardCommand(base.ArgparseCommand):
                 return 'Password', password_field.get_default_value(str)
         return 'Password', ''
 
-    def _output_data(self, copy_item: str, text: str, kwargs: dict, context: KeeperParams, record_uid: str):
+    def _output_data(self, copy_item: str, text: str, kwargs: Dict, context: KeeperParams, record_uid: str):
         """Output data to specified destination."""
         output_type = kwargs.get('output', 'clipboard')
         
@@ -384,7 +384,7 @@ class ClipboardCommand(base.ArgparseCommand):
         if copy_item == 'Password' and text:
             context.vault.client_audit_event_plugin().schedule_audit_event('copy_password', record_uid=record_uid)
 
-    def _load_record_history(self, context: KeeperParams, record_uid: str) -> Optional[list]:
+    def _load_record_history(self, context: KeeperParams, record_uid: str) -> Optional[List]:
         """Load record history from server."""
         if not context.vault:
             raise ValueError('Vault is not initialized. Login to initialize the vault.')
@@ -392,7 +392,7 @@ class ClipboardCommand(base.ArgparseCommand):
         return self._load_record_history_static(context.vault, record_uid)
 
     @staticmethod
-    def _load_record_history_static(vault: vault_online.VaultOnline, record_uid: str) -> Optional[list]:
+    def _load_record_history_static(vault: vault_online.VaultOnline, record_uid: str) -> Optional[List]:
         """Load record history from server (static method for sharing)."""
         current_rec = vault.vault_data._records[record_uid]
         record_key = current_rec.record_key
@@ -535,7 +535,7 @@ class RecordHistoryCommand(base.ArgparseCommand):
                 return folder_record_uid
         return None
 
-    def _execute_action(self, action: str, vault: vault_online.VaultOnline, history: list, kwargs: dict):
+    def _execute_action(self, action: str, vault: vault_online.VaultOnline, history: List, kwargs: Dict):
         """Execute the specified history action."""
         if action == 'list':
             return self._list_history(history, kwargs)
@@ -546,7 +546,7 @@ class RecordHistoryCommand(base.ArgparseCommand):
         elif action == 'restore':
             return self._restore_revision(vault, history, kwargs)
 
-    def _list_history(self, history: list, kwargs: dict):
+    def _list_history(self, history: List, kwargs: Dict):
         """List record history revisions."""
         fmt = kwargs.get('format', '')
         headers = ['version', 'modified_by', 'time_modified']
@@ -564,7 +564,7 @@ class RecordHistoryCommand(base.ArgparseCommand):
         
         return report_utils.dump_report_data(rows, headers, fmt=fmt, filename=kwargs.get('output'))
 
-    def _view_revision(self, history: list, kwargs: dict):
+    def _view_revision(self, history: List, kwargs: Dict):
         """View a specific revision."""
         revision = kwargs.get('revision') or 0
         length = len(history)
@@ -602,7 +602,7 @@ class RecordHistoryCommand(base.ArgparseCommand):
             right_align=(0,)
         )
 
-    def _show_diff(self, history: list, kwargs: dict):
+    def _show_diff(self, history: List, kwargs: Dict):
         """Show differences between revisions."""
         revision = kwargs.get('revision') or 0
         verbose = kwargs.get('verbose') or False
@@ -617,7 +617,7 @@ class RecordHistoryCommand(base.ArgparseCommand):
         headers = ('Version', 'Field', 'New Value', 'Old Value')
         report_utils.dump_report_data(rows, headers)
 
-    def _generate_diff_rows(self, history: list, start_index: int, length: int, verbose: bool) -> list:
+    def _generate_diff_rows(self, history: List, start_index: int, length: int, verbose: bool) -> List:
         """Generate diff rows between revisions."""
         count = MAX_VERSION_COUNT
         current = history[start_index].get('data_unencrypted')
@@ -649,7 +649,7 @@ class RecordHistoryCommand(base.ArgparseCommand):
         
         return rows
 
-    def _get_record_fields(self, record: dict) -> dict:
+    def _get_record_fields(self, record: Dict) -> Dict:
         """Get record fields as dictionary."""
         return_fields = {}
         return_fields['Title'] = record.get('title')
@@ -663,7 +663,7 @@ class RecordHistoryCommand(base.ArgparseCommand):
             return_fields[name] = value                
         return return_fields
 
-    def _add_field_differences(self, rows: list, current_fields: dict, previous_fields: dict):
+    def _add_field_differences(self, rows: List, current_fields: Dict, previous_fields: Dict):
         """Add field differences to rows."""
         for name, value in current_fields.items():
             if name in previous_fields:
@@ -681,7 +681,7 @@ class RecordHistoryCommand(base.ArgparseCommand):
                     value = '\n'.join(value)
                 rows.append(['', name, '', value])
 
-    def _truncate_long_values(self, rows: list):
+    def _truncate_long_values(self, rows: List):
         """Truncate long values in diff rows for better readability."""
         for row in rows:
             for index in (2, 3):
@@ -694,7 +694,7 @@ class RecordHistoryCommand(base.ArgparseCommand):
                     lines.append('...')
                 row[index] = '\n'.join(lines)
 
-    def _restore_revision(self, vault: vault_online.VaultOnline, history: list, kwargs: dict):
+    def _restore_revision(self, vault: vault_online.VaultOnline, history: List, kwargs: Dict):
         """Restore a specific revision."""
         revision = kwargs.get('revision') or 0
         length = len(history)
@@ -792,7 +792,7 @@ class FindDuplicateCommand(base.ArgparseCommand):
         if not context.vault:
             raise base.CommandError('Vault is not initialized')
     
-    def _process_vault_duplicates(self, context: KeeperParams, kwargs: dict):
+    def _process_vault_duplicates(self, context: KeeperParams, kwargs: Dict):
         vault = context.vault
         match_fields = self._determine_match_fields(kwargs)
         

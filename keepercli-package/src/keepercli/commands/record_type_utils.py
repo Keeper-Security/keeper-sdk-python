@@ -1,4 +1,5 @@
 import json
+from typing import List
 
 from .. import api
 
@@ -99,7 +100,7 @@ def get_record_type_example(vault: vault_online.VaultOnline, record_type_name: s
         raise ValueError(f'No record type found with name {record_type_name}. Use "record-type-info" to list all record types')
 
 
-def get_record_types(vault:vault_online.VaultOnline) -> list[vault_types.RecordType]:
+def get_record_types(vault:vault_online.VaultOnline) -> List[vault_types.RecordType]:
         records = []  # (recordTypeId, name, scope)
         record_types = vault.vault_data.get_record_types()
 

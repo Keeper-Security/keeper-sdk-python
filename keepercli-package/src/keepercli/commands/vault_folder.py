@@ -203,11 +203,11 @@ class FolderTreeCommand(base.ArgparseCommand, _FolderMixin):
         show_records: bool = kwargs.get('records') is True
         show_shares: bool = kwargs.get('shares') is True
 
-        def tree_node(node: vault_types.Folder) -> Tuple[str, dict]:
+        def tree_node(node: vault_types.Folder) -> Tuple[str, Dict]:
             if context.vault is None:
                 raise base.CommandError('Vault is not initialized. Login to initialize the vault.')
             name = node.name
-            children: dict = OrderedDict()
+            children: Dict = OrderedDict()
             if verbose and node.folder_uid:
                 name += f' ({node.folder_uid})'
 

@@ -137,7 +137,7 @@ class EnterpriseInfoTreeCommand(base.ArgparseCommand):
                 teams[queued_team.node_id] = []
             queued_teams[queued_team.node_id].append(queued_team)
 
-        def tree_node(node: enterprise_types.Node) -> Tuple[str, Dict[str, dict]]:
+        def tree_node(node: enterprise_types.Node) -> Tuple[str, Dict[str, Dict]]:
             node_name = node.name
             if not node_name:
                 node_name = enterprise_data.enterprise_info.enterprise_name

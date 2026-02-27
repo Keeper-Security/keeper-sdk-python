@@ -2,7 +2,7 @@ import argparse
 import base64
 import getpass
 import json
-from typing import Any, List, Optional, Set
+from typing import Any, List, Optional, Set, Dict
 
 from keepersdk.enterprise import breachwatch_report
 from keepersdk.proto import breachwatch_pb2, client_pb2
@@ -16,7 +16,7 @@ from ..params import KeeperParams
 
 logger = api.get_logger()
    
-STATUS_TO_TEXT: dict[int, str] = { 
+STATUS_TO_TEXT: Dict[int, str] = {
     client_pb2.BWStatus.GOOD: "GOOD", 
     client_pb2.BWStatus.WEAK: "WEAK", 
     client_pb2.BWStatus.BREACHED: "BREACHED" 
@@ -176,7 +176,7 @@ class BreachWatchIgnoreCommand(base.ArgparseCommand):
         else:
             logger.info("No breach watch requests to process")
 
-    def _get_record_names(self, kwargs: dict) -> list[str]:
+    def _get_record_names(self, kwargs: Dict) -> List[str]:
         """Extract record names from kwargs."""
         records = kwargs.get('records')
         if not records:
@@ -187,14 +187,14 @@ class BreachWatchIgnoreCommand(base.ArgparseCommand):
         
         return records
 
-    def _resolve_record_uids(self, record_names: list[str], context: KeeperParams) -> Set[str]:
+    def _resolve_record_uids(self, record_names: List[str], context: KeeperParams) -> Set[str]:
         """Resolve record names to UIDs using the context."""
         record_uids: Set[str] = set()
         for record_name in record_names:
             record_uids.update(record_utils.resolve_records(record_name, context))
         return record_uids
 
-    def _get_breached_records(self, vault: vault_online.VaultOnline) -> dict[str, str]:
+    def _get_breached_records(self, vault: vault_online.VaultOnline) -> Dict[str, str]:
         """Get breached records and their passwords."""
         record_passwords = {}
         
@@ -219,7 +219,7 @@ class BreachWatchIgnoreCommand(base.ArgparseCommand):
         
         return None
 
-    def _create_breach_watch_requests(self, vault: vault_online.VaultOnline, record_passwords: dict[str, str], record_uids: Set[str]) -> list[breachwatch_pb2.BreachWatchRecordRequest]:
+    def _create_breach_watch_requests(self, vault: vault_online.VaultOnline, record_passwords: Dict[str, str], record_uids: Set[str]) -> List[breachwatch_pb2.BreachWatchRecordRequest]:
         """Create breach watch record requests for the given records."""
         bw_requests = []
         
@@ -296,7 +296,7 @@ class BreachWatchIgnoreCommand(base.ArgparseCommand):
         
         return None
 
-    def _process_breach_watch_requests(self, vault: vault_online.VaultOnline, bw_requests: list[breachwatch_pb2.BreachWatchRecordRequest]) -> None:
+    def _process_breach_watch_requests(self, vault: vault_online.VaultOnline, bw_requests: List[breachwatch_pb2.BreachWatchRecordRequest]) -> None:
         """Process the breach watch requests."""
         # Queue audit event
         self._queue_audit_event(vault)
@@ -309,7 +309,7 @@ class BreachWatchIgnoreCommand(base.ArgparseCommand):
         if audit_plugin:
             audit_plugin.schedule_audit_event('bw_record_ignored')
 
-    def _send_breach_watch_requests(self, vault: vault_online.VaultOnline, bw_requests: list[breachwatch_pb2.BreachWatchRecordRequest]) -> None:
+    def _send_breach_watch_requests(self, vault: vault_online.VaultOnline, bw_requests: List[breachwatch_pb2.BreachWatchRecordRequest]) -> None:
         """Send breach watch requests in chunks."""
         while bw_requests:
             chunk = bw_requests[0:999]
@@ -321,7 +321,7 @@ class BreachWatchIgnoreCommand(base.ArgparseCommand):
             except Exception as e:
                 logger.error(f'Error sending breach watch chunk: {e}')
 
-    def _send_breach_watch_chunk(self, vault: vault_online.VaultOnline, chunk: list[breachwatch_pb2.BreachWatchRecordRequest]) -> breachwatch_pb2.BreachWatchUpdateResponse:
+    def _send_breach_watch_chunk(self, vault: vault_online.VaultOnline, chunk: List[breachwatch_pb2.BreachWatchRecordRequest]) -> breachwatch_pb2.BreachWatchUpdateResponse:
         """Send a chunk of breach watch requests."""
         rq = breachwatch_pb2.BreachWatchUpdateRequest()
         rq.breachWatchRecordRequest.extend(chunk)
@@ -368,7 +368,7 @@ class BreachWatchScanCommand(base.ArgparseCommand):
         if not context.auth.auth_context.license.get('breachWatchEnabled'):
             raise ValueError("Breach watch is not enabled. Please contact your administrator to enable this feature.")
 
-    def _get_and_validate_record_uids(self, kwargs: dict) -> list[str]:
+    def _get_and_validate_record_uids(self, kwargs: Dict) -> List[str]:
         """Extract and validate record UIDs from kwargs."""
         record_uids = kwargs.get('records')
         if not record_uids:
@@ -479,7 +479,7 @@ class BreachWatchPasswordCommand(base.ArgparseCommand):
             raise base.CommandError('Breach watch is not enabled. Please contact your administrator to enable this feature.')
         return True
 
-    def _get_passwords_to_scan(self, kwargs: dict) -> list[str]:
+    def _get_passwords_to_scan(self, kwargs: Dict) -> List[str]:
         """Get passwords from command line arguments or prompt user."""
         passwords = kwargs.get('passwords', [])
         if passwords:
@@ -493,7 +493,7 @@ class BreachWatchPasswordCommand(base.ArgparseCommand):
             logger.info('')
         return []
 
-    def _scan_passwords(self, breach_watch, passwords: list[str]) -> list:
+    def _scan_passwords(self, breach_watch, passwords: List[str]) -> List:
         """Scan passwords and return results with EUIDs for cleanup."""
         scan_results = []
         for result in breach_watch.scan_passwords(passwords):
@@ -505,7 +505,7 @@ class BreachWatchPasswordCommand(base.ArgparseCommand):
         """Validate scan result structure."""
         return result and len(result) == 2
 
-    def _display_results(self, scan_results: list, echo_passwords: bool) -> None:
+    def _display_results(self, scan_results: List, echo_passwords: bool) -> None:
         """Display scan results in a formatted way."""
         for result in scan_results:
             password, scan_result = result
@@ -523,7 +523,7 @@ class BreachWatchPasswordCommand(base.ArgparseCommand):
         status_code = client_pb2.BWStatus.BREACHED if is_breached else client_pb2.BWStatus.GOOD
         return STATUS_TO_TEXT.get(status_code, "Unknown")
 
-    def _cleanup_scan_data(self, breach_watch, scan_results: list) -> None:
+    def _cleanup_scan_data(self, breach_watch, scan_results: List) -> None:
         """Clean up scan data by deleting EUIDs."""
         euids = self._extract_euids(scan_results)
         if euids:
@@ -532,7 +532,7 @@ class BreachWatchPasswordCommand(base.ArgparseCommand):
             except Exception as e:
                 logger.warning(f"Failed to cleanup scan data: {e}")
 
-    def _extract_euids(self, scan_results: list) -> list:
+    def _extract_euids(self, scan_results: List) -> List:
         """Extract EUIDs from scan results for cleanup."""
         euids = []
         for result in scan_results:

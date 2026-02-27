@@ -1,10 +1,11 @@
 import logging
 from enum import Enum
+from typing import List, Dict, Optional
 
 from .. import crypto, utils
 from ..proto import folder_pb2, record_pb2
 from ..vault import vault_online, vault_utils, share_management_utils
-from ..enterprise import enterprise_data
+from ..enterprise import enterprise_types
 
 
 class ApiUrl(Enum):
@@ -64,7 +65,7 @@ def set_expiration_fields(obj, expiration):
 class RecordShares():
     
     @staticmethod
-    def cancel_share(vault: vault_online.VaultOnline, emails: list[str]):
+    def cancel_share(vault: vault_online.VaultOnline, emails: List[str]):
         for email in emails:
             request = {
                 'command': 'cancel_share',
@@ -74,7 +75,7 @@ class RecordShares():
         vault.sync_down()
     
     @staticmethod
-    def _resolve_uid_or_name(vault: vault_online.VaultOnline, uid_or_name: str, record_cache: dict, shared_folder_cache: dict, folder_cache: dict):
+    def _resolve_uid_or_name(vault: vault_online.VaultOnline, uid_or_name: str, record_cache: Dict, shared_folder_cache: Dict, folder_cache: Dict):
         """Resolve uid_or_name to record_uid, folder_uid, or shared_folder_uid."""
         record_uid = None
         folder_uid = None
@@ -306,12 +307,12 @@ class RecordShares():
     
     @staticmethod
     def prep_request(vault: vault_online.VaultOnline,
-                    emails: list[str],
+                    emails: List[str],
                     action: str,
                     uid_or_name: str,
-                    share_expiration: int,
+                    share_expiration: Optional[int],
                     dry_run: bool,
-                    enterprise: enterprise_data.EnterpriseData,
+                    enterprise: enterprise_types.IEnterpriseData,
                     enterprise_access: bool = False,
                     recursive: bool = False,
                     can_edit: bool = False,
@@ -443,7 +444,7 @@ class RecordShares():
                 len(request.removeSharedRecord) > 0)
     
     @staticmethod
-    def send_requests(vault: vault_online.VaultOnline, requests: list[record_pb2.RecordShareUpdateRequest]):
+    def send_requests(vault: vault_online.VaultOnline, requests: List[record_pb2.RecordShareUpdateRequest]):
         """Send record share update requests in batches."""
         success_responses = []
         failed_responses = []

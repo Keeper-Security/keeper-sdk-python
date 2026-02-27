@@ -4,7 +4,7 @@ import enum
 import re
 import shlex
 import sys
-from typing import Optional, Any, Dict, Iterable, Tuple
+from typing import Optional, Any, Dict, Iterable, Tuple, Set, List
 
 from keepersdk import errors
 
@@ -146,7 +146,7 @@ class ArgparseCommand(ICliCommand, abc.ABC):
     def execute(self, context: KeeperParams, **kwargs):
         pass
 
-    def _get_all_option_strings(self, parser: argparse.ArgumentParser) -> set:
+    def _get_all_option_strings(self, parser: argparse.ArgumentParser) -> Set:
         """Get all valid option strings from the parser and its parents."""
         options = set()
         for action in parser._actions:
@@ -154,7 +154,7 @@ class ArgparseCommand(ICliCommand, abc.ABC):
                 options.add(opt)
         return options
 
-    def _validate_strict_options(self, arg_list: list, valid_options: set) -> None:
+    def _validate_strict_options(self, arg_list: List, valid_options: Set) -> None:
         """Validate that all option-like arguments are recognized.
         
         Raises ParseError if:

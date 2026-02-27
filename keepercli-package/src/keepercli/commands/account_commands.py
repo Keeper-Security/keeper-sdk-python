@@ -2,7 +2,7 @@ import argparse
 import datetime
 import os
 import re
-from typing import Tuple, Optional, List, Any
+from typing import Tuple, Optional, List, Any, Dict
 
 from keepersdk import crypto, utils, errors
 from keepersdk.authentication import keeper_auth  
@@ -394,7 +394,7 @@ class ResetPasswordCommand(base.ArgparseCommand):
             else:
                 raise kae
     
-    def _handle_sso_deletion(self, kwargs: dict, auth: keeper_auth.KeeperAuth, is_sso_user: bool, current_salt) -> bool:
+    def _handle_sso_deletion(self, kwargs: Dict, auth: keeper_auth.KeeperAuth, is_sso_user: bool, current_salt) -> bool:
         """Handle SSO password deletion request."""
         if not kwargs.get('delete_sso'):
             return False

@@ -449,7 +449,7 @@ class InMemoryConfigurationStorage(IConfigurationStorage):
 
 
 class _JsonConfigurationCollection(list, IConfigurationCollection):
-    def __init__(self, entity_type: Union[Type[dict], Type[IEntityId]], lst:Optional[List[Dict]]=None) -> None:
+    def __init__(self, entity_type: Union[Type[Dict], Type[IEntityId]], lst:Optional[List[Dict]]=None) -> None:
         super(_JsonConfigurationCollection, self).__init__()
         if isinstance(lst, list):
             for entity in lst:

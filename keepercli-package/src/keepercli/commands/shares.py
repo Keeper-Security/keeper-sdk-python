@@ -3,7 +3,7 @@ import datetime
 import math
 import re
 from enum import Enum
-from typing import Optional
+from typing import Optional, List, Set, Dict
 
 from keepersdk import utils
 from keepersdk.authentication import keeper_auth
@@ -132,7 +132,7 @@ class ShareRecordCommand(base.ArgparseCommand):
         if not context.vault:
             raise ValueError("Vault is not initialized.")
         vault = context.vault
-        
+
         uid_or_name = kwargs.get('record')
         if not uid_or_name:
             return self.get_parser().print_help()
@@ -154,7 +154,7 @@ class ShareRecordCommand(base.ArgparseCommand):
         share_expiration = share_management_utils.get_share_expiration(
             kwargs.get('expire_at'), kwargs.get('expire_in')
         )
-        
+
         request = RecordShares.prep_request(
             vault=vault, 
             enterprise=context.enterprise_data,
@@ -177,7 +177,7 @@ class ShareRecordCommand(base.ArgparseCommand):
                     logger.error(f'Failed to process share request: {failed_response}')
             vault.sync_down()
     
-    def _validate_and_replace_contacts(self, vault, emails: list, force: bool) -> list:
+    def _validate_and_replace_contacts(self, vault, emails: List, force: bool) -> List:
         """Validate emails against known contacts and optionally replace with matches."""
         shared_objects = share_management_utils.get_share_objects(vault=vault)
         known_users = shared_objects.get('users', {})
@@ -315,7 +315,7 @@ class ShareFolderCommand(base.ArgparseCommand):
                 logger.error(f'Failed to process share request: {failed_response}')
         vault.sync_down()
     
-    def _normalize_folder_names(self, folder_names) -> list:
+    def _normalize_folder_names(self, folder_names) -> List:
         """Normalize folder names list and check for wildcard."""
         if not folder_names:
             return []
@@ -323,7 +323,7 @@ class ShareFolderCommand(base.ArgparseCommand):
             return [folder_names]
         return folder_names
     
-    def _resolve_shared_folder_uids(self, vault: vault_online.VaultOnline, names: list) -> set:
+    def _resolve_shared_folder_uids(self, vault: vault_online.VaultOnline, names: List) -> Set:
         """Resolve folder names to shared folder UIDs."""
         all_folders = any(x == ALL_FOLDERS_WILDCARD for x in names)
         if all_folders:
@@ -342,8 +342,8 @@ class ShareFolderCommand(base.ArgparseCommand):
         
         return shared_folder_uids
     
-    def _resolve_specific_folders(self, vault: vault_online.VaultOnline, names: list, 
-                                   shared_folder_cache: dict, folder_cache: dict) -> set:
+    def _resolve_specific_folders(self, vault: vault_online.VaultOnline, names: List,
+                                   shared_folder_cache: Dict, folder_cache: Dict) -> Set:
         """Resolve specific folder names to shared folder UIDs."""
         shared_folder_uids = set()
         folder_uids = {
@@ -371,7 +371,7 @@ class ShareFolderCommand(base.ArgparseCommand):
         return shared_folder_uids
     
     def _get_share_admin_obj_uids(self, vault: vault_online.VaultOnline, 
-                                   obj_names: list, obj_type) -> Optional[set]:
+                                   obj_names: List, obj_type) -> Optional[Set]:
         """Get UIDs of objects where user is share admin."""
         if not obj_names:
             return None
@@ -403,7 +403,7 @@ class ShareFolderCommand(base.ArgparseCommand):
         except (ValueError, AttributeError) as e:
             raise ValueError(f'get_share_admin: msg = {e}') from e
     
-    def _get_record_uids(self, vault: vault_online.VaultOnline, name: str) -> set[str]:
+    def _get_record_uids(self, vault: vault_online.VaultOnline, name: str) -> Set[str]:
         """Get record UIDs by name or UID."""
         record_uids = set()
         if not vault or not vault.vault_data:
@@ -420,7 +420,7 @@ class ShareFolderCommand(base.ArgparseCommand):
         
         return record_uids
     
-    def _get_share_expiration(self, action: str, kwargs: dict):
+    def _get_share_expiration(self, action: str, kwargs: Dict):
         """Get share expiration if action is grant."""
         if action == ShareAction.GRANT.value:
             return share_management_utils.get_share_expiration(
@@ -428,7 +428,7 @@ class ShareFolderCommand(base.ArgparseCommand):
             )
         return None
     
-    def _parse_user_arguments(self, vault, kwargs: dict) -> dict:
+    def _parse_user_arguments(self, vault, kwargs: Dict) -> Dict:
         """Parse user arguments and return user data."""
         as_users = set()
         as_teams = set()
@@ -485,7 +485,7 @@ class ShareFolderCommand(base.ArgparseCommand):
         
         return matches[0]
     
-    def _parse_record_arguments(self, vault, kwargs: dict) -> dict:
+    def _parse_record_arguments(self, vault, kwargs: Dict) -> Dict:
         """Parse record arguments and return record data."""
         record_uids = set()
         all_records = False
@@ -525,7 +525,7 @@ class ShareFolderCommand(base.ArgparseCommand):
             'default_record': default_record
         }
     
-    def _is_nothing_to_do(self, user_data: dict, record_data: dict) -> bool:
+    def _is_nothing_to_do(self, user_data: Dict, record_data: Dict) -> bool:
         """Check if there's nothing to do based on user and record data."""
         return (
             len(user_data['users']) == 0 and 
@@ -537,9 +537,9 @@ class ShareFolderCommand(base.ArgparseCommand):
             not record_data['all_records']
         )
     
-    def _prepare_request_groups(self, vault: vault_online.VaultOnline, shared_folder_uids: set,
-                                user_data: dict, record_data: dict, action: str,
-                                share_expiration, kwargs: dict) -> list:
+    def _prepare_request_groups(self, vault: vault_online.VaultOnline, shared_folder_uids: Set,
+                                user_data: Dict, record_data: Dict, action: str,
+                                share_expiration, kwargs: Dict) -> List:
         """Prepare request groups for all shared folders."""
         rq_groups = []
         shared_folder_cache = {x.shared_folder_uid: x for x in vault.vault_data.shared_folders()}
@@ -554,9 +554,9 @@ class ShareFolderCommand(base.ArgparseCommand):
         return rq_groups
     
     def _prepare_folder_requests(self, vault: vault_online.VaultOnline, sf_uid: str,
-                                  shared_folder_cache: dict, user_data: dict, 
-                                  record_data: dict, action: str, share_expiration,
-                                  kwargs: dict) -> list:
+                                  shared_folder_cache: Dict, user_data: Dict,
+                                  record_data: Dict, action: str, share_expiration,
+                                  kwargs: Dict) -> List:
         """Prepare requests for a single shared folder."""
         sf_users = user_data['users'].copy()
         sf_teams = user_data['teams'].copy()
@@ -576,8 +576,8 @@ class ShareFolderCommand(base.ArgparseCommand):
             record_data['default_record'], user_data['default_account'], share_expiration
         )
     
-    def _load_or_create_shared_folder(self, vault: vault_online.VaultOnline, sf_uid: str, shared_folder_cache: dict,
-                                       user_data: dict, record_data: dict, action: str):
+    def _load_or_create_shared_folder(self, vault: vault_online.VaultOnline, sf_uid: str, shared_folder_cache: Dict,
+                                       user_data: Dict, record_data: Dict, action: str):
         """Load existing shared folder or create a new one."""
         if sf_uid in shared_folder_cache:
             return vault.vault_data.load_shared_folder(sf_uid)
@@ -611,8 +611,8 @@ class ShareFolderCommand(base.ArgparseCommand):
         }
     
     def _update_from_existing_folder(self, sh_fol, auth: keeper_auth.KeeperAuth, 
-                                     user_data: dict, record_data: dict,
-                                     sf_users: set, sf_records: set):
+                                     user_data: Dict, record_data: Dict,
+                                     sf_users: Set, sf_records: Set):
         """Update user and record sets from existing folder permissions."""
         if not (user_data['all_users'] or record_data['all_records']):
             return
@@ -626,10 +626,10 @@ class ShareFolderCommand(base.ArgparseCommand):
         if record_data['all_records'] and sh_fol.record_permissions:
             sf_records.update(x.record_uid for x in sh_fol.record_permissions)
     
-    def _chunk_and_prepare_requests(self, vault: vault_online.VaultOnline, kwargs: dict, sh_fol, sf_uid: str,
-                                     sf_users: set, sf_teams: set, sf_records: set,
+    def _chunk_and_prepare_requests(self, vault: vault_online.VaultOnline, kwargs: Dict, sh_fol, sf_uid: str,
+                                     sf_users: Set, sf_teams: Set, sf_records: Set,
                                      default_record: bool, default_account: bool,
-                                     share_expiration) -> list:
+                                     share_expiration) -> List:
         """Chunk records and users, then prepare requests."""
         rec_list = list(sf_records)
         user_list = list(sf_users)
@@ -668,7 +668,7 @@ class ShareFolderCommand(base.ArgparseCommand):
         return rq_groups
     
     def _build_shared_folder_info(self, sh_fol, sf_uid: str, sf_unencrypted_key,
-                                   shared_folder_revision: int, group_idx: int) -> dict:
+                                   shared_folder_revision: int, group_idx: int) -> Dict:
         """Build shared folder info dictionary."""
         if isinstance(sh_fol, dict):
             sf_info = sh_fol.copy()
@@ -741,7 +741,7 @@ class OneTimeShareListCommand(base.ArgparseCommand):
         
         return self._format_output(table_data, kwargs)
 
-    def _resolve_record_uids(self, context: KeeperParams, vault, records: list, recursive: bool) -> set:
+    def _resolve_record_uids(self, context: KeeperParams, vault, records: List, recursive: bool) -> Set:
         """Resolve record names/paths to UIDs."""
         record_uids = set()
         
@@ -774,7 +774,7 @@ class OneTimeShareListCommand(base.ArgparseCommand):
         
         return record_uids
 
-    def _add_folder_records(self, vault, folder_uid: str, record_uids: set, recursive: bool):
+    def _add_folder_records(self, vault, folder_uid: str, record_uids: Set, recursive: bool):
         """Add records from a folder to the record_uids set."""
         def on_folder(f):
             f_uid = f.folder_uid or ''
@@ -790,7 +790,7 @@ class OneTimeShareListCommand(base.ArgparseCommand):
         else:
             on_folder(folder)
 
-    def _get_applications(self, vault, record_uids: set):
+    def _get_applications(self, vault, record_uids: Set):
         """Get application info for the given record UIDs."""
         r_uids = list(record_uids)
         if len(r_uids) >= MAX_BATCH_SIZE:
@@ -926,7 +926,7 @@ class OneTimeShareCreateCommand(base.ArgparseCommand):
             raise base.CommandError('URL expiration period cannot be greater than 6 months.')
         return period
 
-    def _create_share_urls(self, context: KeeperParams, vault, record_names: list, period, name: str, is_editable: bool):
+    def _create_share_urls(self, context: KeeperParams, vault, record_names: List, period, name: str, is_editable: bool):
         """Create share URLs for the given records."""
         urls = {}
         for record_name in record_names:
@@ -938,7 +938,7 @@ class OneTimeShareCreateCommand(base.ArgparseCommand):
             urls[record_uid] = str(url)
         return urls
 
-    def _handle_output(self, context: KeeperParams, urls: dict, kwargs):
+    def _handle_output(self, context: KeeperParams, urls: Dict, kwargs):
         """Handle different output formats for the URLs."""
         if context.keeper_config.batch_mode:
             return '\n'.join(urls.values())
@@ -954,7 +954,7 @@ class OneTimeShareCreateCommand(base.ArgparseCommand):
         else:
             return '\n'.join(urls.values())
 
-    def _copy_to_clipboard(self, urls: dict):
+    def _copy_to_clipboard(self, urls: Dict):
         """Copy URL to clipboard."""
         import pyperclip
         url = next(iter(urls.values()))
@@ -962,7 +962,7 @@ class OneTimeShareCreateCommand(base.ArgparseCommand):
         logger.info('One-Time record share URL is copied to clipboard')
         return None
 
-    def _output_to_stdout(self, urls: dict):
+    def _output_to_stdout(self, urls: Dict):
         """Output URLs to stdout in table format."""
         table = [list(x) for x in urls.items()]
         headers = ['Record UID', 'URL']
@@ -1042,7 +1042,7 @@ class OneTimeShareRemoveCommand(base.ArgparseCommand):
         
         return self._resolve_partial_matches(partial_matches, share_name)
 
-    def _resolve_partial_matches(self, partial_matches: list[bytes], original_name: str) -> Optional[bytes]:
+    def _resolve_partial_matches(self, partial_matches: List[bytes], original_name: str) -> Optional[bytes]:
         """
         Resolve partial matches to a single client ID.
         

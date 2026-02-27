@@ -92,12 +92,12 @@ def welcome_print_version():
 
     this_app_version = __version__
 
-    ver_info = is_up_to_date_version()
-
-    if ver_info.get('is_up_to_date') is None:
-        api.get_logger().debug("It appears that the internet connection is offline.")
-
-    elif not ver_info.get('is_up_to_date'):
-        prompt_utils.output_text(f" Your version of the Commander CLI is {this_app_version}, "
-                                 f"the current version is {ver_info.get('current_github_version')}.\n"
-                                 f" Use the ‘version’ command for more details.\n", color='WARNING')
+    # ver_info = is_up_to_date_version()
+    #
+    # if ver_info.get('is_up_to_date') is None:
+    #     api.get_logger().debug("It appears that the internet connection is offline.")
+    #
+    # elif not ver_info.get('is_up_to_date'):
+    #     prompt_utils.output_text(f" Your version of the Commander CLI is {this_app_version}, "
+    #                              f"the current version is {ver_info.get('current_github_version')}.\n"
+    #                              f" Use the ‘version’ command for more details.\n", color='WARNING')
