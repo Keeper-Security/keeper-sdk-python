@@ -26,9 +26,15 @@ try:
 except ImportError:
     pyperclip = None
 
-
 logger = utils.get_logger()
-logger.setLevel(logging.WARNING)
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setLevel(logging.INFO)
+    _handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s")
+    )
+    logger.addHandler(_handler)
 
 
 class FidoCliInteraction(fido2.client.UserInteraction, IKeeperUserInteraction):
@@ -68,6 +74,16 @@ class LoginFlow:
     def __init__(self) -> None:
         self._config = configuration.JsonConfigurationStorage()
         self._logged_in_with_persistent = True
+        self._endpoint: Optional[endpoint.KeeperEndpoint] = None
+
+    @property
+    def endpoint(self) -> Optional[endpoint.KeeperEndpoint]:
+        return self._endpoint
+
+    @property
+    def logged_in_with_persistent(self) -> bool:
+        """True if login succeeded by resuming an existing persistent session (no step loop)."""
+        return self._logged_in_with_persistent
 
     def run(self) -> Optional[keeper_auth.KeeperAuth]:
         """
@@ -78,6 +94,7 @@ class LoginFlow:
         """
         server = self._ensure_server()
         keeper_endpoint = endpoint.KeeperEndpoint(self._config, server)
+        self._endpoint = keeper_endpoint
         login_auth_context = login_auth.LoginAuth(keeper_endpoint)
 
         username = self._config.get().last_login or input("Enter username: ")
@@ -136,6 +153,7 @@ class LoginFlow:
             "ask admin to approve this device and then press return/enter to resume"
         )
         input()
+        step.resume()
 
     def _handle_password(self, step: login_auth.LoginStepPassword) -> None:
         password = getpass.getpass("Enter password: ")
@@ -403,6 +421,36 @@ class LoginFlow:
         return login_auth.TwoFactorDuration.EveryLogin
 
 
+def enable_persistent_login(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
+    """
+    Enable persistent login and register data key for device.
+    Sets persistent_login to on and logout_timer to 30 days.
+    """
+    keeper_auth.set_user_setting(keeper_auth_context, 'persistent_login', '1')
+    keeper_auth.register_data_key_for_device(keeper_auth_context)
+    mins_per_day = 60 * 24
+    timeout_in_minutes = mins_per_day * 30  # 30 days
+    keeper_auth.set_user_setting(keeper_auth_context, 'logout_timer', str(timeout_in_minutes))
+    print("Persistent login turned on successfully and device registered")
+
+
+def login():
+    """
+    Handle the login process including server selection, authentication,
+    and multi-factor authentication steps (device approval, password, 2FA
+    with channel selection and Security Key, SSO data key, SSO token).
+
+    Returns:
+        tuple: (keeper_auth_context, keeper_endpoint) on success, or (None, None) if login fails.
+    """
+    flow = LoginFlow()
+    keeper_auth_context = flow.run()
+    if keeper_auth_context and not flow.logged_in_with_persistent:
+        enable_persistent_login(keeper_auth_context)
+    keeper_endpoint = flow.endpoint if keeper_auth_context else None
+    return keeper_auth_context, keeper_endpoint
+
+
 def list_records(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
     """
     List all records in the vault.
@@ -423,15 +471,14 @@ def list_records(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
     print("-" * 50)
     for record in vault.vault_data.records():
         print(f"Title: {record.title}")
+        print(f"Record UID: {record.record_uid}")
+        print(f"Record Type: {record.record_type}")
 
         if record.version == 2:
             legacy_record = vault.vault_data.load_record(record.record_uid)
             if isinstance(legacy_record, vault_record.PasswordRecord):
                 print(f"Username: {legacy_record.login}")
                 print(f"URL: {legacy_record.link}")
-
-        elif record.version >= 3:
-            print(f"Record Type: {record.record_type}")
 
         print("-" * 50)
 
@@ -441,8 +488,7 @@ def list_records(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
 
 def main() -> None:
     """Run login and list all vault records."""
-    login_flow = LoginFlow()
-    keeper_auth_context = login_flow.run()
+    keeper_auth_context, _ = login()
 
     if keeper_auth_context:
         list_records(keeper_auth_context)

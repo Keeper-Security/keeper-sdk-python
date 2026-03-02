@@ -25,7 +25,14 @@ except ImportError:
     pyperclip = None
 
 logger = utils.get_logger()
-logger.setLevel(logging.WARNING)
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setLevel(logging.INFO)
+    _handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s")
+    )
+    logger.addHandler(_handler)
 
 
 class FidoCliInteraction(fido2.client.UserInteraction, IKeeperUserInteraction):
@@ -70,6 +77,11 @@ class LoginFlow:
     @property
     def endpoint(self) -> Optional[endpoint.KeeperEndpoint]:
         return self._endpoint
+
+    @property
+    def logged_in_with_persistent(self) -> bool:
+        """True if login succeeded by resuming an existing persistent session (no step loop)."""
+        return self._logged_in_with_persistent
 
     def run(self) -> Optional[keeper_auth.KeeperAuth]:
         """
@@ -139,6 +151,7 @@ class LoginFlow:
             "ask admin to approve this device and then press return/enter to resume"
         )
         input()
+        step.resume()
 
     def _handle_password(self, step: login_auth.LoginStepPassword) -> None:
         password = getpass.getpass("Enter password: ")
@@ -430,7 +443,7 @@ def login():
     """
     flow = LoginFlow()
     keeper_auth_context = flow.run()
-    if keeper_auth_context:
+    if keeper_auth_context and not flow.logged_in_with_persistent:
         enable_persistent_login(keeper_auth_context)
     keeper_endpoint = flow.endpoint if keeper_auth_context else None
     return keeper_auth_context, keeper_endpoint
@@ -439,7 +452,7 @@ def login():
 def display_login_info(keeper_auth_context: keeper_auth.KeeperAuth, keeper_endpoint: endpoint.KeeperEndpoint):
     """
     Display login success information.
-    
+
     Args:
         keeper_auth_context: The authenticated Keeper context.
         keeper_endpoint: The Keeper endpoint with server information.
