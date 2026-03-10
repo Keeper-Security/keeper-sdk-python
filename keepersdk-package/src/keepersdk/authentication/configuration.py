@@ -627,6 +627,99 @@ class _JsonUserConfiguration(dict, IUserConfiguration):
         return self.get(self.LAST_DEVICE)
 
 
+def _is_commander_config(obj: Optional[dict]) -> bool:
+    """Return True if the JSON object looks like commander_config (flat single-device format)."""
+    if not isinstance(obj, dict) or not obj:
+        return False
+    # Commander config has top-level device_token and user, and no "users" array
+    has_commander_keys = 'device_token' in obj and 'user' in obj and 'server' in obj and 'private_key' in obj and 'clone_code' in obj
+    has_keeper_structure = isinstance(obj.get('users'), list) and isinstance(obj.get('servers'), list) and isinstance(obj.get('devices'), list)
+    return bool(has_commander_keys and not has_keeper_structure)
+
+
+def _is_keepersdk_config(obj: Optional[dict]) -> bool:
+    """Return True if the JSON object looks like keepersdk (users/servers/devices) format."""
+    if not isinstance(obj, dict) or not obj:
+        return False
+    # Keepersdk config has "users", "servers", and "devices" arrays
+    has_keeper_structure = isinstance(obj.get('users'), list) and isinstance(obj.get('servers'), list) and isinstance(obj.get('devices'), list)
+    has_commander_keys = 'device_token' in obj and 'user' in obj and 'server' in obj and 'private_key' in obj and 'clone_code' in obj
+    return bool(not has_commander_keys and has_keeper_structure)
+
+
+def _keepersdk_config_to_commander_config(data: dict) -> dict:
+    """Convert keepersdk (users/servers/devices) format to commander_config (flat single-device format).
+    Keeper format uses lists for users and devices; look up by last_login and device_token."""
+    user = data.get('last_login')
+    server = data.get('last_server')
+    users_list = data.get('users') or []
+    devices_list = data.get('devices') or []
+
+    device_token = None
+    if user and isinstance(users_list, list):
+        for u in users_list:
+            if isinstance(u, dict) and u.get('user') == user:
+                last_device = u.get('last_device')
+                if isinstance(last_device, dict):
+                    device_token = last_device.get('device_token')
+                break
+
+    private_key = None
+    clone_code = None
+    if device_token and isinstance(devices_list, list):
+        for d in devices_list:
+            if isinstance(d, dict) and d.get('device_token') == device_token:
+                private_key = d.get('private_key')
+                clone_code = d.get('clone_code')
+                if clone_code is None and d.get('server_info'):
+                    si = d['server_info']
+                    if isinstance(si, list) and si and isinstance(si[0], dict):
+                        clone_code = si[0].get('clone_code')
+                break
+
+    commander_data = {
+        'server': server,
+        'user': user,
+        'device_token': device_token,
+        'private_key': private_key,
+        'clone_code': clone_code,
+    }
+    return {**data, **commander_data}
+
+
+def _commander_config_to_keeper_config(data: dict) -> dict:
+    """Convert commander_config (flat) format to keepersdk (users/servers/devices) format.
+    Original top-level keys are preserved in the returned dict."""
+    server = adjust_servername(data.get('server') or '')
+    user = adjust_username(data.get('user') or '')
+    device_token = data.get('device_token') or ''
+    private_key = data.get('private_key') or ''
+    clone_code = data.get('clone_code') or ''
+
+    keeper_format = {
+        'users': [
+            {
+                'user': user,
+                'server': server,
+                'last_device': {'device_token': device_token} if device_token else None,
+            }
+        ],
+        'servers': [
+            {'server': server, 'server_key_id': data.get('server_key_id', 1)},
+        ],
+        'devices': [
+            {
+                'device_token': device_token,
+                'private_key': private_key,
+                'server_info': [{'server': server, **({'clone_code': clone_code} if clone_code else {})}],
+            }
+        ] if device_token else [],
+        'last_login': user,
+        'last_server': server,
+    }
+    return {**data, **keeper_format}
+
+
 class JsonKeeperConfiguration(dict, IKeeperConfiguration):
     LAST_SERVER = 'last_server'
     LAST_LOGIN = 'last_login'
@@ -764,6 +857,10 @@ class JsonConfigurationStorage(IConfigurationStorage):
                     json_conf = json.load(fp)
                     if not isinstance(json_conf, dict):
                         raise Exception('JSON configuration should be an object')
+                    if _is_commander_config(json_conf):
+                        json_conf = _commander_config_to_keeper_config(json_conf)
+                    elif _is_keepersdk_config(json_conf):
+                        json_conf = _keepersdk_config_to_commander_config(json_conf)
                 except Exception as e:
                     json_conf = None
                     logger.debug('Load JSON configuration', exc_info=e)
