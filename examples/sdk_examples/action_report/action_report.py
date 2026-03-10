@@ -112,14 +112,14 @@ class LoginFlow:
             step = login_auth_context.login_step
             if isinstance(step, login_auth.LoginStepDeviceApproval):
                 self._handle_device_approval(step)
-            elif isinstance(step, login_auth.LoginStepPassword):
-                self._handle_password(step)
             elif isinstance(step, login_auth.LoginStepTwoFactor):
                 self._handle_two_factor(step)
-            elif isinstance(step, login_auth.LoginStepSsoDataKey):
-                self._handle_sso_data_key(step)
+            elif isinstance(step, login_auth.LoginStepPassword):
+                self._handle_password(step)
             elif isinstance(step, login_auth.LoginStepSsoToken):
                 self._handle_sso_token(step)
+            elif isinstance(step, login_auth.LoginStepSsoDataKey):
+                self._handle_sso_data_key(step)
             elif isinstance(step, login_auth.LoginStepError):
                 print(f"Login error: ({step.code}) {step.message}")
                 return None
@@ -154,17 +154,61 @@ class LoginFlow:
     def _handle_device_approval(
         self, step: login_auth.LoginStepDeviceApproval
     ) -> None:
-        step.send_push(login_auth.DeviceApprovalChannel.KeeperPush)
-        print(
-            "Device approval request sent. Login to existing vault/console or "
-            "ask admin to approve this device and then press return/enter to resume"
-        )
-        input()
-        step.resume()
+        """Device approval: same options as keepercli verify_device (email, keeper push, 2FA, resume)."""
+        menu = [
+            ("email_send", "to send email"),
+            ("email_code=<code>", "to validate verification code sent via email"),
+            ("keeper_push", "to send Keeper Push notification"),
+            ("2fa_send", "to send 2FA code"),
+            ("2fa_code=<code>", "to validate a code provided by 2FA application"),
+            ("<Enter>", "to resume"),
+        ]
+        lines = ["Approve by selecting a method below"]
+        lines.extend(f"  {cmd} {desc}" for cmd, desc in menu)
+        print("\n".join(lines))
+
+        selection = input("Type your selection or <Enter> to resume: ").strip()
+        if selection is None:
+            return
+        if selection in ("email_send", "es"):
+            step.send_push(channel=login_auth.DeviceApprovalChannel.Email)
+            print("An email with instructions has been sent. Press <Enter> when approved.")
+        elif selection.startswith("email_code="):
+            code = selection[len("email_code=") :]
+            step.send_code(channel=login_auth.DeviceApprovalChannel.Email, code=code)
+            print("Successfully verified email code.")
+        elif selection in ("keeper_push", "kp"):
+            step.send_push(channel=login_auth.DeviceApprovalChannel.KeeperPush)
+            print(
+                "Successfully made a push notification to the approved device. "
+                "Press <Enter> when approved."
+            )
+        elif selection in ("2fa_send", "2fs"):
+            step.send_push(channel=login_auth.DeviceApprovalChannel.TwoFactor)
+            print("2FA code was sent.")
+        elif selection.startswith("2fa_code="):
+            code = selection[len("2fa_code=") :]
+            step.send_code(channel=login_auth.DeviceApprovalChannel.TwoFactor, code=code)
+            print("Successfully verified 2FA code.")
+        else:
+            step.resume()
 
     def _handle_password(self, step: login_auth.LoginStepPassword) -> None:
-        password = getpass.getpass("Enter password: ")
-        step.verify_password(password)
+        """Password step: prompt for password and retry on auth_failed (aligned with keepercli handle_verify_password)."""
+        print(f"\nEnter password for {step.username}")
+        while True:
+            password = getpass.getpass("Password: ")
+            if not password:
+                raise KeyboardInterrupt()
+            try:
+                step.verify_password(password)
+                break
+            except errors.KeeperApiError as kae:
+                print(
+                    "Invalid email or password combination, please re-enter."
+                    if kae.result_code == "auth_failed"
+                    else kae.message
+                )
 
     def _handle_two_factor(self, step: login_auth.LoginStepTwoFactor) -> None:
         channels = [
