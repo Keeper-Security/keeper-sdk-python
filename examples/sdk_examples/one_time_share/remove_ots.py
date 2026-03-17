@@ -2,7 +2,6 @@ import getpass
 import sqlite3
 import json
 import logging
-
 from typing import Dict, Optional
 
 import fido2
@@ -107,14 +106,14 @@ class LoginFlow:
             step = login_auth_context.login_step
             if isinstance(step, login_auth.LoginStepDeviceApproval):
                 self._handle_device_approval(step)
-            elif isinstance(step, login_auth.LoginStepPassword):
-                self._handle_password(step)
             elif isinstance(step, login_auth.LoginStepTwoFactor):
                 self._handle_two_factor(step)
-            elif isinstance(step, login_auth.LoginStepSsoDataKey):
-                self._handle_sso_data_key(step)
+            elif isinstance(step, login_auth.LoginStepPassword):
+                self._handle_password(step)
             elif isinstance(step, login_auth.LoginStepSsoToken):
                 self._handle_sso_token(step)
+            elif isinstance(step, login_auth.LoginStepSsoDataKey):
+                self._handle_sso_data_key(step)
             elif isinstance(step, login_auth.LoginStepError):
                 print(f"Login error: ({step.code}) {step.message}")
                 return None
@@ -149,17 +148,61 @@ class LoginFlow:
     def _handle_device_approval(
         self, step: login_auth.LoginStepDeviceApproval
     ) -> None:
-        step.send_push(login_auth.DeviceApprovalChannel.KeeperPush)
-        print(
-            "Device approval request sent. Login to existing vault/console or "
-            "ask admin to approve this device and then press return/enter to resume"
-        )
-        input()
-        step.resume()
+        """Device approval: same options as keepercli verify_device (email, keeper push, 2FA, resume)."""
+        menu = [
+            ("email_send", "to send email"),
+            ("email_code=<code>", "to validate verification code sent via email"),
+            ("keeper_push", "to send Keeper Push notification"),
+            ("2fa_send", "to send 2FA code"),
+            ("2fa_code=<code>", "to validate a code provided by 2FA application"),
+            ("<Enter>", "to resume"),
+        ]
+        lines = ["Approve by selecting a method below"]
+        lines.extend(f"  {cmd} {desc}" for cmd, desc in menu)
+        print("\n".join(lines))
+
+        selection = input("Type your selection or <Enter> to resume: ").strip()
+        if selection is None:
+            return
+        if selection in ("email_send", "es"):
+            step.send_push(channel=login_auth.DeviceApprovalChannel.Email)
+            print("An email with instructions has been sent. Press <Enter> when approved.")
+        elif selection.startswith("email_code="):
+            code = selection[len("email_code=") :]
+            step.send_code(channel=login_auth.DeviceApprovalChannel.Email, code=code)
+            print("Successfully verified email code.")
+        elif selection in ("keeper_push", "kp"):
+            step.send_push(channel=login_auth.DeviceApprovalChannel.KeeperPush)
+            print(
+                "Successfully made a push notification to the approved device. "
+                "Press <Enter> when approved."
+            )
+        elif selection in ("2fa_send", "2fs"):
+            step.send_push(channel=login_auth.DeviceApprovalChannel.TwoFactor)
+            print("2FA code was sent.")
+        elif selection.startswith("2fa_code="):
+            code = selection[len("2fa_code=") :]
+            step.send_code(channel=login_auth.DeviceApprovalChannel.TwoFactor, code=code)
+            print("Successfully verified 2FA code.")
+        else:
+            step.resume()
 
     def _handle_password(self, step: login_auth.LoginStepPassword) -> None:
-        password = getpass.getpass("Enter password: ")
-        step.verify_password(password)
+        """Password step: prompt for password and retry on auth_failed (aligned with keepercli handle_verify_password)."""
+        print(f"\nEnter password for {step.username}")
+        while True:
+            password = getpass.getpass("Password: ")
+            if not password:
+                raise KeyboardInterrupt()
+            try:
+                step.verify_password(password)
+                break
+            except errors.KeeperApiError as kae:
+                print(
+                    "Invalid email or password combination, please re-enter."
+                    if kae.result_code == "auth_failed"
+                    else kae.message
+                )
 
     def _handle_two_factor(self, step: login_auth.LoginStepTwoFactor) -> None:
         channels = [
@@ -453,7 +496,76 @@ def login():
     return keeper_auth_context, keeper_endpoint
 
 
-def list_one_time_shares(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
+def _resolve_record_uid(
+    vault: vault_online.VaultOnline,
+    record_title_or_uid: str,
+) -> str:
+    """
+    Resolve record title or UID to a record UID.
+
+    If record_title_or_uid matches a record UID (record exists), return it.
+    Otherwise find the first record whose title equals or contains the given string.
+    """
+    if not record_title_or_uid or not record_title_or_uid.strip():
+        raise ValueError("Record title or UID must be non-empty.")
+
+    candidate = record_title_or_uid.strip()
+
+    if vault.vault_data.get_record(candidate) is not None:
+        return candidate
+
+    candidate_lower = candidate.lower()
+    for record_info in vault.vault_data.records():
+        if record_info.version not in (2, 3):
+            continue
+        if (
+            record_info.title.lower() == candidate_lower
+            or candidate_lower in record_info.title.lower()
+        ):
+            return record_info.record_uid
+
+    raise ValueError(
+        f"No record found matching {record_title_or_uid!r}. "
+        "Use an existing record title or record UID."
+    )
+
+
+def remove_one_time_share_example(
+    vault: vault_online.VaultOnline,
+    record_title_or_uid: str,
+    share_identifier: str,
+) -> bool:
+    """
+    Remove a one-time share for the given record using the SDK.
+
+    Args:
+        vault: Initialized VaultOnline instance.
+        record_title_or_uid: Record title or record UID that has the one-time share.
+        share_identifier: Full share link ID, or unique prefix.
+
+    Returns:
+        True if the share was removed, False on error.
+    """
+    record_uid = _resolve_record_uid(vault, record_title_or_uid)
+    try:
+        one_time_share.remove_one_time_share(
+            vault=vault,
+            record_uid=record_uid,
+            share_identifier=share_identifier,
+        )
+        print(f"One-time share {share_identifier!r} removed for record {record_title_or_uid!r}.")
+        return True
+    except ValueError as e:
+        print(f"Error removing one-time share: {e}")
+        return False
+
+
+def remove_one_time_share_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
+    """Build vault from auth context, remove one-time share with configured variables, then close."""
+    # Record and share to remove
+    RECORD_TITLE_OR_UID = "My Login"  # Record title or record UID that has the share
+    SHARE_IDENTIFIER = "Share for contractor"  # Share link ID / prefix
+
     conn = sqlite3.Connection("file::memory:", uri=True)
     vault_storage = sqlite_storage.SqliteVaultStorage(
         lambda: conn,
@@ -462,62 +574,22 @@ def list_one_time_shares(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
     vault = vault_online.VaultOnline(keeper_auth_context, vault_storage)
     vault.sync_down()
     try:
-        record_search = input(
-            "Enter record name/UID to check for shares (or leave empty for all records): "
-        ).strip()
-        record_uids = []
-        for record_info in vault.vault_data.records():
-            if record_info.version not in (2, 3):
-                continue
-            if (
-                not record_search
-                or record_search.lower() in record_info.title.lower()
-                or record_search == record_info.record_uid
-            ):
-                record_uids.append(record_info.record_uid)
-        if not record_uids:
-            print("\nNo records found to check for one-time shares")
-        else:
-            shares: list[one_time_share.OneTimeShare] = one_time_share.list_one_time_shares(
-                vault=vault,
-                record_uid=record_uids[:1000],
-                include_expired=True,
-            )
-            if not shares:
-                print("\nNo one-time shares found")
-            else:
-                print(f"\nOne-Time Shares ({len(shares)})\n{'=' * 130}")
-                print(
-                    f"{'Record Title':<30} {'Share Name':<20} {'Created':<20} {'Expires':<20} {'Status':<15}\n{'-' * 130}"
-                )
-                for share in shares:
-                    record_info = vault.vault_data.get_record(share.record_uid)
-                    record_title = record_info.title if record_info else "Unknown"
-                    created = (
-                        share.generated.strftime("%Y-%m-%d %H:%M")
-                        if share.generated
-                        else "N/A"
-                    )
-                    expires = (
-                        share.expires.strftime("%Y-%m-%d %H:%M")
-                        if share.expires
-                        else "N/A"
-                    )
-                    print(
-                        f"{record_title[:29]:<30} {share.share_link_name[:19]:<20} {created:<20} {expires:<20} {share.status:<15}"
-                    )
-                print(f"{'-' * 130}\nTotal: {len(shares)}")
-        print("=" * 130)
+        remove_one_time_share_example(
+            vault,
+            RECORD_TITLE_OR_UID,
+            SHARE_IDENTIFIER,
+        )
     except Exception as e:
-        print(f"Error retrieving one-time shares: {e}")
-    vault.close()
-    keeper_auth_context.close()
+        print(f"Error: {e}")
+    finally:
+        vault.close()
+        keeper_auth_context.close()
 
 
-def main():
+def main() -> None:
     keeper_auth_context, _ = login()
     if keeper_auth_context:
-        list_one_time_shares(keeper_auth_context)
+        remove_one_time_share_run(keeper_auth_context)
     else:
         print("Login failed.")
 

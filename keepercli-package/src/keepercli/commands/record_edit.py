@@ -11,7 +11,7 @@ from typing import Iterable, Optional, List, Any, Sequence, Union, Dict
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
-from keepersdk.vault import (record_types, typed_field_utils, vault_record, attachment, record_facades,
+from keepersdk.vault import (record_types, typed_field_utils, vault_record, attachment, record_facades, one_time_share,
                              record_management, vault_online, vault_data, vault_types, vault_utils, vault_extensions, share_management_utils)
 from keepersdk import crypto, generator
 
@@ -714,7 +714,7 @@ class RecordAddCommand(base.ArgparseCommand, RecordEditMixin):
             SIX_MONTHS_IN_SECONDS = 182 * 24 * 60 * 60
             if expiration_period.total_seconds() > SIX_MONTHS_IN_SECONDS:
                 raise base.CommandError('URL expiration period cannot be greater than 6 months.')
-            url = record_utils.process_external_share(context=context, expiration_period=expiration_period, record=record)
+            url = one_time_share.create_one_time_share(context.vault, record.record_uid, expiration_period, is_self_destruct=True)
             expiration_date = datetime.datetime.now() + expiration_period
             formatted_date = expiration_date.strftime('%d/%m/%Y %H:%M:%S')
             message = f'Record self-destructs on {formatted_date} or after being viewed once. Once the link is opened the recipient will have 5 minutes to view the record.\n{url}'
