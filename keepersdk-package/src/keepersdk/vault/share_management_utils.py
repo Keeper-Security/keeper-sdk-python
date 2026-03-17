@@ -5,7 +5,7 @@ from re import findall
 from typing import Optional, Dict, List, Any, Generator, Iterable, Set, Tuple, Union
 
 from .. import crypto, utils
-from ..proto import enterprise_pb2, record_pb2
+from ..proto import enterprise_pb2, folder_pb2, record_pb2
 from ..vault import vault_online, vault_record, vault_types, vault_utils
 from ..enterprise import enterprise_data
 
@@ -957,3 +957,411 @@ def parse_timeout(timeout_input: str) -> datetime.timedelta:
     
     tdelta_kwargs = _parse_timeout_units(timeout_input)
     return datetime.timedelta(**tdelta_kwargs)
+
+
+_SHARED_FOLDER_TYPES: Tuple[str, ...] = ('shared_folder', 'shared_folder_folder')
+_AM_I_SHARE_ADMIN_ENDPOINT = 'vault/am_i_share_admin'
+_RECORDS_SHARE_UPDATE_ENDPOINT = 'vault/records_share_update'
+_SHARED_FOLDER_UPDATE_V3_ENDPOINT = 'vault/shared_folder_update_v3'
+_DIRECT_SHARE_BATCH_SIZE = 900
+_SHARED_FOLDER_RECORD_BATCH_SIZE = 490
+_SHARED_FOLDER_CHUNK_ELEMENT_LIMIT = 500
+
+
+def _resolve_folder_for_permission(
+    vault: vault_online.VaultOnline,
+    folder_uid_or_path: Optional[str]
+) -> vault_types.Folder:
+    """Resolve folder from UID or path. Returns root folder if folder_uid_or_path is None or empty."""
+    if not folder_uid_or_path or not folder_uid_or_path.strip():
+        return vault.vault_data.root_folder
+    name = folder_uid_or_path.strip()
+    if name in vault.vault_data._folders:
+        folder = vault.vault_data.get_folder(name)
+        if folder:
+            return folder
+    folder, remaining = try_resolve_path(vault, name)
+    if remaining:
+        raise ShareNotFoundError(f'Folder "{folder_uid_or_path}" not found')
+    return folder
+
+
+def _get_folders_to_process(
+    vault: vault_online.VaultOnline,
+    start_folder: vault_types.Folder,
+    recursive: bool
+) -> List[vault_types.Folder]:
+    """Return list of folders to process, optionally including all subfolders."""
+    folders = [start_folder]
+    if not recursive:
+        return folders
+    visited: Set[str] = {start_folder.folder_uid}
+    pos = 0
+    while pos < len(folders):
+        folder = folders[pos]
+        if folder.subfolders:
+            for sub_uid in folder.subfolders:
+                if sub_uid not in visited:
+                    sub = vault.vault_data.get_folder(sub_uid)
+                    if sub:
+                        folders.append(sub)
+                    visited.add(sub_uid)
+        pos += 1
+    return folders
+
+
+def _get_share_admin_folders(
+    vault: vault_online.VaultOnline,
+    folders: List[vault_types.Folder]
+) -> Set[str]:
+    """Return set of shared folder UIDs where the current user is share admin."""
+    shared_folder_uids: Set[str] = set()
+    for folder in folders:
+        uid = None
+        if folder.folder_type == 'shared_folder':
+            uid = folder.folder_uid
+        elif folder.folder_type == 'shared_folder_folder':
+            uid = folder.folder_scope_uid
+        if uid and uid not in shared_folder_uids and uid in vault.vault_data._shared_folders:
+            shared_folder_uids.add(uid)
+    if not shared_folder_uids:
+        return set()
+    try:
+        rq = record_pb2.AmIShareAdmin()
+        for sf_uid in shared_folder_uids:
+            osa = record_pb2.IsObjectShareAdmin()
+            osa.uid = utils.base64_url_decode(sf_uid)
+            osa.objectType = record_pb2.CHECK_SA_ON_SF
+            rq.isObjectShareAdmin.append(osa)
+        rs = vault.keeper_auth.execute_auth_rest(
+            rest_endpoint=_AM_I_SHARE_ADMIN_ENDPOINT,
+            request=rq,
+            response_type=record_pb2.AmIShareAdmin
+        )
+        return {utils.base64_url_encode(osa.uid) for osa in rs.isObjectShareAdmin if osa.isAdmin}
+    except Exception:
+        return set()
+
+
+def _get_shared_folder_uid(folder: vault_types.Folder) -> Optional[str]:
+    """Get shared folder UID from a folder (for shared_folder or shared_folder_folder)."""
+    if folder.folder_type == 'shared_folder':
+        return folder.folder_uid
+    if folder.folder_type == 'shared_folder_folder':
+        return folder.folder_scope_uid
+    return None
+
+
+def _has_manage_records_permission(
+    vault: vault_online.VaultOnline,
+    shared_folder: vault_types.SharedFolder,
+    shared_folder_uid: str,
+    is_share_admin: bool
+) -> bool:
+    """Return True if current user can manage records in this shared folder."""
+    if is_share_admin:
+        return True
+    account_uid = utils.base64_url_encode(vault.keeper_auth.auth_context.account_uid)
+    username = vault.keeper_auth.auth_context.username
+    if shared_folder.user_permissions:
+        if shared_folder.user_permissions[0].user_uid == account_uid:
+            return True
+        user = next(
+            (u for u in shared_folder.user_permissions if u.name == username),
+            None
+        )
+        if user and user.manage_records:
+            return True
+    return False
+
+
+def _needs_shared_folder_record_update(
+    rp: vault_types.SharedFolderRecord,
+    should_have: bool,
+    change_edit: bool,
+    change_share: bool
+) -> bool:
+    """Return True if this shared folder record permission should be updated."""
+    if change_edit and (should_have != rp.can_edit):
+        return True
+    if change_share and (should_have != rp.can_share):
+        return True
+    return False
+
+
+def _build_shared_folder_record_update(
+    record_uid: str,
+    shared_folder_uid: str,
+    should_have: bool,
+    change_edit: bool,
+    change_share: bool
+) -> Any:
+    """Build SharedFolderUpdateRecord protobuf for one record in a shared folder."""
+    cmd = folder_pb2.SharedFolderUpdateRecord()
+    cmd.recordUid = utils.base64_url_decode(record_uid)
+    cmd.sharedFolderUid = utils.base64_url_decode(shared_folder_uid)
+    cmd.canEdit = (
+        folder_pb2.BOOLEAN_TRUE if should_have else folder_pb2.BOOLEAN_FALSE
+    ) if change_edit else folder_pb2.BOOLEAN_NO_CHANGE
+    cmd.canShare = (
+        folder_pb2.BOOLEAN_TRUE if should_have else folder_pb2.BOOLEAN_FALSE
+    ) if change_share else folder_pb2.BOOLEAN_NO_CHANGE
+    return cmd
+
+
+def _process_direct_share_updates(
+    vault: vault_online.VaultOnline,
+    folders: List[vault_types.Folder],
+    should_have: bool,
+    change_edit: bool,
+    change_share: bool
+) -> List[Dict[str, Any]]:
+    """Collect direct record-share permission updates (record shared to users)."""
+    record_uids: Set[str] = set()
+    for folder in folders:
+        if folder.records:
+            record_uids.update(folder.records)
+    if not record_uids:
+        return []
+    shared_records = get_record_shares(vault, list(record_uids))
+    if not shared_records:
+        return []
+    current_username = vault.keeper_auth.auth_context.username
+    updates: List[Dict[str, Any]] = []
+    for sr in shared_records:
+        shares = sr.get('shares', {})
+        user_permissions = shares.get('user_permissions', [])
+        for up in user_permissions:
+            if up.get('owner'):
+                continue
+            username = up.get('username')
+            if username == current_username:
+                continue
+            needs = (change_edit and (should_have != up.get('editable'))) or (
+                change_share and (should_have != up.get('shareable'))
+            )
+            if needs:
+                updates.append({
+                    'record_uid': sr.get('record_uid'),
+                    'to_username': username,
+                    'editable': should_have if change_edit else up.get('editable'),
+                    'shareable': should_have if change_share else up.get('shareable'),
+                })
+    return updates
+
+
+def _process_shared_folder_permission_updates(
+    vault: vault_online.VaultOnline,
+    folders: List[vault_types.Folder],
+    should_have: bool,
+    change_edit: bool,
+    change_share: bool
+) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, Dict[str, Any]]]:
+    """Collect shared-folder record permission updates and skipped (no permission)."""
+    share_admin = _get_share_admin_folders(vault, folders)
+    account_uid = utils.base64_url_encode(vault.keeper_auth.auth_context.account_uid)
+    updates: Dict[str, Dict[str, Any]] = {}
+    skipped: Dict[str, Dict[str, Any]] = {}
+    for folder in folders:
+        if folder.folder_type not in _SHARED_FOLDER_TYPES:
+            continue
+        shared_folder_uid = _get_shared_folder_uid(folder)
+        if not shared_folder_uid or shared_folder_uid not in vault.vault_data._shared_folders:
+            continue
+        is_share_admin = shared_folder_uid in share_admin
+        shared_folder = vault.vault_data.load_shared_folder(shared_folder_uid)
+        if not shared_folder:
+            continue
+        has_manage = _has_manage_records_permission(
+            vault, shared_folder, shared_folder_uid, is_share_admin
+        )
+        container = updates if (is_share_admin or has_manage) else skipped
+        if not shared_folder.record_permissions:
+            continue
+        record_uids = folder.records if folder.records else set()
+        for rp in shared_folder.record_permissions:
+            record_uid = rp.record_uid
+            if record_uid not in record_uids:
+                continue
+            if record_uid in container.get(shared_folder_uid, {}):
+                continue
+            if _needs_shared_folder_record_update(rp, should_have, change_edit, change_share):
+                container.setdefault(shared_folder_uid, {})
+                container[shared_folder_uid][record_uid] = _build_shared_folder_record_update(
+                    record_uid, shared_folder_uid, should_have, change_edit, change_share
+                )
+    # drop empty dicts
+    updates = {k: v for k, v in updates.items() if v}
+    skipped = {k: v for k, v in skipped.items() if v}
+    return updates, skipped
+
+
+def _to_shared_record_proto(item: Dict[str, Any]) -> Any:
+    """Build SharedRecord protobuf for records_share_update."""
+    sr = record_pb2.SharedRecord()
+    sr.toUsername = item['to_username']
+    sr.recordUid = utils.base64_url_decode(item['record_uid'])
+    if 'editable' in item:
+        sr.editable = item['editable']
+    if 'shareable' in item:
+        sr.shareable = item['shareable']
+    return sr
+
+
+def _execute_direct_share_updates(
+    vault: vault_online.VaultOnline,
+    updates: List[Dict[str, Any]]
+) -> List[List[Any]]:
+    """Apply direct record share permission updates. Returns list of error rows [record_uid, username, status, message]."""
+    errors: List[List[Any]] = []
+    while updates:
+        batch = updates[:_DIRECT_SHARE_BATCH_SIZE]
+        updates = updates[_DIRECT_SHARE_BATCH_SIZE:]
+        rq = record_pb2.RecordShareUpdateRequest()
+        rq.updateSharedRecord.extend(_to_shared_record_proto(x) for x in batch)
+        rs = vault.keeper_auth.execute_auth_rest(
+            rest_endpoint=_RECORDS_SHARE_UPDATE_ENDPOINT,
+            request=rq,
+            response_type=record_pb2.RecordShareUpdateResponse
+        )
+        for status in rs.updateSharedRecordStatus:
+            if status.status.lower() != 'success':
+                errors.append([
+                    utils.base64_url_encode(status.recordUid),
+                    status.username,
+                    status.status.lower(),
+                    status.message
+                ])
+    return errors
+
+
+def _execute_shared_folder_updates(
+    vault: vault_online.VaultOnline,
+    updates: Dict[str, Dict[str, Any]]
+) -> List[List[Any]]:
+    """Apply shared folder record permission updates. Returns list of error rows [shared_folder_uid, record_uid, status]."""
+    errors: List[List[Any]] = []
+    requests: List[Any] = []
+    for shared_folder_uid in updates:
+        commands = list(updates[shared_folder_uid].values())
+        while commands:
+            batch = commands[:_SHARED_FOLDER_RECORD_BATCH_SIZE]
+            commands = commands[_SHARED_FOLDER_RECORD_BATCH_SIZE:]
+            rq = folder_pb2.SharedFolderUpdateV3Request()
+            rq.sharedFolderUid = utils.base64_url_decode(shared_folder_uid)
+            rq.forceUpdate = True
+            rq.sharedFolderUpdateRecord.extend(batch)
+            if batch:
+                rq.fromTeamUid = batch[0].teamUid
+            requests.append(rq)
+    # Chunk for API size limits
+    chunks: List[Dict[bytes, Any]] = []
+    current: Dict[bytes, Any] = {}
+    total = 0
+    for rq in requests:
+        if rq.sharedFolderUid in current:
+            chunks.append(current)
+            current = {}
+            total = 0
+        n = len(rq.sharedFolderUpdateRecord)
+        if total + n > _SHARED_FOLDER_CHUNK_ELEMENT_LIMIT:
+            chunks.append(current)
+            current = {}
+            total = 0
+        current[rq.sharedFolderUid] = rq
+        total += n
+    if current:
+        chunks.append(current)
+    for chunk in chunks:
+        rqs = folder_pb2.SharedFolderUpdateV3RequestV2()
+        rqs.sharedFoldersUpdateV3.extend(chunk.values())
+        rss = vault.keeper_auth.execute_auth_rest(
+            rest_endpoint=_SHARED_FOLDER_UPDATE_V3_ENDPOINT,
+            request=rqs,
+            response_type=folder_pb2.SharedFolderUpdateV3ResponseV2,
+            payload_version=1
+        )
+        for rs in rss.sharedFoldersUpdateV3Response:
+            sf_uid = utils.base64_url_encode(rs.sharedFolderUid)
+            for status in rs.sharedFolderUpdateRecordStatus:
+                if status.status != 'success':
+                    errors.append([sf_uid, utils.base64_url_encode(status.recordUid), status.status])
+    return errors
+
+
+def update_record_permissions(
+    vault: vault_online.VaultOnline,
+    action: str,
+    can_share: bool = False,
+    can_edit: bool = False,
+    *,
+    folder_uid_or_path: Optional[str] = None,
+    recursive: bool = False,
+    share_record: bool = True,
+    share_folder: bool = True,
+    dry_run: bool = False,
+    sync_after: bool = True
+) -> Dict[str, Any]:
+    """Update record permissions (can_edit / can_share) in a folder and optionally its subfolders.
+
+    Args:
+        vault: Connected vault.
+        action: ``'grant'`` or ``'revoke'``.
+        can_share: Whether to change the "can share" permission.
+        can_edit: Whether to change the "can edit" permission.
+        folder_uid_or_path: Folder UID or path; if None or empty, uses root.
+        recursive: If True, include all subfolders.
+        share_record: If True, update direct record shares (record shared to users).
+        share_folder: If True, update shared folder record permissions.
+        dry_run: If True, do not apply changes; only compute and return planned updates.
+        sync_after: If True and changes were applied, sync vault down after updates.
+
+    Returns:
+        Dict with keys:
+        - ``direct_share_updates``: list of direct-share updates (each a dict with
+          record_uid, to_username, editable, shareable).
+        - ``shared_folder_updates``: dict shared_folder_uid -> { record_uid -> update_cmd }.
+        - ``direct_share_errors``: list of error rows for direct share API (if not dry_run).
+        - ``shared_folder_errors``: list of error rows for shared folder API (if not dry_run).
+        - ``skipped_shared_folders``: shared folder UIDs skipped due to insufficient permissions.
+
+    Raises:
+        ShareValidationError: If neither can_share nor can_edit is True, or action is invalid.
+        ShareNotFoundError: If folder_uid_or_path is not found.
+    """
+    if action not in ('grant', 'revoke'):
+        raise ShareValidationError(f'Invalid action: {action!r}; use "grant" or "revoke"')
+    if not can_share and not can_edit:
+        raise ShareValidationError('Specify at least one of can_share or can_edit')
+    should_have = action == 'grant'
+    folder = _resolve_folder_for_permission(vault, folder_uid_or_path)
+    folders = _get_folders_to_process(vault, folder, recursive)
+    direct_share_updates: List[Dict[str, Any]] = []
+    shared_folder_updates: Dict[str, Dict[str, Any]] = {}
+    skipped_shared_folders: Dict[str, Dict[str, Any]] = {}
+    if share_record:
+        direct_share_updates = _process_direct_share_updates(
+            vault, folders, should_have, can_edit, can_share
+        )
+    if share_folder:
+        shared_folder_updates, skipped_shared_folders = _process_shared_folder_permission_updates(
+            vault, folders, should_have, can_edit, can_share
+        )
+    result: Dict[str, Any] = {
+        'direct_share_updates': direct_share_updates,
+        'shared_folder_updates': shared_folder_updates,
+        'direct_share_errors': [],
+        'shared_folder_errors': [],
+        'skipped_shared_folders': skipped_shared_folders,
+    }
+    if dry_run:
+        return result
+    if direct_share_updates:
+        result['direct_share_errors'] = _execute_direct_share_updates(vault, direct_share_updates)
+    if shared_folder_updates:
+        result['shared_folder_errors'] = _execute_shared_folder_updates(vault, shared_folder_updates)
+    if sync_after and (direct_share_updates or shared_folder_updates):
+        vault.sync_down(True)
+    return result
+
+
