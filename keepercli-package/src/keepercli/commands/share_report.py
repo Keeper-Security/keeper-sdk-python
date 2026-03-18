@@ -126,7 +126,10 @@ class ShareReportCommand(base.ArgparseCommand):
         if config.folders_only:
             return self._generate_folders_report(generator, output_format, output_file)
         if config.show_ownership:
-            return self._generate_ownership_report(generator, output_format, output_file, verbose)
+            return self._generate_ownership_report(
+                generator, output_format, output_file, verbose,
+                show_share_date=config.show_share_date
+            )
         if config.record_filter:
             return self._generate_record_detail_report(generator, config)
         if config.user_filter:
@@ -158,15 +161,18 @@ class ShareReportCommand(base.ArgparseCommand):
         generator: share_report.ShareReportGenerator,
         output_format: str,
         output_file: Optional[str],
-        verbose: bool
+        verbose: bool,
+        show_share_date: bool = False
     ) -> Optional[str]:
         """Generate record ownership report."""
         entries = generator.generate_records_report()
-        headers = share_report.ShareReportGenerator.get_headers(ownership=True)
+        headers = share_report.ShareReportGenerator.get_headers(
+            ownership=True, show_share_date=show_share_date
+        )
         table = [
             [e.record_owner, e.record_uid, e.record_title,
              e.shared_with if verbose else e.shared_with_count,
-             '\n'.join(e.folder_paths)]
+             '\n'.join(e.folder_paths)] + ([e.share_date or ''] if show_share_date else [])
             for e in entries
         ]
 

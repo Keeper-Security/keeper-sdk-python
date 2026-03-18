@@ -164,11 +164,22 @@ class SecurityAuditReportCommand(base.ArgparseCommand, enterprise_utils.Enterpri
             return []
 
         node_ids = []
+        unresolved = []
         for name_or_id in nodes:
+            matched = False
             for n in enterprise_data.nodes.get_all_entities():
                 if name_or_id == str(n.node_id) or name_or_id == n.name:
                     node_ids.append(n.node_id)
+                    matched = True
                     break
+            if not matched:
+                unresolved.append(name_or_id)
+
+        if unresolved:
+            raise base.CommandError(
+                f'Invalid node(s): {", ".join(repr(x) for x in unresolved)}. '
+                'Provide a valid node name or node UID.'
+            )
         return node_ids
 
     def _format_report(
