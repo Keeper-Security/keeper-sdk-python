@@ -2,7 +2,6 @@ import getpass
 import sqlite3
 import json
 import logging
-
 from typing import Dict, Optional
 
 import fido2
@@ -497,7 +496,76 @@ def login():
     return keeper_auth_context, keeper_endpoint
 
 
-def list_one_time_shares(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
+def _resolve_record_uid(
+    vault: vault_online.VaultOnline,
+    record_title_or_uid: str,
+) -> str:
+    """
+    Resolve record title or UID to a record UID.
+
+    If record_title_or_uid matches a record UID (record exists), return it.
+    Otherwise find the first record whose title equals or contains the given string.
+    """
+    if not record_title_or_uid or not record_title_or_uid.strip():
+        raise ValueError("Record title or UID must be non-empty.")
+
+    candidate = record_title_or_uid.strip()
+
+    if vault.vault_data.get_record(candidate) is not None:
+        return candidate
+
+    candidate_lower = candidate.lower()
+    for record_info in vault.vault_data.records():
+        if record_info.version not in (2, 3):
+            continue
+        if (
+            record_info.title.lower() == candidate_lower
+            or candidate_lower in record_info.title.lower()
+        ):
+            return record_info.record_uid
+
+    raise ValueError(
+        f"No record found matching {record_title_or_uid!r}. "
+        "Use an existing record title or record UID."
+    )
+
+
+def remove_one_time_share_example(
+    vault: vault_online.VaultOnline,
+    record_title_or_uid: str,
+    share_identifier: str,
+) -> bool:
+    """
+    Remove a one-time share for the given record using the SDK.
+
+    Args:
+        vault: Initialized VaultOnline instance.
+        record_title_or_uid: Record title or record UID that has the one-time share.
+        share_identifier: Full share link ID, or unique prefix.
+
+    Returns:
+        True if the share was removed, False on error.
+    """
+    record_uid = _resolve_record_uid(vault, record_title_or_uid)
+    try:
+        one_time_share.remove_one_time_share(
+            vault=vault,
+            record_uid=record_uid,
+            share_identifier=share_identifier,
+        )
+        print(f"One-time share {share_identifier!r} removed for record {record_title_or_uid!r}.")
+        return True
+    except ValueError as e:
+        print(f"Error removing one-time share: {e}")
+        return False
+
+
+def remove_one_time_share_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
+    """Build vault from auth context, remove one-time share with configured variables, then close."""
+    # Record and share to remove
+    RECORD_TITLE_OR_UID = "My Login"  # Record title or record UID that has the share
+    SHARE_IDENTIFIER = "Share for contractor"  # Share link ID / prefix
+
     conn = sqlite3.Connection("file::memory:", uri=True)
     vault_storage = sqlite_storage.SqliteVaultStorage(
         lambda: conn,
@@ -506,62 +574,22 @@ def list_one_time_shares(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
     vault = vault_online.VaultOnline(keeper_auth_context, vault_storage)
     vault.sync_down()
     try:
-        record_search = input(
-            "Enter record name/UID to check for shares (or leave empty for all records): "
-        ).strip()
-        record_uids = []
-        for record_info in vault.vault_data.records():
-            if record_info.version not in (2, 3):
-                continue
-            if (
-                not record_search
-                or record_search.lower() in record_info.title.lower()
-                or record_search == record_info.record_uid
-            ):
-                record_uids.append(record_info.record_uid)
-        if not record_uids:
-            print("\nNo records found to check for one-time shares")
-        else:
-            shares: list[one_time_share.OneTimeShare] = one_time_share.list_one_time_shares(
-                vault=vault,
-                record_uid=record_uids[:1000],
-                include_expired=True,
-            )
-            if not shares:
-                print("\nNo one-time shares found")
-            else:
-                print(f"\nOne-Time Shares ({len(shares)})\n{'=' * 130}")
-                print(
-                    f"{'Record Title':<30} {'Share Name':<20} {'Created':<20} {'Expires':<20} {'Status':<15}\n{'-' * 130}"
-                )
-                for share in shares:
-                    record_info = vault.vault_data.get_record(share.record_uid)
-                    record_title = record_info.title if record_info else "Unknown"
-                    created = (
-                        share.generated.strftime("%Y-%m-%d %H:%M")
-                        if share.generated
-                        else "N/A"
-                    )
-                    expires = (
-                        share.expires.strftime("%Y-%m-%d %H:%M")
-                        if share.expires
-                        else "N/A"
-                    )
-                    print(
-                        f"{record_title[:29]:<30} {share.share_link_name[:19]:<20} {created:<20} {expires:<20} {share.status:<15}"
-                    )
-                print(f"{'-' * 130}\nTotal: {len(shares)}")
-        print("=" * 130)
+        remove_one_time_share_example(
+            vault,
+            RECORD_TITLE_OR_UID,
+            SHARE_IDENTIFIER,
+        )
     except Exception as e:
-        print(f"Error retrieving one-time shares: {e}")
-    vault.close()
-    keeper_auth_context.close()
+        print(f"Error: {e}")
+    finally:
+        vault.close()
+        keeper_auth_context.close()
 
 
-def main():
+def main() -> None:
     keeper_auth_context, _ = login()
     if keeper_auth_context:
-        list_one_time_shares(keeper_auth_context)
+        remove_one_time_share_run(keeper_auth_context)
     else:
         print("Login failed.")
 
