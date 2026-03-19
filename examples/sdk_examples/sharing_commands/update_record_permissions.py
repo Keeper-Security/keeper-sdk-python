@@ -1,9 +1,15 @@
+"""
+Sample script demonstrating update_record_permissions from share_management_utils.
+
+Updates record-level permissions (can_edit / can_share) for records in a folder,
+either for direct record shares, shared folder record permissions, or both.
+Uses the same login and vault setup pattern as share_folder.py.
+"""
 import getpass
-import sqlite3
 import json
 import logging
-
-from typing import Dict, Optional
+import sqlite3
+from typing import Any, Dict, Optional
 
 import fido2
 import webbrowser
@@ -20,8 +26,7 @@ from keepersdk.authentication.yubikey import (
     yubikey_authenticate,
 )
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
-from keepersdk.vault import one_time_share, sqlite_storage, vault_online
-from keepersdk import utils
+from keepersdk.vault import share_management_utils, sqlite_storage, vault_online
 
 try:
     import pyperclip
@@ -149,7 +154,6 @@ class LoginFlow:
     def _handle_device_approval(
         self, step: login_auth.LoginStepDeviceApproval
     ) -> None:
-        """Device approval: same options as keepercli verify_device (email, keeper push, 2FA, resume)."""
         menu = [
             ("email_send", "to send email"),
             ("email_code=<code>", "to validate verification code sent via email"),
@@ -161,7 +165,6 @@ class LoginFlow:
         lines = ["Approve by selecting a method below"]
         lines.extend(f"  {cmd} {desc}" for cmd, desc in menu)
         print("\n".join(lines))
-
         selection = input("Type your selection or <Enter> to resume: ").strip()
         if selection is None:
             return
@@ -189,7 +192,6 @@ class LoginFlow:
             step.resume()
 
     def _handle_password(self, step: login_auth.LoginStepPassword) -> None:
-        """Password step: prompt for password and retry on auth_failed (aligned with keepercli handle_verify_password)."""
         print(f"\nEnter password for {step.username}")
         while True:
             password = getpass.getpass("Password: ")
@@ -221,11 +223,9 @@ class LoginFlow:
                 )
             )
         menu.append(("q", "Quit authentication attempt and return to Commander prompt."))
-
         lines = ["", "This account requires 2FA Authentication"]
         lines.extend(f"  {a}. {t}" for a, t in menu)
         print("\n".join(lines))
-
         while True:
             selection = input("Selection: ")
             if selection is None:
@@ -245,7 +245,6 @@ class LoginFlow:
                     "may be configured if not currently enabled."
                 )
                 continue
-
             if channel.channel_type in (
                 login_auth.TwoFactorChannel.TextMessage,
                 login_auth.TwoFactorChannel.KeeperDNA,
@@ -265,7 +264,6 @@ class LoginFlow:
                 )
                 if action:
                     step.send_push(channel.channel_uid, action)
-
             if channel.channel_type == login_auth.TwoFactorChannel.SecurityKey:
                 try:
                     challenge = json.loads(channel.challenge)
@@ -277,8 +275,6 @@ class LoginFlow:
                 except Exception as e:
                     logger.error(e)
                 continue
-
-            # 2FA code path
             step.duration = min(step.duration, channel.max_expiration)
             available_dura = sorted(
                 x for x in _TWO_FACTOR_DURATION_CODES if x <= channel.max_expiration
@@ -286,7 +282,6 @@ class LoginFlow:
             available_codes = [
                 _TWO_FACTOR_DURATION_CODES.get(x) or "login" for x in available_dura
             ]
-
             while True:
                 mfa_desc = self._two_factor_duration_desc(step.duration)
                 prompt_exp = (
@@ -294,7 +289,6 @@ class LoginFlow:
                     f"To change duration: 2fa_duration={'|'.join(available_codes)}"
                 )
                 print(prompt_exp)
-
                 selection = input("\nEnter 2FA Code or Duration: ")
                 if not selection:
                     return
@@ -326,7 +320,6 @@ class LoginFlow:
         lines = ["Approve this device by selecting a method below:"]
         lines.extend(f"  {cmd:>3}. {text}" for cmd, text in menu)
         print("\n".join(lines))
-
         while True:
             answer = input("Selection: ")
             if answer is None:
@@ -362,7 +355,6 @@ class LoginFlow:
             menu.append(("p", "Paste SSO Token from clipboard."))
         menu.append(("t", "Enter SSO Token manually."))
         menu.append(("q", "Quit SSO authentication attempt and return to Commander prompt."))
-
         lines = [
             "",
             "SSO Login URL:",
@@ -376,7 +368,6 @@ class LoginFlow:
         ]
         lines.extend(f"  {a:>3}. {t}" for a, t in menu)
         print("\n".join(lines))
-
         while True:
             token = input("Selection: ")
             if token == "q":
@@ -423,7 +414,6 @@ class LoginFlow:
                 if len(token) < 10:
                     print(f"Unsupported menu option: {token}")
                     continue
-
             if token:
                 try:
                     step.set_sso_token(token)
@@ -468,26 +458,19 @@ class LoginFlow:
 
 
 def enable_persistent_login(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
-    """
-    Enable persistent login and register data key for device.
-    Sets persistent_login to on and logout_timer to 30 days.
-    """
+    """Enable persistent login and register data key for device."""
     keeper_auth.set_user_setting(keeper_auth_context, 'persistent_login', '1')
     keeper_auth.register_data_key_for_device(keeper_auth_context)
     mins_per_day = 60 * 24
-    timeout_in_minutes = mins_per_day * 30  # 30 days
+    timeout_in_minutes = mins_per_day * 30
     keeper_auth.set_user_setting(keeper_auth_context, 'logout_timer', str(timeout_in_minutes))
     print("Persistent login turned on successfully and device registered")
 
 
 def login():
     """
-    Handle the login process including server selection, authentication,
-    and multi-factor authentication steps (device approval, password, 2FA
-    with channel selection and Security Key, SSO data key, SSO token).
-
-    Returns:
-        tuple: (keeper_auth_context, keeper_endpoint) on success, or (None, None) if login fails.
+    Handle the login process. Returns (keeper_auth_context, keeper_endpoint) on success,
+    or (None, None) if login fails.
     """
     flow = LoginFlow()
     keeper_auth_context = flow.run()
@@ -497,73 +480,131 @@ def login():
     return keeper_auth_context, keeper_endpoint
 
 
-def list_one_time_shares(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
+def update_record_permissions_in_folder(
+    keeper_auth_context: keeper_auth.KeeperAuth,
+    action: str,
+    can_share: bool = False,
+    can_edit: bool = False,
+    folder_uid_or_path: Optional[str] = None,
+    recursive: bool = False,
+    share_record: bool = True,
+    share_folder: bool = True,
+    dry_run: bool = False,
+    sync_after: bool = True,
+) -> Dict[str, Any]:
+    """
+    Update record permissions (can_edit / can_share) in a folder using
+    share_management_utils.update_record_permissions.
+
+    Args:
+        keeper_auth_context: Authenticated Keeper context.
+        action: 'grant' or 'revoke'.
+        can_share: Whether to change the "can share" permission.
+        can_edit: Whether to change the "can edit" permission.
+        folder_uid_or_path: Folder UID or path; None or empty = root.
+        recursive: If True, include all subfolders.
+        share_record: If True, update direct record shares.
+        share_folder: If True, update shared folder record permissions.
+        dry_run: If True, only compute and return planned updates; do not apply.
+        sync_after: If True and changes were applied, sync vault down after updates.
+
+    Returns:
+        Result dict from update_record_permissions (direct_share_updates,
+        shared_folder_updates, direct_share_errors, shared_folder_errors,
+        skipped_shared_folders).
+    """
     conn = sqlite3.Connection("file::memory:", uri=True)
     vault_storage = sqlite_storage.SqliteVaultStorage(
         lambda: conn,
-        vault_owner=bytes(keeper_auth_context.auth_context.username, "utf-8"),
+        vault_owner=bytes(keeper_auth_context.auth_context.username, 'utf-8')
     )
     vault = vault_online.VaultOnline(keeper_auth_context, vault_storage)
     vault.sync_down()
+
     try:
-        record_search = input(
-            "Enter record name/UID to check for shares (or leave empty for all records): "
-        ).strip()
-        record_uids = []
-        for record_info in vault.vault_data.records():
-            if record_info.version not in (2, 3):
-                continue
-            if (
-                not record_search
-                or record_search.lower() in record_info.title.lower()
-                or record_search == record_info.record_uid
-            ):
-                record_uids.append(record_info.record_uid)
-        if not record_uids:
-            print("\nNo records found to check for one-time shares")
-        else:
-            shares: list[one_time_share.OneTimeShare] = one_time_share.list_one_time_shares(
-                vault=vault,
-                record_uid=record_uids[:1000],
-                include_expired=True,
-            )
-            if not shares:
-                print("\nNo one-time shares found")
-            else:
-                print(f"\nOne-Time Shares ({len(shares)})\n{'=' * 130}")
-                print(
-                    f"{'Record Title':<30} {'Share Name':<20} {'Created':<20} {'Expires':<20} {'Status':<15}\n{'-' * 130}"
-                )
-                for share in shares:
-                    record_info = vault.vault_data.get_record(share.record_uid)
-                    record_title = record_info.title if record_info else "Unknown"
-                    created = (
-                        share.generated.strftime("%Y-%m-%d %H:%M")
-                        if share.generated
-                        else "N/A"
-                    )
-                    expires = (
-                        share.expires.strftime("%Y-%m-%d %H:%M")
-                        if share.expires
-                        else "N/A"
-                    )
-                    print(
-                        f"{record_title[:29]:<30} {share.share_link_name[:19]:<20} {created:<20} {expires:<20} {share.status:<15}"
-                    )
-                print(f"{'-' * 130}\nTotal: {len(shares)}")
-        print("=" * 130)
-    except Exception as e:
-        print(f"Error retrieving one-time shares: {e}")
-    vault.close()
-    keeper_auth_context.close()
+        result = share_management_utils.update_record_permissions(
+            vault=vault,
+            action=action,
+            can_share=can_share,
+            can_edit=can_edit,
+            folder_uid_or_path=folder_uid_or_path,
+            recursive=recursive,
+            share_record=share_record,
+            share_folder=share_folder,
+            dry_run=dry_run,
+            sync_after=sync_after,
+        )
+        _print_result(result, action, dry_run)
+        return result
+    except share_management_utils.ShareValidationError as e:
+        print(f"Validation error: {e}")
+        raise
+    except share_management_utils.ShareNotFoundError as e:
+        print(f"Folder not found: {e}")
+        raise
+    finally:
+        vault.close()
+        keeper_auth_context.close()
 
 
-def main():
+def _print_result(result: Dict[str, Any], action: str, dry_run: bool) -> None:
+    """Print a summary of update_record_permissions result."""
+    prefix = "[dry run] " if dry_run else ""
+    direct = result.get("direct_share_updates") or []
+    sf_updates = result.get("shared_folder_updates") or {}
+    direct_errors = result.get("direct_share_errors") or []
+    sf_errors = result.get("shared_folder_errors") or []
+    skipped = result.get("skipped_shared_folders") or {}
+
+    if direct:
+        print(f"{prefix}Direct share updates: {len(direct)}")
+    if sf_updates:
+        total_sf = sum(len(v) for v in sf_updates.values())
+        print(f"{prefix}Shared folder record updates: {total_sf} (across {len(sf_updates)} shared folder(s))")
+    if not direct and not sf_updates and not direct_errors and not sf_errors:
+        print(f"{prefix}No permission changes to apply for action={action!r}.")
+    if direct_errors:
+        print(f"Direct share errors: {len(direct_errors)}")
+    if sf_errors:
+        print(f"Shared folder errors: {len(sf_errors)}")
+    if skipped:
+        print(f"Skipped shared folders (permissions): {len(skipped)}")
+
+
+def main() -> None:
+    """
+    Main entry point. Logs in and updates record permissions in a folder.
+    Edit the variables below to match your folder and desired permissions.
+    """
     keeper_auth_context, _ = login()
-    if keeper_auth_context:
-        list_one_time_shares(keeper_auth_context)
-    else:
-        print("Login failed.")
+    if not keeper_auth_context:
+        print("Login failed. Unable to update record permissions.")
+        return
+
+    # Configure these for your run:
+    action = "grant"  # or "revoke"
+    can_share = True
+    can_edit = True
+    folder_uid_or_path = "My Folder"  # Use folder UID / path like "My Folder"
+    recursive = False
+    share_record = True  # update direct record shares
+    share_folder = True  # update shared folder record permissions
+    dry_run = False  # set to False to apply changes
+
+    update_record_permissions_in_folder(
+        keeper_auth_context=keeper_auth_context,
+        action=action,
+        can_share=can_share,
+        can_edit=can_edit,
+        folder_uid_or_path=folder_uid_or_path,
+        recursive=recursive,
+        share_record=share_record,
+        share_folder=share_folder,
+        dry_run=dry_run,
+        sync_after=not dry_run,
+    )
+    if dry_run:
+        print("Run with dry_run=False to apply the changes.")
 
 
 if __name__ == "__main__":
