@@ -12,6 +12,8 @@ from urllib.parse import urlunparse
 from keepersdk import crypto, utils
 from keepersdk.proto.APIRequest_pb2 import AddExternalShareRequest, Device
 from keepersdk.proto.enterprise_pb2 import GetSharingAdminsRequest, GetSharingAdminsResponse
+from keepersdk.proto.router_pb2 import RouterRotationInfo
+from keepersdk.proto.pam_pb2 import PAMGenericUidRequest
 from keepersdk.vault import vault_online, vault_record, vault_types, vault_utils
 
 from ..commands.base import CommandError
@@ -189,3 +191,13 @@ def resolve_record(context: KeeperParams, name: str) -> str:
                             return uid
     if record_uid is None:
         raise CommandError(f'Record not found: {name}')
+
+
+def record_rotation_get(vault: vault_online.VaultOnline, record_uid_bytes: bytes) -> RouterRotationInfo:
+
+    rq = PAMGenericUidRequest()
+    rq.uid = record_uid_bytes
+
+    rotation_info_rs = vault.keeper_auth.execute_auth_rest(rest_endpoint='pam/get_rotation_info', request=rq, response_type=RouterRotationInfo)
+
+    return rotation_info_rs

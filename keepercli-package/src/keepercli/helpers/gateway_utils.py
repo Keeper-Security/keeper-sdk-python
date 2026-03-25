@@ -1,6 +1,7 @@
 from time import time
 from typing import List
 
+from keepersdk import utils
 from keepersdk.vault import vault_online
 from keepersdk.proto import pam_pb2, enterprise_pb2
 from keepersdk.vault import ksm_management
@@ -110,3 +111,13 @@ def set_gateway_max_instances(vault: vault_online.VaultOnline, gateway_uid: byte
         rest_endpoint=REST_ENDPOINT_SET_MAX_INSTANCE_COUNT,
         request=rq
     )
+
+
+def find_connected_gateways(all_controllers, identifier):
+
+    found_connected_controller_uid_bytes = next((c for c in all_controllers if (utils.base64_url_encode(c) == identifier)), None)
+
+    if found_connected_controller_uid_bytes:
+        return found_connected_controller_uid_bytes
+    else:
+        return None

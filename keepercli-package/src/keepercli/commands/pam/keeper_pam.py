@@ -4,6 +4,9 @@ import requests
 from datetime import datetime
 
 from .pam_config import PAMConfigListCommand, PAMConfigNewCommand, PAMConfigEditCommand, PAMConfigRemoveCommand
+from .pam_gateway_action import (PAMGatewayActionServerInfoCommand, PAMGatewayActionRotateCommand, 
+                                PAMGatewayActionJobCommand, PAMDiscoveryCommand, PAMActionServiceCommand, 
+                                PAMActionSaasCommand, PAMDebugCommand)
 from .. import base
 from ... import api
 from ...helpers import report_utils, router_utils, gateway_utils
@@ -73,6 +76,10 @@ class PAMControllerCommand(base.GroupCommand):
         super().__init__('PAM Controller')
         self.register_command(PAMGatewayCommand(), 'gateway', 'g')
         self.register_command(PAMConfigCommand(), 'config', 'c')
+        self.register_command(PAMGatewayActionCommand(), 'action', 'a')
+        self.register_command('rotation', PAMRotationCommand(), 'Manage Rotations', 'r')
+        self.register_command('connection', PAMConnectionCommand(), 'Manage Connections', 'n')
+        self.register_command('rbi', PAMRbiCommand(), 'Manage Remote Browser Isolation', 'b')
 
 
 class PAMGatewayCommand(base.GroupCommand):
@@ -96,6 +103,18 @@ class PAMConfigCommand(base.GroupCommand):
         self.register_command(PAMConfigRemoveCommand(), 'remove', 'rm')
         self.default_verb = 'list'
 
+
+class PAMGatewayActionCommand(base.GroupCommand):
+    def __init__(self):
+        super().__init__('PAM Gateway Action')
+        self.register_command(PAMGatewayActionServerInfoCommand(), 'gateway-info', 'i')
+        self.register_command(PAMGatewayActionRotateCommand(), 'rotate', 'r')
+        self.register_command(PAMGatewayActionJobCommand(), 'job-info', 'ji')
+        self.register_command(PAMGatewayActionJobCommand(), 'job-cancel', 'jc')
+        self.register_command(PAMDiscoveryCommand(), 'discover', 'd')
+        self.register_command(PAMActionServiceCommand(), 'service', 's')
+        self.register_command(PAMActionSaasCommand(), 'saas', 'sa')
+        self.register_command(PAMDebugCommand(), 'debug', 'd')
 
 class PAMGatewayListCommand(base.ArgparseCommand):
 

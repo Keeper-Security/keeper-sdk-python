@@ -15,6 +15,7 @@ from keepersdk.helpers import gateway_utils, config_utils
 from keepersdk.vault import vault_online, vault_utils, vault_record, record_management
 from keepersdk.helpers.pam_config_facade import PamConfigurationRecordFacade
 from keepersdk.helpers.tunnel.tunnel_graph import TunnelDAG, tunnel_utils
+from keepersdk.helpers.keeper_dag import dag_utils
 from .. import record_edit
 
 
@@ -568,12 +569,12 @@ class PamConfigurationEditMixin(record_edit.RecordEditMixin):
 
     def _parse_domain_ssl_settings(self, extra_properties: list, kwargs: dict):
         """Parses domain SSL and scan settings."""
-        domain_use_ssl = utils.value_to_boolean(kwargs.get('domain_use_ssl'))
+        domain_use_ssl = dag_utils.value_to_boolean(kwargs.get('domain_use_ssl'))
         if domain_use_ssl is not None:
             val = 'true' if domain_use_ssl else 'false'
             extra_properties.append(f'checkbox.useSSL={val}')
         
-        domain_scan_dc_cidr = utils.value_to_boolean(kwargs.get('domain_scan_dc_cidr'))
+        domain_scan_dc_cidr = dag_utils.value_to_boolean(kwargs.get('domain_scan_dc_cidr'))
         if domain_scan_dc_cidr is not None:
             val = 'true' if domain_scan_dc_cidr else 'false'
             extra_properties.append(f'checkbox.scanDCCIDR={val}')
