@@ -2,7 +2,7 @@ import datetime
 import itertools
 import logging
 from re import findall
-from typing import Optional, Dict, List, Any, Generator, Iterable, Set, Tuple
+from typing import Optional, Dict, List, Any, Generator, Iterable, Set, Tuple, Union
 
 from .. import crypto, utils
 from ..proto import enterprise_pb2, record_pb2
@@ -161,7 +161,7 @@ def _process_teams(teams_data: Iterable[Any]) -> Dict[str, Dict[str, Any]]:
 def load_records_in_shared_folder(
     vault: vault_online.VaultOnline, 
     shared_folder_uid: str, 
-    record_uids: Optional[set[str]] = None
+    record_uids: Optional[Set[str]] = None
 ) -> None:
     try:
         shared_folder = _find_shared_folder(vault, shared_folder_uid)
@@ -698,7 +698,7 @@ def _extract_team_uids_from_shares(shares: Optional[List[Dict[str, Any]]]) -> Se
     }
 
 
-def _build_username_lookup(enterprise: enterprise_data.EnterpriseData) -> dict[int, str] | dict[Any, Any]:
+def _build_username_lookup(enterprise: enterprise_data.EnterpriseData) -> Union[Dict[int, str], Dict[Any, Any]]:
     if not enterprise:
         return {}
     

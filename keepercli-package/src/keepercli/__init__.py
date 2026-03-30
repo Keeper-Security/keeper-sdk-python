@@ -9,5 +9,5 @@
 # Contact: commander@keepersecurity.com
 #
 
-__version__ = '1.0.0-beta01'
+__version__ = '1.1.0'
 

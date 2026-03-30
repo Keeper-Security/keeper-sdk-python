@@ -30,8 +30,8 @@ class AuditAlerts(base.GroupCommand):
 class AuditSettingMixin:
     LAST_USERNAME = ""
     LAST_ENTERPRISE_ID = 0
-    SETTINGS = None  # type: Optional[dict]
-    EVENT_TYPES = None  # type: Optional[List[Tuple[int, str]]]
+    SETTINGS: Optional[Dict] = None
+    EVENT_TYPES: Optional[List[Tuple[int, str]]] = None
 
     @staticmethod
     def load_settings(auth: keeper_auth.KeeperAuth, reload: bool=False) -> Optional[Dict[str, Any]]:

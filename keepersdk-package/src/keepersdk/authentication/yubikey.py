@@ -20,6 +20,7 @@ if os.isatty(0) and os.isatty(1):
     prompt_session = PromptSession(multiline=False, complete_while_typing=False)
 
 
+
 class IKeeperUserInteraction(abc.ABC):
     @abc.abstractmethod
     def output_text(self, text: str) -> None:
@@ -165,16 +166,10 @@ def yubikey_register(request, force_pin=False, user_interaction: Optional[UserIn
                     return None
                 prompt1 = '       PIN Code: '
                 prompt2 = ' PIN Code Again: '
-                if prompt_session:
-                    pin1 = prompt_session.prompt(prompt1, is_password=True)
-                else:
-                    pin1 = getpass.getpass(prompt1)
+                pin1 = getpass.getpass(prompt1)
                 if not pin1:
                     raise Exception('PIN is required')
-                if prompt_session:
-                    pin2 = prompt_session.prompt(prompt2, is_password=True)
-                else:
-                    pin2 = getpass.getpass(prompt2)
+                pin2 = getpass.getpass(prompt2)
                 if not pin2:
                     raise Exception('PIN is required')
                 if pin1 != pin2:

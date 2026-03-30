@@ -1,7 +1,7 @@
 import argparse
 from enum import Enum
 import time
-from typing import Optional
+from typing import Optional, List, Set, Tuple
 
 from keepersdk import utils
 from keepersdk.proto.enterprise_pb2 import GENERAL
@@ -366,7 +366,7 @@ class SecretsManagerClientCommand(base.ArgparseCommand):
             current_time_ms + first_access_expire_duration * MILLISECONDS_PER_MINUTE
         )
         access_expire_in_ms = (
-            (current_time_ms + access_expire_in_min * MILLISECONDS_PER_MINUTE) 
+            access_expire_in_min * MILLISECONDS_PER_MINUTE 
             if access_expire_in_min else None
         )
         
@@ -455,7 +455,7 @@ class SecretsManagerClientCommand(base.ArgparseCommand):
         return user_choice.lower() == USER_CHOICE_YES
 
     @staticmethod
-    def remove_client(vault: vault_online.VaultOnline, uid: str, client_names_and_ids: list[str], force: bool = False):
+    def remove_client(vault: vault_online.VaultOnline, uid: str, client_names_and_ids: List[str], force: bool = False):
         """Remove client devices from a KSM application."""
         ksm_management.KSMClientManagement.remove_clients_from_ksm_app(
             vault=vault, 
@@ -540,7 +540,7 @@ class SecretsManagerShareCommand(base.ArgparseCommand):
         
         return ksm_app.record_uid
 
-    def _parse_secret_uids(self, secret_uids_str: Optional[str]) -> list[str]:
+    def _parse_secret_uids(self, secret_uids_str: Optional[str]) -> List[str]:
         """Parse secret UIDs from string."""
         if not secret_uids_str:
             return []
@@ -553,7 +553,7 @@ class SecretsManagerShareCommand(base.ArgparseCommand):
             None
         )
 
-    def _handle_add_share(self, context: KeeperParams, app_uid: str, secret_uids: list[str], is_editable: bool) -> None:
+    def _handle_add_share(self, context: KeeperParams, app_uid: str, secret_uids: List[str], is_editable: bool) -> None:
         """Handle adding shares to a KSM application."""
         if not context.vault:
             raise ValueError("Vault is not initialized.")
@@ -601,7 +601,7 @@ class SecretsManagerShareCommand(base.ArgparseCommand):
             raise ValueError(f"Failed to share secrets: {kae}")
 
     @staticmethod
-    def remove_share(vault: vault_online.VaultOnline, app_uid: str, secret_uids: list[str]) -> None:
+    def remove_share(vault: vault_online.VaultOnline, app_uid: str, secret_uids: List[str]) -> None:
         """Remove shares from a KSM application."""
         if not secret_uids:
             logger.warning("No secret UIDs provided for removal.")
@@ -624,7 +624,7 @@ class SecretsManagerShareCommand(base.ArgparseCommand):
         logger.info("Shared secrets were successfully removed from the application\n")
 
     @staticmethod
-    def _get_current_shared_uids(vault: vault_online.VaultOnline, app_uid: str) -> set:
+    def _get_current_shared_uids(vault: vault_online.VaultOnline, app_uid: str) -> Set:
         """Get currently shared UIDs for the application."""
         app_infos = ksm_management.get_app_info(vault=vault, app_uid=app_uid)
         if not app_infos:
@@ -637,14 +637,14 @@ class SecretsManagerShareCommand(base.ArgparseCommand):
         }
 
     @staticmethod
-    def _validate_share_uids(secret_uids: list[str], current_shared_uids: set) -> tuple[list, list]:
+    def _validate_share_uids(secret_uids: List[str], current_shared_uids: Set) -> Tuple[List, List]:
         """Validate secret UIDs against currently shared UIDs."""
         valid_uids = [uid for uid in secret_uids if uid in current_shared_uids]
         invalid_uids = [uid for uid in secret_uids if uid not in current_shared_uids]
         return valid_uids, invalid_uids
 
     @staticmethod
-    def _log_invalid_uids(invalid_uids: list[str]) -> None:
+    def _log_invalid_uids(invalid_uids: List[str]) -> None:
         """Log warnings for invalid UIDs."""
         for uid in invalid_uids:
             logger.warning(f"Secret UID '{uid}' is not shared with this application. Skipping.")

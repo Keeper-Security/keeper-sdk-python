@@ -6,7 +6,7 @@ import datetime
 import itertools
 import json
 import os
-from typing import Iterable, Optional, List, Any, Sequence, Union
+from typing import Iterable, Optional, List, Any, Sequence, Union, Dict
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
@@ -227,12 +227,12 @@ class RecordEditMixin(typed_field_utils.TypedFieldMixin):
             value = value[4:]
             if value.startswith(':'):
                 gen_parameters = value[1:]
-                if gen_parameters and isinstance(parameters, list):
+                if gen_parameters and isinstance(parameters, List):
                     parameters.extend((x.strip() for x in gen_parameters.split(',')))
             return True
 
     @staticmethod
-    def generate_key_pair(key_type: str, passphrase: str) -> dict:
+    def generate_key_pair(key_type: str, passphrase: str) -> Dict:
         private_key: Any
         public_key: Any
         if key_type == 'ec':
@@ -1276,7 +1276,7 @@ class RecordGetCommand(base.ArgparseCommand):
         
         return output
 
-    def _add_password_record_json_fields(self, record_data: vault_record.PasswordRecord, output: dict, unmask: bool = False):
+    def _add_password_record_json_fields(self, record_data: vault_record.PasswordRecord, output: Dict, unmask: bool = False):
         """Add password record specific fields to JSON output."""
         output['Notes:'] = record_data.notes
         output['$login:'] = record_data.login
@@ -1305,7 +1305,7 @@ class RecordGetCommand(base.ArgparseCommand):
                 custom_output.append(field_data)
             output['Custom fields:'] = custom_output
 
-    def _add_typed_record_json_fields(self, record_data: vault_record.TypedRecord, output: dict, unmask: bool = False):
+    def _add_typed_record_json_fields(self, record_data: vault_record.TypedRecord, output: Dict, unmask: bool = False):
         """Add typed record specific fields to JSON output."""
         output['Notes:'] = record_data.notes
         
@@ -1331,13 +1331,13 @@ class RecordGetCommand(base.ArgparseCommand):
             custom_output.append(field_data)
         output['Custom:'] = custom_output
 
-    def _add_file_record_json_fields(self, record_data: vault_record.FileRecord, output: dict):
+    def _add_file_record_json_fields(self, record_data: vault_record.FileRecord, output: Dict):
         """Add file record specific fields to JSON output."""
         output['Name:'] = record_data.file_name
         output['MIME Type:'] = record_data.mime_type
         output['Size:'] = record_data.size
 
-    def _add_share_info_to_json(self, vault: vault_online.VaultOnline, uid: str, output: dict):
+    def _add_share_info_to_json(self, vault: vault_online.VaultOnline, uid: str, output: Dict):
         """Add share information to JSON output."""
         share_infos = share_management_utils.get_record_shares(vault=vault, record_uids=[uid])
         if share_infos and len(share_infos) > 0:
@@ -1770,7 +1770,7 @@ class RecordSearchCommand(base.ArgparseCommand):
         search_config = self._prepare_search_config(kwargs)
         self._perform_search(context.vault, search_config, context)
 
-    def _prepare_search_config(self, kwargs: dict) -> dict:
+    def _prepare_search_config(self, kwargs: Dict) -> Dict:
         """Prepare search configuration from command line arguments."""
         pattern = kwargs.get('pattern') or ''
         
@@ -1786,7 +1786,7 @@ class RecordSearchCommand(base.ArgparseCommand):
             'skip_details': not verbose
         }
 
-    def _perform_search(self, vault: vault_online.VaultOnline, config: dict, context: KeeperParams):
+    def _perform_search(self, vault: vault_online.VaultOnline, config: Dict, context: KeeperParams):
         """Perform the search across all specified categories."""
 
         valid_categories = set('rst')
@@ -1835,7 +1835,7 @@ class RecordSearchCommand(base.ArgparseCommand):
         
         self._display_all_search_results(search_results, config, context, vault)
 
-    def _display_all_search_results(self, search_results: dict, config: dict, context: KeeperParams, vault: vault_online.VaultOnline):
+    def _display_all_search_results(self, search_results: Dict, config: Dict, context: KeeperParams, vault: vault_online.VaultOnline):
         """Display all search results after all searches are completed."""
         if 'records' in search_results and search_results['records']:
             logger.info('')
@@ -1852,7 +1852,7 @@ class RecordSearchCommand(base.ArgparseCommand):
             logger.info('')
             self._display_teams(search_results['teams'], config['skip_details'], context)
 
-    def _search_records(self, config: dict, context: KeeperParams):
+    def _search_records(self, config: Dict, context: KeeperParams):
         """Search and display records matching the pattern."""
         try:
             records = context.vault.vault_data.find_records(criteria=config['pattern'], record_type=None, record_version=None)
@@ -1865,7 +1865,7 @@ class RecordSearchCommand(base.ArgparseCommand):
         except Exception as e:
             logger.error(f"Error searching records: {e}")
 
-    def _search_shared_folders(self, vault: vault_online.VaultOnline, config: dict):
+    def _search_shared_folders(self, vault: vault_online.VaultOnline, config: Dict):
         """Search and display shared folders matching the pattern."""
         try:
             shared_folders = vault.vault_data.find_shared_folders(criteria=config['pattern'])
@@ -1875,7 +1875,7 @@ class RecordSearchCommand(base.ArgparseCommand):
         except Exception as e:
             logger.error(f"Error searching shared folders: {e}")
 
-    def _search_teams(self, context: KeeperParams, config: dict):
+    def _search_teams(self, context: KeeperParams, config: Dict):
         """Search and display teams matching the pattern."""
         try:
             teams = context.vault.vault_data.find_teams(criteria=config['pattern'])

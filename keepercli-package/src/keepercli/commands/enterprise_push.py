@@ -3,7 +3,7 @@ import json
 import os
 import copy
 import re
-from typing import Any
+from typing import Any, List, Set, Dict, Optional
 
 from . import base
 from .. import api
@@ -100,7 +100,7 @@ PARAMETER_PATTERN = re.compile(r"\${(\w+)}")
 TRANSFER_RECORD_SUCCESS = "transfer_record_success"
 
 
-def _substitute_value(value: str, values: dict[str, str]) -> str:
+def _substitute_value(value: str, values: Dict[str, str]) -> str:
     """Replace all ${key} placeholders in a string with values from the given dict."""
     result = value
     while True:
@@ -113,7 +113,7 @@ def _substitute_value(value: str, values: dict[str, str]) -> str:
     return result
 
 
-def _substitute_in_dict(container: dict, values: dict[str, str]) -> None:
+def _substitute_in_dict(container: Dict, values: Dict[str, str]) -> None:
     """Recursively substitute placeholders in dict (and nested dicts/lists) in place."""
     for key, val in list(container.items()):
         if isinstance(val, str):
@@ -126,7 +126,7 @@ def _substitute_in_dict(container: dict, values: dict[str, str]) -> None:
             container[key] = _substitute_in_list(val, values)
 
 
-def _substitute_in_list(container: list, values: dict[str, str]) -> list:
+def _substitute_in_list(container: list, values: Dict[str, str]) -> List:
     """Return a new list with placeholders substituted."""
     result = []
     for item in container:
@@ -142,7 +142,7 @@ def _substitute_in_list(container: list, values: dict[str, str]) -> list:
     return result
 
 
-def _get_substitution_values(enterprise: enterprise_types.IEnterpriseData, email: str) -> dict[str, str]:
+def _get_substitution_values(enterprise: enterprise_types.IEnterpriseData, email: str) -> Dict[str, str]:
     """Build substitution map for a user: user_email, user_name, generate_password."""
     values = {
         "user_email": email,
@@ -156,14 +156,14 @@ def _get_substitution_values(enterprise: enterprise_types.IEnterpriseData, email
 
 
 def _substitute_record_params(
-    enterprise: enterprise_types.IEnterpriseData, email: str, record_data: dict
+    enterprise: enterprise_types.IEnterpriseData, email: str, record_data: Dict
 ) -> None:
     """Fill template parameters in record_data for the given user (in place)."""
     values = _get_substitution_values(enterprise, email)
     _substitute_in_dict(record_data, values)
 
 
-def _resolve_user_to_email(enterprise: enterprise_types.IEnterpriseData, user_id: str) -> str | None:
+def _resolve_user_to_email(enterprise: enterprise_types.IEnterpriseData, user_id: str) -> Optional[str]:
     """Resolve user identifier (email, name, or enterprise_user_id) to username (email)."""
     user_id_lower = user_id.lower()
     for u in enterprise.users.get_all_entities():
@@ -176,7 +176,7 @@ def _resolve_user_to_email(enterprise: enterprise_types.IEnterpriseData, user_id
     return None
 
 
-def _resolve_team_to_uid(enterprise: enterprise_types.IEnterpriseData, team_id: str) -> str | None:
+def _resolve_team_to_uid(enterprise: enterprise_types.IEnterpriseData, team_id: str) -> Optional[str]:
     """Resolve team identifier (name or team_uid) to team_uid."""
     for t in enterprise.teams.get_all_entities() or []:
         if team_id == t.team_uid or team_id.lower() == t.name.lower():
@@ -187,9 +187,9 @@ def _resolve_team_to_uid(enterprise: enterprise_types.IEnterpriseData, team_id: 
 def _collect_recipient_emails(
     enterprise: enterprise_types.IEnterpriseData,
     current_username: str,
-    user_ids: list[str],
-    team_ids: list[str],
-) -> set[str]:
+    user_ids: List[str],
+    team_ids: List[str],
+) -> Set[str]:
     """Resolve user_ids and team_ids to a set of recipient emails. Excludes current user."""
     emails = set()
 
@@ -231,8 +231,8 @@ def _collect_recipient_emails(
 def _build_typed_records_for_user(
     enterprise: enterprise_types.IEnterpriseData,
     email: str,
-    record_data: list[dict[str, Any]],
-) -> list[TypedRecord]:
+    record_data: List[Dict[str, Any]],
+) -> List[TypedRecord]:
     """Substitute template params and convert JSON templates to typed records."""
     user_records = []
     for template in record_data:
@@ -247,10 +247,10 @@ def _build_typed_records_for_user(
 def _build_records_add_request(
     auth: keeper_auth.KeeperAuth,
     vault: vault_online.VaultOnline,
-    typed_records: list[TypedRecord],
+    typed_records: List[TypedRecord],
     user_ec_key: Any,
     user_rsa_key: Any,
-    record_keys_out: dict[str, bytes],
+    record_keys_out: Dict[str, bytes],
 ) -> record_pb2.RecordsAddRequest:
     """Build RecordsAddRequest and fill record_keys_out with uid -> encrypted_key for transfer."""
     rq = record_pb2.RecordsAddRequest()
@@ -303,7 +303,7 @@ def _add_transfer_and_cleanup(
     auth: keeper_auth.KeeperAuth,
     email: str,
     add_request: record_pb2.RecordsAddRequest,
-    record_keys_for_user: dict[str, Any],
+    record_keys_for_user: Dict[str, Any],
 ) -> None:
     """Execute records_add, transfer ownership to user, then unlink from admin (pre_delete + delete)."""
     rs = auth.execute_auth_rest(
@@ -378,7 +378,7 @@ def _process_one_recipient(
     auth: keeper_auth.KeeperAuth,
     vault: vault_online.VaultOnline,
     email: str,
-    record_data: list[dict[str, Any]],
+    record_data: List[Dict[str, Any]],
 ) -> None:
     """Load user key, build records, add to vault, transfer ownership to user."""
     user_key = auth.get_user_keys(email)
@@ -428,9 +428,9 @@ class EnterprisePush:
         enterprise: enterprise_types.IEnterpriseData,
         auth: keeper_auth.KeeperAuth,
         vault: vault_online.VaultOnline,
-        user_ids: list[str],
-        team_ids: list[str],
-        record_data: list[dict[str, Any]],
+        user_ids: List[str],
+        team_ids: List[str],
+        record_data: List[Dict[str, Any]],
     ) -> None:
         """Resolve recipients, then for each user substitute template params and add/transfer records."""
         emails = list(

@@ -1,3 +1,5 @@
+from typing import List
+
 from keepersdk.vault import ksm
 
 from .. import api
@@ -5,7 +7,7 @@ from ..helpers import report_utils
 
 logger = api.get_logger()
 
-def print_client_device_info(client_devices: list[ksm.ClientDevice]) -> None:
+def print_client_device_info(client_devices: List[ksm.ClientDevice]) -> None:
     for index, client_device in enumerate(client_devices, start=1):
         client_devices_str = f"\nClient Device {index}\n" \
                                     f"=============================\n" \
@@ -19,7 +21,7 @@ def print_client_device_info(client_devices: list[ksm.ClientDevice]) -> None:
                                     f'  IP Address: {client_device.ip_address or "--"}'
         logger.info(client_devices_str)
 
-def print_shared_secrets_info(shared_secrets: list[ksm.SharedSecretsInfo]) -> None:
+def print_shared_secrets_info(shared_secrets: List[ksm.SharedSecretsInfo]) -> None:
     shares_table_fields = ['Share Type', 'UID', 'Title', 'Permissions']
     rows = [
         [secrets.type, secrets.uid, secrets.name, secrets.permissions]

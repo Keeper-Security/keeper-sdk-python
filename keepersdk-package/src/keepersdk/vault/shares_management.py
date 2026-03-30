@@ -1,10 +1,11 @@
 import logging
 from enum import Enum
+from typing import List, Dict, Optional
 
 from .. import crypto, utils
 from ..proto import folder_pb2, record_pb2
 from ..vault import vault_online, vault_utils, share_management_utils
-from ..enterprise import enterprise_data
+from ..enterprise import enterprise_types
 
 
 class ApiUrl(Enum):
@@ -64,7 +65,7 @@ def set_expiration_fields(obj, expiration):
 class RecordShares():
     
     @staticmethod
-    def cancel_share(vault: vault_online.VaultOnline, emails: list[str]):
+    def cancel_share(vault: vault_online.VaultOnline, emails: List[str]):
         for email in emails:
             request = {
                 'command': 'cancel_share',
@@ -74,7 +75,7 @@ class RecordShares():
         vault.sync_down()
     
     @staticmethod
-    def _resolve_uid_or_name(vault: vault_online.VaultOnline, uid_or_name: str, record_cache: dict, shared_folder_cache: dict, folder_cache: dict):
+    def _resolve_uid_or_name(vault: vault_online.VaultOnline, uid_or_name: str, record_cache: Dict, shared_folder_cache: Dict, folder_cache: Dict):
         """Resolve uid_or_name to record_uid, folder_uid, or shared_folder_uid."""
         record_uid = None
         folder_uid = None
@@ -190,23 +191,17 @@ class RecordShares():
         return all_users
     
     @staticmethod
-    def _encrypt_record_key_for_user(vault: vault_online.VaultOnline, record_key: bytes, email: str, ro: record_pb2.SharedRecord):
+    def _encrypt_record_key_for_user(vault, record_key, email, ro):
         """Encrypt record key for a user using their public key."""
-        keys = vault.keeper_auth.get_user_keys(email)
-        if not keys:
-            vault.keeper_auth.load_user_public_keys([email])
-            keys = vault.keeper_auth.get_user_keys(email)
-            if not keys:
-                raise ValueError(f'User {email} public key not found')
-        if keys:
-            if vault.keeper_auth.auth_context.forbid_rsa and keys.ec:
-                ec_key = crypto.load_ec_public_key(keys.ec)
-                ro.recordKey = crypto.encrypt_ec(record_key, ec_key)
-                ro.useEccKey = True
-            elif not vault.keeper_auth.auth_context.forbid_rsa and keys.rsa:
-                rsa_key = crypto.load_rsa_public_key(keys.rsa)
-                ro.recordKey = crypto.encrypt_rsa(record_key, rsa_key)
-                ro.useEccKey = False
+        keys = vault.keeper_auth._key_cache[email]
+        if vault.keeper_auth.auth_context.forbid_rsa and keys.ec:
+            ec_key = crypto.load_ec_public_key(keys.ec)
+            ro.recordKey = crypto.encrypt_ec(record_key, ec_key)
+            ro.useEccKey = True
+        elif not vault.keeper_auth.auth_context.forbid_rsa and keys.rsa:
+            rsa_key = crypto.load_rsa_public_key(keys.rsa)
+            ro.recordKey = crypto.encrypt_rsa(record_key, rsa_key)
+            ro.useEccKey = False
     
     @staticmethod
     def _build_shared_record(vault, email, record_uid, record_path, action, 
@@ -244,9 +239,9 @@ class RecordShares():
         return ro
     
     @staticmethod
-    def _process_record_shares(vault: vault_online.VaultOnline, record_uids: list[str], all_users: list[str], action: str, can_edit: bool, 
-                              can_share: bool, share_expiration: int, record_cache: dict[str, dict], 
-                              not_owned_records: dict[str, dict], is_share_admin: bool, enterprise: enterprise_data.EnterpriseData):
+    def _process_record_shares(vault, record_uids, all_users, action, can_edit, 
+                              can_share, share_expiration, record_cache, 
+                              not_owned_records, is_share_admin, enterprise):
         """Process shares for all records and users, building the request."""
         rq = record_pb2.RecordShareUpdateRequest()
         
@@ -295,7 +290,7 @@ class RecordShares():
                 if action in {ShareAction.GRANT.value, ShareAction.OWNER.value}:
                     record_uid_to_use = rec.get('record_uid', record_uid) if isinstance(rec, dict) else getattr(rec, 'record_uid', record_uid)
                     record_key = vault.vault_data.get_record_key(record_uid=record_uid_to_use)
-                    if record_key and email not in existing_shares:
+                    if record_key and email not in existing_shares and vault.keeper_auth._key_cache and email in vault.keeper_auth._key_cache:
                         RecordShares._encrypt_record_key_for_user(vault, record_key, email, ro)
                     
                     if email in existing_shares:
@@ -312,12 +307,12 @@ class RecordShares():
     
     @staticmethod
     def prep_request(vault: vault_online.VaultOnline,
-                    emails: list[str],
+                    emails: List[str],
                     action: str,
                     uid_or_name: str,
-                    share_expiration: int,
+                    share_expiration: Optional[int],
                     dry_run: bool,
-                    enterprise: enterprise_data.EnterpriseData,
+                    enterprise: enterprise_types.IEnterpriseData,
                     enterprise_access: bool = False,
                     recursive: bool = False,
                     can_edit: bool = False,
@@ -449,7 +444,7 @@ class RecordShares():
                 len(request.removeSharedRecord) > 0)
     
     @staticmethod
-    def send_requests(vault: vault_online.VaultOnline, requests: list[record_pb2.RecordShareUpdateRequest]):
+    def send_requests(vault: vault_online.VaultOnline, requests: List[record_pb2.RecordShareUpdateRequest]):
         """Send record share update requests in batches."""
         success_responses = []
         failed_responses = []

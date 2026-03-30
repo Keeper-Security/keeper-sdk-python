@@ -129,7 +129,7 @@ class VaultData:
         if isinstance(words, str):
             words = list(utils.tokenize_searchable_text(words))
         elif isinstance(words, list):
-            search_words = []
+            search_words: List[str] = []
             for word in words:
                 search_words.extend(utils.tokenize_searchable_text(word))
             words = search_words
