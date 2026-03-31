@@ -14,7 +14,6 @@ from ...params import KeeperParams
 
 
 from keepersdk import utils
-from keepersdk.helpers import router_utils, gateway_utils
 from keepersdk.vault import ksm_management
 
 
