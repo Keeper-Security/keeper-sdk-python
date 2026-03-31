@@ -7,7 +7,6 @@ from pydantic import BaseModel
 from typing import Any, List, Optional, Union, TYPE_CHECKING
 
 from . import dag_crypto
-from .dag_vertex import DAGVertex
 
 if TYPE_CHECKING:
     from .dag_vertex import DAGVertex
@@ -423,7 +422,7 @@ class DiscoveryObject(BaseModel):
         raise ValueError(f"Cannot not find field with label {label}")
 
     @staticmethod
-    def get_discovery_object(vertex: DAGVertex) -> "DiscoveryObject":
+    def get_discovery_object(vertex: "DAGVertex") -> "DiscoveryObject":
         """
         Get DiscoveryObject with correct item instance.
 
@@ -729,7 +728,7 @@ class NormalizedRecord(BaseModel):
 
     def find_user(self, user):
 
-        from .utils import split_user_and_domain
+        from .dag_utils import split_user_and_domain
 
         res = self._field("login", user)
         if res is None:

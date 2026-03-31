@@ -119,7 +119,7 @@ class PAMGatewayActionDiscoverRuleListCommand(PAMGatewayActionDiscoverCommandBas
 
 class PAMGatewayActionDiscoverRuleAddCommand(PAMGatewayActionDiscoverCommandBase):
     
-    def init_parser(self):
+    def __init__(self):
         parser = argparse.ArgumentParser(prog='pam action discover rule add')
         PAMGatewayActionDiscoverRuleAddCommand.add_arguments_to_parser(parser)
         super().__init__(parser)

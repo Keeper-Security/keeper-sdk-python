@@ -6,7 +6,8 @@ import time
 from typing import Any, Optional
 
 from .dag import DAG
-from .dag_types import DAGVertex, EdgeType, PamGraphId
+from .dag_types import EdgeType, PamGraphId
+from .dag_vertex import DAGVertex
 from .dag_utils import get_connection, make_agent
 from .exceptions import DAGVertexException
 from ... import utils

@@ -143,7 +143,7 @@ class Jobs:
 
         return JobContent.model_validate(current_dict)
 
-    def _chunk_delta_data(self, job_vertex: DAGVertex, delta: DiscoveryDelta):
+    def _chunk_delta_data(self, job_vertex: "DAGVertex", delta: DiscoveryDelta):
 
         # From the job vertex we want to create vertices to hold the delta information.
         # Break them up based on the DELTA_SIZE.

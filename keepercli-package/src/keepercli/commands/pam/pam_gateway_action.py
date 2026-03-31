@@ -551,7 +551,7 @@ class PAMActionSaasCommand(base.GroupCommand):
 class PAMDebugCommand(base.GroupCommand):
 
     def __init__(self):
-        super(PAMDebugCommand, self).__init__()
+        super().__init__('PAM Debug')
         self.register_command(PAMDebugInfoCommand(), 'info', 'i')
         self.register_command(PAMDebugGatewayCommand(), 'gateway', 'g')
         self.register_command(PAMDebugGraphCommand(), 'graph', 'r')

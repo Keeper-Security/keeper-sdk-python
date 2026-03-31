@@ -5,7 +5,7 @@ import logging
 import re
 from typing import TYPE_CHECKING, List, Optional, Union
 from .constants import VERTICES_SORT_MAP
-from .dag_types import DAGVertex
+from .dag_vertex import DAGVertex
 from .dag_types import DiscoveryObject
 Logger = Union[logging.RootLogger, logging.Logger]
 if TYPE_CHECKING:

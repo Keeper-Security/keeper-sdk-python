@@ -17,9 +17,10 @@ from .rule_commands import PAMGatewayActionDiscoverRuleAddCommand, PAMGatewayAct
 
 from keepersdk.helpers.pam_user_record_facade import PamUserRecordFacade
 from keepersdk.helpers.keeper_dag.jobs import Jobs
-from keepersdk.helpers.keeper_dag.dag_types import (CredentialBase, DiscoveryDelta, DiscoveryObject, DAGVertex, JobItem, UserAcl, DirectoryInfo, 
+from keepersdk.helpers.keeper_dag.dag_types import (CredentialBase, DiscoveryDelta, DiscoveryObject, JobItem, UserAcl, DirectoryInfo, 
                 BulkRecordConvert, BulkRecordAdd, BulkRecordSuccess, BulkRecordFail, BulkProcessResults, NormalizedRecord, BulkRecordFail, PromptResult,
                 PromptActionEnum)
+from keepersdk.helpers.keeper_dag.dag_vertex import DAGVertex
 from keepersdk.helpers.keeper_dag.dag import DAG
 from keepersdk.helpers.keeper_dag.dag_sort import sort_infra_vertices
 from keepersdk.helpers.keeper_dag.constants import VERTICES_SORT_MAP, DIS_INFRA_GRAPH_ID, PAM_USER
@@ -40,18 +41,21 @@ class PAMGatewayActionDiscoverJobStatusCommand(PAMGatewayActionDiscoverCommandBa
 
     """
 
-    parser = argparse.ArgumentParser(prog='pam action discover status')
-    parser.add_argument('--gateway', '-g', required=False, dest='gateway', action='store',
-                        help='Show only discovery jobs from a specific gateway.')
-    parser.add_argument('--job-id', '-j', required=False, dest='job_id', action='store',
-                        help='Detailed information for a specific discovery job.')
-    parser.add_argument('--history', required=False, dest='show_history', action='store_true',
-                        help='Show history')
-    parser.add_argument('--configuration-uid', '-c', required=False, dest='configuration_uid',
-                        action='store', help='PAM configuration UID is using --history')
-
-    def get_parser(self):
-        return PAMGatewayActionDiscoverJobStatusCommand.parser
+    def __init__(self):
+        parser = argparse.ArgumentParser(prog='pam action discover status')
+        PAMGatewayActionDiscoverJobStatusCommand.add_arguments_to_parser(parser)
+        super().__init__(parser)
+    
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
+        parser.add_argument('--gateway', '-g', required=False, dest='gateway', action='store',
+                            help='Show only discovery jobs from a specific gateway.')
+        parser.add_argument('--job-id', '-j', required=False, dest='job_id', action='store',
+                            help='Detailed information for a specific discovery job.')
+        parser.add_argument('--history', required=False, dest='show_history', action='store_true',
+                            help='Show history')
+        parser.add_argument('--configuration-uid', '-c', required=False, dest='configuration_uid',
+                            action='store', help='PAM configuration UID is using --history')
 
     @staticmethod
     def print_job_table(jobs: List[Dict],

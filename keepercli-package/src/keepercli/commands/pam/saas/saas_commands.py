@@ -15,7 +15,14 @@ from ..pam_dto import GatewayAction
 from ....params import KeeperParams
 from .... import api
 from ....__init__ import __version__
-from .saas_commands import SaasCatalog, get_plugins_map, get_field_input, make_script_signature, get_record_field_value, set_record_field_value
+from . import (
+    SaasCatalog,
+    get_plugins_map,
+    get_field_input,
+    make_script_signature,
+    get_record_field_value,
+    set_record_field_value,
+)
 
 from keepersdk.vault import vault_record, vault_extensions, attachment, record_management
 from keepersdk.helpers.keeper_dag.constants import PAM_USER, PAM_MACHINE, PAM_DATABASE, PAM_DIRECTORY

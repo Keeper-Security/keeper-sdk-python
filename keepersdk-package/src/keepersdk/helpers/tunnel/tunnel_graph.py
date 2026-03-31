@@ -2,7 +2,7 @@ import logging
 
 from . import tunnel_utils
 
-from ..keeper_dag.connection import Connection
+from ..keeper_dag.connection.commander import Connection
 from ..keeper_dag.dag_types import EdgeType, RefType, PamEndpoints
 from ..keeper_dag.dag import DAG
 from ..keeper_dag.dag_vertex import DAGVertex
