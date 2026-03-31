@@ -11,7 +11,7 @@ from ..record_edit import RecordEditMixin
 
 from keepersdk import utils
 from keepersdk.proto import pam_pb2, record_pb2
-from keepersdk.helpers import gateway_utils, config_utils
+from keepersdk.helpers import config_utils
 from keepersdk.vault import vault_online, vault_utils, vault_record, record_management
 from keepersdk.helpers.pam_config_facade import PamConfigurationRecordFacade
 from keepersdk.helpers.tunnel.tunnel_graph import TunnelDAG, tunnel_utils
