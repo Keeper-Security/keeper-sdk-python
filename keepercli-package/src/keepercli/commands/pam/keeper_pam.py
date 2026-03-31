@@ -77,9 +77,9 @@ class PAMControllerCommand(base.GroupCommand):
         self.register_command(PAMGatewayCommand(), 'gateway', 'g')
         self.register_command(PAMConfigCommand(), 'config', 'c')
         self.register_command(PAMGatewayActionCommand(), 'action', 'a')
-        self.register_command('rotation', PAMRotationCommand(), 'Manage Rotations', 'r')
-        self.register_command('connection', PAMConnectionCommand(), 'Manage Connections', 'n')
-        self.register_command('rbi', PAMRbiCommand(), 'Manage Remote Browser Isolation', 'b')
+        # self.register_command('rotation', PAMRotationCommand(), 'Manage Rotations', 'r')
+        # self.register_command('connection', PAMConnectionCommand(), 'Manage Connections', 'n')
+        # self.register_command('rbi', PAMRbiCommand(), 'Manage Remote Browser Isolation', 'b')
 
 
 class PAMGatewayCommand(base.GroupCommand):
