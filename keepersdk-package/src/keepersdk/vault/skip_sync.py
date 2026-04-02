@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from .. import crypto, utils
 from ..authentication import keeper_auth
@@ -11,12 +12,17 @@ from . import sync_down, vault_types, vault_utils
 
 _GET_SHARED_FOLDERS_COMMAND = "get_shared_folders"
 _SHARED_FOLDER_UPDATE_V3_ENDPOINT = "vault/shared_folder_update_v3"
+_RECORD_DETAILS_URL = "vault/get_records_details"
+_RECORD_DETAILS_CHUNK = 999
+_MAX_V2_RECORD_VERSION = 2
 
 
 @dataclass(frozen=True)
-class SharedFolderRecordInfo:
+class SharedFolderRecordDisplay:
+    """Decrypted display row for a record in a shared folder (skip-sync path)."""
+
     record_uid: str
-    record_key: bytes
+    name: str
 
 
 def _ensure_auth(auth: Optional[keeper_auth.KeeperAuth]) -> keeper_auth.KeeperAuth:
@@ -183,6 +189,126 @@ def get_record_keys_from_shared_folder(
     return result
 
 
+def _build_record_details_request(uids: List[str]) -> record_pb2.GetRecordDataWithAccessInfoRequest:
+    rq = record_pb2.GetRecordDataWithAccessInfoRequest()
+    rq.clientTime = utils.current_milli_time()
+    rq.recordDetailsInclude = record_pb2.DATA_PLUS_SHARE
+    for uid in uids:
+        try:
+            rq.recordUid.append(utils.base64_url_decode(uid))
+        except Exception:
+            pass
+    return rq
+
+
+def _process_record_owner_key_details(
+    record_data: record_pb2.RecordData, record_uid: str, record_keys: Dict[str, bytes]
+) -> None:
+    if record_data.recordUid and record_data.recordKey:
+        owner_id = utils.base64_url_encode(record_data.recordUid)
+        if owner_id in record_keys:
+            try:
+                record_keys[record_uid] = crypto.decrypt_aes_v2(
+                    record_data.recordKey, record_keys[owner_id]
+                )
+            except Exception:
+                pass
+
+
+def _resolve_record_key_for_details(
+    auth: keeper_auth.KeeperAuth,
+    record_data: record_pb2.RecordData,
+    record_uid: str,
+    record_keys: Dict[str, bytes],
+) -> Optional[bytes]:
+    _process_record_owner_key_details(record_data, record_uid, record_keys)
+    if record_uid in record_keys:
+        k = record_keys[record_uid]
+        if k:
+            return k
+    try:
+        return sync_down.decrypt_keeper_key(
+            auth.auth_context, record_data.recordKey or b"", record_data.recordKeyType
+        )
+    except Exception:
+        return None
+
+
+def _decrypt_record_payload(
+    record_data: record_pb2.RecordData, record_key: bytes
+) -> Optional[bytes]:
+    if not record_data.encryptedRecordData:
+        return None
+    try:
+        data_decoded = utils.base64_url_decode(record_data.encryptedRecordData)
+    except Exception:
+        return None
+    version = record_data.version
+    try:
+        if version <= _MAX_V2_RECORD_VERSION:
+            return crypto.decrypt_aes_v1(data_decoded, record_key)
+        return crypto.decrypt_aes_v2(data_decoded, record_key)
+    except Exception:
+        return None
+
+
+def _record_display_name_from_payload(data: bytes) -> str:
+    try:
+        d = json.loads(data.decode("utf-8"))
+        title = d.get("title")
+        return title if isinstance(title, str) else ""
+    except Exception:
+        return ""
+
+
+def get_shared_folder_records_display(
+    auth: keeper_auth.KeeperAuth, shared_folder_uid: str
+) -> List[SharedFolderRecordDisplay]:
+    """
+    Analog of .NET RecordSkipSyncDown.GetSharedFolderRecordsAsync: load keys via
+    get_shared_folders, call vault/get_records_details, decrypt payloads, return
+    only record UID and decrypted title (name) for each row.
+    """
+    auth = _ensure_auth(auth)
+    keys = get_record_keys_from_shared_folder(auth, shared_folder_uid)
+    if not keys:
+        return []
+
+    uid_list = list(keys.keys())
+    working_keys = dict(keys)
+    out: List[SharedFolderRecordDisplay] = []
+
+    for i in range(0, len(uid_list), _RECORD_DETAILS_CHUNK):
+        chunk = uid_list[i : i + _RECORD_DETAILS_CHUNK]
+        rq = _build_record_details_request(chunk)
+        if len(rq.recordUid) == 0:
+            continue
+        rs = auth.execute_auth_rest(
+            _RECORD_DETAILS_URL,
+            rq,
+            response_type=record_pb2.GetRecordDataWithAccessInfoResponse,
+        )
+        if not rs:
+            continue
+        for item in rs.recordDataWithAccessInfo:
+            if not item.recordUid:
+                continue
+            uid = utils.base64_url_encode(item.recordUid)
+            rd = item.recordData
+            if rd is None or not rd.encryptedRecordData:
+                continue
+            rk = _resolve_record_key_for_details(auth, rd, uid, working_keys)
+            if not rk:
+                continue
+            payload = _decrypt_record_payload(rd, rk)
+            if not payload:
+                continue
+            name = _record_display_name_from_payload(payload)
+            out.append(SharedFolderRecordDisplay(record_uid=uid, name=name))
+
+    return out
+
+
 def get_available_teams_for_share(
     auth: keeper_auth.KeeperAuth,
 ) -> List[vault_types.TeamInfo]:
@@ -268,7 +394,7 @@ def _encrypt_shared_folder_key_for_user(
         encrypted = crypto.encrypt_aes_v1(shared_folder_key, ac.data_key)
         return encrypted, folder_pb2.encrypted_by_data_key
 
-    need_invites = auth.load_user_public_keys([username], send_invites=False)
+    auth.load_user_public_keys([username], send_invites=False)
     keys = auth.get_user_keys(username)
     if keys is None:
         raise ValueError(f'Cannot retrieve user "{username}" public key for sharing.')
@@ -304,9 +430,11 @@ def share_shared_folder_to_team(
     manage_users: Optional[bool] = None,
     manage_records: Optional[bool] = None,
     expiration: Optional[int] = None,
-) -> None:
+) -> List[SharedFolderRecordDisplay]:
     """
     Share a shared folder to a team without requiring a synced vault.
+
+    Returns decrypted record UID and title (name) for each record in the folder.
     """
     auth = _ensure_auth(auth)
     if not shared_folder_uid:
@@ -340,7 +468,7 @@ def share_shared_folder_to_team(
     team_is_member = existing_team is not None
 
     if _has_no_share_option_changes(manage_users, manage_records, expiration) and team_is_member:
-        return
+        return get_shared_folder_records_display(auth, shared_folder_uid)
 
     sfut = folder_pb2.SharedFolderUpdateTeam()
     sfut.teamUid = utils.base64_url_decode(team_uid)
@@ -374,6 +502,8 @@ def share_shared_folder_to_team(
                 raise ValueError(
                     f'Put Team "{utils.base64_url_encode(st.teamUid)}" to Shared Folder "{display_name}" error: {st.status}'
                 )
+
+    return get_shared_folder_records_display(auth, shared_folder_uid)
 
 
 def revoke_shared_folder_from_team(
@@ -434,9 +564,11 @@ def share_shared_folder_to_user(
     manage_users: Optional[bool] = None,
     manage_records: Optional[bool] = None,
     expiration: Optional[int] = None,
-) -> None:
+) -> List[SharedFolderRecordDisplay]:
     """
     Share a shared folder to a user (email) without requiring a synced vault.
+
+    Returns decrypted record UID and title (name) for each record in the folder.
     """
     auth = _ensure_auth(auth)
     if not shared_folder_uid:
@@ -456,7 +588,7 @@ def share_shared_folder_to_user(
 
     user_is_member = _is_shared_folder_user_member(sf, username)
     if _has_no_share_option_changes(manage_users, manage_records, expiration) and user_is_member:
-        return
+        return get_shared_folder_records_display(auth, shared_folder_uid)
 
     sfu = folder_pb2.SharedFolderUpdateUser()
     sfu.username = username
@@ -501,6 +633,8 @@ def share_shared_folder_to_user(
                 raise ValueError(
                     f'Put "{st.username}" to Shared Folder "{display_name}" error: {st.status}'
                 )
+
+    return get_shared_folder_records_display(auth, shared_folder_uid)
 
 
 def revoke_shared_folder_from_user(

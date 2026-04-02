@@ -12,7 +12,8 @@ from typing import Dict, Optional
 import fido2
 import webbrowser
 
-from keepersdk import errors, utils, skip_sync
+from keepersdk import errors, utils
+from keepersdk.vault import skip_sync
 from keepersdk.authentication import (
     configuration,
     endpoint,

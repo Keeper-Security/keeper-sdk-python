@@ -12,7 +12,8 @@ from typing import Dict, Optional
 import fido2
 import webbrowser
 
-from keepersdk import errors, utils, skip_sync
+from keepersdk import errors, utils
+from keepersdk.vault import skip_sync
 from keepersdk.authentication import (
     configuration,
     endpoint,
@@ -516,7 +517,7 @@ def main() -> None:
     expiration = None     # Unix timestamp seconds, or None for no expiration
     #Note: Default shared folder permissions will take effect if not specified
 
-    skip_sync.share_shared_folder_to_team(
+    records = skip_sync.share_shared_folder_to_team(
         keeper_auth_context,
         shared_folder_uid=shared_folder_uid,
         team_name_or_uid=team_name_or_uid,
@@ -525,6 +526,9 @@ def main() -> None:
         expiration=expiration,
     )
     print(f'Shared folder "{shared_folder_uid}" with team "{team_name_or_uid}" via skip-sync.')
+    print("Records in folder (decrypted title):")
+    for row in records:
+        print(f"  {row.record_uid}\t{row.name!r}")
 
     keeper_auth_context.close()
 
