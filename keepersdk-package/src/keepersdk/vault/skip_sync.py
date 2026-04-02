@@ -17,6 +17,34 @@ _RECORD_DETAILS_CHUNK = 999
 _MAX_V2_RECORD_VERSION = 2
 
 
+def _coerce_shared_folder_header_key_type(raw) -> Optional[int]:
+    """
+    Parse get_shared_folders ``key_type`` into an int compatible with
+    ``record_pb2.RecordKeyType`` / ``sync_down.decrypt_keeper_key``.
+
+    The protobuf Python ``RecordKeyType`` wrapper is not callable (do not use
+    ``RecordKeyType(n)``); values are plain ints. The API may return an int or
+    a string (digits or protobuf-style enum name in snake_case).
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, int):
+        return raw
+    if isinstance(raw, str):
+        s = raw.strip()
+        if not s:
+            return None
+        if s.isdigit() or (s.startswith("-") and s[1:].isdigit()):
+            return int(s)
+        try:
+            return record_pb2.RecordKeyType.Value(s.upper())
+        except ValueError:
+            return None
+    return None
+
+
 @dataclass(frozen=True)
 class SharedFolderRecordDisplay:
     """Decrypted display row for a record in a shared folder (skip-sync path)."""
@@ -67,13 +95,12 @@ def _decrypt_shared_folder_key(
     if not sf:
         return None
 
-    key_type_value = sf.get("key_type")
+    key_type = _coerce_shared_folder_header_key_type(sf.get("key_type"))
     shared_folder_key_b64 = sf.get("shared_folder_key")
 
-    if key_type_value is None:
+    if key_type is None:
         return None
 
-    key_type = record_pb2.RecordKeyType(key_type_value)
     auth_context = auth.auth_context
 
     if shared_folder_key_b64:
@@ -364,21 +391,25 @@ def _is_remove_status_ok(status: str) -> bool:
 
 def _encrypt_shared_folder_key_for_team(
     auth: keeper_auth.KeeperAuth, team_uid: str, shared_folder_key: bytes
-) -> Tuple[bytes, folder_pb2.EncryptedKeyType]:
+) -> Tuple[bytes, int]:
+    """Match ``shares_management.FolderShares._encrypt_shared_folder_key_for_team``."""
+    ac = auth.auth_context
     auth.load_team_keys([team_uid])
     keys = auth.get_team_keys(team_uid)
     if keys is None:
         raise ValueError(f'Cannot retrieve team "{team_uid}" keys for sharing.')
 
     if keys.aes:
-        # Prefer AES CBC for compatibility
+        if ac.forbid_rsa:
+            encrypted = crypto.encrypt_aes_v2(shared_folder_key, keys.aes)
+            return encrypted, folder_pb2.encrypted_by_data_key_gcm
         encrypted = crypto.encrypt_aes_v1(shared_folder_key, keys.aes)
         return encrypted, folder_pb2.encrypted_by_data_key
-    if auth.auth_context.forbid_rsa and keys.ec:
+    elif ac.forbid_rsa and keys.ec:
         pub = crypto.load_ec_public_key(keys.ec)
         encrypted = crypto.encrypt_ec(shared_folder_key, pub)
         return encrypted, folder_pb2.encrypted_by_public_key_ecc
-    if keys.rsa:
+    elif not ac.forbid_rsa and keys.rsa:
         pub = crypto.load_rsa_public_key(keys.rsa)
         encrypted = crypto.encrypt_rsa(shared_folder_key, pub)
         return encrypted, folder_pb2.encrypted_by_public_key
@@ -388,7 +419,7 @@ def _encrypt_shared_folder_key_for_team(
 
 def _encrypt_shared_folder_key_for_user(
     auth: keeper_auth.KeeperAuth, username: str, shared_folder_key: bytes
-) -> Tuple[bytes, folder_pb2.EncryptedKeyType]:
+) -> Tuple[bytes, int]:
     ac = auth.auth_context
     if username.strip().casefold() == ac.username.strip().casefold():
         encrypted = crypto.encrypt_aes_v1(shared_folder_key, ac.data_key)
@@ -399,11 +430,11 @@ def _encrypt_shared_folder_key_for_user(
     if keys is None:
         raise ValueError(f'Cannot retrieve user "{username}" public key for sharing.')
 
-    if ac.forbid_rsa and keys.ec:
+    elif ac.forbid_rsa and keys.ec:
         pub = crypto.load_ec_public_key(keys.ec)
         encrypted = crypto.encrypt_ec(shared_folder_key, pub)
         return encrypted, folder_pb2.encrypted_by_public_key_ecc
-    if keys.rsa:
+    elif not ac.forbid_rsa and keys.rsa:
         pub = crypto.load_rsa_public_key(keys.rsa)
         encrypted = crypto.encrypt_rsa(shared_folder_key, pub)
         return encrypted, folder_pb2.encrypted_by_public_key
@@ -485,10 +516,8 @@ def share_shared_folder_to_team(
         sfut.manageRecords = manage_records if manage_records is not None else sf.get("default_manage_records", False)
 
         encrypted_key, key_type = _encrypt_shared_folder_key_for_team(auth, team_uid, sf_key)
-        sfut.typedSharedFolderKey = folder_pb2.EncryptedDataKey(
-            encryptedKey=encrypted_key,
-            encryptedKeyType=key_type,
-        )
+        sfut.typedSharedFolderKey.encryptedKey = encrypted_key
+        sfut.typedSharedFolderKey.encryptedKeyType = key_type
         rq.sharedFolderAddTeam.append(sfut)
 
     rs = auth.execute_auth_rest(
@@ -617,10 +646,8 @@ def share_shared_folder_to_user(
         )
 
         encrypted_key, key_type = _encrypt_shared_folder_key_for_user(auth, username, sf_key)
-        sfu.typedSharedFolderKey = folder_pb2.EncryptedDataKey(
-            encryptedKey=encrypted_key,
-            encryptedKeyType=key_type,
-        )
+        sfu.typedSharedFolderKey.encryptedKey = encrypted_key
+        sfu.typedSharedFolderKey.encryptedKeyType = key_type
         rq.sharedFolderAddUser.append(sfu)
 
     rs = auth.execute_auth_rest(
