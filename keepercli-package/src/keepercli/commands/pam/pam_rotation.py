@@ -6,16 +6,15 @@ import re
 
 from keepersdk import crypto, utils
 from keepersdk.errors import KeeperApiError
-from keepersdk.helpers.keeper_dag import dag_utils
 from keepersdk.helpers.tunnel.tunnel_graph import TunnelDAG
-from keepersdk.helpers.tunnel.tunnel_utils import get_keeper_tokens, get_config_uid
-from keepersdk.vault import record_management, vault_record, vault_types, vault_utils
+from keepersdk.helpers.tunnel.tunnel_utils import get_keeper_tokens
+from keepersdk.vault import record_management, vault_record, vault_types, vault_utils, record_facades, attachment
 from keepersdk.proto import pam_pb2, router_pb2
 
 from .. import base
-from ... import api
+from ... import api, prompt_utils
 from ...params import KeeperParams
-from ...helpers import gateway_utils, router_utils, report_utils
+from ...helpers import gateway_utils, router_utils, report_utils, folder_utils, record_utils
 
 
 logger = api.get_logger()
@@ -52,7 +51,7 @@ class PAMListRecordRotationCommand(base.ArgparseCommand):
         enterprise_controllers_connected_uids_bytes = \
             [x.controllerUid for x in enterprise_controllers_connected_resp.controllers]
 
-        all_pam_config_records = pam_configurations_get_all(params)
+        all_pam_config_records = record_utils.pam_configurations_get_all(vault)
         table = []
 
         headers = []
@@ -142,7 +141,7 @@ class PAMListRecordRotationCommand(base.ArgparseCommand):
                         f"[No config found. Looks like configuration {configuration_uid_str} was removed but rotation schedule was not modified]")
 
             else:
-                pam_data_decrypted = pam_decrypt_configuration_data(pam_configuration)
+                pam_data_decrypted = record_utils.pam_decrypt_configuration_data(pam_configuration)
                 pam_config_name = pam_data_decrypted.get('title')
                 pam_config_type = pam_data_decrypted.get('type')
                 row.append(f"{pam_config_name} ({pam_config_type})")
@@ -162,51 +161,89 @@ class PAMListRecordRotationCommand(base.ArgparseCommand):
 
 
 
-class PAMCreateRecordRotationCommand(base.ArgparseCommand):
-    parser = argparse.ArgumentParser(prog='pam rotation edit')
-    record_group = parser.add_mutually_exclusive_group(required=True)
-    record_group.add_argument('--record', '-r', dest='record_name', action='store',
-                              help='Record UID, name, or pattern to be rotated manually or via schedule')
-    record_group.add_argument('--folder', '-fd', dest='folder_name', action='store',
-                              help='Used for bulk rotation setup. The folder UID or name that holds records to be '
-                                   'configured')
-    parser.add_argument('--force', '-f', dest='force', action='store_true', help='Do not ask for confirmation')
-    parser.add_argument('--config', '-c', required=False, dest='config', action='store',
-                        help='UID or path of the configuration record.')
-    parser.add_argument('--iam-aad-config', '-iac', dest='iam_aad_config_uid', action='store',
-                        help='UID of a PAM Configuration. Used for an IAM or Azure AD user in place of --resource.')
-    parser.add_argument('--rotation-profile', '-rp', dest='rotation_profile', action='store',
-                        choices=['general', 'iam_user', 'scripts_only'],
-                        help='Rotation profile type: general (resource-based), iam_user (IAM/Azure user), '
-                             'scripts_only (run PAM scripts only)')
-    parser.add_argument('--resource', '-rs', dest='resource', action='store',
-                        help='UID or path of the resource record.')
-    schedule_group = parser.add_mutually_exclusive_group()
-    schedule_group.add_argument('--schedulejson', '-sj', required=False, dest='schedule_json_data',
-                                action='append', help='JSON of the scheduler. Example: -sj \'{"type": "WEEKLY", '
-                                                      '"utcTime": "15:44", "weekday": "SUNDAY", "intervalCount": 1}\'')
-    schedule_group.add_argument('--schedulecron', '-sc', required=False, dest='schedule_cron_data',
-                                action='append', help='Cron tab string of the scheduler. Example: to run job daily at '
-                                                      '5:56PM UTC enter following cron -sc "56 17 * * *"')
-    schedule_group.add_argument('--on-demand', '-od', required=False, dest='on_demand',
-                                action='store_true', help='Schedule On Demand')
-    schedule_group.add_argument('--schedule-config', '-sf', required=False, dest='schedule_config',
-                                action='store_true', help='Schedule from Configuration')
-    parser.add_argument('--schedule-only', '-so', dest='schedule_only', action='store_true',
-                        help='Only update the rotation schedule without changing other settings')
-    parser.add_argument('--complexity', '-x', required=False, dest='pwd_complexity', action='store',
-                        help='Password complexity: length, upper, lower, digits, symbols. Ex. 32,5,5,5,5[,SPECIAL CHARS]')
-    parser.add_argument('--admin-user', '-a', required=False, dest='admin', action='store',
-                        help='UID or path for the PAMUser record to configure the admin credential on the PAM Resource as the Admin when rotating')
-    state_group = parser.add_mutually_exclusive_group()
-    state_group.add_argument('--enable', '-e', dest='enable', action='store_true', help='Enable rotation')
-    state_group.add_argument('--disable', '-d', dest='disable', action='store_true', help='Disable rotation')
+def validate_cron_field(field, min_val, max_val):
+    # Accept *, single number, range, step, list, and L suffix for last day/week
+    pattern = r'^(\*|\d+L?|L[W]?|\d+-\d+|\*/\d+|\d+(,\d+)*|\d+-\d+/\d+)$'
+    if not re.match(pattern, field):
+        return False
 
-    def get_parser(self):
-        return PAMCreateRecordRotationCommand.parser
-    
+    def is_valid_number(n):
+        # Strip L and W suffix if present (for last day/week expressions)
+        n_stripped = n.rstrip('LW')
+        return n_stripped and n_stripped.isdigit() and min_val <= int(n_stripped) <= max_val
+
+    parts = re.split(r'[,\-/]', field)
+    return all(part == '*' or part in ('L', 'LW') or is_valid_number(part) for part in parts if part != '*')
+
+def validate_cron_expression(expr, for_rotation=False):
+    parts = expr.strip().split()
+
+    # All internal docs, MRD etc. specify that rotation schedule is using CRON format
+    # but actually back-end don't accept all valid standard CRON and uses unspecified custom CRON format
+    if for_rotation is True:
+        if len(parts) != 6:
+            return False, f"CRON: Rotation schedules require all 6 parts incl. seconds - ex. Daily at 04:00:00 cron: 0 0 4 * * ? got {len(parts)} parts"
+        if not (parts[3] == '?' or parts[5] == "?"):
+            logger.warning(
+                "CRON: Rotation schedule CRON format - must use ? character in one of these fields: day-of-week, day-of-month")
+        parts[3] = '*' if parts[3] == '?' else parts[3]
+        parts[5] = '*' if parts[5] == '?' else parts[5]
+        logger.debug(
+            "WARNING! Validating CRON expression for rotation - if you get 500 type errors make sure to validate your CRON using web vault UI")
+
+    if len(parts) not in [5, 6]:
+        return False, f"CRON: Expected 5 or 6 fields, got {len(parts)}"
+
+    if len(parts) == 6:
+        seconds, minute, hour, dom, month, dow = parts
+        if not validate_cron_field(seconds, 0, 59):
+            return False, "CRON: Invalid seconds field"
+    else:
+        minute, hour, dom, month, dow = parts
+
+    validators = [
+        (minute, 0, 59, "minute"),
+        (hour, 0, 23, "hour"),
+        (dom, 1, 31, "day of month"),
+        (month, 1, 12, "month"),
+        (dow, 0, 7, "day of week")
+    ]
+
+    for field, min_val, max_val, name in validators:
+        if not validate_cron_field(field, min_val, max_val):
+            return False, f"CRON: Invalid {name} field"
+
+    return True, "Valid cron expression"
+
+def parse_schedule_data(kwargs):
+    schedule_json_data = kwargs.get('schedule_json_data')
+    schedule_cron_data = kwargs.get('schedule_cron_data')
+    schedule_on_demand = kwargs.get('on_demand') is True
+    schedule_data = None
+    if isinstance(schedule_json_data, list):
+        schedule_data = [json.loads(x) for x in schedule_json_data]
+    elif isinstance(schedule_cron_data, list):
+        # more details: http://www.quartz-scheduler.org/documentation/quartz-2.3.0/tutorials/crontrigger.html#examples
+        if schedule_cron_data and isinstance(schedule_cron_data[0], str):
+            valid, err = validate_cron_expression(schedule_cron_data[0], for_rotation=True)
+            if valid:
+                schedule_data = [{"type": "CRON", "cron": schedule_cron_data[0], "tz": "Etc/UTC"}]
+            else:
+                logger.error(f'Invalid CRON "{schedule_cron_data[0]}" Error: {err}')
+    elif schedule_on_demand is True:
+        schedule_data = []
+    return schedule_data
+
+
+class PAMCreateRecordRotationCommand(base.ArgparseCommand):
+
     def __init__(self):
         parser = argparse.ArgumentParser(prog='pam rotation edit')
+        PAMCreateRecordRotationCommand.add_arguments_to_parser(parser)
+        super().__init__(parser)
+    
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
         parser.add_argument('--record', '-r', dest='record_name', action='store',
                               help='Record UID, name, or pattern to be rotated manually or via schedule')
         parser.add_argument('--folder', '-fd', dest='folder_name', action='store',
@@ -221,7 +258,7 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                         choices=['general', 'iam_user', 'scripts_only'],
                         help='Rotation profile type: general (resource-based), iam_user (IAM/Azure user), '
                              'scripts_only (run PAM scripts only)')
-
+        
         parser.add_argument('--resource', '-rs', dest='resource', action='store',
                         help='UID or path of the resource record.')
         parser.add_argument('--schedulejson', '-sj', required=False, dest='schedule_json_data',
@@ -243,7 +280,6 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
         state_group = parser.add_mutually_exclusive_group()
         state_group.add_argument('--enable', '-e', dest='enable', action='store_true', help='Enable rotation')
         state_group.add_argument('--disable', '-d', dest='disable', action='store_true', help='Disable rotation')
-        super().__init__(parser)
         
     def execute(self, context: KeeperParams, **kwargs):
         """Configure rotation settings for one or multiple PAM records.
@@ -253,7 +289,7 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
         resource linkage and then submits rotation requests to the Keeper
         PAM router service.
         """
-        self._validate_vault_and_permissions(context)
+
         vault = context.vault
 
         def config_resource(_dag, target_record, target_config_uid, silent=None):
@@ -854,7 +890,7 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                     folder, record_title = rs
                     if not record_title:
 
-                        def add_folders(sub_folder):  # type: (BaseFolderNode) -> None
+                        def add_folders(sub_folder):
                             folder_uids.add(sub_folder.uid or '')
 
                         if isinstance(folder, vault_types.Folder):
@@ -885,7 +921,7 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                                     continue
                                 record_uids.add(record_uid)
 
-        pam_records = []  # type: List[vault.TypedRecord]
+        pam_records = []
         valid_record_types = ['pamDatabase', 'pamDirectory', 'pamMachine', 'pamUser', 'pamRemoteBrowser']
         for record_uid in record_uids:
             record = vault.vault_data.load_record(record_uid)
@@ -958,7 +994,7 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                         'complexity']
         valid_records = []
 
-        r_requests = []  # type: List[router_pb2.RouterRecordRotationRequest]
+        r_requests = []
 
         # Note: --folder, -fd FOLDER_NAME sets up General rotation
         # use --schedule-only, -so to preserve individual setups (General, IAM, NOOP)
@@ -1014,27 +1050,27 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
         force = kwargs.get('force') is True
 
         if len(skipped_records) > 0:
-            skipped_header = [field_to_title(x) for x in skipped_header]
-            dump_report_data(skipped_records, skipped_header, title='The following record(s) were skipped')
+            skipped_header = [report_utils.field_to_title(x) for x in skipped_header]
+            report_utils.dump_report_data(skipped_records, skipped_header, title='The following record(s) were skipped')
 
             if len(r_requests) > 0 and not force:
-                answer = user_choice('\nDo you want to cancel password rotation?', 'Yn', 'Y')
+                answer = prompt_utils.user_choice('\nDo you want to cancel password rotation?', 'Yn', 'Y')
                 if answer.lower().startswith('y'):
                     return
 
         if len(r_requests) > 0:
-            valid_header = [field_to_title(x) for x in valid_header]
+            valid_header = [report_utils.field_to_title(x) for x in valid_header]
             if not kwargs.get('silent'):
-                dump_report_data(valid_records, valid_header, title='The following record(s) will be updated')
+                report_utils.dump_report_data(valid_records, valid_header, title='The following record(s) will be updated')
             if not force:
-                answer = user_choice('\nDo you want to update password rotation?', 'Yn', 'Y')
+                answer = prompt_utils.user_choice('\nDo you want to update password rotation?', 'Yn', 'Y')
                 if answer.lower().startswith('n'):
                     return
 
             for rq in r_requests:
                 record_uid = utils.base64_url_encode(rq.recordUid)
                 try:
-                    router_set_record_rotation_information(params, rq, transmission_key, encrypted_transmission_key,
+                    router_utils.router_set_record_rotation_information(vault, rq, transmission_key, encrypted_transmission_key,
                                                            encrypted_session_token)
                 except KeeperApiError as kae:
                     logger.warning('Record "%s": Set rotation error "%s": %s',
@@ -1043,39 +1079,40 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
 
 
 
-class PAMRouterGetRotationInfo(Command):
-    parser = argparse.ArgumentParser(prog='dr-router-get-rotation-info-parser')
-    parser.add_argument('--record-uid', '-r', required=True, dest='record_uid', action='store',
-                        help='Record UID to rotate')
+class PAMRouterGetRotationInfo(base.ArgparseCommand):
+    def __init__(self):
+        parser = argparse.ArgumentParser(prog='dr-router-get-rotation-info-parser')
+        parser.add_argument('--record-uid', '-r', required=True, dest='record_uid', action='store',
+                            help='Record UID to rotate')
+        super().__init__(parser)
 
-    def get_parser(self):
-        return PAMRouterGetRotationInfo.parser
-
-    def execute(self, params, **kwargs):
+    def execute(self, context: KeeperParams, **kwargs):
 
         record_uid = kwargs.get('record_uid')
-        record_uid_bytes = url_safe_str_to_bytes(record_uid)
+        record_uid_bytes = utils.base64_url_decode(record_uid)
 
-        rri = record_rotation_get(params, record_uid_bytes)
+        vault = context.vault
+
+        rri = record_utils.record_rotation_get(vault, record_uid_bytes)
         rri_status_name = router_pb2.RouterRotationStatus.Name(rri.status)
         if rri_status_name == 'RRS_ONLINE':
 
-            print(f'Rotation Status: {bcolors.OKBLUE}Ready to rotate ({rri_status_name}){bcolors.ENDC}')
+            logger.info(f'Rotation Status: Ready to rotate ({rri_status_name})')
             configuration_uid = utils.base64_url_encode(rri.configurationUid)
-            print(f'PAM Config UID: {bcolors.OKBLUE}{configuration_uid}{bcolors.ENDC}')
-            print(f'Node ID: {bcolors.OKBLUE}{rri.nodeId}{bcolors.ENDC}')
+            logger.info(f'PAM Config UID: {configuration_uid}')
+            logger.info(f'Node ID: {rri.nodeId}')
 
-            print(
-                f"Gateway Name where the rotation will be performed: {bcolors.OKBLUE}{(rri.controllerName if rri.controllerName else '-')}{bcolors.ENDC}")
-            print(
-                f"Gateway Uid: {bcolors.OKBLUE}{(utils.base64_url_encode(rri.controllerUid) if rri.controllerUid else '-')} {bcolors.ENDC}")
+            logger.info(
+                f"Gateway Name where the rotation will be performed: {(rri.controllerName if rri.controllerName else '-')}")
+            logger.info(
+                f"Gateway Uid: {(utils.base64_url_encode(rri.controllerUid) if rri.controllerUid else '-')}")
 
-            def is_resource_ok(resource_id, params, configuration_uid):
-                if resource_id not in params.record_cache:
+            def is_resource_ok(resource_id, vault, configuration_uid):
+                if resource_id not in vault.vault_data._records:
                     return False
 
-                configuration = vault.KeeperRecord.load(params, configuration_uid)
-                if not isinstance(configuration, vault.TypedRecord):
+                configuration = vault.vault_data.load_record(configuration_uid)
+                if not isinstance(configuration, vault_record.TypedRecord):
                     return False
 
                 field = configuration.get_typed_field('pamResources')
@@ -1091,42 +1128,39 @@ class PAMRouterGetRotationInfo(Command):
 
             if rri.resourceUid:
                 resource_id = utils.base64_url_encode(rri.resourceUid)
-                resource_ok = is_resource_ok(resource_id, params, configuration_uid)
-                print(f"Admin Resource Uid: {bcolors.OKBLUE if resource_ok else bcolors.FAIL}{resource_id}"
-                      f"{bcolors.ENDC}")
+                resource_ok = is_resource_ok(resource_id, vault, configuration_uid)
+                logger.info(f"Admin Resource Uid: {resource_id if resource_ok else 'FAIL'}")
 
-            # print(f"Router Cookie: {bcolors.OKBLUE}{(rri.cookie if rri.cookie else '-')}{bcolors.ENDC}")
-            # print(f"scriptName: {bcolors.OKGREEN}{rri.scriptName}{bcolors.ENDC}")
             if rri.pwdComplexity:
-                print(f"Password Complexity: {bcolors.OKGREEN}{rri.pwdComplexity}{bcolors.ENDC}")
+                logger.info(f"Password Complexity: {rri.pwdComplexity}")
                 try:
-                    record = params.record_cache.get(record_uid)
+                    record = vault.vault_data._records[record_uid]
                     if record:
                         complexity = crypto.decrypt_aes_v2(utils.base64_url_decode(rri.pwdComplexity),
-                                                           record['record_key_unencrypted'])
+                                                           record.record_key)
                         c = json.loads(complexity.decode())
-                        print(f"Password Complexity Data: {bcolors.OKBLUE}"
+                        logger.info(f"Password Complexity Data: "
                               f"Length: {c.get('length')}; Lowercase: {c.get('lowercase')}; "
                               f"Uppercase: {c.get('caps')}; "
                               f"Digits: {c.get('digits')}; "
                               f"Symbols: {c.get('special')}; "
-                              f"Symbols Chars: {c.get('specialChars')} {bcolors.ENDC}")
+                              f"Symbols Chars: {c.get('specialChars')}")
                 except:
                     pass
             else:
-                print(f"Password Complexity: {bcolors.OKGREEN}[not set]{bcolors.ENDC}")
+                logger.info(f"Password Complexity: [not set]")
 
-            print(f"Is Rotation Disabled: {bcolors.OKGREEN}{rri.disabled}{bcolors.ENDC}")
+            logger.info(f"Is Rotation Disabled: {rri.disabled}")
 
             # Get schedule information
             rq = pam_pb2.PAMGenericUidsRequest()
-            schedules_proto = router_get_rotation_schedules(params, rq)
+            schedules_proto = router_utils.router_get_rotation_schedules(context, rq)
             if schedules_proto:
                 schedules = list(schedules_proto.schedules)
                 for s in schedules:
                     if s.recordUid == record_uid_bytes:
                         if s.noSchedule is True:
-                            print(f"Schedule Type: {bcolors.OKBLUE}Manual Rotation{bcolors.ENDC}")
+                            logger.info(f"Schedule Type: Manual Rotation")
                         else:
                             if s.scheduleData:
                                 schedule_arr = s.scheduleData.replace('RotateActionJob|', '').split('.')
@@ -1136,41 +1170,42 @@ class PAMRouterGetRotationInfo(Command):
                                     schedule_str = f'{schedule_arr[0]} at {schedule_arr[1]} UTC with interval count of {schedule_arr[2]}'
                                 else:
                                     schedule_str = s.scheduleData
-                                print(f"Schedule: {bcolors.OKBLUE}{schedule_str}{bcolors.ENDC}")
+                                logger.info(f"Schedule: {schedule_str}")
                         break
 
-            print(f"\nCommand to manually rotate: {bcolors.OKGREEN}pam action rotate -r {record_uid}{bcolors.ENDC}")
+            logger.info(f"\nCommand to manually rotate: pam action rotate -r {record_uid}")
         else:
-            print(f'{bcolors.WARNING}Rotation Status: Not ready to rotate ({rri_status_name}){bcolors.ENDC}')
+            logger.info(f'Rotation Status: Not ready to rotate ({rri_status_name})')
 
 
-class PAMRouterScriptCommand(GroupCommand):
+class PAMRouterScriptCommand(base.GroupCommand):
     def __init__(self):
-        super().__init__()
-        self.register_command('list', PAMScriptListCommand(), 'List script fields')
-        self.register_command('add', PAMScriptAddCommand(), 'List Record Rotation Schedulers')
-        self.register_command('edit', PAMScriptEditCommand(), 'Add, delete, or edit script field')
-        self.register_command('delete', PAMScriptDeleteCommand(), 'Delete script field')
+        super().__init__('PAM Router Script')
+        self.register_command(PAMScriptListCommand(), 'list', 'l')
+        self.register_command(PAMScriptAddCommand(), 'add', 'a')
+        self.register_command(PAMScriptEditCommand(), 'edit', 'e')
+        self.register_command(PAMScriptDeleteCommand(), 'delete', 'd')
         self.default_verb = 'list'
 
 
+class PAMScriptListCommand(base.ArgparseCommand):
+    def __init__(self):
+        parser = argparse.ArgumentParser(prog='pam rotate script view', parents=[base.report_output_parser],
+                                         description='List script fields')
+        parser.add_argument('pattern', nargs='?', help='Record UID, path, or search pattern')
+        super().__init__(parser)
 
-class PAMScriptListCommand(Command):
-    parser = argparse.ArgumentParser(prog='pam rotate script view', parents=[report_output_parser],
-                                     description='List script fields')
-    parser.add_argument('pattern', nargs='?', help='Record UID, path, or search pattern')
-
-    def get_parser(self):
-        return PAMScriptListCommand.parser
-
-    def execute(self, params, **kwargs):
+    def execute(self, context: KeeperParams, **kwargs):
         pattern = kwargs.get('pattern')
+
+        vault = context.vault
 
         table = []
         header = ['record_uid', 'title', 'record_type', 'script_uid', 'script_name', 'records', 'command']
-        for record in vault_extensions.find_records(params, search_str=pattern, record_version=3,
+        for rec in vault.vault_data.find_records(criteria=pattern, record_version=3,
                                                     record_type=('pamUser', 'pamDirectory')):
-            if not isinstance(record, vault.TypedRecord):
+            record = vault.vault_data.load_record(rec.record_uid)
+            if not isinstance(record, vault_record.TypedRecord):
                 continue
             for field in (x for x in record.fields if x.type == 'script'):
                 value = field.get_default_value(dict)
@@ -1179,7 +1214,7 @@ class PAMScriptListCommand(Command):
                 file_ref = value.get('fileRef')
                 if not file_ref:
                     continue
-                file_record = vault.KeeperRecord.load(params, file_ref)
+                file_record = vault.vault_data.load_record(file_ref)
                 if not file_record:
                     continue
                 records = value.get('recordRef')
@@ -1188,52 +1223,57 @@ class PAMScriptListCommand(Command):
                               file_record.title, records, command])
         fmt = kwargs.get('format')
         if fmt != 'json':
-            header = [field_to_title(x) for x in header]
-        return dump_report_data(table, header, fmt=fmt, filename=kwargs.get('output'), row_number=True)
+            header = [report_utils.field_to_title(x) for x in header]
+        return report_utils.dump_report_data(table, header, fmt=fmt, filename=kwargs.get('output'), row_number=True)
 
 
-class PAMScriptAddCommand(Command):
-    parser = argparse.ArgumentParser(prog='pam rotate script add', description='Add script to record')
-    parser.add_argument('--script', required=True, dest='script', action='store',
-                        help='Script file name')
-    parser.add_argument('--add-credential', dest='add_credential', action='append',
-                        help='Record with rotation credential')
-    parser.add_argument('--script-command', dest='script_command', action='store',
-                        help='Script command')
-    parser.add_argument('record', help='Record UID or Title')
+class PAMScriptAddCommand(base.ArgparseCommand):
+    
+    def __init__(self):
+        parser = argparse.ArgumentParser(prog='pam rotate script add', description='Add script to record')
+        PAMScriptAddCommand.add_arguments_to_parser(parser)
+        super().__init__(parser)
+    
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
+        parser.add_argument('--script', required=True, dest='script', action='store',
+                            help='Script file name')
+        parser.add_argument('--add-credential', dest='add_credential', action='append',
+                            help='Record with rotation credential')
+        parser.add_argument('--script-command', dest='script_command', action='store',
+                            help='Script command')
+        parser.add_argument('record', help='Record UID or Title')
 
-    def get_parser(self):
-        return PAMScriptAddCommand.parser
+    def execute(self, context: KeeperParams, **kwargs):
+        vault = context.vault
 
-    def execute(self, params, **kwargs):
         record_name = kwargs.get('record')
         if not record_name:
-            raise CommandError('rotate script', '"record" argument is required')
-        records = list(vault_extensions.find_records(
-            params, search_str=record_name, record_version=3, record_type=('pamUser', 'pamDirectory')))
+            raise base.CommandError('"record" argument is required')
+        records = list(vault.vault_data.find_records(criteria=record_name, record_version=3, record_type=('pamUser', 'pamDirectory')))
         if len(records) == 0:
-            raise CommandError('rotate script', f'Record "{record_name}" not found')
+            raise base.CommandError(f'Record "{record_name}" not found')
         if len(records) > 1:
-            raise CommandError('rotate script', f'Record "{record_name}" is not unique. Use record UID.')
-        record = records[0]
-        if not isinstance(record, vault.TypedRecord):
-            raise CommandError('rotate script', f'Record "{record.title}" is not a rotation record.')
+            raise base.CommandError(f'Record "{record_name}" is not unique. Use record UID.')
+        record = vault.vault_data.load_record(records[0].record_uid)
+        if not isinstance(record, vault_record.TypedRecord):
+            raise base.CommandError(f'Record "{record.title}" is not a rotation record.')
 
         script_field = next((x for x in record.fields if x.type == 'script'), None)
         if not script_field:
-            script_field = vault.TypedField.new_field('script', [], 'rotationScripts')
+            script_field = vault_record.TypedField.new_field('script', [], 'rotationScripts')
             record.fields.append(script_field)
 
         file_name = kwargs.get('script')
         full_name = os.path.expanduser(file_name)
         if not os.path.isfile(full_name):
-            raise CommandError('rotate script', f'File "{file_name}" not found.')
+            raise base.CommandError(f'File "{file_name}" not found.')
 
         facade = record_facades.FileRefRecordFacade()
         facade.record = record
         pre = set(facade.file_ref)
         upload_task = attachment.FileUploadTask(full_name)
-        attachment.upload_attachments(params, record, [upload_task])
+        attachment.upload_attachments(vault, record, [upload_task])
         post = set(facade.file_ref)
         df = post.difference(pre)
         if len(df) == 1:
@@ -1248,69 +1288,74 @@ class PAMScriptAddCommand(Command):
             record_refs = kwargs.get('add_credential')
             if isinstance(record_refs, list):
                 for ref in record_refs:
-                    if ref in params.record_cache:
+                    if ref in vault.vault_data._records:
                         script_value['recordRef'].append(ref)
             cmd = kwargs.get('script_command')
             if cmd:
                 script_value['command'] = cmd
 
-        record_management.update_record(params, record)
-        params.sync_data = True
+        record_management.update_record(vault, record)
+        vault.sync_data = True
 
 
-class PAMScriptEditCommand(Command):
-    parser = argparse.ArgumentParser(prog='pam rotate script edit', description='Edit script field')
-    parser.add_argument('--script', required=True, dest='script', action='store',
-                        help='Script UID or name')
-    parser.add_argument('-ac', '--add-credential', dest='add_credential', action='append',
-                        help='Add a record with rotation credential')
-    parser.add_argument('-rc', '--remove-credential', dest='remove_credential', action='append',
-                        help='Remove a record with rotation credential')
-    parser.add_argument('--script-command', dest='script_command', action='store',
-                        help='Script command')
-    parser.add_argument('record', help='Record UID or Title')
+class PAMScriptEditCommand(base.ArgparseCommand):
+    
+    def __init__(self):
+        parser = argparse.ArgumentParser(prog='pam rotate script edit', description='Edit script field')
+        PAMScriptEditCommand.add_arguments_to_parser(parser)
+        super().__init__(parser)
+    
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
+        parser.add_argument('--script', required=True, dest='script', action='store',
+                            help='Script UID or name')
+        parser.add_argument('-ac', '--add-credential', dest='add_credential', action='append',
+                            help='Add a record with rotation credential')
+        parser.add_argument('-rc', '--remove-credential', dest='remove_credential', action='append',
+                            help='Remove a record with rotation credential')
+        parser.add_argument('--script-command', dest='script_command', action='store',
+                            help='Script command')
+        parser.add_argument('record', help='Record UID or Title')
 
-    def get_parser(self):
-        return PAMScriptEditCommand.parser
+    def execute(self, context: KeeperParams, **kwargs):
+        vault = context.vault
 
-    def execute(self, params, **kwargs):
         record_name = kwargs.get('record')
         if not record_name:
-            raise CommandError('rotate script', '"record" argument is required')
+            raise base.CommandError('"record" argument is required')
 
-        script_name = kwargs.get('script')  # type: Optional[str]
+        script_name = kwargs.get('script')
         if not script_name:
-            raise CommandError('rotate script', '"script" argument is required')
+            raise base.CommandError('"script" argument is required')
 
-        records = list(vault_extensions.find_records(
-            params, search_str=record_name, record_version=3, record_type=('pamUser', 'pamDirectory')))
+        records = list(vault.vault_data.find_records(criteria=record_name, record_version=3, record_type=('pamUser', 'pamDirectory')))
         if len(records) == 0:
-            raise CommandError('rotate script', f'Record "{record_name}" not found')
+            raise base.CommandError(f'Record "{record_name}" not found')
         if len(records) > 1:
-            raise CommandError('rotate script', f'Record "{record_name}" is not unique. Use record UID.')
-        record = records[0]
-        if not isinstance(record, vault.TypedRecord):
-            raise CommandError('rotate script', f'Record "{record.title}" is not a rotation record.')
+            raise base.CommandError(f'Record "{record_name}" is not unique. Use record UID.')
+        record = vault.vault_data.load_record(records[0].record_uid)
+        if not isinstance(record, vault_record.TypedRecord):
+            raise base.CommandError(f'Record "{record.title}" is not a rotation record.')
 
         script_field = next((x for x in record.fields if x.type == 'script'), None)
         if script_field is None:
-            raise CommandError('rotate script', f'Record "{record.title}" has no rotation scripts.')
+            raise base.CommandError(f'Record "{record.title}" has no rotation scripts.')
         script_value = next((x for x in script_field.value if x.get('fileRef') == script_name), None)
         if script_value is None:
             s_name = script_name.casefold()
             for x in script_field.value:
                 file_uid = x.get('fileRef')
-                file_record = vault.KeeperRecord.load(params, file_uid)
-                if isinstance(file_record, vault.FileRecord):
-                    if file_record.title.casefold() == s_name:
+                file_record = vault.vault_data.load_record(file_uid)
+                if isinstance(file_record, vault_record.FileRecord):
+                    if file_record.record_uid == s_name:
                         script_value = x
                         break
-                    elif file_record.name.casefold() == s_name:
+                    elif file_record.title.casefold() == s_name:
                         script_value = x
                         break
 
         if not isinstance(script_value, dict):
-            raise CommandError('rotate script', f'Record "{record.title}" does not have script "{script_name}"')
+            raise base.CommandError(f'Record "{record.title}" does not have script "{script_name}"')
 
         modified = False
         refs = set()
@@ -1333,61 +1378,65 @@ class PAMScriptEditCommand(Command):
             modified = True
 
         if not modified:
-            raise CommandError('rotate script', 'Nothing to do')
+            raise base.CommandError('Nothing to do')
 
-        record_management.update_record(params, record)
-        params.sync_data = True
+        record_management.update_record(vault, record)
+        vault.sync_data = True
 
 
-class PAMScriptDeleteCommand(Command):
-    parser = argparse.ArgumentParser(prog='pam rotate script delete', description='Delete script field')
-    parser.add_argument('--script', required=True, dest='script', action='store',
-                        help='Script UID or name')
-    parser.add_argument('record', help='Record UID or Title')
+class PAMScriptDeleteCommand(base.ArgparseCommand):
+    def __init__(self):
+        parser = argparse.ArgumentParser(prog='pam rotate script delete', description='Delete script field')
+        PAMScriptDeleteCommand.add_arguments_to_parser(parser)
+        super().__init__(parser)
+    
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
+        parser.add_argument('--script', required=True, dest='script', action='store',
+                            help='Script UID or name')
+        parser.add_argument('record', help='Record UID or Title')
 
-    def get_parser(self):
-        return PAMScriptDeleteCommand.parser
+    def execute(self, context: KeeperParams, **kwargs):
+        vault = context.vault
 
-    def execute(self, params, **kwargs):
         record_name = kwargs.get('record')
         if not record_name:
-            raise CommandError('rotate script', '"record" argument is required')
+            raise base.CommandError('"record" argument is required')
 
-        script_name = kwargs.get('script')  # type: Optional[str]
+        script_name = kwargs.get('script')
         if not script_name:
-            raise CommandError('rotate script', '"script" argument is required')
+            raise base.CommandError('"script" argument is required')
 
-        records = list(vault_extensions.find_records(
-            params, search_str=record_name, record_version=3, record_type=('pamUser', 'pamDirectory')))
+        records = list(vault.vault_data.find_records(criteria=record_name, record_version=3, record_type=('pamUser', 'pamDirectory')))
         if len(records) == 0:
-            raise CommandError('rotate script', f'Record "{record_name}" not found')
+            raise base.CommandError(f'Record "{record_name}" not found')
         if len(records) > 1:
-            raise CommandError('rotate script', f'Record "{record_name}" is not unique. Use record UID.')
-        record = records[0]
-        if not isinstance(record, vault.TypedRecord):
-            raise CommandError('rotate script', f'Record "{record.title}" is not a rotation record.')
+            raise base.CommandError(f'Record "{record_name}" is not unique. Use record UID.')
+        record = vault.vault_data.load_record(records[0].record_uid)
+        if not isinstance(record, vault_record.TypedRecord):
+            raise base.CommandError(f'Record "{record.title}" is not a rotation record.')
 
         script_field = next((x for x in record.fields if x.type == 'script'), None)
         if script_field is None:
-            raise CommandError('rotate script', f'Record "{record.title}" has no rotation scripts.')
+            raise base.CommandError(f'Record "{record.title}" has no rotation scripts.')
         script_value = next((x for x in script_field.value if x.get('fileRef') == script_name), None)
         if script_value is None:
             s_name = script_name.casefold()
             for x in script_field.value:
                 file_uid = x.get('fileRef')
-                file_record = vault.KeeperRecord.load(params, file_uid)
-                if isinstance(file_record, vault.FileRecord):
-                    if file_record.title.casefold() == s_name:
+                file_record = vault.vault_data.load_record(file_uid)
+                if isinstance(file_record, vault_record.FileRecord):
+                    if file_record.record_uid == s_name:
                         script_value = x
                         break
-                    elif file_record.name.casefold() == s_name:
+                    elif file_record.title.casefold() == s_name:
                         script_value = x
                         break
 
         if not isinstance(script_value, dict):
-            raise CommandError('rotate script', f'Record "{record.title}" does not have script "{script_name}"')
+            raise base.CommandError(f'Record "{record.title}" does not have script "{script_name}"')
 
         script_field.value.remove(script_value)
-        record_management.update_record(params, record)
-        params.sync_data = True
+        record_management.update_record(vault, record)
+        vault.sync_data = True
 

@@ -394,6 +394,8 @@ def get_response_payload(router_response):
 
     return router_response_response_payload_dict
 
+def router_get_rotation_schedules(context: KeeperParams, proto_request):
+    return _post_request_to_router(context, 'get_rotation_schedules', rq_proto=proto_request, rs_type=pam_pb2.PAMRotationSchedulesResponse)
 
 def _post_request_to_router(context: KeeperParams, path, rq_proto=None, rs_type=None, method='post',
                             raw_without_status_check_response=False, query_params=None, transmission_key=None,
