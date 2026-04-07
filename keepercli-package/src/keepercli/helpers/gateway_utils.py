@@ -121,3 +121,13 @@ def find_connected_gateways(all_controllers, identifier):
         return found_connected_controller_uid_bytes
     else:
         return None
+
+
+def edit_gateway(vault: vault_online.VaultOnline, gateway_uid, gateway_name, node_id):
+    rq = pam_pb2.PAMController()
+    rq.controllerUid = gateway_uid
+    rq.controllerName = gateway_name
+    rq.nodeId = node_id
+    vault.keeper_auth.execute_auth_rest(
+        rest_endpoint='pam/modify_controller',
+        request=rq)

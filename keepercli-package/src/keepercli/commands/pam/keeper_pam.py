@@ -7,6 +7,10 @@ from .pam_config import PAMConfigListCommand, PAMConfigNewCommand, PAMConfigEdit
 from .pam_gateway_action import (PAMGatewayActionServerInfoCommand, PAMGatewayActionRotateCommand, 
                                 PAMGatewayActionJobCommand, PAMDiscoveryCommand, PAMActionServiceCommand, 
                                 PAMActionSaasCommand, PAMDebugCommand)
+from .pam_rotation import PAMCreateRecordRotationCommand, PAMListRecordRotationCommand, PAMRouterGetRotationInfo, PAMRouterScriptCommand
+from .pam_connection import PAMConnectionEditCommand
+from .pam_rbi import PAMRbiEditCommand
+from .. import enterprise_utils
 from .. import base
 from ... import api
 from ...helpers import report_utils, router_utils, gateway_utils
@@ -76,9 +80,9 @@ class PAMControllerCommand(base.GroupCommand):
         self.register_command(PAMGatewayCommand(), 'gateway', 'g')
         self.register_command(PAMConfigCommand(), 'config', 'c')
         self.register_command(PAMGatewayActionCommand(), 'action', 'a')
-        # self.register_command('rotation', PAMRotationCommand(), 'Manage Rotations', 'r')
-        # self.register_command('connection', PAMConnectionCommand(), 'Manage Connections', 'n')
-        # self.register_command('rbi', PAMRbiCommand(), 'Manage Remote Browser Isolation', 'b')
+        self.register_command(PAMRotationCommand(), 'rotation', 'r')
+        self.register_command(PAMConnectionCommand(), 'connection', 'n')
+        self.register_command(PAMRbiCommand(), 'rbi', 'b')
 
 
 class PAMGatewayCommand(base.GroupCommand):
@@ -87,6 +91,7 @@ class PAMGatewayCommand(base.GroupCommand):
         super().__init__('PAM Gateway')
         self.register_command(PAMGatewayListCommand(), 'list', 'l')
         self.register_command(PAMGatewayNewCommand(), 'new', 'n')
+        self.register_command(PAMGatewayEditCommand(), 'edit', 'e')
         self.register_command(PAMGatewayRemoveCommand(), 'remove', 'rm')
         self.register_command(PAMGatewaySetMaxInstancesCommand(), 'set-max-instances', 'smi')
         self.default_verb = 'list'
@@ -114,6 +119,30 @@ class PAMGatewayActionCommand(base.GroupCommand):
         self.register_command(PAMActionServiceCommand(), 'service', 's')
         self.register_command(PAMActionSaasCommand(), 'saas', 'sa')
         self.register_command(PAMDebugCommand(), 'debug', 'd')
+
+
+class PAMRotationCommand(base.GroupCommand):
+    def __init__(self):
+        super().__init__('PAM Rotation')
+        self.register_command(PAMCreateRecordRotationCommand(), 'edit', 'new')
+        self.register_command(PAMListRecordRotationCommand(), 'list', 'l')
+        self.register_command(PAMRouterGetRotationInfo(), 'info', 'i')
+        self.register_command(PAMRouterScriptCommand(), 'script', 's')
+        self.default_verb = 'list'
+
+
+class PAMConnectionCommand(base.GroupCommand):
+    def __init__(self):
+        super().__init__('PAM Connection')
+        self.register_command(PAMConnectionEditCommand(), 'edit', 'e')
+        self.default_verb = 'edit'
+
+class PAMRbiCommand(base.GroupCommand):
+    def __init__(self):
+        super().__init__('PAM Remote Browser Isolation')
+        self.register_command(PAMRbiEditCommand(), 'edit', 'e')
+        self.default_verb = 'edit'
+
 
 class PAMGatewayListCommand(base.ArgparseCommand):
 
@@ -593,6 +622,67 @@ class PAMGatewayNewCommand(base.ArgparseCommand):
         logger.info(one_time_token)
         logger.info(TOKEN_SEPARATOR)
 
+
+class PAMGatewayEditCommand(base.ArgparseCommand):
+
+    def __init__(self):
+        parser = argparse.ArgumentParser(prog='dr-edit-gateway')
+        PAMGatewayEditCommand.add_arguments_to_parser(parser)
+        super().__init__(parser)
+
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
+        parser.add_argument('--gateway', '-g', required=True, dest='gateway',
+                            help='Gateway UID or Name', action='store')
+        parser.add_argument('--name', '-n', required=False, dest='gateway_name',
+                            help='Name of the Gateway', action='store')
+        parser.add_argument('--node-id', '-i', required=False, dest='node_id',
+                        help='Node ID', action='store')
+                            
+    def execute(self, context: KeeperParams, **kwargs):
+        self._validate_vault_and_permissions(context)
+        vault = context.vault
+
+        gateway_uid = kwargs.get('gateway')
+        gateway_name = kwargs.get('gateway_name')
+        node_id = kwargs.get('node_id')
+        if not gateway_uid:
+            raise base.CommandError('Gateway UID is required')
+
+        gateway = self._find_gateway(vault, gateway_uid)
+        if not gateway:
+            raise base.CommandError(f'Gateway {gateway_uid} not found')
+        
+        if not node_id and not gateway_name:
+            logger.info("Nothing to do. Provide new name or node ID to edit the gateway.")
+            return
+        
+        if node_id:
+            node = enterprise_utils.NodeUtils.resolve_single_node(context.enterprise_data, node_id)
+            if not node:
+                raise base.CommandError(f'Node {node_id} not found')
+            node_id = node.node_id
+        else:
+            node_id = gateway.nodeId
+        
+        if not gateway_name:
+            gateway_name = gateway.controllerName
+        
+        gateway_utils.edit_gateway(vault, gateway.controllerUid, gateway_name, node_id)
+        logger.info('Gateway %s has been edited.', gateway.controllerName)
+
+    def _validate_vault_and_permissions(self, context: KeeperParams):
+        """Validates that vault is initialized and user has enterprise admin permissions."""
+        if not context.vault:
+            raise ValueError(ERROR_VAULT_NOT_INITIALIZED)
+        base.require_enterprise_admin(context)
+
+    def _find_gateway(self, vault, gateway_uid):
+        """Finds a gateway by UID or name."""
+        gateways = gateway_utils.get_all_gateways(vault)
+        return next((x for x in gateways
+                    if utils.base64_url_encode(x.controllerUid) == gateway_uid
+                    or x.controllerName == gateway_uid))
 
 class PAMGatewayRemoveCommand(base.ArgparseCommand):
 
