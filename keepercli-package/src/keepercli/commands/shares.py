@@ -7,8 +7,8 @@ from typing import Optional, List, Set, Dict
 
 from keepersdk import utils
 from keepersdk.authentication import keeper_auth
-from keepersdk.proto import record_pb2, APIRequest_pb2
-from keepersdk.vault import ksm_management, vault_online, vault_utils, share_management_utils
+from keepersdk.proto import record_pb2
+from keepersdk.vault import one_time_share, share_management_utils, vault_online, vault_utils
 from keepersdk.vault.shares_management import RecordShares, FolderShares
 
 from . import base
@@ -21,7 +21,6 @@ class ApiUrl(Enum):
     SHARE_ADMIN = 'vault/am_i_share_admin'
     SHARE_UPDATE = 'vault/records_share_update'
     SHARE_FOLDER_UPDATE = 'vault/shared_folder_update_v3'
-    REMOVE_EXTERNAL_SHARE = 'vault/external_share_remove'
 
 
 class ShareAction(Enum):
@@ -42,27 +41,14 @@ logger = api.get_logger()
 # Constants
 TIMESTAMP_MILLISECONDS_FACTOR = 1000
 TRUNCATE_SUFFIX = '...'
-URL_TRUNCATE_LENGTH = 30
-NON_SHARED_DEFAULT = 'non-shared'
-CUSTOM_FIELD_TYPE_PREFIX = 'type:'
-TOTP_FIELD_NAME = 'totp'
-LIST_SEPARATOR = '|'
-DICT_SEPARATOR = ';'
-KEY_VALUE_SEPARATOR = '='
-PERMISSION_SEPARATOR = '='
-SHARE_NAMES_SEPARATOR = ', '
 SUPPORTED_RECORD_VERSIONS = {2, 3}
-DEFAULT_SEARCH_FIELDS = ['by_title', 'by_login', 'by_password']
 CHUNK_SIZE = 500
-MAX_BATCH_SIZE = 1000
 SHARE_LINK_TRUNCATE_LENGTH = 20
 SIX_MONTHS_IN_SECONDS = 182 * 24 * 60 * 60
 TEAMS_THRESHOLD = 500
-ALL_FOLDERS_WILDCARD = '*'
 ALL_USERS_WILDCARD = '@existing'
 ALL_USERS_WILDCARD_ALT = '@current'
-DEFAULT_ACCOUNT_WILDCARD = '*'
-DEFAULT_RECORD_WILDCARD = '*'
+DEFAULT_WILDCARD = '*'
 
 def set_expiration_fields(obj, expiration):
     """Set expiration and timerNotificationType fields on proto object if expiration is provided."""
@@ -323,9 +309,9 @@ class ShareFolderCommand(base.ArgparseCommand):
     
     def _resolve_shared_folder_uids(self, vault: vault_online.VaultOnline, names: List) -> Set:
         """Resolve folder names to shared folder UIDs."""
-        all_folders = any(x == ALL_FOLDERS_WILDCARD for x in names)
+        all_folders = any(x == DEFAULT_WILDCARD for x in names)
         if all_folders:
-            names = [x for x in names if x != ALL_FOLDERS_WILDCARD]
+            names = [x for x in names if x != DEFAULT_WILDCARD]
         
         shared_folder_cache = {x.shared_folder_uid: x for x in vault.vault_data.shared_folders()}
         folder_cache = {x.folder_uid: x for x in vault.vault_data.folders()}
@@ -442,7 +428,7 @@ class ShareFolderCommand(base.ArgparseCommand):
             }
         
         for u in (kwargs.get('user') or []):
-            if u == DEFAULT_ACCOUNT_WILDCARD:
+            if u == DEFAULT_WILDCARD:
                 default_account = True
             elif u in (ALL_USERS_WILDCARD, ALL_USERS_WILDCARD_ALT):
                 all_users = True
@@ -500,7 +486,7 @@ class ShareFolderCommand(base.ArgparseCommand):
         unresolved_names = []
         
         for r in records:
-            if r == DEFAULT_RECORD_WILDCARD:
+            if r == DEFAULT_WILDCARD:
                 default_record = True
             elif r in (ALL_USERS_WILDCARD, ALL_USERS_WILDCARD_ALT):
                 all_records = True
@@ -734,9 +720,10 @@ class OneTimeShareListCommand(base.ArgparseCommand):
         if not record_uids:
             raise base.CommandError('No records found')
 
-        applications = self._get_applications(vault, record_uids)
-        table_data = self._build_share_table(applications, kwargs)
-        
+        shares = one_time_share.list_one_time_shares(
+            vault, list(record_uids), include_expired=kwargs.get('show_all', False)
+        )
+        table_data = self._build_share_table_from_sdk(shares, kwargs)
         return self._format_output(table_data, kwargs)
 
     def _resolve_record_uids(self, context: KeeperParams, vault, records: List, recursive: bool) -> Set:
@@ -788,68 +775,31 @@ class OneTimeShareListCommand(base.ArgparseCommand):
         else:
             on_folder(folder)
 
-    def _get_applications(self, vault, record_uids: Set):
-        """Get application info for the given record UIDs."""
-        r_uids = list(record_uids)
-        if len(r_uids) >= MAX_BATCH_SIZE:
-            logger.info('Trimming result to %d records', MAX_BATCH_SIZE)
-            r_uids = r_uids[:MAX_BATCH_SIZE - 1]
-        return ksm_management.get_app_info(vault=vault, app_uid=r_uids)
-
-    def _build_share_table(self, applications, kwargs):
-        """Build table data from applications."""
+    def _build_share_table_from_sdk(self, shares: List[one_time_share.OneTimeShare], kwargs):
+        """Build table data from OneTimeShare list."""
         show_all = kwargs.get('show_all', False)
         verbose = kwargs.get('verbose', False)
-        now = utils.current_milli_time()
-        
+        output_format = kwargs.get('format')
         fields = ['record_uid', 'share_link_name', 'share_link_id', 'generated', 'opened', 'expires']
         if show_all:
             fields.append('status')
-        
         table = []
-        output_format = kwargs.get('format')
-        
-        for app_info in applications:
-            if not app_info.isExternalShare:
-                continue
-                
-            for client in app_info.clients:
-                if not show_all and now > client.accessExpireOn:
-                    continue
-                    
-                link = self._create_share_link_data(app_info, client, verbose, output_format, now)
-                table.append([link.get(x, '') for x in fields])
-        
+        for s in shares:
+            share_link_id = s.share_link_id
+            if output_format == 'table' and not verbose and len(share_link_id) > SHARE_LINK_TRUNCATE_LENGTH:
+                share_link_id = share_link_id[:SHARE_LINK_TRUNCATE_LENGTH] + TRUNCATE_SUFFIX
+            row = [
+                s.record_uid,
+                s.share_link_name,
+                share_link_id,
+                s.generated or '',
+                s.opened or '',
+                s.expires or '',
+            ]
+            if show_all:
+                row.append(s.status)
+            table.append(row)
         return table, fields
-
-    def _create_share_link_data(self, app_info, client, verbose: bool, output_format: str, now: int):
-        """Create share link data dictionary."""
-        encoded_client_id = utils.base64_url_encode(client.clientId)
-        link = {
-            'record_uid': utils.base64_url_encode(app_info.appRecordUid),
-            'name': client.id,
-            'share_link_id': encoded_client_id,
-            'generated': datetime.datetime.fromtimestamp(client.createdOn / TIMESTAMP_MILLISECONDS_FACTOR),
-            'expires': datetime.datetime.fromtimestamp(client.accessExpireOn / TIMESTAMP_MILLISECONDS_FACTOR),
-        }
-        
-        if output_format == 'table' and not verbose:
-            link['share_link_id'] = encoded_client_id[:SHARE_LINK_TRUNCATE_LENGTH] + TRUNCATE_SUFFIX
-        else:
-            link['share_link_id'] = encoded_client_id
-
-        if client.firstAccess > 0:
-            link['opened'] = datetime.datetime.fromtimestamp(client.firstAccess / TIMESTAMP_MILLISECONDS_FACTOR)
-            link['accessed'] = datetime.datetime.fromtimestamp(client.lastAccess / TIMESTAMP_MILLISECONDS_FACTOR)
-
-        if now > client.accessExpireOn:
-            link['status'] = 'Expired'
-        elif client.firstAccess > 0:
-            link['status'] = 'Opened'
-        else:
-            link['status'] = 'Generated'
-        
-        return link
 
     def _format_output(self, table_data, kwargs):
         """Format and return the output."""
@@ -912,7 +862,7 @@ class OneTimeShareCreateCommand(base.ArgparseCommand):
             raise base.CommandError('URL expiration period parameter \"--expire\" is required.')
         
         period = self._validate_and_parse_expiration(period_str)
-        
+
         urls = self._create_share_urls(context, vault, record_names, period, name, is_editable)
         
         return self._handle_output(context, urls, kwargs)
@@ -929,11 +879,15 @@ class OneTimeShareCreateCommand(base.ArgparseCommand):
         urls = {}
         for record_name in record_names:
             record_uid = record_utils.resolve_record(context=context, name=record_name)
-            record = vault.vault_data.load_record(record_uid=record_uid)
-            url = record_utils.process_external_share(
-                context=context, expiration_period=period, record=record, name=name, is_editable=is_editable, is_self_destruct=False
+            url = one_time_share.create_one_time_share(
+                vault=vault,
+                record_uid=record_uid,
+                expiration_period=period,
+                name=name or None,
+                is_editable=is_editable,
+                is_self_destruct=False,
             )
-            urls[record_uid] = str(url)
+            urls[record_uid] = url
         return urls
 
     def _handle_output(self, context: KeeperParams, urls: Dict, kwargs):
@@ -990,19 +944,11 @@ class OneTimeShareRemoveCommand(base.ArgparseCommand):
     def execute(self, context: KeeperParams, **kwargs):
         if not context.vault:
             raise ValueError('Vault is not initialized.')
-        
-        vault = context.vault
 
+        vault = context.vault
         record_name = kwargs.get('record')
         if not record_name:
             self.get_parser().print_help()
-            return
-
-        record_uid = record_utils.resolve_record(context=context, name=record_name)
-        applications = ksm_management.get_app_info(vault=vault, app_uid=record_uid)
-        
-        if len(applications) == 0:
-            logger.info('There are no one-time shares for record \"%s\"', record_name)
             return
 
         share_name = kwargs.get('share')
@@ -1010,63 +956,12 @@ class OneTimeShareRemoveCommand(base.ArgparseCommand):
             self.get_parser().print_help()
             return
 
-        client_id = self._find_client_id(applications, share_name)
-        if not client_id:
-            return
-
-        self._remove_share(vault, record_uid, client_id, share_name, record_name)
-
-    def _find_client_id(self, applications, share_name: str) -> Optional[bytes]:
-        
-        cleaned_name = share_name[:-len(TRUNCATE_SUFFIX)] if share_name.endswith(TRUNCATE_SUFFIX) else share_name
-        cleaned_name_lower = cleaned_name.lower()
-        
-        partial_matches = []
-        
-        for app_info in applications:
-            if not app_info.isExternalShare:
-                continue
-                
-            for client in app_info.clients:
-                if client.id.lower() == cleaned_name_lower:
-                    return client.clientId
-                
-                encoded_client_id = utils.base64_url_encode(client.clientId)
-                if encoded_client_id == cleaned_name:
-                    return client.clientId
-                
-                if encoded_client_id.startswith(cleaned_name):
-                    partial_matches.append(client.clientId)
-        
-        return self._resolve_partial_matches(partial_matches, share_name)
-
-    def _resolve_partial_matches(self, partial_matches: List[bytes], original_name: str) -> Optional[bytes]:
-        """
-        Resolve partial matches to a single client ID.
-        
-        Args:
-            partial_matches: List of client IDs that partially match
-            original_name: Original share name for error reporting
-            
-        Returns:
-            bytes: Single client ID if exactly one match, None otherwise
-        """
-        if not partial_matches:
-            logger.warning('No one-time share found matching "%s"', original_name)
-            return None
-            
-        if len(partial_matches) == 1:
-            return partial_matches[0]
-            
-        # Multiple matches found
-        logger.warning('Multiple one-time shares found matching "%s". Please use a more specific identifier.', original_name)
-        return None
-
-    def _remove_share(self, vault, record_uid: str, client_id: bytes, share_name: str, record_name: str):
-        """Remove the one-time share."""
-        rq = APIRequest_pb2.RemoveAppClientsRequest()
-        rq.appRecordUid = utils.base64_url_decode(record_uid)
-        rq.clients.append(client_id)
-
-        vault.keeper_auth.execute_auth_rest(request=rq, rest_endpoint=ApiUrl.REMOVE_EXTERNAL_SHARE.value)
-        logger.info('One-time share \"%s\" is removed from record \"%s\"', share_name, record_name)
+        try:
+            record_uid = record_utils.resolve_record(context=context, name=record_name)
+            one_time_share.remove_one_time_share(vault=vault, record_uid=record_uid, share_identifier=share_name)
+            logger.info(f'One-time share "{share_name}" is removed from record "{record_name}"')
+        except ValueError as e:
+            if 'no one-time shares' in str(e).lower() or 'there are no' in str(e).lower():
+                logger.error(f'{str(e)}')
+            else:
+                logger.warning(f'{str(e)}')

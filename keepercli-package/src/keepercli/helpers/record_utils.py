@@ -4,13 +4,10 @@ import fnmatch
 import hashlib
 import hmac
 import re
-from datetime import timedelta
 from typing import Iterator, List, Optional
 from urllib import parse
-from urllib.parse import urlunparse
 
-from keepersdk import crypto, utils
-from keepersdk.proto.APIRequest_pb2 import AddExternalShareRequest, Device
+from keepersdk import utils
 from keepersdk.proto.enterprise_pb2 import GetSharingAdminsRequest, GetSharingAdminsResponse
 from keepersdk.proto.router_pb2 import RouterRotationInfo
 from keepersdk.proto.pam_pb2 import PAMGenericUidRequest
@@ -24,8 +21,6 @@ from . import folder_utils
 logger = api.get_logger()
 
 GET_SHARE_ADMINS = 'enterprise/get_sharing_admins'
-EXTERNAL_SHARE_ADD_URL = 'vault/external_share_add'
-KEEPER_SECRETS_MANAGER_CLIENT_ID = 'KEEPER_SECRETS_MANAGER_CLIENT_ID'
 
 
 def try_resolve_single_record(record_name: Optional[str], context: KeeperParams) -> Optional[vault_record.KeeperRecordInfo]:
@@ -82,46 +77,6 @@ def resolve_records(pattern: str, context: KeeperParams, *, recursive: bool=Fals
 
 def default_confirm(prompt: str) -> bool:
     return input(f"{prompt} (y/n): ").strip().lower() == 'y'
-
-
-def process_external_share(context: KeeperParams, expiration_period: timedelta, 
-                           record: vault_record.PasswordRecord | vault_record.TypedRecord,
-                           name: Optional[str] = None, is_editable: bool = False,
-                           is_self_destruct: Optional[bool] = True) -> str:
-    
-    vault = context.vault
-    record_uid = record.record_uid
-    record_key = vault.vault_data.get_record_key(record_uid=record_uid)
-    client_key = utils.generate_aes_key()
-    client_id = crypto.hmac_sha512(client_key, KEEPER_SECRETS_MANAGER_CLIENT_ID.encode())
-    
-    request = AddExternalShareRequest()
-    request.recordUid = utils.base64_url_decode(record_uid)
-    request.encryptedRecordKey = crypto.encrypt_aes_v2(record_key, client_key)
-    request.clientId = client_id
-    request.accessExpireOn = utils.current_milli_time() + int(expiration_period.total_seconds() * 1000)
-
-    if name:
-        request.id = name
-    
-    request.isSelfDestruct = is_self_destruct
-    request.isEditable = is_editable
-
-    vault.keeper_auth.execute_auth_rest(
-        rest_endpoint=EXTERNAL_SHARE_ADD_URL, 
-        request=request, 
-        response_type=Device
-    )
-    
-    url = urlunparse((
-        'https', 
-        context.auth.keeper_endpoint.server, 
-        '/vault/share', 
-        None, 
-        None, 
-        utils.base64_url_encode(client_key)
-    ))
-    return url
 
 
 def get_totp_code(url, offset=None):

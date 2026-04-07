@@ -1,6 +1,7 @@
 import getpass
 import json
 import logging
+import sqlite3
 from typing import Dict, Optional
 
 import fido2
@@ -18,7 +19,7 @@ from keepersdk.authentication.yubikey import (
     yubikey_authenticate,
 )
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
-from keepersdk.errors import KeeperApiError
+from keepersdk.vault import shares_management, sqlite_storage, vault_online
 
 try:
     import pyperclip
@@ -493,84 +494,126 @@ def login():
     keeper_endpoint = flow.endpoint if keeper_auth_context else None
     return keeper_auth_context, keeper_endpoint
 
-def list_alerts(keeper_auth_context: keeper_auth.KeeperAuth):
+
+def _build_shared_folder_info(vault: vault_online.VaultOnline, shared_folder_uid: str):
     """
-    List all audit alerts.
-    
+    Build shared folder info dict for FolderShares.prepare_request, like
+    keepercli ShareFolderCommand._build_shared_folder_info.
+    Loads the shared folder, revision, and key from the vault.
+
+    Returns:
+        dict with shared_folder_uid, users, teams, records,
+        shared_folder_key_unencrypted, default_manage_users, default_manage_records, revision;
+        or None if the shared folder is not found.
+    """
+    sh_fol = vault.vault_data.load_shared_folder(shared_folder_uid)
+    if not sh_fol:
+        return None
+    sf_uid = shared_folder_uid
+    sf_entity = vault.vault_data.storage.shared_folders.get_entity(sf_uid)
+    shared_folder_revision = sf_entity.revision if sf_entity else 0
+    sf_unencrypted_key = vault.vault_data.get_shared_folder_key(shared_folder_uid=sf_uid)
+    if not sf_unencrypted_key:
+        return None
+    sf_info = {
+        "shared_folder_uid": sf_uid,
+        "users": sh_fol.user_permissions,
+        "teams": [],
+        "records": [{"record_uid": r.record_uid} for r in sh_fol.record_permissions],
+        "shared_folder_key_unencrypted": sf_unencrypted_key,
+        "default_manage_users": sh_fol.default_manage_users,
+        "default_manage_records": sh_fol.default_manage_records,
+        "revision": shared_folder_revision,
+    }
+    return sf_info
+
+
+def share_shared_folder_with_users_and_teams(
+        keeper_auth_context, shared_folder_uid, users, teams, 
+        record_uids=None, manage_records=True, manage_users=True, 
+        can_edit=True, can_share=True, default_record=True, default_account=True, 
+        share_expiration=None):
+    """
+    Share a shared folder with specified users and teams using FolderShares.prepare_request and send_requests.
     Args:
-        keeper_auth_context: The authenticated Keeper context with enterprise admin privileges.
+        keeper_auth_context: Authenticated Keeper context
+        shared_folder_uid: UID of the shared folder (str)
+        users: list of user emails
+        teams: list of team UIDs
+        record_uids: list of record UIDs to share (optional)
+        manage_records: allow managing records (default True)
+        manage_users: allow managing users (default True)
+        can_edit: allow editing records (default True)
+        can_share: allow sharing records (default True)
+        default_record: set default record permissions (default True)
+        default_account: set default account permissions (default True)
+        share_expiration: expiration in seconds (optional)
     """
-    if not keeper_auth_context.auth_context.is_enterprise_admin:
-        print("ERROR: This operation requires enterprise admin privileges.")
-        print("The current user is not an enterprise administrator.")
-        keeper_auth_context.close()
-        return
-    
-    try:
-        rq = {
-            'command': 'get_enterprise_setting',
-            'include': ['AuditAlertContext', 'AuditAlertFilter']
-        }
-        settings = keeper_auth_context.execute_auth_command(rq)
-        
-        alert_filters = settings.get('AuditAlertFilter', [])
-        alert_context = settings.get('AuditAlertContext', [])
-        
-        if not alert_filters:
-            print("\nNo audit alerts configured")
-        else:
-            print("\nAudit Alerts")
-            print("=" * 120)
-            print(f"{'ID':<8} {'Name':<30} {'Frequency':<20} {'Active':<10} {'Recipients':<20}")
-            print("-" * 120)
-            
-            for alert in alert_filters:
-                alert_id = alert.get('id', 'N/A')
-                alert_name = alert.get('name', 'N/A')
-                
-                frequency_data = alert.get('frequency', {})
-                if isinstance(frequency_data, dict):
-                    period = frequency_data.get('period', 'event')
-                    count = frequency_data.get('count', '')
-                    frequency = f"{count} {period}" if count else period
-                else:
-                    frequency = 'event'
-                
-                active = 'Yes' if alert.get('active', False) else 'No'
-                
-                context_entry = next((x for x in alert_context if x.get('id') == alert_id), None)
-                recipients_count = 0
-                if context_entry:
-                    recipients = context_entry.get('recipients', [])
-                    recipients_count = len(recipients) if isinstance(recipients, list) else 0
-                
-                print(f"{str(alert_id):<8} {alert_name[:29]:<30} {frequency[:19]:<20} {active:<10} {recipients_count:<20}")
-            
-            print("-" * 120)
-            print(f"Total alerts: {len(alert_filters)}")
-            print("=" * 120)
-        
-        keeper_auth_context.close()
-        
-    except KeeperApiError as e:
-        print(f"\nAPI Error: {e}")
-        keeper_auth_context.close()
-    except Exception as e:
-        print(f"\nError loading audit alerts: {e}")
-        keeper_auth_context.close()
+    conn = sqlite3.Connection("file::memory:", uri=True)
+    vault_storage = sqlite_storage.SqliteVaultStorage(
+        lambda: conn,
+        vault_owner=bytes(keeper_auth_context.auth_context.username, 'utf-8')
+    )
+    vault = vault_online.VaultOnline(keeper_auth_context, vault_storage)
+    vault.sync_down()
+
+    sf_info = _build_shared_folder_info(vault, shared_folder_uid)
+    if not sf_info:
+        raise ValueError(f"Shared folder not found: {shared_folder_uid}")
+
+    #
+    # FolderShares.prepare_request parameters:
+    #   action: Type of sharing action. Usually 'grant' to share, 'remove' to unshare. Use ShareAction.GRANT.value to grant access.
+    #   manage_records: Permission for user/team to add/remove/edit records in the shared folder. ON = allow, OFF = deny.
+    #   manage_users: Permission for user/team to add/remove other users/teams from the shared folder. ON = allow, OFF = deny.
+    #   can_edit: Permission for user/team to edit records in the shared folder. ON = allow, OFF = deny.
+    #   can_share: Permission for user/team to share records from the shared folder. ON = allow, OFF = deny.
+    #   default_record: If True, applies can_edit/can_share as default for all records in the folder.
+    #   default_account: If True, applies manage_records/manage_users as default for all users/teams.
+    #   share_expiration: Optional expiration (in seconds) for the share.
+    #
+    request = shares_management.FolderShares.prepare_request(
+        vault=vault,
+        kwargs={
+            "action": shares_management.ShareAction.GRANT.value,  # 'grant' to share, 'remove' to unshare
+            "manage_records": shares_management.ManagePermission.ON.value if manage_records else shares_management.ManagePermission.OFF.value,  # Allow managing records
+            "manage_users": shares_management.ManagePermission.ON.value if manage_users else shares_management.ManagePermission.OFF.value,      # Allow managing users/teams
+            "can_edit": shares_management.ManagePermission.ON.value if can_edit else shares_management.ManagePermission.OFF.value,              # Allow editing records
+            "can_share": shares_management.ManagePermission.ON.value if can_share else shares_management.ManagePermission.OFF.value,            # Allow sharing records
+        },
+        curr_sf=sf_info,
+        users=users,
+        teams=teams,
+        rec_uids=record_uids or [],
+        default_record=default_record,
+        default_account=default_account,
+        share_expiration=share_expiration,
+    )
+
+    partitioned_requests = [[request]]
+    shares_management.FolderShares.send_requests(vault, partitioned_requests)
+    print("Shared folder successfully shared with users and teams.")
+    vault.close()
+    keeper_auth_context.close()
 
 
-def main():
+def main() -> None:
     """
-    Main entry point for the list alerts script.
-    Performs login and lists audit alerts.
+    Main entry point for the share folder script.
+    Performs login and shares a shared folder with users and teams.
     """
     keeper_auth_context, _ = login()
-    
     if keeper_auth_context:
-        list_alerts(keeper_auth_context)
+        # Fill in your values here. Set to users or teams as None if not required.
+        shared_folder_uid = "<your_shared_folder_uid>"
+        users = ["<user_email_1>", "<user_email_2>"]
+        teams = ["<team_uid_1>", "<team_uid_2>"]
+        record_uids = None  # Optional. Set to None if not required.
+        share_shared_folder_with_users_and_teams(
+            keeper_auth_context, shared_folder_uid, users, teams, record_uids
+        )
     else:
-        print("Login failed. Unable to list alerts.")
+        print("Login failed. Unable to share folder.")
 
 
 if __name__ == "__main__":

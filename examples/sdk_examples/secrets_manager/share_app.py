@@ -1,7 +1,8 @@
 import getpass
 import json
 import logging
-from typing import Dict, Optional
+import sqlite3
+from typing import Dict, List, Optional
 
 import fido2
 import webbrowser
@@ -18,7 +19,8 @@ from keepersdk.authentication.yubikey import (
     yubikey_authenticate,
 )
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
-from keepersdk.errors import KeeperApiError
+from keepersdk.enterprise import enterprise_loader, sqlite_enterprise_storage
+from keepersdk.vault import ksm_management, sqlite_storage, vault_online
 
 try:
     import pyperclip
@@ -493,84 +495,122 @@ def login():
     keeper_endpoint = flow.endpoint if keeper_auth_context else None
     return keeper_auth_context, keeper_endpoint
 
-def list_alerts(keeper_auth_context: keeper_auth.KeeperAuth):
+
+def share_ksm_app_with_users(
+    keeper_auth_context,
+    app_uid_or_name: str,
+    user_emails: List[str],
+    action: str = "grant",
+    can_edit: bool = True,
+    can_share: bool = True,
+    enterprise_data=None,
+) -> None:
     """
-    List all audit alerts.
-    
+    Share or unshare a Keeper Secrets Manager (KSM) app with users using
+    ksm_management.share_secrets_manager_app.
+
     Args:
-        keeper_auth_context: The authenticated Keeper context with enterprise admin privileges.
+        keeper_auth_context: Authenticated Keeper context.
+        app_uid_or_name: UID or name of the KSM application.
+        user_emails: List of user emails to share with or remove access from.
+        action: 'grant' to share, 'remove' to unshare (revoke access).
+        can_edit: Allow users to edit the app's shared secrets (default True).
+        can_share: Allow users to share the app (default True).
+        enterprise_data: Enterprise data from EnterpriseLoader. Required for
+            KSM app share/unshare (enterprise admin account).
     """
-    if not keeper_auth_context.auth_context.is_enterprise_admin:
-        print("ERROR: This operation requires enterprise admin privileges.")
-        print("The current user is not an enterprise administrator.")
-        keeper_auth_context.close()
-        return
-    
-    try:
-        rq = {
-            'command': 'get_enterprise_setting',
-            'include': ['AuditAlertContext', 'AuditAlertFilter']
-        }
-        settings = keeper_auth_context.execute_auth_command(rq)
-        
-        alert_filters = settings.get('AuditAlertFilter', [])
-        alert_context = settings.get('AuditAlertContext', [])
-        
-        if not alert_filters:
-            print("\nNo audit alerts configured")
-        else:
-            print("\nAudit Alerts")
-            print("=" * 120)
-            print(f"{'ID':<8} {'Name':<30} {'Frequency':<20} {'Active':<10} {'Recipients':<20}")
-            print("-" * 120)
-            
-            for alert in alert_filters:
-                alert_id = alert.get('id', 'N/A')
-                alert_name = alert.get('name', 'N/A')
-                
-                frequency_data = alert.get('frequency', {})
-                if isinstance(frequency_data, dict):
-                    period = frequency_data.get('period', 'event')
-                    count = frequency_data.get('count', '')
-                    frequency = f"{count} {period}" if count else period
-                else:
-                    frequency = 'event'
-                
-                active = 'Yes' if alert.get('active', False) else 'No'
-                
-                context_entry = next((x for x in alert_context if x.get('id') == alert_id), None)
-                recipients_count = 0
-                if context_entry:
-                    recipients = context_entry.get('recipients', [])
-                    recipients_count = len(recipients) if isinstance(recipients, list) else 0
-                
-                print(f"{str(alert_id):<8} {alert_name[:29]:<30} {frequency[:19]:<20} {active:<10} {recipients_count:<20}")
-            
-            print("-" * 120)
-            print(f"Total alerts: {len(alert_filters)}")
-            print("=" * 120)
-        
-        keeper_auth_context.close()
-        
-    except KeeperApiError as e:
-        print(f"\nAPI Error: {e}")
-        keeper_auth_context.close()
-    except Exception as e:
-        print(f"\nError loading audit alerts: {e}")
-        keeper_auth_context.close()
+    if not user_emails:
+        raise ValueError("user_emails cannot be empty.")
+    if enterprise_data is None:
+        raise ValueError(
+            "Enterprise data is required for KSM app share/unshare. "
+            "Use an enterprise admin account and load enterprise data."
+        )
+
+    conn = sqlite3.connect("file::memory:", uri=True)
+    vault_storage = sqlite_storage.SqliteVaultStorage(
+        lambda: conn,
+        vault_owner=bytes(keeper_auth_context.auth_context.username, "utf-8"),
+    )
+    vault = vault_online.VaultOnline(keeper_auth_context, vault_storage)
+    vault.sync_down()
+
+    success_responses, failed_responses = ksm_management.share_secrets_manager_app(
+        vault=vault,
+        enterprise=enterprise_data,
+        app_uid=app_uid_or_name,
+        emails=user_emails,
+        action=action,
+        can_edit=can_edit,
+        can_share=can_share,
+    )
+
+    # Note: SDK may return (None, None) due to list.extend() in return; treat as success.
+    if success_responses:
+        print(f"KSM app '{app_uid_or_name}': {action} succeeded for {len(success_responses)} user(s).")
+    if failed_responses:
+        for r in failed_responses:
+            print(f"  Failed: {r}")
+    if (not success_responses or success_responses is None) and (
+        not failed_responses or failed_responses is None
+    ):
+        print(f"KSM app '{app_uid_or_name}': {action} completed for {len(user_emails)} user(s).")
+
+    vault.close()
+    keeper_auth_context.close()
 
 
-def main():
+def main() -> None:
     """
-    Main entry point for the list alerts script.
-    Performs login and lists audit alerts.
+    Main entry point. Logs in, loads enterprise data if admin, then shares or
+    unshares a KSM app with the given users.
     """
     keeper_auth_context, _ = login()
-    
-    if keeper_auth_context:
-        list_alerts(keeper_auth_context)
+    if not keeper_auth_context:
+        print("Login failed. Unable to share/unshare KSM app.")
+        return
+
+    # Fill in your values here.
+    app_uid_or_name = "<your_ksm_app_uid_or_name>"
+    user_emails = ["user1@example.com", "user2@example.com"]
+    action = "grant"  # Use "grant" to share, "remove" to unshare
+    can_edit = True
+    can_share = True
+
+    # KSM app share/unshare requires enterprise data (enterprise admin).
+    enterprise_data = None
+    enterprise = None
+    if keeper_auth_context.auth_context.is_enterprise_admin:
+        enterprise_conn = sqlite3.connect("file::memory:", uri=True)
+        enterprise_id = keeper_auth_context.auth_context.enterprise_id or 0
+        enterprise_storage = sqlite_enterprise_storage.SqliteEnterpriseStorage(
+            lambda: enterprise_conn, enterprise_id
+        )
+        enterprise = enterprise_loader.EnterpriseLoader(
+            keeper_auth_context, enterprise_storage
+        )
+        enterprise_data = enterprise.enterprise_data
     else:
-        print("Login failed. Unable to list alerts.")
+        print(
+            "KSM app share/unshare requires an enterprise admin account. "
+            "Skipping operation."
+        )
+        keeper_auth_context.close()
+        return
+
+    try:
+        share_ksm_app_with_users(
+            keeper_auth_context,
+            app_uid_or_name,
+            user_emails,
+            action=action,
+            can_edit=can_edit,
+            can_share=can_share,
+            enterprise_data=enterprise_data,
+        )
+    finally:
+        if enterprise is not None:
+            enterprise.close()
 
 
 if __name__ == "__main__":

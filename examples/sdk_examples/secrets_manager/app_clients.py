@@ -1,7 +1,9 @@
 import getpass
 import json
 import logging
-from typing import Dict, Optional
+import sqlite3
+import time
+from typing import Dict, List, Optional
 
 import fido2
 import webbrowser
@@ -18,7 +20,7 @@ from keepersdk.authentication.yubikey import (
     yubikey_authenticate,
 )
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
-from keepersdk.errors import KeeperApiError
+from keepersdk.vault import ksm_management, sqlite_storage, vault_online
 
 try:
     import pyperclip
@@ -493,84 +495,173 @@ def login():
     keeper_endpoint = flow.endpoint if keeper_auth_context else None
     return keeper_auth_context, keeper_endpoint
 
-def list_alerts(keeper_auth_context: keeper_auth.KeeperAuth):
+
+MILLISECONDS_PER_SECOND = 1000
+MILLISECONDS_PER_MINUTE = 60 * 1000
+DEFAULT_FIRST_ACCESS_EXPIRES_MINUTES = 60
+
+
+def _vault_and_app_uid(keeper_auth_context, app_uid_or_name: str):
     """
-    List all audit alerts.
-    
+    Create an in-memory vault, sync, and resolve the KSM app.
+    Caller must call vault.close() and keeper_auth_context.close() when done.
+
+    Returns:
+        tuple: (vault, app_uid) for the given app_uid_or_name.
+    """
+    conn = sqlite3.connect("file::memory:", uri=True)
+    vault_storage = sqlite_storage.SqliteVaultStorage(
+        lambda: conn,
+        vault_owner=bytes(keeper_auth_context.auth_context.username, "utf-8"),
+    )
+    vault = vault_online.VaultOnline(keeper_auth_context, vault_storage)
+    vault.sync_down()
+    app = ksm_management.get_secrets_manager_app(vault, app_uid_or_name)
+    return vault, app.uid
+
+
+def add_client_to_ksm_app(
+    keeper_auth_context,
+    app_uid_or_name: str,
+    client_name: str,
+    count: int = 1,
+    unlock_ip: bool = False,
+    first_access_expires_in_minutes: int = DEFAULT_FIRST_ACCESS_EXPIRES_MINUTES,
+    access_expire_in_minutes: Optional[int] = None,
+) -> None:
+    """
+    Add a client device to a KSM app using
+    ksm_management.KSMClientManagement.add_client_to_ksm_app.
+    Prints the one-time token and device info for each client added.
+
     Args:
-        keeper_auth_context: The authenticated Keeper context with enterprise admin privileges.
+        keeper_auth_context: Authenticated Keeper context.
+        app_uid_or_name: UID or name of the KSM application.
+        client_name: Optional display name for the client.
+        count: Number of client tokens to generate (default 1).
+        unlock_ip: If True, do not lock the client to the current IP.
+        first_access_expires_in_minutes: Minutes until the one-time token expires (default 60).
+        access_expire_in_minutes: Optional minutes until app access expires (None = never).
     """
-    if not keeper_auth_context.auth_context.is_enterprise_admin:
-        print("ERROR: This operation requires enterprise admin privileges.")
-        print("The current user is not an enterprise administrator.")
-        keeper_auth_context.close()
-        return
-    
+    vault, app_uid = _vault_and_app_uid(keeper_auth_context, app_uid_or_name)
     try:
-        rq = {
-            'command': 'get_enterprise_setting',
-            'include': ['AuditAlertContext', 'AuditAlertFilter']
-        }
-        settings = keeper_auth_context.execute_auth_command(rq)
-        
-        alert_filters = settings.get('AuditAlertFilter', [])
-        alert_context = settings.get('AuditAlertContext', [])
-        
-        if not alert_filters:
-            print("\nNo audit alerts configured")
-        else:
-            print("\nAudit Alerts")
-            print("=" * 120)
-            print(f"{'ID':<8} {'Name':<30} {'Frequency':<20} {'Active':<10} {'Recipients':<20}")
-            print("-" * 120)
-            
-            for alert in alert_filters:
-                alert_id = alert.get('id', 'N/A')
-                alert_name = alert.get('name', 'N/A')
-                
-                frequency_data = alert.get('frequency', {})
-                if isinstance(frequency_data, dict):
-                    period = frequency_data.get('period', 'event')
-                    count = frequency_data.get('count', '')
-                    frequency = f"{count} {period}" if count else period
-                else:
-                    frequency = 'event'
-                
-                active = 'Yes' if alert.get('active', False) else 'No'
-                
-                context_entry = next((x for x in alert_context if x.get('id') == alert_id), None)
-                recipients_count = 0
-                if context_entry:
-                    recipients = context_entry.get('recipients', [])
-                    recipients_count = len(recipients) if isinstance(recipients, list) else 0
-                
-                print(f"{str(alert_id):<8} {alert_name[:29]:<30} {frequency[:19]:<20} {active:<10} {recipients_count:<20}")
-            
-            print("-" * 120)
-            print(f"Total alerts: {len(alert_filters)}")
-            print("=" * 120)
-        
-        keeper_auth_context.close()
-        
-    except KeeperApiError as e:
-        print(f"\nAPI Error: {e}")
-        keeper_auth_context.close()
-    except Exception as e:
-        print(f"\nError loading audit alerts: {e}")
+        master_key = vault.vault_data.get_record_key(record_uid=app_uid)
+        if not master_key:
+            raise ValueError(f"Could not retrieve app key for application {app_uid}")
+
+        server = keeper_auth_context.keeper_endpoint.server
+        current_time_ms = int(time.time() * MILLISECONDS_PER_SECOND)
+        first_access_expire_duration_ms = (
+            current_time_ms + first_access_expires_in_minutes * MILLISECONDS_PER_MINUTE
+        )
+        access_expire_in_ms = (
+            access_expire_in_minutes * MILLISECONDS_PER_MINUTE
+            if access_expire_in_minutes else None
+        )
+
+        for i in range(count):
+            result = ksm_management.KSMClientManagement.add_client_to_ksm_app(
+                vault=vault,
+                uid=app_uid,
+                client_name=client_name or "",
+                count=count,
+                index=i,
+                unlock_ip=unlock_ip,
+                first_access_expire_duration_ms=first_access_expire_duration_ms,
+                access_expire_in_ms=access_expire_in_ms,
+                master_key=master_key,
+                server=server,
+            )
+            print(result["output_string"])
+            if result.get("token_info"):
+                print(f"  One-Time Token: {result['token_info'].get('oneTimeToken', '')}")
+
+        print(f"Successfully added {count} client(s) to KSM app '{app_uid_or_name}'.")
+    finally:
+        vault.close()
         keeper_auth_context.close()
 
 
-def main():
+def remove_clients_from_ksm_app(
+    keeper_auth_context,
+    app_uid_or_name: str,
+    client_names_or_ids: List[str],
+    force: bool = False,
+) -> None:
     """
-    Main entry point for the list alerts script.
-    Performs login and lists audit alerts.
+    Remove client devices from a KSM app using
+    ksm_management.KSMClientManagement.remove_clients_from_ksm_app.
+    Clients can be identified by display name or by client ID (full or short prefix).
+
+    Args:
+        keeper_auth_context: Authenticated Keeper context.
+        app_uid_or_name: UID or name of the KSM application.
+        client_names_or_ids: List of client display names or client IDs to remove.
+        force: If True, skip confirmation prompt.
+    """
+    if not client_names_or_ids:
+        raise ValueError("client_names_or_ids cannot be empty.")
+
+    def confirm_remove(n: int) -> bool:
+        if force:
+            return True
+        answer = input(f"Remove {n} client(s) from this app? [y/N]: ").strip().lower()
+        return answer in ("y", "yes")
+
+    vault, app_uid = _vault_and_app_uid(keeper_auth_context, app_uid_or_name)
+    try:
+        ksm_management.KSMClientManagement.remove_clients_from_ksm_app(
+            vault=vault,
+            uid=app_uid,
+            client_names_and_ids=client_names_or_ids,
+            callable=confirm_remove,
+        )
+        print(f"Successfully removed client(s) from KSM app '{app_uid_or_name}'.")
+    finally:
+        vault.close()
+        keeper_auth_context.close()
+
+
+def main() -> None:
+    """
+    Main entry point. Logs in, then adds or removes clients to/from a KSM app.
     """
     keeper_auth_context, _ = login()
-    
-    if keeper_auth_context:
-        list_alerts(keeper_auth_context)
+    if not keeper_auth_context:
+        print("Login failed. Unable to manage KSM app clients.")
+        return
+
+    # Fill in your values here.
+    app_uid_or_name = "<your_ksm_app_uid_or_name>"
+    action = "add"  # Use "add" to add client(s), "remove" to remove client(s)
+
+    if action == "add":
+        client_name = "My KSM Client"
+        count = 1
+        unlock_ip = False  # Set True to allow config from any IP
+        first_access_expires_in_minutes = 60  # Token validity (max 1440 = 24h)
+        access_expire_in_minutes = None  # None = never expire app access
+        add_client_to_ksm_app(
+            keeper_auth_context,
+            app_uid_or_name,
+            client_name=client_name,
+            count=count,
+            unlock_ip=unlock_ip,
+            first_access_expires_in_minutes=first_access_expires_in_minutes,
+            access_expire_in_minutes=access_expire_in_minutes,
+        )
+    elif action == "remove":
+        client_names_or_ids = ["<client_id_1>", "<client_id_2>"]  # Client ID(s)
+        force = True  # Set True to skip confirmation
+        remove_clients_from_ksm_app(
+            keeper_auth_context,
+            app_uid_or_name,
+            client_names_or_ids,
+            force=force,
+        )
     else:
-        print("Login failed. Unable to list alerts.")
+        print(f"Unknown action: {action}. Use 'add' or 'remove'.")
+        keeper_auth_context.close()
 
 
 if __name__ == "__main__":

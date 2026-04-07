@@ -1,6 +1,7 @@
 import getpass
 import json
 import logging
+import sqlite3
 from typing import Dict, Optional
 
 import fido2
@@ -18,7 +19,8 @@ from keepersdk.authentication.yubikey import (
     yubikey_authenticate,
 )
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
-from keepersdk.errors import KeeperApiError
+from keepersdk.enterprise import enterprise_loader, sqlite_enterprise_storage
+from keepersdk.vault import shares_management, sqlite_storage, vault_online
 
 try:
     import pyperclip
@@ -493,84 +495,109 @@ def login():
     keeper_endpoint = flow.endpoint if keeper_auth_context else None
     return keeper_auth_context, keeper_endpoint
 
-def list_alerts(keeper_auth_context: keeper_auth.KeeperAuth):
+
+def share_record_with_user(
+    keeper_auth_context,
+    record_uid,
+    user_email,
+    can_edit=True,
+    can_share=True,
+    share_expiration=None,
+    enterprise_data=None,
+):
     """
-    List all audit alerts.
-    
+    Share a record with a user using RecordShares.prep_request and send_requests.
     Args:
-        keeper_auth_context: The authenticated Keeper context with enterprise admin privileges.
+        keeper_auth_context: Authenticated Keeper context
+        record_uid: UID of the record to share (str)
+        user_email: Email of the user to share with (str)
+        can_edit: Allow editing the record (default True)
+        can_share: Allow sharing the record (default True)
+        share_expiration: Optional expiration (in seconds) for the share
+        enterprise_data: Optional IEnterpriseData for enterprise context (e.g. from
+            enterprise_loader.EnterpriseLoader(keeper_auth_context, enterprise_storage).enterprise_data).
+            Required for enterprise_access or when resolving share-admin records by name.
     """
-    if not keeper_auth_context.auth_context.is_enterprise_admin:
-        print("ERROR: This operation requires enterprise admin privileges.")
-        print("The current user is not an enterprise administrator.")
-        keeper_auth_context.close()
-        return
-    
-    try:
-        rq = {
-            'command': 'get_enterprise_setting',
-            'include': ['AuditAlertContext', 'AuditAlertFilter']
-        }
-        settings = keeper_auth_context.execute_auth_command(rq)
-        
-        alert_filters = settings.get('AuditAlertFilter', [])
-        alert_context = settings.get('AuditAlertContext', [])
-        
-        if not alert_filters:
-            print("\nNo audit alerts configured")
-        else:
-            print("\nAudit Alerts")
-            print("=" * 120)
-            print(f"{'ID':<8} {'Name':<30} {'Frequency':<20} {'Active':<10} {'Recipients':<20}")
-            print("-" * 120)
-            
-            for alert in alert_filters:
-                alert_id = alert.get('id', 'N/A')
-                alert_name = alert.get('name', 'N/A')
-                
-                frequency_data = alert.get('frequency', {})
-                if isinstance(frequency_data, dict):
-                    period = frequency_data.get('period', 'event')
-                    count = frequency_data.get('count', '')
-                    frequency = f"{count} {period}" if count else period
-                else:
-                    frequency = 'event'
-                
-                active = 'Yes' if alert.get('active', False) else 'No'
-                
-                context_entry = next((x for x in alert_context if x.get('id') == alert_id), None)
-                recipients_count = 0
-                if context_entry:
-                    recipients = context_entry.get('recipients', [])
-                    recipients_count = len(recipients) if isinstance(recipients, list) else 0
-                
-                print(f"{str(alert_id):<8} {alert_name[:29]:<30} {frequency[:19]:<20} {active:<10} {recipients_count:<20}")
-            
-            print("-" * 120)
-            print(f"Total alerts: {len(alert_filters)}")
-            print("=" * 120)
-        
-        keeper_auth_context.close()
-        
-    except KeeperApiError as e:
-        print(f"\nAPI Error: {e}")
-        keeper_auth_context.close()
-    except Exception as e:
-        print(f"\nError loading audit alerts: {e}")
-        keeper_auth_context.close()
+    conn = sqlite3.Connection("file::memory:", uri=True)
+    vault_storage = sqlite_storage.SqliteVaultStorage(
+        lambda: conn,
+        vault_owner=bytes(keeper_auth_context.auth_context.username, 'utf-8')
+    )
+    vault = vault_online.VaultOnline(keeper_auth_context, vault_storage)
+    vault.sync_down()
+
+    # RecordShares.prep_request parameters:
+    #   action: ShareAction — 'grant' (share), 'revoke' (remove access), 'owner' (transfer ownership),
+    #           'cancel' (cancel pending share), 'remove' (revoke share).
+    #   can_edit: Permission for the recipient to edit the record. True = allow, False = view only.
+    #   can_share: Permission for the recipient to share the record. True = allow, False = cannot reshare.
+    #   share_expiration: Optional expiration time for the share (seconds). None = no expiration.
+    #   enterprise: IEnterpriseData for enterprise context; use enterprise_data when sharing in
+    #              an enterprise or when using enterprise_access (e.g. share-admin by name).
+    #   enterprise_access: If True, resolve uid_or_name as share-admin record (requires enterprise).
+    #   recursive: If True and uid_or_name is a folder/shared folder, share all records inside.
+    #   dry_run: If True, validate and return request without sending.
+    request = shares_management.RecordShares.prep_request(
+        vault=vault,
+        emails=[user_email],
+        action=shares_management.ShareAction.GRANT.value,
+        uid_or_name=record_uid,
+        share_expiration=share_expiration,
+        dry_run=False,
+        enterprise=enterprise_data,
+        enterprise_access=False,
+        recursive=False,
+        can_edit=can_edit,
+        can_share=can_share,
+    )
+
+    # Send the request
+    shares_management.RecordShares.send_requests(vault, [request])
+    print(f"Record {record_uid} shared with {user_email}.")
+    vault.close()
+    keeper_auth_context.close()
 
 
-def main():
+def main() -> None:
     """
-    Main entry point for the list alerts script.
-    Performs login and lists audit alerts.
+    Main entry point for the share record script.
+    Performs login and shares a record with a user.
     """
     keeper_auth_context, _ = login()
-    
-    if keeper_auth_context:
-        list_alerts(keeper_auth_context)
-    else:
-        print("Login failed. Unable to list alerts.")
+    if not keeper_auth_context:
+        print("Login failed. Unable to share record.")
+        return
+
+    # Fill in your values here
+    record_uid = "<your_record_uid>"
+    user_email = "user1@example.com"
+
+    # Optional: initialize enterprise data (for enterprise accounts or enterprise_access).
+    # Pass enterprise_data to share_record_with_user when using share-admin features
+    # or when uid_or_name must be resolved in enterprise context.
+    enterprise_data = None
+    enterprise = None
+    if keeper_auth_context.auth_context.is_enterprise_admin:
+        enterprise_conn = sqlite3.Connection("file::memory:", uri=True)
+        enterprise_id = keeper_auth_context.auth_context.enterprise_id or 0
+        enterprise_storage = sqlite_enterprise_storage.SqliteEnterpriseStorage(
+            lambda: enterprise_conn, enterprise_id
+        )
+        enterprise = enterprise_loader.EnterpriseLoader(
+            keeper_auth_context, enterprise_storage
+        )
+        enterprise_data = enterprise.enterprise_data
+
+    try:
+        share_record_with_user(
+            keeper_auth_context,
+            record_uid,
+            user_email,
+            enterprise_data=enterprise_data,
+        )
+    finally:
+        if enterprise is not None:
+            enterprise.close()
 
 
 if __name__ == "__main__":

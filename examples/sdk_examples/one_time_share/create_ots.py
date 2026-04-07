@@ -1,6 +1,9 @@
+from datetime import timedelta
 import getpass
+import sqlite3
 import json
 import logging
+
 from typing import Dict, Optional
 
 import fido2
@@ -18,7 +21,8 @@ from keepersdk.authentication.yubikey import (
     yubikey_authenticate,
 )
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
-from keepersdk.errors import KeeperApiError
+from keepersdk.vault import one_time_share, sqlite_storage, vault_online
+from keepersdk import utils
 
 try:
     import pyperclip
@@ -493,84 +497,121 @@ def login():
     keeper_endpoint = flow.endpoint if keeper_auth_context else None
     return keeper_auth_context, keeper_endpoint
 
-def list_alerts(keeper_auth_context: keeper_auth.KeeperAuth):
+
+def _resolve_record_uid(
+    vault: vault_online.VaultOnline,
+    record_title_or_uid: str,
+) -> str:
     """
-    List all audit alerts.
-    
+    Resolve record title or UID to a record UID.
+
+    If record_title_or_uid matches a record UID (record exists), return it.
+    Otherwise find the first record whose title equals or contains the given string.
+    """
+    if not record_title_or_uid or not record_title_or_uid.strip():
+        raise ValueError("Record title or UID must be non-empty.")
+
+    candidate = record_title_or_uid.strip()
+
+    # Try as record UID first
+    if vault.vault_data.get_record(candidate) is not None:
+        return candidate
+
+    # Search by title (first match, case-insensitive)
+    candidate_lower = candidate.lower()
+    for record_info in vault.vault_data.records():
+        if record_info.version not in (2, 3):
+            continue
+        if (
+            record_info.title.lower() == candidate_lower
+            or candidate_lower in record_info.title.lower()
+        ):
+            return record_info.record_uid
+
+    raise ValueError(
+        f"No record found matching {record_title_or_uid!r}. "
+        "Use an existing record title or record UID."
+    )
+
+
+def create_one_time_share_example(
+    vault: vault_online.VaultOnline,
+    record_title_or_uid: str,
+    ots_name: str,
+    expiration_days: int = 7,
+    is_editable: bool = False,
+    is_self_destruct: bool = False,
+) -> Optional[str]:
+    """
+    Create a one-time share for the given record using the SDK.
+
     Args:
-        keeper_auth_context: The authenticated Keeper context with enterprise admin privileges.
+        vault: Initialized VaultOnline instance.
+        record_title_or_uid: Record title or record UID to share.
+        ots_name: Label for the one-time share link.
+        expiration_days: Number of days the share link is valid (max 182).
+        is_editable: If True, the recipient can edit the shared record.
+        is_self_destruct: If True, the share is invalidated after first open.
+
+    Returns:
+        The one-time share URL, or None on error.
     """
-    if not keeper_auth_context.auth_context.is_enterprise_admin:
-        print("ERROR: This operation requires enterprise admin privileges.")
-        print("The current user is not an enterprise administrator.")
-        keeper_auth_context.close()
-        return
-    
+    record_uid = _resolve_record_uid(vault, record_title_or_uid)
+    expiration_period = timedelta(days=expiration_days)
+
     try:
-        rq = {
-            'command': 'get_enterprise_setting',
-            'include': ['AuditAlertContext', 'AuditAlertFilter']
-        }
-        settings = keeper_auth_context.execute_auth_command(rq)
-        
-        alert_filters = settings.get('AuditAlertFilter', [])
-        alert_context = settings.get('AuditAlertContext', [])
-        
-        if not alert_filters:
-            print("\nNo audit alerts configured")
-        else:
-            print("\nAudit Alerts")
-            print("=" * 120)
-            print(f"{'ID':<8} {'Name':<30} {'Frequency':<20} {'Active':<10} {'Recipients':<20}")
-            print("-" * 120)
-            
-            for alert in alert_filters:
-                alert_id = alert.get('id', 'N/A')
-                alert_name = alert.get('name', 'N/A')
-                
-                frequency_data = alert.get('frequency', {})
-                if isinstance(frequency_data, dict):
-                    period = frequency_data.get('period', 'event')
-                    count = frequency_data.get('count', '')
-                    frequency = f"{count} {period}" if count else period
-                else:
-                    frequency = 'event'
-                
-                active = 'Yes' if alert.get('active', False) else 'No'
-                
-                context_entry = next((x for x in alert_context if x.get('id') == alert_id), None)
-                recipients_count = 0
-                if context_entry:
-                    recipients = context_entry.get('recipients', [])
-                    recipients_count = len(recipients) if isinstance(recipients, list) else 0
-                
-                print(f"{str(alert_id):<8} {alert_name[:29]:<30} {frequency[:19]:<20} {active:<10} {recipients_count:<20}")
-            
-            print("-" * 120)
-            print(f"Total alerts: {len(alert_filters)}")
-            print("=" * 120)
-        
-        keeper_auth_context.close()
-        
-    except KeeperApiError as e:
-        print(f"\nAPI Error: {e}")
-        keeper_auth_context.close()
+        url = one_time_share.create_one_time_share(
+            vault=vault,
+            record_uid=record_uid,
+            expiration_period=expiration_period,
+            name=ots_name or None,
+            is_editable=is_editable,
+            is_self_destruct=is_self_destruct,
+        )
+        print(f"One-time share created for record {record_title_or_uid!r}.")
+        print(f"Share name: {ots_name or '(unnamed)'}")
+        print(f"Expires in: {expiration_days} day(s)")
+        print(f"URL: {url}")
+        return url
+    except ValueError as e:
+        print(f"Error creating one-time share: {e}")
+        return None
+
+
+def create_one_time_share_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
+    """Build vault from auth context, create one-time share with configured variables, then close."""
+    # Record and one-time share parameters
+    RECORD_TITLE_OR_UID = "My Login"  # Record title or record UID to create one-time share for
+    OTS_NAME = "Share for contractor"  # Label for the one-time share link
+    EXPIRATION_DAYS = 7  # Link valid for 7 days (max 182)
+
+    conn = sqlite3.Connection("file::memory:", uri=True)
+    vault_storage = sqlite_storage.SqliteVaultStorage(
+        lambda: conn,
+        vault_owner=bytes(keeper_auth_context.auth_context.username, "utf-8"),
+    )
+    vault = vault_online.VaultOnline(keeper_auth_context, vault_storage)
+    vault.sync_down()
+    try:
+        create_one_time_share_example(
+            vault,
+            RECORD_TITLE_OR_UID,
+            OTS_NAME,
+            expiration_days=EXPIRATION_DAYS,
+        )
     except Exception as e:
-        print(f"\nError loading audit alerts: {e}")
+        print(f"Error: {e}")
+    finally:
+        vault.close()
         keeper_auth_context.close()
 
 
-def main():
-    """
-    Main entry point for the list alerts script.
-    Performs login and lists audit alerts.
-    """
+def main() -> None:
     keeper_auth_context, _ = login()
-    
     if keeper_auth_context:
-        list_alerts(keeper_auth_context)
+        create_one_time_share_run(keeper_auth_context)
     else:
-        print("Login failed. Unable to list alerts.")
+        print("Login failed.")
 
 
 if __name__ == "__main__":
