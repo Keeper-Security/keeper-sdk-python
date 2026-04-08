@@ -17,64 +17,7 @@ logger = api.get_logger()
 
 
 class PAMRbiEditCommand(base.ArgparseCommand):
-    parser = argparse.ArgumentParser(prog='pam rbi edit')
 
-    # Record and Configuration
-    parser.add_argument('--record', '-r', type=str, required=True, dest='record', action='store',
-                        help='The record UID or path of the RBI record.')
-    parser.add_argument('--configuration', '-c', required=False, dest='config', action='store',
-                        help='The PAM Configuration UID or path to use for connections. '
-                        'Use command `pam config list` to view available PAM Configurations.')
-
-    # RBI and Recording Settings
-    parser.add_argument('--remote-browser-isolation', '-rbi', dest='rbi', choices=choices,
-                        help='Set RBI permissions')
-    parser.add_argument('--connections-recording', '-cr', dest='recording', choices=choices,
-                        help='Set recording connections permissions for the resource')
-    parser.add_argument('--key-events', '-k', dest='key_events', choices=choices,
-                        help='Toggle Key Events settings')
-
-    # Browser Settings
-    parser.add_argument('--allow-url-navigation', '-nav', dest='allow_url_navigation', choices=choices,
-                        help='Allow navigation via direct URL manipulation (on/off/default)')
-    parser.add_argument('--ignore-server-cert', '-isc', dest='ignore_server_cert', choices=choices,
-                        help='Ignore server certificate errors (on/off/default)')
-
-    # URL Filtering
-    parser.add_argument('--allowed-urls', '-au', dest='allowed_urls', action='append',
-                        help='Allowed URL patterns (can specify multiple times)')
-    parser.add_argument('--allowed-resource-urls', '-aru', dest='allowed_resource_urls', action='append',
-                        help='Allowed resource URL patterns (can specify multiple times)')
-
-    # Autofill Settings
-    parser.add_argument('--autofill-credentials', '-a', type=str, required=False, dest='autofill', action='store',
-                        help='The record UID or path of the RBI Autofill Credentials record.')
-    parser.add_argument('--autofill-targets', '-at', dest='autofill_targets', action='append',
-                        help='Autofill target selectors (can specify multiple times)')
-
-    # Clipboard Settings
-    parser.add_argument('--allow-copy', '-cpy', dest='allow_copy', choices=choices,
-                        help='Allow copying to clipboard (on/off/default)')
-    parser.add_argument('--allow-paste', '-p', dest='allow_paste', choices=choices,
-                        help='Allow pasting from clipboard (on/off/default)')
-
-    # Audio Settings
-    parser.add_argument('--disable-audio', '-da', dest='disable_audio', choices=choices,
-                        help='Disable audio for RBI sessions (on/off/default)')
-    parser.add_argument('--audio-channels', '-ac', dest='audio_channels', type=int,
-                        help='Number of audio channels (e.g., 1 for mono, 2 for stereo)')
-    parser.add_argument('--audio-bit-depth', '-bd', dest='audio_bit_depth', type=int, choices=[8, 16],
-                        help='Audio bit depth (8 or 16)')
-    parser.add_argument('--audio-sample-rate', '-sr', dest='audio_sample_rate', type=int,
-                        help='Audio sample rate in Hz (e.g., 44100, 48000)')
-
-    # Utility
-    parser.add_argument('--silent', '-s', required=False, dest='silent', action='store_true',
-                        help='Silent mode - don\'t print PAM User, PAM Config etc.')
-
-    def get_parser(self):
-        return PAMRbiEditCommand.parser
-    
     def __init__(self):
         parser = argparse.ArgumentParser(prog='pam rbi edit')
         PAMRbiEditCommand.add_arguments_to_parser(parser)
@@ -471,16 +414,11 @@ class PAMRbiEditCommand(base.ArgparseCommand):
             dirty = True
 
         allowed_settings_name = "allowedSettings"
-        # NB! Currently for remoteBrowserIsolation to work rec needs only "allowedSettings": {"connections": true}
-        # allowed_settings_name = "pamRemoteBrowserSettings"
-        # if rbi and rbi != tdag.get_resource_setting(record_uid, 'pamRemoteBrowserSettings', 'remoteBrowserIsolation'):
-        #     dirty = True
 
         if dirty:
             tdag.set_resource_allowed(resource_uid=record_uid,
                                     allowed_settings_name=allowed_settings_name,
                                     connections=con_val,
                                     session_recording=rec_val)
-        # if not kwargs.get("silent", False):
-        #     tdag.print_tunneling_config(record_uid, record.get_typed_field('pamRemoteBrowserSettings'), config_uid)
+                                    
         vault.sync_data = True

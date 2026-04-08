@@ -682,7 +682,7 @@ class PAMGatewayEditCommand(base.ArgparseCommand):
         gateways = gateway_utils.get_all_gateways(vault)
         return next((x for x in gateways
                     if utils.base64_url_encode(x.controllerUid) == gateway_uid
-                    or x.controllerName == gateway_uid))
+                    or x.controllerName == gateway_uid), None)
 
 class PAMGatewayRemoveCommand(base.ArgparseCommand):
 
