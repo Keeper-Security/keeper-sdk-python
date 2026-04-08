@@ -20,36 +20,6 @@ choices = ['on', 'off', 'default']
 
 
 class PAMConnectionEditCommand(base.ArgparseCommand):
-    parser = argparse.ArgumentParser(prog='pam connection edit')
-    parser.add_argument('record', type=str, action='store', help='The record UID or path of the PAM '
-                        'resource record with network information to use for connections')
-    parser.add_argument('--configuration', '-c', required=False, dest='config', action='store',
-                        help='The PAM Configuration UID or path to use for connections. '
-                        'Use command `pam config list` to view available PAM Configurations.')
-    parser.add_argument('--admin-user', '-a', required=False, dest='admin', action='store',
-					help='The record path or UID of the PAM User record to configure the admin '
-                    'credential on the PAM Resource')
-    parser.add_argument('--launch-user', '-lu', required=False, dest='launch_user', action='store',
-					help='The record path or UID of the PAM User record to configure as the launch '
-                    'credential on the PAM Resource')
-    parser.add_argument('--protocol', '-p', dest='protocol', choices=protocols,
-                        help='Set connection protocol')
-    parser.add_argument('--connections', '-cn', dest='connections', choices=choices,
-                        help='Set connections permissions')
-    parser.add_argument('--connections-recording', '-cr', dest='recording', choices=choices,
-                        help='Set recording connections permissions for the resource')
-    parser.add_argument('--typescript-recording', '-tr', dest='typescriptrecording', choices=choices,
-                        help='Set TypeScript recording permissions for the resource')
-    parser.add_argument('--connections-override-port', '-cop', required=False, dest='connections_override_port',
-                        action='store', help='Port to use for connections. If not provided, '
-                        'the port from the record will be used.')
-    parser.add_argument('--key-events', '-k', dest='key_events', choices=choices,
-                        help='Toggle Key Events settings')
-    parser.add_argument('--silent', '-s', required=False, dest='silent', action='store_true',
-					help='Silent mode - don\'t print PAM User, PAM Config etc.')
-
-    def get_parser(self):
-        return PAMConnectionEditCommand.parser
     
     def __init__(self):
         parser = argparse.ArgumentParser(prog='pam connection edit')

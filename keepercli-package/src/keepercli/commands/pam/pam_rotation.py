@@ -244,39 +244,40 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
     
     @staticmethod
     def add_arguments_to_parser(parser: argparse.ArgumentParser):
-        parser.add_argument('--record', '-r', dest='record_name', action='store',
-                              help='Record UID, name, or pattern to be rotated manually or via schedule')
-        parser.add_argument('--folder', '-fd', dest='folder_name', action='store',
-                              help='Used for bulk rotation setup. The folder UID or name that holds records to be '
-                                   'configured')
+        record_group = parser.add_mutually_exclusive_group(required=True)
+        record_group.add_argument('--record', '-r', dest='record_name', action='store',
+                                help='Record UID, name, or pattern to be rotated manually or via schedule')
+        record_group.add_argument('--folder', '-fd', dest='folder_name', action='store',
+                                help='Used for bulk rotation setup. The folder UID or name that holds records to be '
+                                    'configured')
         parser.add_argument('--force', '-f', dest='force', action='store_true', help='Do not ask for confirmation')
         parser.add_argument('--config', '-c', required=False, dest='config', action='store',
-                        help='UID or path of the configuration record.')
+                            help='UID or path of the configuration record.')
         parser.add_argument('--iam-aad-config', '-iac', dest='iam_aad_config_uid', action='store',
-                        help='UID of a PAM Configuration. Used for an IAM or Azure AD user in place of --resource.')
+                            help='UID of a PAM Configuration. Used for an IAM or Azure AD user in place of --resource.')
         parser.add_argument('--rotation-profile', '-rp', dest='rotation_profile', action='store',
-                        choices=['general', 'iam_user', 'scripts_only'],
-                        help='Rotation profile type: general (resource-based), iam_user (IAM/Azure user), '
-                             'scripts_only (run PAM scripts only)')
-        
+                            choices=['general', 'iam_user', 'scripts_only'],
+                            help='Rotation profile type: general (resource-based), iam_user (IAM/Azure user), '
+                                'scripts_only (run PAM scripts only)')
         parser.add_argument('--resource', '-rs', dest='resource', action='store',
-                        help='UID or path of the resource record.')
-        parser.add_argument('--schedulejson', '-sj', required=False, dest='schedule_json_data',
-                                action='append', help='JSON of the scheduler. Example: -sj \'{"type": "WEEKLY", '
-                                                      '"utcTime": "15:44", "weekday": "SUNDAY", "intervalCount": 1}\'')
-        parser.add_argument('--schedulecron', '-sc', required=False, dest='schedule_cron_data',
-                                action='append', help='Cron tab string of the scheduler. Example: to run job daily at '
-                                                      '5:56PM UTC enter following cron -sc "56 17 * * *"')
-        parser.add_argument('--on-demand', '-od', required=False, dest='on_demand',
-                                action='store_true', help='Schedule On Demand')
-        parser.add_argument('--schedule-config', '-sf', required=False, dest='schedule_config',
-                                action='store_true', help='Schedule from Configuration')
+                            help='UID or path of the resource record.')
+        schedule_group = parser.add_mutually_exclusive_group()
+        schedule_group.add_argument('--schedulejson', '-sj', required=False, dest='schedule_json_data',
+                                    action='append', help='JSON of the scheduler. Example: -sj \'{"type": "WEEKLY", '
+                                                        '"utcTime": "15:44", "weekday": "SUNDAY", "intervalCount": 1}\'')
+        schedule_group.add_argument('--schedulecron', '-sc', required=False, dest='schedule_cron_data',
+                                    action='append', help='Cron tab string of the scheduler. Example: to run job daily at '
+                                                        '5:56PM UTC enter following cron -sc "56 17 * * *"')
+        schedule_group.add_argument('--on-demand', '-od', required=False, dest='on_demand',
+                                    action='store_true', help='Schedule On Demand')
+        schedule_group.add_argument('--schedule-config', '-sf', required=False, dest='schedule_config',
+                                    action='store_true', help='Schedule from Configuration')
         parser.add_argument('--schedule-only', '-so', dest='schedule_only', action='store_true',
-                        help='Only update the rotation schedule without changing other settings')
+                            help='Only update the rotation schedule without changing other settings')
         parser.add_argument('--complexity', '-x', required=False, dest='pwd_complexity', action='store',
-                        help='Password complexity: length, upper, lower, digits, symbols. Ex. 32,5,5,5,5[,SPECIAL CHARS]')
+                            help='Password complexity: length, upper, lower, digits, symbols. Ex. 32,5,5,5,5[,SPECIAL CHARS]')
         parser.add_argument('--admin-user', '-a', required=False, dest='admin', action='store',
-                        help='UID or path for the PAMUser record to configure the admin credential on the PAM Resource as the Admin when rotating')
+                            help='UID or path for the PAMUser record to configure the admin credential on the PAM Resource as the Admin when rotating')
         state_group = parser.add_mutually_exclusive_group()
         state_group.add_argument('--enable', '-e', dest='enable', action='store_true', help='Enable rotation')
         state_group.add_argument('--disable', '-d', dest='disable', action='store_true', help='Disable rotation')

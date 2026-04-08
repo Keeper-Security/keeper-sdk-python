@@ -124,9 +124,9 @@ class PAMGatewayActionCommand(base.GroupCommand):
 class PAMRotationCommand(base.GroupCommand):
     def __init__(self):
         super().__init__('PAM Rotation')
-        self.register_command(PAMCreateRecordRotationCommand(), 'edit', 'new')
         self.register_command(PAMListRecordRotationCommand(), 'list', 'l')
         self.register_command(PAMRouterGetRotationInfo(), 'info', 'i')
+        self.register_command(PAMCreateRecordRotationCommand(), 'edit', 'new')
         self.register_command(PAMRouterScriptCommand(), 'script', 's')
         self.default_verb = 'list'
 

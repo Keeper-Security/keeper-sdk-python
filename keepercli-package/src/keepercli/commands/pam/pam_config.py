@@ -662,45 +662,94 @@ CONFIG_TYPE_TO_RECORD_TYPE = {
     'oci': 'pamOciConfiguration'
 }
 
+common_parser = argparse.ArgumentParser(add_help=False)
+common_parser.add_argument('--environment', '-env', dest='config_type', action='store',
+                        choices=['local', 'aws', 'azure', 'gcp', 'domain', 'oci'], help='PAM Configuration Type')
+common_parser.add_argument('--title', '-t', dest='title', action='store', help='Title of the PAM Configuration')
+common_parser.add_argument('--gateway', '-g', dest='gateway_uid', action='store', help='Gateway UID or Name')
+common_parser.add_argument('--shared-folder', '-sf', dest='shared_folder_uid', action='store',
+                        help='Share Folder where this PAM Configuration is stored. Should be one of the folders to '
+                                'which the gateway has access to.')
+common_parser.add_argument('--schedule', '-sc', dest='default_schedule', action='store',
+                        help='Default Schedule: Use CRON syntax')
+common_parser.add_argument('--port-mapping', '-pm', dest='port_mapping', action='append', help='Port Mapping')
+common_parser.add_argument('--identity-provider', '-idp', dest='identity_provider_uid',
+                        action='store', help='Identity Provider UID')
+network_group = common_parser.add_argument_group('network', 'Local network configuration')
+network_group.add_argument('--network-id', dest='network_id', action='store', help='Network ID')
+network_group.add_argument('--network-cidr', dest='network_cidr', action='store', help='Network CIDR')
+aws_group = common_parser.add_argument_group('aws', 'AWS configuration')
+aws_group.add_argument('--aws-id', dest='aws_id', action='store', help='AWS ID')
+aws_group.add_argument('--access-key-id', dest='access_key_id', action='store', help='Access Key Id')
+aws_group.add_argument('--access-secret-key', dest='access_secret_key', action='store', help='Access Secret Key')
+aws_group.add_argument('--region-name', dest='region_names', action='append', help='Region Names')
+azure_group = common_parser.add_argument_group('azure', 'Azure configuration')
+azure_group.add_argument('--azure-id', dest='azure_id', action='store', help='Azure Id')
+azure_group.add_argument('--client-id', dest='client_id', action='store', help='Client Id')
+azure_group.add_argument('--client-secret', dest='client_secret', action='store', help='Client Secret')
+azure_group.add_argument('--subscription_id', dest='subscription_id', action='store',
+                        help='Subscription Id')
+azure_group.add_argument('--tenant-id', dest='tenant_id', action='store', help='Tenant Id')
+azure_group.add_argument('--resource-group', dest='resource_groups', action='append', help='Resource Group')
+domain_group = common_parser.add_argument_group('domain', 'Domain configuration')
+domain_group.add_argument('--domain-id', dest='domain_id', action='store', help='Domain ID')
+domain_group.add_argument('--domain-hostname', dest='domain_hostname', action='store', help='Domain hostname')
+domain_group.add_argument('--domain-port', dest='domain_port', action='store', help='Domain port')
+domain_group.add_argument('--domain-use-ssl', dest='domain_use_ssl', choices=['true', 'false'],
+                        help='Domain use SSL flag')
+domain_group.add_argument('--domain-scan-dc-cidr', dest='domain_scan_dc_cidr', choices=['true', 'false'],
+                        help='Domain scan DC CIDR flag')
+domain_group.add_argument('--domain-network-cidr', dest='domain_network_cidr', action='store',
+                        help='Domain Network CIDR')
+domain_group.add_argument('--domain-admin', dest='domain_administrative_credential', action='store',
+                        help='Domain administrative credential')
+oci_group = common_parser.add_argument_group('oci', 'OCI configuration')
+oci_group.add_argument('--oci-id', dest='oci_id', action='store', help='OCI ID')
+oci_group.add_argument('--oci-admin-id', dest='oci_admin_id', action='store', help='OCI Admin ID')
+oci_group.add_argument('--oci-admin-public-key', dest='oci_admin_public_key', action='store',
+                    help='OCI admin public key')
+oci_group.add_argument('--oci-admin-private-key', dest='oci_admin_private_key', action='store',
+                    help='OCI admin private key')
+oci_group.add_argument('--oci-tenancy', dest='oci_tenancy', action='store', help='OCI tenancy')
+oci_group.add_argument('--oci-region', dest='oci_region', action='store', help='OCI region')
+
+gcp_group = common_parser.add_argument_group('gcp', 'GCP configuration')
+gcp_group.add_argument('--gcp-id', dest='gcp_id', action='store', help='GCP Id')
+gcp_group.add_argument('--service-account-key', dest='service_account_key', action='store',
+                    help='Service Account Key (JSON format)')
+gcp_group.add_argument('--google-admin-email', dest='google_admin_email', action='store',
+                    help='Google Workspace Administrator Email Address')
+gcp_group.add_argument('--gcp-region', dest='region_names', action='append', help='GCP Region Names')
+
 
 class PAMConfigNewCommand(base.ArgparseCommand, PamConfigurationEditMixin):
 
     def __init__(self):
         self.choices = ['on', 'off', 'default']
-        parser = argparse.ArgumentParser(prog='pam config new')
+        parser = argparse.ArgumentParser(prog='pam config new', parents=[common_parser])
         PAMConfigNewCommand.add_arguments_to_parser(parser)
         super().__init__(parser)
 
     @staticmethod
     def add_arguments_to_parser(parser: argparse.ArgumentParser):
         choices = ['on', 'off', 'default']
-        parser.add_argument('--config-type', '-ct', dest='config_type', action='store',
-                                choices=['network', 'aws', 'azure'], help='PAM Configuration Type', )
-        parser.add_argument('--title', '-t', dest='title', action='store', help='Title of the PAM Configuration')
-        parser.add_argument('--gateway', '-g', dest='gateway', action='store', help='Gateway UID or Name')
-        parser.add_argument('--shared-folder', '-sf', dest='shared_folder', action='store',
-                                help='Share Folder where this PAM Configuration is stored. Should be one of the folders to '
-                                        'which the gateway has access to.')
-        parser.add_argument('--resource-record', '-rr', dest='resource_records', action='append',
-                                help='Resource Record UID')
-        parser.add_argument('--schedule', '-sc', dest='default_schedule', action='store', help='Default Schedule: Use CRON syntax')
-        parser.add_argument('--port-mapping', '-pm', dest='port_mapping', action='append', help='Port Mapping')
-        network_group = parser.add_argument_group('network', 'Local network configuration')
-        network_group.add_argument('--network-id', dest='network_id', action='store', help='Network ID')
-        network_group.add_argument('--network-cidr', dest='network_cidr', action='store', help='Network CIDR')
-        aws_group = parser.add_argument_group('aws', 'AWS configuration')
-        aws_group.add_argument('--aws-id', dest='aws_id', action='store', help='AWS ID')
-        aws_group.add_argument('--access-key-id', dest='access_key_id', action='store', help='Access Key Id')
-        aws_group.add_argument('--access-secret-key', dest='access_secret_key', action='store', help='Access Secret Key')
-        aws_group.add_argument('--region-name', dest='region_names', action='append', help='Region Names')
-        azure_group = parser.add_argument_group('azure', 'Azure configuration')
-        azure_group.add_argument('--azure-id', dest='azure_id', action='store', help='Azure Id')
-        azure_group.add_argument('--client-id', dest='client_id', action='store', help='Client Id')
-        azure_group.add_argument('--client-secret', dest='client_secret', action='store', help='Client Secret')
-        azure_group.add_argument('--subscription_id', dest='subscription_id', action='store',
-                                help='Subscription Id')
-        azure_group.add_argument('--tenant-id', dest='tenant_id', action='store', help='Tenant Id')
-        azure_group.add_argument('--resource-group', dest='resource_group', action='append', help='Resource Group')
+        parser.add_argument('--connections', '-c', dest='connections', choices=choices,
+                            help='Set connections permissions')
+        parser.add_argument('--tunneling', '-u', dest='tunneling', choices=choices,
+                            help='Set tunneling permissions')
+        parser.add_argument('--rotation', '-r', dest='rotation', choices=choices,
+                            help='Set rotation permissions')
+        parser.add_argument('--remote-browser-isolation', '-rbi', dest='remotebrowserisolation', choices=choices,
+                            help='Set remote browser isolation permissions')
+        parser.add_argument('--connections-recording', '-cr', dest='recording', choices=choices,
+                            help='Set recording connections permissions for the resource')
+        parser.add_argument('--typescript-recording', '-tr', dest='typescriptrecording', choices=choices,
+                            help='Set TypeScript recording permissions for the resource')
+        parser.add_argument('--ai-threat-detection', dest='ai_threat_detection', choices=choices,
+                            help='Set AI threat detection permissions')
+        parser.add_argument('--ai-terminate-session-on-detection', dest='ai_terminate_session_on_detection',
+                        choices=choices,
+                        help='Set AI session termination on threat detection permissions')
 
     def execute(self, context: KeeperParams, **kwargs):
         self.warnings.clear()
@@ -854,40 +903,28 @@ class PAMConfigNewCommand(base.ArgparseCommand, PamConfigurationEditMixin):
 class PAMConfigEditCommand(base.ArgparseCommand, PamConfigurationEditMixin):
 
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='pam config edit')
+        parser = argparse.ArgumentParser(prog='pam config edit', parents=[common_parser])
         PAMConfigEditCommand.add_arguments_to_parser(parser)
         super().__init__(parser)
 
     @staticmethod
     def add_arguments_to_parser(parser: argparse.ArgumentParser):
         choices = ['on', 'off', 'default']
-        parser.add_argument('--config-type', '-ct', dest='config_type', action='store',
-                                choices=['network', 'aws', 'azure'], help='PAM Configuration Type', )
-        parser.add_argument('--title', '-t', dest='title', action='store', help='Title of the PAM Configuration')
-        parser.add_argument('--gateway', '-g', dest='gateway', action='store', help='Gateway UID or Name')
-        parser.add_argument('--shared-folder', '-sf', dest='shared_folder', action='store',
-                                help='Share Folder where this PAM Configuration is stored. Should be one of the folders to '
-                                        'which the gateway has access to.')
-        parser.add_argument('--resource-record', '-rr', dest='resource_records', action='append',
-                                help='Resource Record UID')
-        parser.add_argument('--schedule', '-sc', dest='default_schedule', action='store', help='Default Schedule: Use CRON syntax')
-        parser.add_argument('--port-mapping', '-pm', dest='port_mapping', action='append', help='Port Mapping')
-        network_group = parser.add_argument_group('network', 'Local network configuration')
-        network_group.add_argument('--network-id', dest='network_id', action='store', help='Network ID')
-        network_group.add_argument('--network-cidr', dest='network_cidr', action='store', help='Network CIDR')
-        aws_group = parser.add_argument_group('aws', 'AWS configuration')
-        aws_group.add_argument('--aws-id', dest='aws_id', action='store', help='AWS ID')
-        aws_group.add_argument('--access-key-id', dest='access_key_id', action='store', help='Access Key Id')
-        aws_group.add_argument('--access-secret-key', dest='access_secret_key', action='store', help='Access Secret Key')
-        aws_group.add_argument('--region-name', dest='region_names', action='append', help='Region Names')
-        azure_group = parser.add_argument_group('azure', 'Azure configuration')
-        azure_group.add_argument('--azure-id', dest='azure_id', action='store', help='Azure Id')
-        azure_group.add_argument('--client-id', dest='client_id', action='store', help='Client Id')
-        azure_group.add_argument('--client-secret', dest='client_secret', action='store', help='Client Secret')
-        azure_group.add_argument('--subscription_id', dest='subscription_id', action='store',
-                                help='Subscription Id')
-        azure_group.add_argument('--tenant-id', dest='tenant_id', action='store', help='Tenant Id')
-        azure_group.add_argument('--resource-group', dest='resource_group', action='append', help='Resource Group')
+        parser.add_argument('uid', type=str, action='store', help='The Config UID to edit')
+        parser.add_argument('--remove-resource-record', '-rrr', dest='remove_records', action='append',
+                            help='Resource Record UID to remove')
+        parser.add_argument('--connections', '-c', dest='connections', choices=choices,
+                            help='Set connections permissions')
+        parser.add_argument('--tunneling', '-u', dest='tunneling', choices=choices,
+                            help='Set tunneling permissions')
+        parser.add_argument('--rotation', '-r', dest='rotation', choices=choices,
+                            help='Set rotation permissions')
+        parser.add_argument('--remote-browser-isolation', '-rbi', dest='remotebrowserisolation', choices=choices,
+                            help='Set remote browser isolation permissions')
+        parser.add_argument('--connections-recording', '-cr', dest='recording', choices=choices,
+                            help='Set recording connections permissions for the resource')
+        parser.add_argument('--typescript-recording', '-tr', dest='typescriptrecording', choices=choices,
+                            help='Set TypeScript recording permissions for the resource')
     
     def execute(self, context: KeeperParams, **kwargs):
         self.warnings.clear()
@@ -1010,14 +1047,14 @@ class PAMConfigRemoveCommand(base.ArgparseCommand):
 
     @staticmethod
     def add_arguments_to_parser(parser: argparse.ArgumentParser):
-        parser.add_argument('--config', '-c', required=True, dest='pam_config', action='store', 
+        parser.add_argument('config', type=str, action='store', 
             help='PAM Configuration UID. To view all rotation settings with their UIDs, use command `pam config list`')
     
     def execute(self, context: KeeperParams, **kwargs):
         self._validate_vault(context)
         
         vault = context.vault
-        pam_config_name = kwargs.get('pam_config')
+        pam_config_name = kwargs.get('config')
         pam_config_uid = self._find_configuration_uid(vault, pam_config_name)
         
         if not pam_config_uid:
