@@ -8,6 +8,7 @@ from keepersdk.authentication import configuration, endpoint, keeper_auth
 from keepersdk.enterprise import sqlite_enterprise_storage, enterprise_types, enterprise_loader
 from keepersdk.vault import vault_online, sqlite_storage
 from keepersdk.plugins.pedm import admin_plugin
+from keepersdk.plugins.pam import pam_plugin
 
 
 class KeeperConfig(configuration.IConfigurationStorage):
@@ -162,6 +163,8 @@ class KeeperParams:
 
         self._pedm_plugin: Optional[admin_plugin.PedmPlugin] = None
 
+        self._pam_plugin: Optional[pam_plugin.PamPlugin] = None
+
     @property
     def keeper_config(self) -> KeeperConfig:
         return self._keeper_config
@@ -235,6 +238,13 @@ class KeeperParams:
         if self._pedm_plugin.need_sync:
             self._pedm_plugin.sync_down()
         return self._pedm_plugin
+
+    @property
+    def pam_plugin(self) -> pam_plugin.PamPlugin:
+        assert self._enterprise_loader is not None
+        if not self._pam_plugin:
+            self._pam_plugin = pam_plugin.PamPlugin(self._enterprise_loader)
+        return self._pam_plugin
 
     def vault_down(self):
         if self._vault:

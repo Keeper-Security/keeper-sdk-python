@@ -169,7 +169,10 @@ class PAMGatewayListCommand(base.ArgparseCommand):
         format_type = kwargs.get('format', 'table')
 
         enterprise_controllers_connected, is_router_down = self._fetch_connected_gateways(vault, is_force)
-        enterprise_controllers_all = gateway_utils.get_all_gateways(vault)
+        enterprise_controllers_all = context.pam_plugin.controllers.get_all_entities()
+        if not enterprise_controllers_all:
+            context.pam_plugin.sync_down()
+            enterprise_controllers_all = context.pam_plugin.controllers.get_all_entities()
 
         if not enterprise_controllers_all:
             return self._handle_no_gateways(format_type)
@@ -649,7 +652,7 @@ class PAMGatewayEditCommand(base.ArgparseCommand):
         if not gateway_uid:
             raise base.CommandError('Gateway UID is required')
 
-        gateway = self._find_gateway(vault, gateway_uid)
+        gateway = self._find_gateway(context, gateway_uid)
         if not gateway:
             raise base.CommandError(f'Gateway {gateway_uid} not found')
         
@@ -677,12 +680,10 @@ class PAMGatewayEditCommand(base.ArgparseCommand):
             raise ValueError(ERROR_VAULT_NOT_INITIALIZED)
         base.require_enterprise_admin(context)
 
-    def _find_gateway(self, vault, gateway_uid):
+    def _find_gateway(self, context: KeeperParams, gateway_uid):
         """Finds a gateway by UID or name."""
-        gateways = gateway_utils.get_all_gateways(vault)
-        return next((x for x in gateways
-                    if utils.base64_url_encode(x.controllerUid) == gateway_uid
-                    or x.controllerName == gateway_uid), None)
+        gateway = context.pam_plugin.controllers.get_entity(gateway_uid)
+        return gateway
 
 class PAMGatewayRemoveCommand(base.ArgparseCommand):
 
@@ -701,7 +702,7 @@ class PAMGatewayRemoveCommand(base.ArgparseCommand):
         vault = context.vault
 
         gateway_uid = kwargs.get('gateway')
-        gateway = self._find_gateway(vault, gateway_uid)
+        gateway = self._find_gateway(context, gateway_uid)
 
         if gateway:
             gateway_utils.remove_gateway(vault, gateway.controllerUid)
@@ -715,12 +716,9 @@ class PAMGatewayRemoveCommand(base.ArgparseCommand):
             raise ValueError(ERROR_VAULT_NOT_INITIALIZED)
         base.require_enterprise_admin(context)
 
-    def _find_gateway(self, vault, gateway_uid):
+    def _find_gateway(self, context: KeeperParams, gateway_uid):
         """Finds a gateway by UID or name."""
-        gateways = gateway_utils.get_all_gateways(vault)
-        return next((x for x in gateways
-                    if utils.base64_url_encode(x.controllerUid) == gateway_uid
-                    or x.controllerName.lower() == gateway_uid.lower()), None)
+        return context.pam_plugin.controllers.get_entity(gateway_uid)
 
 
 class PAMGatewaySetMaxInstancesCommand(base.ArgparseCommand):
@@ -745,7 +743,7 @@ class PAMGatewaySetMaxInstancesCommand(base.ArgparseCommand):
         max_instances = kwargs.get('max_instances')
 
         self._validate_max_instances(max_instances)
-        gateway = self._find_gateway(vault, gateway_uid)
+        gateway = self._find_gateway(context, gateway_uid)
 
         if not gateway:
             raise base.CommandError(f'Gateway "{gateway_uid}" not found')
@@ -763,12 +761,9 @@ class PAMGatewaySetMaxInstancesCommand(base.ArgparseCommand):
         if max_instances < MIN_INSTANCES:
             raise base.CommandError(f'pam gateway set-max-instances: --max-instances must be at least {MIN_INSTANCES}')
 
-    def _find_gateway(self, vault, gateway_uid):
+    def _find_gateway(self, context: KeeperParams, gateway_uid):
         """Finds a gateway by UID or name."""
-        gateways = gateway_utils.get_all_gateways(vault)
-        return next((x for x in gateways
-                    if utils.base64_url_encode(x.controllerUid) == gateway_uid
-                    or x.controllerName.lower() == gateway_uid.lower()), None)
+        return context.pam_plugin.controllers.get_entity(gateway_uid)
 
     def _set_max_instances(self, vault, gateway, max_instances):
         """Sets the maximum number of instances for a gateway."""
