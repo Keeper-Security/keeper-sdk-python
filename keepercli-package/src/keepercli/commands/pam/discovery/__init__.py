@@ -10,7 +10,7 @@ from .... import api
 from ....commands import base
 from ....helpers import router_utils
 from ....helpers.gateway_utils import get_all_gateways
-
+from ..pam_config import PAM_CONFIG_RECORD_TYPES
 
 from keepersdk.vault import vault_record, vault_online
 from keepersdk.helpers.pam_config_facade import PamConfigurationRecordFacade
@@ -145,7 +145,8 @@ class GatewayContext:
 
         """
         # Get all the PAM configuration records in the Vault; not Application
-        configuration_records = list(vault.vault_data.find_records("pam.*Configuration"))
+        configuration_records = list(vault.vault_data.find_records(
+            criteria=None, record_type=PAM_CONFIG_RECORD_TYPES, record_version=6))
 
         if configuration_uid:
             logger.debug(f"find the gateway with configuration record {configuration_uid}")

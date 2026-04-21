@@ -80,6 +80,8 @@ class PAMConfigListCommand(base.ArgparseCommand):
                                    is_verbose: bool, format_type: str):
         """Lists details for a single PAM configuration."""
         configuration = self._load_and_validate_configuration(vault, config_uid, format_type)
+        if format_type == 'json' and isinstance(configuration, str):
+            return configuration
         facade = self._create_facade(configuration)
         shared_folder = self._load_shared_folder(vault, facade.folder_uid)
         
@@ -95,16 +97,22 @@ class PAMConfigListCommand(base.ArgparseCommand):
         headers = self._build_list_headers(is_verbose, format_type)
         
         for config_record in self._find_pam_configurations(vault):
-            facade = self._create_facade(config_record)
+            full_record = vault.vault_data.load_record(config_record.record_uid)
+            if not full_record or not isinstance(full_record, vault_record.TypedRecord):
+                logger.warning(
+                    'Skipping PAM configuration that could not be loaded as a typed record: UID: %s, Title: %s',
+                    config_record.record_uid, config_record.title)
+                continue
+
+            facade = self._create_facade(full_record)
             shared_folder_parents = vault_utils.get_folders_for_record(vault.vault_data, config_record.record_uid)
-            
+
             if not shared_folder_parents:
                 logger.warning(f'Following configuration is not in the shared folder: UID: %s, Title: %s',
                               config_record.record_uid, config_record.title)
                 continue
-            
+
             shared_folder = shared_folder_parents[0]
-            full_record = vault.vault_data.load_record(config_record.record_uid)
             
             if format_type == 'json':
                 config_data = self._build_config_json_data(config_record, facade, shared_folder, full_record, is_verbose)
@@ -119,11 +127,11 @@ class PAMConfigListCommand(base.ArgparseCommand):
         """Loads and validates a PAM configuration record."""
         configuration = vault.vault_data.load_record(config_uid)
         if not configuration:
-            self._handle_error(format_type, f'Configuration {config_uid} not found')
-        
+            return self._handle_error(format_type, f'Configuration {config_uid} not found')
+
         if configuration.version != 6 or not isinstance(configuration, vault_record.TypedRecord):
-            self._handle_error(format_type, f'{config_uid} is not PAM Configuration')
-        
+            return self._handle_error(format_type, f'{config_uid} is not PAM Configuration')
+
         return configuration
 
     def _handle_error(self, format_type: str, error_message: str):
@@ -963,8 +971,10 @@ class PAMConfigEditCommand(base.ArgparseCommand, PamConfigurationEditMixin):
         config_name_lower = config_name.casefold()
         for record in vault.vault_data.find_records(record_type=None, record_version=6):
             if record.title.casefold() == config_name_lower:
-                return record
-        
+                loaded = vault.vault_data.load_record(record.record_uid)
+                if loaded and isinstance(loaded, vault_record.TypedRecord):
+                    return loaded
+
         return None
 
     def _validate_configuration(self, configuration, config_name: str):

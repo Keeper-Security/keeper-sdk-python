@@ -14,6 +14,7 @@ from .... import api
 from .__init__ import GatewayContext, MultiConfigurationException, multi_conf_msg, PAMGatewayActionDiscoverCommandBase
 from ..pam_dto import GatewayAction, GatewayActionDiscoverJobStartInputs, GatewayActionDiscoverJobStart, GatewayActionDiscoverJobRemoveInputs, GatewayActionDiscoverJobRemove
 from .rule_commands import PAMGatewayActionDiscoverRuleAddCommand, PAMGatewayActionDiscoverRuleListCommand, PAMGatewayActionDiscoverRuleRemoveCommand, PAMGatewayActionDiscoverRuleUpdateCommand
+from ..pam_config import PAM_CONFIG_RECORD_TYPES
 
 from keepersdk.helpers.pam_user_record_facade import PamUserRecordFacade
 from keepersdk.helpers.keeper_dag.jobs import Jobs
@@ -300,7 +301,8 @@ class PAMGatewayActionDiscoverJobStatusCommand(PAMGatewayActionDiscoverCommandBa
             # For each configuration/ gateway, we are going to get all jobs.
             # We are going to query the gateway for any updated status.
 
-            configuration_records = list(vault.vault_data.find_records("pam.*Configuration"))
+            configuration_records = list(vault.vault_data.find_records(
+                criteria=None, record_type=PAM_CONFIG_RECORD_TYPES, record_version=6))
             for configuration_record in configuration_records:
 
                 gateway_context = GatewayContext.from_configuration_uid(
@@ -555,7 +557,7 @@ class PAMGatewayActionDiscoverJobStartCommand(base.ArgparseCommand):
 
         vault = context.vault
         user_map = []
-        for record in vault.vault_data.find_records("pamUser"):
+        for record in vault.vault_data.find_records(criteria=None, record_type="pamUser", record_version=3):
             user_record = vault.vault_data.load_record(record.record_uid)
             user_facade = PamUserRecordFacade()
             user_facade.record = user_record
@@ -1239,19 +1241,19 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
 
             # Search for record with the search string.
             # Currently, this only works with TypedRecord, version 3.
-            user_record = vault.vault_data.find_records(
+            user_records = list(vault.vault_data.find_records(
                 criteria=user_search,
                 record_version=3,
                 record_type=None
-            )
+            ))
             # If not record are returned by the search just return None,
-            if len(user_record) == 0:
+            if len(user_records) == 0:
                 logger.error(f"Could not find any records that contain the search text.")
                 return None, False
 
             # Find usable admin records.
             admin_search_results = []
-            for record in user_record:
+            for record in user_records:
 
                 user_record = vault.vault_data.get_record(record.record_uid)
                 if user_record.record_type == "pamUser":

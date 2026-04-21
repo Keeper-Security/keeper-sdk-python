@@ -15,6 +15,7 @@ from .. import base
 from ... import api, prompt_utils
 from ...params import KeeperParams
 from ...helpers import gateway_utils, router_utils, report_utils, folder_utils, record_utils
+from .pam_config import PAM_CONFIG_RECORD_TYPES
 
 
 logger = api.get_logger()
@@ -926,8 +927,12 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
             if not kwargs.get('silent'):
                 logger.info('Selected %d PAM record(s) for rotation', len(pam_records))
 
-        pam_configurations = {x.record_uid: x for x in vault.vault_data.find_records(record_version=6) if
-                              isinstance(x, vault_record.TypedRecord)}
+        pam_configurations = {}
+        for x in vault.vault_data.find_records(
+                criteria=None, record_type=PAM_CONFIG_RECORD_TYPES, record_version=6):
+            loaded = vault.vault_data.load_record(x.record_uid)
+            if loaded and isinstance(loaded, vault_record.TypedRecord):
+                pam_configurations[x.record_uid] = loaded
 
         config_uid = kwargs.get('config')
         cfg_rec = vault.vault_data.load_record(kwargs.get('config', None))
