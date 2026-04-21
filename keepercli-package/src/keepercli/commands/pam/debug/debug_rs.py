@@ -1,5 +1,6 @@
 import argparse
 import re
+from types import SimpleNamespace
 
 from ....params import KeeperParams
 from keepersdk.helpers.keeper_dag.constants import PAM_USER, PAM_MACHINE, PAM_DATABASE, PAM_DIRECTORY
@@ -56,7 +57,7 @@ class PAMDebugRotationSettingsCommand(PAMGatewayActionDiscoverCommandBase):
                   f"The record is {user_record.record_type}")
             return
 
-        record_rotation = params.record_rotation_cache.get(user_record_uid)
+        record_rotation = context.get_record_rotation(user_record_uid)
         if record_rotation is None:
             logger.warning(f"The protobuf rotation settings are missing. Attempting to create.")
 
@@ -118,19 +119,20 @@ class PAMDebugRotationSettingsCommand(PAMGatewayActionDiscoverCommandBase):
 
                 context.sync_data = True
                 vault.sync_down()
+                context.refresh_record_rotations()
 
-                record_rotation = params.record_rotation_cache.get(user_record_uid)
+                record_rotation = context.get_record_rotation(user_record_uid)
                 if record_rotation is None:
                     logger.error(f"Protobuf rotation settings did not create.")
                     return
             else:
                 logger.info(f"DRY RUN: Would have created the protobuf rotation settings.")
-                record_rotation = {
-                    "configuration_uid": configuration_record_uid,
-                    "resource_uid": resource_record_uid
-                }
+                record_rotation = SimpleNamespace(
+                    configuration_uid=configuration_record_uid,
+                    resource_uid=resource_record_uid,
+                )
 
-        configuration_record_uid = record_rotation.get("configuration_uid")
+        configuration_record_uid = record_rotation.configuration_uid
         if configuration_record_uid is None:
             logger.error(f"Record does not have the PAM Configuration set.")
             return
@@ -142,7 +144,7 @@ class PAMDebugRotationSettingsCommand(PAMGatewayActionDiscoverCommandBase):
             logger.error(f"Configuration record does not exists.")
             return
 
-        resource_record_uid = record_rotation.get("resource_uid")
+        resource_record_uid = record_rotation.resource_uid
         if resource_record_uid is not None:
 
             logger.info(f"Resource Record UID: {resource_record_uid}")

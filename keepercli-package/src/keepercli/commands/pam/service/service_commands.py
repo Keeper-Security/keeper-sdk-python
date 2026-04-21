@@ -172,9 +172,9 @@ class PAMActionServiceAddCommand(PAMGatewayActionDiscoverCommandBase):
             logger.error(f"The user record is not a PAM User.")
             return
 
-        record_rotation = params.record_rotation_cache.get(user_record.record_uid)
+        record_rotation = context.get_record_rotation(user_record.record_uid)
         if record_rotation is not None:
-            controller_uid = record_rotation.get("configuration_uid")
+            controller_uid = record_rotation.configuration_uid
             if controller_uid is None or controller_uid != gateway_context.configuration_uid:
                 logger.error(f"The user record does not belong to this gateway. Cannot use this user.")
                 return

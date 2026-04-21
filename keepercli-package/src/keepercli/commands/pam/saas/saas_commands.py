@@ -407,9 +407,9 @@ class PAMActionSaasSetCommand(PAMGatewayActionDiscoverCommandBase):
             logger.error(f"The user record is not a PAM User.")
             return
 
-        record_rotation = params.record_rotation_cache.get(user_record.record_uid)
+        record_rotation = context.get_record_rotation(user_record.record_uid)
         if record_rotation is not None:
-            configuration_uid = record_rotation.get("configuration_uid")
+            configuration_uid = record_rotation.configuration_uid
         else:
             logger.error(f"The user record does not have any rotation settings.")
             return
@@ -565,9 +565,9 @@ class PAMActionSaasRemoveCommand(PAMGatewayActionDiscoverCommandBase):
             logger.error(f"The user record is not a PAM User.")
             return
 
-        record_rotation = params.record_rotation_cache.get(user_record.record_uid)
+        record_rotation = context.get_record_rotation(user_record.record_uid)
         if record_rotation is not None:
-            configuration_uid = record_rotation.get("configuration_uid")
+            configuration_uid = record_rotation.configuration_uid
         else:
             logger.error(f"The user record does not have any rotation settings.")
             return
@@ -659,9 +659,9 @@ class PAMActionSaasUserCommand(PAMGatewayActionDiscoverCommandBase):
             logger.error(f"The user record is not a PAM User.")
             return
 
-        record_rotation = params.record_rotation_cache.get(user_record.record_uid)
+        record_rotation = context.get_record_rotation(user_record.record_uid)
         if record_rotation is not None:
-            configuration_uid = record_rotation.get("configuration_uid")
+            configuration_uid = record_rotation.configuration_uid
         else:
             logger.error(f"The user record does not have any rotation settings.")
             return

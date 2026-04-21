@@ -543,7 +543,7 @@ class PAMGatewayActionDiscoverJobStartCommand(base.ArgparseCommand):
             router_utils.print_router_response(router_response, "job_info", conversation_id, gateway_uid=gateway_context.gateway_uid)
 
     @staticmethod
-    def make_protobuf_user_map(vault: vault_online.VaultOnline, gateway_context: GatewayContext) -> List[dict]:
+    def make_protobuf_user_map(context: KeeperParams, gateway_context: GatewayContext) -> List[dict]:
         """
         Make a user map for PAM Users.
 
@@ -553,30 +553,31 @@ class PAMGatewayActionDiscoverJobStartCommand(base.ArgparseCommand):
         This map will map a login/DN and parent UID to a record UID.
         """
 
+        vault = context.vault
         user_map = []
         for record in vault.vault_data.find_records("pamUser"):
             user_record = vault.vault_data.load_record(record.record_uid)
             user_facade = PamUserRecordFacade()
             user_facade.record = user_record
 
-            info = params.record_rotation_cache.get(user_record.record_uid)
+            info = context.get_record_rotation(user_record.record_uid)
             if info is None:
                 continue
 
             # Make sure this user is part of this gateway.
-            if info.get("configuration_uid") != gateway_context.configuration_uid:
+            if info.configuration_uid != gateway_context.configuration_uid:
                 continue
 
             # If the user Admin Cred Record (i.e., parent) is blank, skip the mapping item
             # This will be a UID string, not 16 bytes.
-            if info.get("resource_uid") is None or info.get("resource_uid") == "":
+            if info.resource_uid is None or info.resource_uid == "":
                 continue
 
             user_map.append({
                 "user": user_facade.login if user_facade.login != "" else None,
                 "dn": user_facade.distinguishedName if user_facade.distinguishedName != "" else None,
                 "record_uid": user_record.record_uid,
-                "parent_record_uid": info.get("resource_uid")
+                "parent_record_uid": info.resource_uid
             })
 
         logger.debug(f"found {len(user_map)} user map items")
@@ -765,13 +766,13 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
             # This is user protobuf values.
             # We could make this also use record linking if we stop using protobuf.
 
-            record_rotation = params.record_rotation_cache.get(record.record_uid)
+            record_rotation = context.get_record_rotation(record.record_uid)
             if record_rotation is not None:
-                controller_uid = record_rotation.get("configuration_uid")
+                controller_uid = record_rotation.configuration_uid
                 if controller_uid is None or controller_uid != gateway_context.configuration_uid:
                     return []
 
-                resource_uid = record_rotation.get("resource_uid")
+                resource_uid = record_rotation.resource_uid
                 # If the resource uid is None, the Admin Cred Record has not been set.
                 if resource_uid is None:
                     return []
@@ -1825,8 +1826,8 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
             rq.recordUid = utils.base64_url_decode(bulk_convert_record.record_uid)
 
             # We can't set the version to 0 if it's greater than 0, look up prior version.
-            record_rotation_revision = params.record_rotation_cache.get(bulk_convert_record.record_uid)
-            rq.revision = record_rotation_revision.get('revision') if record_rotation_revision else 0
+            record_rotation_revision = context.get_record_rotation(bulk_convert_record.record_uid)
+            rq.revision = record_rotation_revision.revision if record_rotation_revision else 0
 
             # Set the gateway/configuration that this record should be connected.
             rq.configurationUid = utils.base64_url_decode(gateway_context.configuration_uid)
@@ -1844,6 +1845,7 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
             router_utils.router_set_record_rotation_information(context, rq)
 
         vault.sync_down(force=True)
+        context.refresh_record_rotations()
 
     @staticmethod
     def _get_directory_info(domain: str,
@@ -1863,12 +1865,12 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
         for directory_record in vault.vault_data.find_records(criteria=None, record_type="pamDirectory", record_version=None):
             directory_record = vault.vault_data.load_record(directory_record.record_uid)
 
-            info = params.record_rotation_cache.get(directory_record.record_uid)
+            info = context.get_record_rotation(directory_record.record_uid)
             if info is None:
                 continue
 
             # Make sure this user is part of this gateway.
-            if info.get("configuration_uid") != gateway_context.configuration_uid:
+            if info.configuration_uid != gateway_context.configuration_uid:
                 continue
 
             domain_field = directory_record.get_typed_field("text", label="domainName")
@@ -1883,15 +1885,15 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
         if directory_info.has_directories is True and skip_users is False:
 
             for user_record in vault.vault_data.find_records(criteria=None, record_type="pamUser", record_version=None):
-                info = params.record_rotation_cache.get(user_record.record_uid)
+                info = context.get_record_rotation(user_record.record_uid)
                 if info is None:
                     continue
 
-                if info.get("resource_uid") is None or info.get("resource_uid") == "":
+                if info.resource_uid is None or info.resource_uid == "":
                     continue
 
                 # If the user's belongs to a directory, and add it to the directory user list.
-                if info.get("resource_uid") in info.directory_record_uids:
+                if info.resource_uid in directory_info.directory_record_uids:
                     directory_info.directory_user_record_uids.append(user_record.record_uid)
 
         return directory_info

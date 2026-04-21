@@ -4,11 +4,12 @@ import sqlite3
 import threading
 from typing import Dict, Optional, Any, Type
 
+from keepersdk import utils as keepersdk_utils
 from keepersdk.authentication import configuration, endpoint, keeper_auth
 from keepersdk.enterprise import sqlite_enterprise_storage, enterprise_types, enterprise_loader
 from keepersdk.vault import vault_online, sqlite_storage
 from keepersdk.plugins.pedm import admin_plugin
-from keepersdk.plugins.pam import pam_plugin
+from keepersdk.plugins.pam import pam_plugin, pam_types
 
 
 class KeeperConfig(configuration.IConfigurationStorage):
@@ -184,6 +185,9 @@ class KeeperParams:
             self._pedm_plugin.close()
             self._pedm_plugin = None
 
+        if self._pam_plugin:
+            self._pam_plugin = None
+
         if self._enterprise_loader:
             self._enterprise_loader = None
 
@@ -249,6 +253,26 @@ class KeeperParams:
     def vault_down(self):
         if self._vault:
             self._vault.sync_down()
+        self.refresh_record_rotations()
+
+    def refresh_record_rotations(self) -> None:
+        """Reload vault ``recordRotations`` into :attr:`pam_plugin` after a vault sync (enterprise admins only)."""
+        if not self._auth or not self._auth.auth_context.is_enterprise_admin:
+            return
+        if self._enterprise_loader is None:
+            return
+        try:
+            self.pam_plugin.sync_record_rotations_from_vault()
+        except Exception as e:
+            keepersdk_utils.get_logger().warning('refresh_record_rotations failed: %s', e)
+
+    def get_record_rotation(self, record_uid: str) -> Optional[pam_types.PamRecordRotationInfo]:
+        """Rotation metadata for ``record_uid`` from the last vault / PAM rotation sync (or ``None``)."""
+        if not self._auth or not self._auth.auth_context.is_enterprise_admin:
+            return None
+        if self._enterprise_loader is None:
+            return None
+        return self.pam_plugin.record_rotations.get_entity(record_uid)
 
     def enterprise_down(self):
         if self._auth and self._enterprise_loader:

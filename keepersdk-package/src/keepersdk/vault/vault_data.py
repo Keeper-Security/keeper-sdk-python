@@ -796,7 +796,7 @@ def load_keeper_record(record: storage_types.StorageRecord, record_key: bytes) -
     if record.version in {0, 1, 2}:
         data_bytes = crypto.decrypt_aes_v1(record.data, record_key)
         data_dict = json.loads(data_bytes.decode())
-    elif record.version in {3, 4, 5}:
+    elif record.version in {3, 4, 5, 6}:
         data_bytes = crypto.decrypt_aes_v2(record.data, record_key)
         data_dict = json.loads(data_bytes.decode())
     else:

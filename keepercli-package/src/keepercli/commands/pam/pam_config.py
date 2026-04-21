@@ -147,8 +147,12 @@ class PAMConfigListCommand(base.ArgparseCommand):
 
     def _find_pam_configurations(self, vault: vault_online.VaultOnline):
         """Finds all PAM configuration records."""
-        yield from vault.vault_data.find_records(
-            criteria='', record_type=PAM_CONFIG_RECORD_TYPES, record_version=None)
+        for record in vault.vault_data.find_records(criteria='', record_type=None, record_version=6):
+            if record.record_type in PAM_CONFIG_RECORD_TYPES:
+                yield record
+            else:
+                logger.warning(f'Following configuration has unsupported type: UID: %s, Title: %s',
+                              record.record_uid, record.title)
 
     def _build_list_headers(self, is_verbose: bool, format_type: str):
         """Builds headers for the configuration list output."""
@@ -1070,7 +1074,7 @@ class PAMConfigRemoveCommand(base.ArgparseCommand):
             return None
         
         if config_name in vault.vault_data._records:
-            record = vault.vault_data.load_record(config_name)
+            record = vault.vault_data.get_record(config_name)
             if record and record.version == 6 and record.record_type in PAM_CONFIG_RECORD_TYPES:
                 return config_name
         

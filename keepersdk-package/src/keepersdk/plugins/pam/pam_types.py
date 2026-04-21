@@ -22,3 +22,21 @@ class PamController(storage_types.IUid[str]):
 
     def uid(self) -> str:
         return self.controller_uid
+
+
+@attrs.define(kw_only=True, frozen=True)
+class PamRecordRotationInfo(storage_types.IUid[str]):
+    """Vault record rotation row exposed by :class:`~keepersdk.plugins.pam.pam_plugin.PamPlugin`."""
+
+    record_uid: str
+    revision: int
+    configuration_uid: str
+    schedule: str
+    pwd_complexity: bytes
+    disabled: bool
+    resource_uid: str
+    last_rotation: int
+    last_rotation_status: int
+
+    def uid(self) -> str:
+        return self.record_uid

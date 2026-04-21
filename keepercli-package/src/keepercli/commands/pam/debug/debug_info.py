@@ -52,7 +52,7 @@ class PAMDebugInfoCommand(PAMGatewayActionDiscoverCommandBase):
         resource_uid = None
         controller_uid = None
 
-        record_rotation = params.record_rotation_cache.get(record_uid)
+        record_rotation = context.get_record_rotation(record_uid)
 
         # Rotation setting don't exist, check each configuration for an active record.
         if record_rotation is None:
@@ -79,12 +79,12 @@ class PAMDebugInfoCommand(PAMGatewayActionDiscoverCommandBase):
         # Else just get information from the rotation settings
         else:
 
-            controller_uid = record_rotation.get("configuration_uid")
+            controller_uid = record_rotation.configuration_uid
             if controller_uid is None:
                 logger.error(f"Record does not have the PAM Configuration set.")
                 return
 
-            resource_uid = record_rotation.get("resource_uid")
+            resource_uid = record_rotation.resource_uid
 
         configuration_record = vault.vault_data.load_record(controller_uid)
         if configuration_record is None:
