@@ -110,7 +110,7 @@ class PAMConnectionEditCommand(base.ArgparseCommand):
             dirty = False
             if not traffic_encryption_key or not traffic_encryption_key.value:
                 base64_seed = utils.base64_url_encode(seed)
-                record_seed = vault_record.TypedField.new_field('trafficEncryptionSeed', base64_seed, "")
+                record_seed = vault_record.TypedField.create_field('trafficEncryptionSeed', base64_seed, "", required=False)
                 # if field is present update in-place, if in rec definition add to fields[] else custom[]
                 record_types_with_seed = ("pamDatabase", "pamDirectory", "pamMachine", "pamRemoteBrowser")
                 if traffic_encryption_key:
@@ -134,7 +134,7 @@ class PAMConnectionEditCommand(base.ArgparseCommand):
                     logger.warning(f'Connection override port and protocol can be set only when connections are enabled '
                             f'with --connections=on option')
                 if pre_settings:
-                    pam_settings = vault_record.TypedField.new_field('pamSettings', pre_settings, "")
+                    pam_settings = vault_record.TypedField.create_field('pamSettings', pre_settings, "", required=False)
                     record.custom.append(pam_settings)
                     dirty = True
             else:

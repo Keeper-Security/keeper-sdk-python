@@ -1368,7 +1368,7 @@ def update_oauth_tokens_in_record(vault: vault_online.VaultOnline, record_uid: s
 
     # Add expiry field if it doesn't exist
     if not expiry_field_found:
-        record.custom.append(vault.TypedField.new_field('text', token_expiry, 'oauth_token_expiry'))
+        record.custom.append(vault.TypedField.create_field('text', token_expiry, 'oauth_token_expiry', required=False))
 
     # Update the record
     record_management.update_record(vault, record)

@@ -354,10 +354,11 @@ def set_record_field_value(record: vault_record.TypedRecord, label: str, value: 
     if field is None or field.value is None or len(field.value) == 0 or field.value[0] is None or field.value[0] == "":
         if value is not None:
             record.custom.append(
-                vault_record.TypedField.new_field(
-                    field_label=label,
+                vault_record.TypedField.create_field(
                     field_type=field_type,
-                    field_value=[value]
+                    field_label=label,
+                    required=False,
+                    value=[value]
                 )
             )
     elif value is not None:

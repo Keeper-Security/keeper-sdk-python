@@ -21,7 +21,7 @@ class PamConfigurationRecordFacade(TypedRecordFacade):
         if self.record:
             self._pam_resources = next((x for x in self.record.fields if x.type == 'pamResources'), None)
             if not self._pam_resources:
-                self._pam_resources = vault_record.TypedField.new_field('pamResources', [])
+                self._pam_resources = vault_record.TypedField.create_field('pamResources', [], required=False)
                 self.record.fields.append(self._pam_resources)
 
             if len(self._pam_resources.value) > 0:
@@ -38,12 +38,12 @@ class PamConfigurationRecordFacade(TypedRecordFacade):
             self._port_mapping = next((x for x in self.record.fields
                                        if x.type == 'multiline' and x.label == 'portMapping'), None)
             if self._port_mapping is None:
-                self._port_mapping = vault_record.TypedField.new_field('multiline', [], field_label='portMapping')
+                self._port_mapping = vault_record.TypedField.create_field('multiline', [], field_label='portMapping', required=False)
                 self.record.fields.append(self._port_mapping)
 
             self._file_ref = next((x for x in self.record.fields if x.type == 'fileRef' and x.label == 'rotationScripts'), None)
             if self._file_ref is None:
-                self._file_ref = vault_record.TypedField.new_field('fileRef', [], field_label='rotationScripts')
+                self._file_ref = vault_record.TypedField.create_field('fileRef', [], field_label='rotationScripts', required=False)
                 self.record.fields.append(self._file_ref)
         else:
             self._pam_resources = None

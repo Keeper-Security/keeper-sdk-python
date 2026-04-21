@@ -1609,12 +1609,11 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
         for field in content.fields:
             field_args = {
                 "field_type": field.type,
-                "field_value": field.value
+                "field_label": field.label,
+                "required": field.required,
+                "value": field.value
             }
-            if field.type != field.label:
-                field_args["field_label"] = field.label
-            record_field = vault_record.TypedField.new_field(**field_args)
-            record_field.required = field.required
+            record_field = vault_record.TypedField.create_field(**field_args)
             record.fields.append(record_field)
 
         vault = context.vault

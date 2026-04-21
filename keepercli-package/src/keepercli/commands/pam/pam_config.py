@@ -330,7 +330,7 @@ class PamConfigurationEditMixin(record_edit.RecordEditMixin):
         """Gets or creates the pamResources field."""
         field = record.get_typed_field('pamResources')
         if not field:
-            field = vault_record.TypedField.new_field('pamResources', {})
+            field = vault_record.TypedField.create_field('pamResources', {}, required=False)
             record.fields.append(field)
         return field
 

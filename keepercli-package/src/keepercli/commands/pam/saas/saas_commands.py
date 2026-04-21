@@ -161,15 +161,17 @@ class PAMActionSaasConfigCommand(PAMGatewayActionDiscoverCommandBase):
                        plugin_code_bytes: Optional[bytes] = None):
 
         custom_fields = [
-            vault_record.TypedField.new_field(
+            vault_record.TypedField.create_field(
                 field_type="text",
                 field_label="SaaS Type",
-                field_value=[plugin.name]
+                required=True,
+                value=[plugin.name]
             ),
-            vault_record.TypedField.new_field(
+            vault_record.TypedField.create_field(
                 field_type="text",
                 field_label="Active",
-                field_value=["TRUE"]
+                required=False,
+                value=["TRUE"]
             )
         ]
 
@@ -186,11 +188,11 @@ class PAMActionSaasConfigCommand(PAMGatewayActionDiscoverCommandBase):
                         field_args = {
                             "field_type": field_type,
                             "field_label": item.label,
-                            "field_value": value
+                            "required": True,
+                            "value": value
                         }
-                        record_field = vault_record.TypedField.new_field(**field_args)
+                        record_field = vault_record.TypedField.create_field(**field_args)
 
-                        record_field.required = True
                         custom_fields.append(record_field)
 
         logger.info("")
@@ -285,9 +287,11 @@ class PAMActionSaasConfigCommand(PAMGatewayActionDiscoverCommandBase):
                 attachment.upload_attachments(context, existing_record, [task])
 
                 record.fields = [
-                    vault_record.TypedField.new_field(
+                    vault_record.TypedField.create_field(
                         field_type="fileRef",
-                        field_value=list(existing_record.linked_keys.keys()))
+                        field_label="rotationScripts",
+                        required=False,
+                        value=list(existing_record.linked_keys.keys()))
                 ]
 
                 record_management.update_record(context, existing_record)
@@ -850,9 +854,11 @@ class PAMActionSaasUpdateCommand(PAMGatewayActionDiscoverCommandBase):
             logger.debug(f"save file ref: {new_file_refs}")
 
             config_record.fields = [
-                vault_record.TypedField.new_field(
+                vault_record.TypedField.create_field(
                     field_type="fileRef",
-                    field_value=new_file_refs
+                    field_label="rotationScripts",
+                    required=False,
+                    value=new_file_refs
                 )
             ]
 
