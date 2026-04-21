@@ -310,6 +310,9 @@ class PedmAgentPlugin:
             'Timestamp': str(timestamp),
             'Version': '1'
         }
+        if endpoint == 'unregister':
+            headers['Signature'] = ''
+
         if 'ROUTER_URL' in os.environ:
             up = urlparse(os.environ['ROUTER_URL'])
             url_comp = (up.scheme, up.netloc, f'api/agent/{endpoint}', None, None, None)
