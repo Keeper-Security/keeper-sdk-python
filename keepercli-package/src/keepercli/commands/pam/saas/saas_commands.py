@@ -164,14 +164,12 @@ class PAMActionSaasConfigCommand(PAMGatewayActionDiscoverCommandBase):
             vault_record.TypedField.create_field(
                 field_type="text",
                 field_label="SaaS Type",
-                required=True,
-                value=[plugin.name]
+                required=True
             ),
             vault_record.TypedField.create_field(
                 field_type="text",
                 field_label="Active",
-                required=False,
-                value=["TRUE"]
+                required=False
             )
         ]
 
@@ -185,13 +183,7 @@ class PAMActionSaasConfigCommand(PAMGatewayActionDiscoverCommandBase):
                         if field_type in ["url", "int", "number", "bool", "enum"]:
                             field_type = "text"
 
-                        field_args = {
-                            "field_type": field_type,
-                            "field_label": item.label,
-                            "required": True,
-                            "value": value
-                        }
-                        record_field = vault_record.TypedField.create_field(**field_args)
+                        record_field = vault_record.TypedField.create_field(field_type=field_type, field_label=item.label, required=True)
 
                         custom_fields.append(record_field)
 

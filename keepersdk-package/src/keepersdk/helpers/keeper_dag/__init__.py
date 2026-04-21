@@ -199,7 +199,7 @@ class ConnectionBase:
              agent: Optional[str] = None) -> bytes:
 
         if agent is None:
-            f"keeper-dag/{dag_version.__version__}"
+            f"keeper-dag/{dag_version}"
 
         endpoint = self._endpoint(ConnectionBase.SYNC, endpoint)
         self.logger.debug(f"endpoint {endpoint}")

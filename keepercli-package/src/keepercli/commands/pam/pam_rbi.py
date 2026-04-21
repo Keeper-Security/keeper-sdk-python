@@ -143,7 +143,7 @@ class PAMRbiEditCommand(base.ArgparseCommand):
         if not traffic_encryption_key or not traffic_encryption_key.value:
             seed = os.urandom(32)
             base64_seed = utils.base64_url_encode(seed)
-            record_seed = vault_record.TypedField.create_field('trafficEncryptionSeed', base64_seed, "", required=False)
+            record_seed = vault_record.TypedField.create_field('trafficEncryptionSeed', base64_seed, required=False)
             if traffic_encryption_key:
                 traffic_encryption_key.value = [base64_seed]
             else:
@@ -153,7 +153,7 @@ class PAMRbiEditCommand(base.ArgparseCommand):
         rbs_fld = record.get_typed_field('pamRemoteBrowserSettings')
         if not rbs_fld:
             rbsettings = {'connection': {'protocol': 'http', 'httpCredentialsUid': ''}}
-            pam_rbsettings = vault_record.TypedField.create_field('pamRemoteBrowserSettings', rbsettings, "", required=False)
+            pam_rbsettings = vault_record.TypedField.create_field('pamRemoteBrowserSettings', rbsettings, required=False)
             record.fields.append(pam_rbsettings)
             dirty = True
         elif not rbs_fld.value:

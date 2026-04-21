@@ -1257,7 +1257,7 @@ class PAMScriptAddCommand(base.ArgparseCommand):
 
         script_field = next((x for x in record.fields if x.type == 'script'), None)
         if not script_field:
-            script_field = vault_record.TypedField.create_field('script', field_label='rotationScripts', required=False, value=[])
+            script_field = vault_record.TypedField.create_field(field_type='script', field_label='rotationScripts', required=False)
             record.fields.append(script_field)
 
         file_name = kwargs.get('script')

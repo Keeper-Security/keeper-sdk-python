@@ -6,16 +6,18 @@ def pam_configuration_create_record_v6(vault: vault_online.VaultOnline, record: 
     if not record.record_uid:
         record.record_uid = utils.generate_uid()
 
-    if not record.record_key:
-        record.record_key = utils.generate_aes_key()
+    record_key = vault.vault_data.get_record_key(record.record_uid)
+    if not record_key:
+        record_key = utils.generate_aes_key()
 
-    record_data = vault_extensions.extract_typed_record_data(record)
-    json_data = record.load_record_data(record_data)
+    schema = vault.vault_data.get_record_type_by_name(record.record_type)
+    record_data = vault_extensions.extract_typed_record_data(record, schema)
+    json_data = vault_extensions.get_padded_json_bytes(record_data)
 
     car = pam_pb2.ConfigurationAddRequest()
     car.configurationUid = utils.base64_url_decode(record.record_uid)
-    car.recordKey = crypto.encrypt_aes_v2(record.record_key, vault.keeper_auth.auth_context.data_key)
-    car.data = crypto.encrypt_aes_v2(json_data, record.record_key)
+    car.recordKey = crypto.encrypt_aes_v2(record_key, vault.keeper_auth.auth_context.data_key)
+    car.data = crypto.encrypt_aes_v2(json_data, record_key)
 
     vault.keeper_auth.execute_auth_rest('pam/add_configuration_record', car)
 

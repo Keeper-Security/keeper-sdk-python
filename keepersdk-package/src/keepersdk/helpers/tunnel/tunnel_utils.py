@@ -78,6 +78,6 @@ def get_keeper_tokens(vault: vault_online.VaultOnline):
     else:
         encrypted_transmission_key = crypto.encrypt_ec(transmission_key, server_public_key)
     encrypted_session_token = crypto.encrypt_aes_v2(
-        utils.base64_url_decode(vault.keeper_auth.auth_context.session_token), transmission_key)
+        vault.keeper_auth.auth_context.session_token, transmission_key)
 
     return encrypted_session_token, encrypted_transmission_key, transmission_key

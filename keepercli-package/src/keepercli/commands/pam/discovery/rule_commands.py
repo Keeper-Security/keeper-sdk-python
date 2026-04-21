@@ -188,13 +188,13 @@ class PAMGatewayActionDiscoverRuleAddCommand(PAMGatewayActionDiscoverCommandBase
                 )
             )
 
-        return statement_struct
+        return ret
 
     def execute(self, context: KeeperParams, **kwargs):
         try:
             gateway_uid = kwargs.get("gateway")
-            gateway_context = GatewayContext.from_gateway(context=context,
-                                                          gateway_uid=gateway_uid,
+            gateway_context = GatewayContext.from_gateway(vault=context.vault,
+                                                          gateway=gateway_uid,
                                                           configuration_uid=kwargs.get('configuration_uid'))
             if gateway_context is None:
                 logger.error(f"Could not find the gateway configuration for {gateway_uid}.")
@@ -290,10 +290,9 @@ class PAMGatewayActionDiscoverRuleUpdateCommand(PAMGatewayActionDiscoverCommandB
         parser.set_defaults(active=None, ignore_case=None)
 
     def execute(self, context: KeeperParams, **kwargs):
-        vault = context.vault
         gateway = kwargs.get("gateway")
-        gateway_context = GatewayContext.from_gateway(vault=vault,
-                                                      gateway_uid=gateway,
+        gateway_context = GatewayContext.from_gateway(vault=context.vault,
+                                                      gateway=gateway,
                                                       configuration_uid=kwargs.get('configuration_uid'))
         if gateway_context is None:
             logger.error(f"Could not find the gateway configuration for {gateway}.")
@@ -360,6 +359,7 @@ class PAMGatewayActionDiscoverRuleUpdateCommand(PAMGatewayActionDiscoverCommandB
                 )
 
                 logger.info("  * Changing the rule statement.")
+                rule_item.statement = statement_struct
 
             name = kwargs.get("name")
             if name is not None:
@@ -401,8 +401,7 @@ class PAMGatewayActionDiscoverRuleRemoveCommand(PAMGatewayActionDiscoverCommandB
     def execute(self, context: KeeperParams, **kwargs):
 
         gateway = kwargs.get("gateway")
-        vault = context.vault
-        gateway_context = GatewayContext.from_gateway(vault=vault,
+        gateway_context = GatewayContext.from_gateway(vault=context.vault,
                                                         gateway=gateway,
                                                         configuration_uid=kwargs.get('configuration_uid'))
         if gateway_context is None:

@@ -203,7 +203,7 @@ class DAG:
         self.write_struct_obj: Union[ProtobufDataStruct, DefaultDataStruct] = ProtobufDataStruct() \
             if conn.use_write_protobuf else DefaultDataStruct()
 
-        self.agent = f"keeper-dag/{dag_version.__version__}"
+        self.agent = f"keeper-dag/{dag_version}"
         if agent is not None:
             self.agent += "; " + agent
 

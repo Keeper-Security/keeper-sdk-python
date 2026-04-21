@@ -74,11 +74,11 @@ class GatewayContext:
         The function needs to return a non-None value to be considered a positive match.
 
         """
-
         if gateways is None:
             gateways = GatewayContext.all_gateways(vault)
 
-        configuration_records = list()
+        configuration_records = list(vault.vault_data.find_records(
+                criteria=None, record_type=PAM_CONFIG_RECORD_TYPES, record_version=6))
         for configuration_record in configuration_records:
             payload = find_func(
                 configuration_record=configuration_record

@@ -1607,13 +1607,7 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
         record.record_key = utils.generate_aes_key()
         record.title = content.title
         for field in content.fields:
-            field_args = {
-                "field_type": field.type,
-                "field_label": field.label,
-                "required": field.required,
-                "value": field.value
-            }
-            record_field = vault_record.TypedField.create_field(**field_args)
+            record_field = vault_record.TypedField.create_field(field_type=field.type, field_label=field.label, required=field.required)
             record.fields.append(record_field)
 
         vault = context.vault

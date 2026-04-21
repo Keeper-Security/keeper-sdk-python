@@ -168,7 +168,7 @@ def router_send_message_to_gateway(context: KeeperParams, transmission_key, rq_p
     if rq_proto:
         encrypted_payload = crypto.encrypt_aes_v2(rq_proto.SerializeToString(), transmission_key)
     if not encrypted_session_token:
-        encrypted_session_token = crypto.encrypt_aes_v2(utils.base64_url_decode(context.auth.auth_context.session_token), transmission_key)
+        encrypted_session_token = crypto.encrypt_aes_v2(context.auth.auth_context.session_token, transmission_key)
 
     rs = requests.post(
         krouter_host+"/api/user/send_controller_message",
@@ -422,7 +422,7 @@ def _post_request_to_router(context: KeeperParams, path, rq_proto=None, rs_type=
         encrypted_payload = crypto.encrypt_aes_v2(rq_proto.SerializeToString(), transmission_key)
 
     if not encrypted_session_token:
-        encrypted_session_token = crypto.encrypt_aes_v2(utils.base64_url_decode(context.auth.auth_context.session_token), transmission_key)
+        encrypted_session_token = crypto.encrypt_aes_v2(context.auth.auth_context.session_token, transmission_key)
 
     try:
         rs = requests.request(method,

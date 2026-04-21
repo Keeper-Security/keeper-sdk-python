@@ -114,7 +114,7 @@ class PamUserRecordFacade(TypedRecordFacade):
                 value = next((x for x in self.record.fields if x.type == attr), None)
                 setattr(self, attr_prv, value)
                 if value is None:
-                    value = TypedField.create_field(attr, '', required=False)
+                    value = TypedField.create_field(field_type=attr, field_label='', required=False)
                     setattr(self, attr_prv, value)
                     self.record.fields.append(value)
         else:

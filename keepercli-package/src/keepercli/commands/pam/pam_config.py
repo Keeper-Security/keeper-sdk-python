@@ -808,9 +808,10 @@ class PAMConfigNewCommand(base.ArgparseCommand, PamConfigurationEditMixin):
 
     def _create_record(self, vault: vault_online.VaultOnline, record_type: str, title: str):
         """Creates a new typed record with the specified type and title."""
-        record = vault_record.TypedRecord(version=6)
-        record.type_name = record_type
+        record = vault_record.TypedRecord()
+        record.record_type = record_type
         record.title = title
+        record.record_version = 6
         
         record_type_def = vault.vault_data.get_record_type_by_name(record_type)
         if record_type_def and record_type_def.fields:
@@ -826,7 +827,7 @@ class PAMConfigNewCommand(base.ArgparseCommand, PamConfigurationEditMixin):
         
         fpath = folder_utils.try_resolve_path(context, sf_name)
         if fpath and len(fpath) >= 2 and fpath[-1] == '':
-            sfuid = fpath[-2].uid
+            sfuid = fpath[-2].folder_uid
             if sfuid:
                 kwargs['shared_folder_uid'] = sfuid
 
@@ -995,7 +996,7 @@ class PAMConfigEditCommand(base.ArgparseCommand, PamConfigurationEditMixin):
         record_type = CONFIG_TYPE_TO_RECORD_TYPE.get(config_type, configuration.record_type)
         
         if record_type != configuration.record_type:
-            configuration.type_name = record_type
+            configuration.record_type = record_type
             record_type_def = vault.vault_data.get_record_type_by_name(record_type)
             if record_type_def and record_type_def.fields:
                 RecordEditMixin.adjust_typed_record_fields(configuration, record_type_def.fields)

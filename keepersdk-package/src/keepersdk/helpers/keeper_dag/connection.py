@@ -90,7 +90,7 @@ class Connection(ConnectionBase):
         else:
             self.dep_encrypted_transmission_key = crypto.encrypt_ec(self.transmission_key, server_public_key)
         self.dep_encrypted_session_token = crypto.encrypt_aes_v2(
-            utils.base64_url_decode(self.vault.keeper_auth.auth_context.session_token), self.transmission_key)
+            self.vault.keeper_auth.auth_context.session_token, self.transmission_key)
 
     def payload_and_headers(self, payload: Any) -> Tuple[Union[str, bytes], Dict]:
 
@@ -112,7 +112,7 @@ class Connection(ConnectionBase):
             else:
                 encrypted_transmission_key = crypto.encrypt_ec(self.transmission_key, server_public_key)
             encrypted_session_token = crypto.encrypt_aes_v2(
-                utils.base64_url_decode(self.vault.keeper_auth.auth_context.session_token), self.transmission_key)
+                self.vault.keeper_auth.auth_context.session_token, self.transmission_key)
 
         # We need the transmission_key for protobuf sync since it returns values encrypted with the transmission_key.
         if self.transmission_key is None:
