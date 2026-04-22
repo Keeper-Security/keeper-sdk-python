@@ -1,17 +1,10 @@
-
-import logging
-import re
 import argparse
-import time
 
 from ....params import KeeperParams
-from keepersdk.helpers.keeper_dag.constants import PAM_USER, PAM_MACHINE, PAM_DATABASE, PAM_DIRECTORY
+from .... import prompt_utils
+from keepersdk.helpers.keeper_dag.constants import PAM_USER
 from keepersdk.helpers.keeper_dag.record_link import RecordLink
 from keepersdk.helpers.keeper_dag.dag_types import UserAcl
-from keepersdk.helpers.keeper_dag.dag import EdgeType
-from keepersdk.helpers.keeper_dag.dag_types import DiscoveryObject
-from keepersdk.helpers.keeper_dag.infrastructure import Infrastructure
-from keepersdk.helpers.keeper_dag.user_service import UserService
 from ..discovery.__init__ import GatewayContext, PAMGatewayActionDiscoverCommandBase
 from .... import api
 
@@ -128,24 +121,14 @@ class PAMDebugACLCommand(PAMGatewayActionDiscoverCommandBase):
 
         logger.info("")
 
-        while True:
-            res = input(f"Does this user belong to {parent_record.title} Y/N >").lower()
-            if res == "y":
-                acl.belongs_to = True
-                break
-            elif res == "n":
-                acl.belongs_to = False
-                break
+        acl.belongs_to = prompt_utils.user_choice(
+            f"Does this user belong to {parent_record.title}", 'yn', default='n'
+        ).lower() == 'y'
 
         if has_admin_uid is None:
-            while True:
-                res = input(f"Is this user the admin of {parent_record.title} Y/N >").lower()
-                if res == "y":
-                    acl.is_admin = True
-                    break
-                elif res == "n":
-                    acl.is_admin = False
-                    break
+            acl.is_admin = prompt_utils.user_choice(
+                f"Is this user the admin of {parent_record.title}", 'yn', default='n'
+            ).lower() == 'y'
 
         try:
             record_link.belongs_to(user_uid, parent_uid, acl=acl)
