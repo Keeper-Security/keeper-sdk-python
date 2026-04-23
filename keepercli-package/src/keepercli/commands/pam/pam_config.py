@@ -72,7 +72,7 @@ class PAMConfigListCommand(base.ArgparseCommand):
 
     def _print_tunneling_config(self, vault: vault_online.VaultOnline, config_uid: str):
         """Prints tunneling configuration for a specific PAM configuration."""
-        encrypted_session_token, encrypted_transmission_key, _ = gateway_utils.get_keeper_tokens(vault)
+        encrypted_session_token, encrypted_transmission_key, _ = tunnel_utils.get_keeper_tokens(vault)
         tmp_dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, config_uid, is_config=True)
         tmp_dag.print_tunneling_config(config_uid, None)
 
@@ -330,7 +330,7 @@ class PamConfigurationEditMixin(record_edit.RecordEditMixin):
         """Gets or creates the pamResources field."""
         field = record.get_typed_field('pamResources')
         if not field:
-            field = vault_record.TypedField.create_field('pamResources', {}, required=False)
+            field = vault_record.TypedField.create_field('pamResources', '', required=False)
             record.fields.append(field)
         return field
 

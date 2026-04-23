@@ -99,8 +99,7 @@ class PAMConnectionEditCommand(base.ArgparseCommand):
 
         encrypted_session_token, encrypted_transmission_key, transmission_key = get_keeper_tokens(vault)
         if record_type in "pamNetworkConfiguration pamAwsConfiguration pamAzureConfiguration".split():
-            tdag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, record_uid, is_config=True,
-                             transmission_key=transmission_key)
+            tdag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, record_uid, is_config=True)
             tdag.edit_tunneling_config(connections=_connections, session_recording=_recording, typescript_recording=_typescript_recording)
             if not kwargs.get("silent", False): tdag.print_tunneling_config(record_uid, None)
         else:
@@ -134,7 +133,8 @@ class PAMConnectionEditCommand(base.ArgparseCommand):
                     logger.warning(f'Connection override port and protocol can be set only when connections are enabled '
                             f'with --connections=on option')
                 if pre_settings:
-                    pam_settings = vault_record.TypedField.create_field('pamSettings', pre_settings, required=False)
+                    pam_settings = vault_record.TypedField.create_field('pamSettings', required=False)
+                    pam_settings.value = [pre_settings]
                     record.custom.append(pam_settings)
                     dirty = True
             else:
@@ -195,10 +195,8 @@ class PAMConnectionEditCommand(base.ArgparseCommand):
 
             existing_config_uid = get_config_uid(vault, encrypted_session_token, encrypted_transmission_key, record_uid)
 
-            tdag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, config_uid,
-                             transmission_key=transmission_key)
-            old_dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, existing_config_uid,
-                                transmission_key=transmission_key)
+            tdag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, config_uid)
+            old_dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, existing_config_uid)
 
             if config_uid and existing_config_uid != config_uid:
                 old_dag.remove_from_dag(record_uid)
@@ -261,7 +259,6 @@ class PAMConnectionEditCommand(base.ArgparseCommand):
             admin_uid = adm_rec.record_uid if adm_rec else None
             if admin_uid and record_type in ("pamDatabase", "pamDirectory", "pamMachine"):
                 tdag.link_user_to_resource(admin_uid, record_uid, is_admin=True, belongs_to=True)
-                # tdag.link_user_to_config(admin_uid)  # is_iam_user=True
 
             # launch-user parameter sets the launch credential on the resource
             launch_user_name = kwargs.get('launch_user')
@@ -274,7 +271,7 @@ class PAMConnectionEditCommand(base.ArgparseCommand):
                 launch_uid = launch_rec.record_uid
                 if record_type in ("pamDatabase", "pamDirectory", "pamMachine"):
                     tdag.clear_launch_credential_for_resource(record_uid, exclude_user_uid=launch_uid)
-                    tdag.link_user_to_resource(launch_uid, record_uid, is_launch_credential=True, belongs_to=True)
+                    tdag.link_user_to_resource(launch_uid, record_uid, is_admin=True, belongs_to=True)
                     tdag.upgrade_resource_meta_to_v1(record_uid)
 
             # Print out PAM Settings

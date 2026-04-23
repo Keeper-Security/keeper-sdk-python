@@ -299,8 +299,7 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
             if not _dag.linking_dag.has_graph:
                 # Add DAG for resource
                 if target_config_uid:
-                    _dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, target_config_uid,
-                                     transmission_key=transmission_key)
+                    _dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, target_config_uid)
                     _dag.edit_tunneling_config(rotation=True)
                 else:
                     raise base.CommandError(f'Resource "{target_record.record_uid}" is not associated '
@@ -311,13 +310,13 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
             if not _dag.resource_belongs_to_config(target_record.record_uid):
                 # Change DAG to this new configuration.
                 resource_dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key,
-                                         target_record.record_uid, transmission_key=transmission_key)
+                                         target_record.record_uid)
                 _dag.link_resource_to_config(target_record.record_uid)
 
             admin = kwargs.get('admin')
             adm_rec = vault.vault_data.load_record(admin)
 
-            if adm_rec and isinstance(adm_rec, vault.TypedRecord):
+            if adm_rec and isinstance(adm_rec, vault_record.TypedRecord):
                 admin = adm_rec.record_uid
 
             if admin and target_record.record_type != 'pamRemoteBrowser':
@@ -410,12 +409,10 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                 return
 
             if _dag and not _dag.linking_dag.has_graph:
-                _dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, target_iam_aad_config_uid,
-                                 transmission_key=transmission_key)
+                _dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, target_iam_aad_config_uid)
                 if not _dag or not _dag.linking_dag.has_graph:
                     _dag.edit_tunneling_config(rotation=True)
-            old_dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, target_record.record_uid,
-                                transmission_key=transmission_key)
+            old_dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, target_record.record_uid)
             if old_dag.linking_dag.has_graph and old_dag.record.record_uid != target_iam_aad_config_uid:
                 old_dag.remove_from_dag(target_record.record_uid)
 
@@ -444,7 +441,7 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                             [target_record.record_uid, target_record.title, 'PAM Configuration was deleted',
                              'Specify a configuration UID parameter [--config]'])
                         return
-                    if not isinstance(pc, vault.TypedRecord) or pc.version != 6:
+                    if not isinstance(pc, vault_record.TypedRecord) or pc.version != 6:
                         skipped_records.append(
                             [target_record.record_uid, target_record.title, 'PAM Configuration is invalid',
                              'Specify a configuration UID parameter [--config]'])
@@ -641,8 +638,7 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                     return
 
             if isinstance(target_resource_uid, str) and len(target_resource_uid) > 0:
-                _dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, target_resource_uid,
-                                 transmission_key=transmission_key)
+                _dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, target_resource_uid)
                 if not _dag or not _dag.linking_dag.has_graph:
                     if target_config_uid and target_resource_uid:
                         config_resource(_dag, target_record, target_config_uid, silent=silent)
@@ -660,8 +656,7 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
             current_record_rotation = context.get_record_rotation(target_record.record_uid)
 
             if not _dag or not _dag.linking_dag.has_graph:
-                _dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, target_resource_uid,
-                                 transmission_key=transmission_key)
+                _dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, target_resource_uid)
                 if not _dag.linking_dag.has_graph:
                     raise base.CommandError(f'Resource "{target_resource_uid}" is not associated '
                                            f'with any configuration. '
@@ -858,7 +853,7 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
             if record_name in vault.vault_data._records:
                 record_uids.add(record_name)
             else:
-                rs = folder_utils.try_resolve_path(vault, record_name, find_all_matches=True)
+                rs = folder_utils.try_resolve_path(context, record_name)
                 if rs is not None:
                     folder, record_title = rs
                     if record_title:
@@ -877,19 +872,19 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
             if folder_name in vault.vault_data._folders:
                 folder_uids.add(folder_name)
             else:
-                rs = folder_utils.try_resolve_path(vault, folder_name, find_all_matches=True)
+                rs = folder_utils.try_resolve_path(context, folder_name)
                 if rs is not None:
                     folder, record_title = rs
                     if not record_title:
 
-                        def add_folders(sub_folder):
-                            folder_uids.add(sub_folder.uid or '')
+                        def add_folders(folder: vault_types.Folder):
+                            folder_uids.add(folder.folder_uid or '')
 
                         if isinstance(folder, vault_types.Folder):
                             folder = [folder]
                         if isinstance(folder, list):
                             for f in folder:
-                                vault_utils.traverse_folder_tree(vault, f.folder_uid, add_folders)
+                                vault_utils.traverse_folder_tree(vault.vault_data, f, add_folders)
                     else:
                         logger.warning('Folder \"%s\" not found. Skipping.', folder_name)
 
@@ -996,8 +991,7 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
         # use --schedule-only, -so to preserve individual setups (General, IAM, NOOP)
         # use --iam-aad-config, -iac IAM_AAD_CONFIG_UID to convert to IAM User
         for _record in pam_records:
-            tmp_dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, _record.record_uid,
-                                transmission_key=transmission_key)
+            tmp_dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, _record.record_uid)
             if _record.record_type in ['pamMachine', 'pamDatabase', 'pamDirectory', 'pamRemoteBrowser']:
                 config_resource(tmp_dag, _record, config_uid, silent=kwargs.get('silent'))
             elif _record.record_type == 'pamUser':

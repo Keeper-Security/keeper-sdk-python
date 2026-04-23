@@ -153,7 +153,8 @@ class PAMRbiEditCommand(base.ArgparseCommand):
         rbs_fld = record.get_typed_field('pamRemoteBrowserSettings')
         if not rbs_fld:
             rbsettings = {'connection': {'protocol': 'http', 'httpCredentialsUid': ''}}
-            pam_rbsettings = vault_record.TypedField.create_field('pamRemoteBrowserSettings', rbsettings, required=False)
+            pam_rbsettings = vault_record.TypedField.create_field('pamRemoteBrowserSettings', required=False)
+            pam_rbsettings.value = [rbsettings]
             record.fields.append(pam_rbsettings)
             dirty = True
         elif not rbs_fld.value:
@@ -362,8 +363,7 @@ class PAMRbiEditCommand(base.ArgparseCommand):
         if not config_uid:
             raise base.CommandError(f'PAM Config record not found.')
 
-        tdag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, config_uid,
-                         transmission_key=transmission_key)
+        tdag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, config_uid)
         if tdag is None or not tdag.linking_dag.has_graph:
             raise base.CommandError(f"No valid PAM Configuration UID set. "
                                "This must be set or supplied for connections to work. "
@@ -372,8 +372,7 @@ class PAMRbiEditCommand(base.ArgparseCommand):
 
         if config_uid:
             if existing_config_uid and existing_config_uid != config_uid:
-                old_dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, existing_config_uid,
-                                    transmission_key=transmission_key)
+                old_dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, existing_config_uid)
                 old_dag.remove_from_dag(record_uid)
                 logger.debug(f'Updated existing PAM Config UID from: {existing_config_uid} to: {config_uid}')
             tdag.link_resource_to_config(record_uid)

@@ -24,6 +24,42 @@ def get_vertex_content(vertex):
     return return_content
 
 
+# Resource meta version (int). Vault uses version >= 1 to read launch credentials from ACL.
+# In set_resource_allowed: meta_version=None or 0 -> legacy (no version in meta); 1 -> v1.
+# Future: add RESOURCE_META_VERSION_V2, etc. and handle them in build_resource_meta().
+RESOURCE_META_VERSION_V1 = 1
+
+
+def build_resource_meta_v1(allowed_settings, rotate_on_termination=False):
+    """
+    Build DAG resource meta payload in v1 format so vault uses ACL is_launch_credential for launch.
+    Returns dict: {"version": <int>, "allowedSettings": allowed_settings, "rotateOnTermination": bool}.
+    """
+    if not isinstance(allowed_settings, dict):
+        allowed_settings = {}
+    return {
+        "version": int(RESOURCE_META_VERSION_V1),
+        "allowedSettings": dict(allowed_settings),
+        "rotateOnTermination": bool(rotate_on_termination),
+    }
+
+def ensure_resource_meta_v1(content):
+    """
+    Ensure existing meta content has version 1 and rotateOnTermination (for re-writes).
+    Returns a copy with version=<int> and rotateOnTermination default False if missing.
+    """
+    if content is None:
+        return build_resource_meta_v1({}, False)
+    out = dict(content)
+    out["version"] = int(RESOURCE_META_VERSION_V1)
+    if "rotateOnTermination" not in out:
+        out["rotateOnTermination"] = False
+    # Normalize allowedSettings key if content used a different key (e.g. allowedSettings)
+    if "allowedSettings" not in out and "allowed_settings" in out:
+        out["allowedSettings"] = out.pop("allowed_settings", {})
+    return out
+
+
 class TunnelDAG:
     def __init__(self, vault: vault_online.VaultOnline, encrypted_session_token, encrypted_transmission_key, record_uid: str, is_config=False):
         config_uid = None
@@ -488,6 +524,39 @@ class TunnelDAG:
         if dirty:
             resource_vertex.add_data(content=content, path='meta', needs_encryption=False)
             self.linking_dag.save()
+
+    def clear_launch_credential_for_resource(self, resource_uid, exclude_user_uid=None):
+        """Remove is_launch_credential from all users on a resource except exclude_user_uid."""
+        resource_vertex = self.linking_dag.get_vertex(resource_uid)
+        if resource_vertex is None:
+            return
+        dirty = False
+        for user_vertex in resource_vertex.has_vertices(EdgeType.ACL):
+            if exclude_user_uid and user_vertex.uid == exclude_user_uid:
+                continue
+            acl_edge = user_vertex.get_edge(resource_vertex, EdgeType.ACL)
+            if not acl_edge:
+                continue
+            edge_content = acl_edge.content_as_dict
+            if edge_content and edge_content.get('is_launch_credential'):
+                edge_content = dict(edge_content)
+                edge_content.pop('is_launch_credential')
+                user_vertex.belongs_to(resource_vertex, EdgeType.ACL, content=edge_content)
+                dirty = True
+        if dirty:
+            self.linking_dag.save()
+
+    def upgrade_resource_meta_to_v1(self, resource_uid):
+        """Ensure resource vertex meta has version >= 1 so vault reads ACL launch credentials."""
+        resource_vertex = self.linking_dag.get_vertex(resource_uid)
+        if resource_vertex is None:
+            return
+        content = get_vertex_content(resource_vertex)
+        if content and content.get('version', 0) >= RESOURCE_META_VERSION_V1:
+            return
+        upgraded = ensure_resource_meta_v1(content)
+        resource_vertex.add_data(content=upgraded, path='meta', needs_encryption=False)
+        self.linking_dag.save()
 
     def is_tunneling_config_set_up(self, resource_uid):
         if not self.linking_dag.has_graph:

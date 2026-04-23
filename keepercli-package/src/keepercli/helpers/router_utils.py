@@ -394,21 +394,21 @@ def get_response_payload(router_response):
 
     return router_response_response_payload_dict
 
-def router_get_rotation_schedules(context: KeeperParams, proto_request):
-    return _post_request_to_router(context, 'get_rotation_schedules', rq_proto=proto_request, rs_type=pam_pb2.PAMRotationSchedulesResponse)
+def router_get_rotation_schedules(vault: vault_online, proto_request):
+    return _post_request_to_router(vault, 'get_rotation_schedules', rq_proto=proto_request, rs_type=pam_pb2.PAMRotationSchedulesResponse)
 
-def _post_request_to_router(context: KeeperParams, path, rq_proto=None, rs_type=None, method='post',
+def _post_request_to_router(vault: vault_online.VaultOnline, path, rq_proto=None, rs_type=None, method='post',
                             raw_without_status_check_response=False, query_params=None, transmission_key=None,
                             encrypted_transmission_key=None, encrypted_session_token=None):
-    krouter_host = context.auth.keeper_endpoint.get_router_server()
+    krouter_host = vault.keeper_auth.keeper_endpoint.get_router_server()
     path = '/api/user/' + path
 
     if not transmission_key:
         transmission_key = utils.generate_aes_key()
     if not encrypted_transmission_key:
-        server_public_key = endpoint.SERVER_PUBLIC_KEYS[context.auth.keeper_endpoint.server_key_id]
+        server_public_key = endpoint.SERVER_PUBLIC_KEYS[vault.keeper_auth.keeper_endpoint.server_key_id]
 
-        if context.auth.keeper_endpoint.server_key_id < 7:
+        if vault.keeper_auth.keeper_endpoint.server_key_id < 7:
             encrypted_transmission_key = crypto.encrypt_rsa(transmission_key, server_public_key)
         else:
             encrypted_transmission_key = crypto.encrypt_ec(transmission_key, server_public_key)
@@ -422,7 +422,7 @@ def _post_request_to_router(context: KeeperParams, path, rq_proto=None, rs_type=
         encrypted_payload = crypto.encrypt_aes_v2(rq_proto.SerializeToString(), transmission_key)
 
     if not encrypted_session_token:
-        encrypted_session_token = crypto.encrypt_aes_v2(context.auth.auth_context.session_token, transmission_key)
+        encrypted_session_token = crypto.encrypt_aes_v2(vault.keeper_auth.auth_context.session_token, transmission_key)
 
     try:
         rs = requests.request(method,
@@ -436,7 +436,7 @@ def _post_request_to_router(context: KeeperParams, path, rq_proto=None, rs_type=
                               data=encrypted_payload if rq_proto else None
         )
     except ConnectionError as e:
-        raise KeeperApiError(-1, f"KRouter is not reachable on '{krouter_host}'. Error: ${e}")
+        raise KeeperApiError('-1', f"KRouter is not reachable on '{krouter_host}'. Error: ${e}")
     except Exception as ex:
         raise ex
 
@@ -479,22 +479,30 @@ def _post_request_to_router(context: KeeperParams, path, rq_proto=None, rs_type=
 
         return rs_body
     else:
-        raise KeeperApiError(rs.status_code, rs.text)
+        raise KeeperApiError(rs.status_code.__str__(), rs.text)
 
 
-def router_set_record_rotation_information(context: KeeperParams, proto_request, transmission_key=None,
+def router_set_record_rotation_information(vault: vault_online.VaultOnline, proto_request, transmission_key=None,
                                            encrypted_transmission_key=None, encrypted_session_token=None):
-    rs = _post_request_to_router(context, 'set_record_rotation', proto_request, transmission_key=transmission_key,
+    rs = _post_request_to_router(vault, 'set_record_rotation', proto_request, transmission_key=transmission_key,
                                  encrypted_transmission_key=encrypted_transmission_key,
                                  encrypted_session_token=encrypted_session_token)
 
     return rs
 
 
-def router_configure_resource(context: KeeperParams, proto_request, transmission_key=None,
+def router_configure_resource(vault: vault_online.VaultOnline, proto_request, transmission_key=None,
                               encrypted_transmission_key=None, encrypted_session_token=None):
-    rs = _post_request_to_router(context, 'configure_resource', proto_request, transmission_key=transmission_key,
+    rs = _post_request_to_router(vault, 'configure_resource', proto_request, transmission_key=transmission_key,
                                  encrypted_transmission_key=encrypted_transmission_key,
                                  encrypted_session_token=encrypted_session_token)
 
     return rs
+
+
+def encrypt_pwd_complexity(rule_list_dict, record_key_unencrypted):
+    rule_list_json = json.dumps(rule_list_dict)
+    rule_list_json_bytes = rule_list_json.encode('UTF-8')
+    rule_list_json_encrypted = crypto.encrypt_aes_v2(rule_list_json_bytes, record_key_unencrypted)
+
+    return rule_list_json_encrypted
