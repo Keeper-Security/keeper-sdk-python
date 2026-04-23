@@ -940,8 +940,8 @@ class PAMConfigEditCommand(base.ArgparseCommand, PamConfigurationEditMixin):
         self._validate_vault(context)
         
         vault = context.vault
-        configuration = self._find_configuration(vault, kwargs.get('config'))
-        self._validate_configuration(configuration, kwargs.get('config'))
+        configuration = self._find_configuration(vault, kwargs.get('uid'))
+        self._validate_configuration(vault, configuration, kwargs.get('uid'))
         
         self._update_record_type_if_needed(vault, configuration, kwargs)
         self._update_title_if_provided(configuration, kwargs)
@@ -965,25 +965,31 @@ class PAMConfigEditCommand(base.ArgparseCommand, PamConfigurationEditMixin):
         """Finds a PAM configuration by UID or name."""
         if not config_name:
             return None
-        
-        if config_name in vault.vault_data._records:
-            return vault.vault_data.load_record(config_name)
-        
-        config_name_lower = config_name.casefold()
-        for record in vault.vault_data.find_records(record_type=None, record_version=6):
-            if record.title.casefold() == config_name_lower:
+        info = vault.vault_data.get_record(config_name)
+        if info and info.version == 6 and info.record_type in PAM_CONFIG_RECORD_TYPES:
+            loaded = vault.vault_data.load_record(config_name)
+            if loaded and isinstance(loaded, vault_record.TypedRecord):
+                return loaded
+        name_lower = config_name.casefold()
+        for record in vault.vault_data.find_records(
+                criteria=None,
+                record_type=PAM_CONFIG_RECORD_TYPES,
+                record_version=6):
+            if record.record_uid == config_name or record.title.casefold() == name_lower:
                 loaded = vault.vault_data.load_record(record.record_uid)
                 if loaded and isinstance(loaded, vault_record.TypedRecord):
                     return loaded
-
         return None
 
-    def _validate_configuration(self, configuration, config_name: str):
-        """Validates that the configuration exists and is valid."""
+    def _validate_configuration(self, vault: vault_online.VaultOnline, configuration, config_name: str):
+        """Validates that the configuration exists and is a v6 PAM config in the vault index."""
         if not configuration:
             raise base.CommandError(f'PAM configuration "{config_name}" not found')
-        
-        if not isinstance(configuration, vault_record.TypedRecord) or configuration.version != 6:
+        if not isinstance(configuration, vault_record.TypedRecord):
+            raise base.CommandError(f'PAM configuration "{config_name}" not found')
+        # Storage format is on KeeperRecordInfo, not TypedRecord.version() (that method returns 3).
+        info = vault.vault_data.get_record(configuration.record_uid)
+        if not info or info.version != 6 or info.record_type not in PAM_CONFIG_RECORD_TYPES:
             raise base.CommandError(f'PAM configuration "{config_name}" not found')
 
     def _update_record_type_if_needed(self, vault: vault_online.VaultOnline, configuration: vault_record.TypedRecord,
@@ -1083,18 +1089,16 @@ class PAMConfigRemoveCommand(base.ArgparseCommand):
         """Finds a PAM configuration UID by UID or name."""
         if not config_name:
             return None
-        
-        if config_name in vault.vault_data._records:
-            record = vault.vault_data.get_record(config_name)
-            if record and record.version == 6 and record.record_type in PAM_CONFIG_RECORD_TYPES:
-                return config_name
-        
-        config_name_lower = config_name.casefold()
-        for record in vault.vault_data.find_records(record_type=None, record_version=6):
-            if record.record_type in PAM_CONFIG_RECORD_TYPES:
-                if record.record_uid == config_name or record.title.casefold() == config_name_lower:
-                    return record.record_uid
-        
+        info = vault.vault_data.get_record(config_name)
+        if info and info.version == 6 and info.record_type in PAM_CONFIG_RECORD_TYPES:
+            return config_name
+        name_lower = config_name.casefold()
+        for record in vault.vault_data.find_records(
+                criteria=None,
+                record_type=PAM_CONFIG_RECORD_TYPES,
+                record_version=6):
+            if record.record_uid == config_name or record.title.casefold() == name_lower:
+                return record.record_uid
         return None
 
 
