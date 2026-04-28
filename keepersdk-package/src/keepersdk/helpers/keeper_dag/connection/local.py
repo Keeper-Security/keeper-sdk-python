@@ -11,27 +11,18 @@ import logging
 from enum import Enum
 from tabulate import tabulate
 
-try:  # pragma: no cover
+try:
     import sqlite3
     from contextlib import closing
 except ImportError:
     raise Exception("Please install the sqlite3 module to use the Local connection.")
 
-from typing import Optional, Union, Any, TYPE_CHECKING  # pragma: no cover
+from typing import Optional, Union, Any, TYPE_CHECKING
 if TYPE_CHECKING:
     Logger = Union[logging.RootLogger, logging.Logger]
 
 
 class Connection(ConnectionBase):
-
-    """
-    BIG TIME NOTE
-
-    This is a fake DAG engine used for unit tests.
-    It tries best to emulate krouter/workflow.
-    This is no substitute for testing against a krouter instance.
-    """
-
     DB_FILE = "local_dag.db"
 
     def __init__(self,
@@ -101,14 +92,6 @@ class Connection(ConnectionBase):
         with closing(sqlite3.connect(self.db_file)) as connection:
             with closing(connection.cursor()) as cursor:
 
-                # This is based on workflow, Database.kt.
-                # The UIDs are stored a character instead of bytes to make them more readable for debugging.
-
-                # The 'type' columns are stored a TEXT.
-                # This is because the WS wants text for the enum, but stores
-                # it as an INTEGER.
-                # We are just going to store it as a TEXT and avoid the middle man.
-
                 cursor.execute(
                     """
 CREATE TABLE IF NOT EXISTS dag_edges (
@@ -164,19 +147,15 @@ CREATE TABLE IF NOT EXISTS dag_streams (
     @staticmethod
     def _payload_to_json(payload: Union[DataPayload, str]) -> dict:
 
-        # if payload is DataPayload
         payload_data = "{}"
         if isinstance(payload, DataPayload):
             payload_data = payload.model_dump_json()
         elif isinstance(payload, str):
             payload_data = payload
 
-            # make sure it is a valid json and raise and exception if not. make an exception for the case of a string
-            # that is a valid json
             if not payload_data.startswith('{') and not payload_data.endswith('}'):
                 raise Exception(f'Invalid payload: {payload_data}')
 
-            # double check if it is a valid json inside the string
             json.loads(payload_data)
 
         return json.loads(payload_data)
@@ -185,16 +164,8 @@ CREATE TABLE IF NOT EXISTS dag_streams (
 
         data = Connection._payload_to_json(payload)
 
-        # Find the vertex that does not belong to any other vertex.
-        # This is normally root for a full DAG, but will be a vertex if adding additional edges.
-        # 100% sure this could be written better.
-        # 1000% sure this could be written better.
-        # TODO: Only refs that are type PAM_NETWORK or PAM_USER can contain the stream id.
-        #  Change code to ignore all other ref types.
-
         self.debug("finding stream id")
 
-        # First check if we can route with existing edges in the database.
         stream_id = None
         with closing(sqlite3.connect(self.db_file)) as connection:
             with closing(connection.cursor()) as cursor:
@@ -206,10 +177,6 @@ CREATE TABLE IF NOT EXISTS dag_streams (
                 runs = 0
                 for item in data.get("dataList"):
 
-                    # Get the head UID of the edge and then find an edge where the UID is the tail.
-                    # If we find an edge, use its head to find an edge where the UID is the tail.
-                    # Repeat until we can't find and edge, that is a stream ID
-                    # Tally all the stream ID and take the best.
                     item_stream_id = item.get("ref")["value"]
                     current_stream_id = item_stream_id
                     while True:
@@ -230,7 +197,7 @@ CREATE TABLE IF NOT EXISTS dag_streams (
                             stream_ids[current_stream_id] = 0
                         stream_ids[current_stream_id] += 1
                     else:
-                        # If we didn't find anything with the tail, check starting with the head.
+
                         item_stream_id = item.get("parentRef")["value"]
                         current_stream_id = item_stream_id
                         while True:
@@ -251,11 +218,6 @@ CREATE TABLE IF NOT EXISTS dag_streams (
                                 stream_ids[current_stream_id] = 0
                             stream_ids[current_stream_id] += 1
 
-                    # Until we rewrite this, exit after we check 3 edges.
-                    # This will slow down after a bunch of edges are added.
-                    # We also fixed stuff in our code to prevent the errors we were seeing.
-                    # Might want to switch to recursion.
-                    # https://www.sqlite.org/lang_with.html
                     if runs > 3:
                         break
                     runs += 1
@@ -264,13 +226,9 @@ CREATE TABLE IF NOT EXISTS dag_streams (
                     sorted_stream_ids = [k for k, v in sorted(stream_ids.items(), key=lambda i: i[1])]
                     stream_id = sorted_stream_ids.pop()
 
-        # If the stream id is None, this is the first save of the DAG.
-        # No edges existed.
-        # Compare the data list items.
-        # The one without an edge with a tail if the stream id.
         if stream_id is None:
             self.debug("stream id None, edges might be new")
-            # Get a starting spot
+
             found = {}
             for item in data.get("dataList"):
                 head_uid = item.get("parentRef")["value"]
@@ -282,7 +240,6 @@ CREATE TABLE IF NOT EXISTS dag_streams (
             if len(stream_ids) > 0:
                 stream_id = stream_ids[0]
 
-        # If we can't find stream ID, assume it's on the first item in the dataList
         if stream_id is None:
             item = data.get("dataList")[0]
             stream_id = item.get("parentRef")["value"] or item.get("ref")["value"]
@@ -328,7 +285,6 @@ CREATE TABLE IF NOT EXISTS dag_streams (
                  use_protobuf: bool = False,
                  agent: Optional[str] = None):
 
-        # Convert protobuf to the pydantic structure
         if isinstance(payload, gs_pb2.GraphSyncAddDataRequest):
             payload = self._add_data_pb_to_pydantic(payload)
 
@@ -499,8 +455,6 @@ CREATE TABLE IF NOT EXISTS dag_streams (
                     res = cursor.execute(sql, tuple(args))
                     edges = res.fetchone()
 
-                    # If the head and tail are the same (DATA edge), then parent_ref is None.
-                    # Else include a parent_ref
                     parent_ref = None
                     if edges[1] != edges[0]:
 

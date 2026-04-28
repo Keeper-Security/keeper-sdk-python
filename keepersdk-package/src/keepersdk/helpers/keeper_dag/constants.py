@@ -1,5 +1,3 @@
-# NOTE: The graph_id constant are part of keeper-dag as enums now.
-
 # This should the relationship between Keeper Vault record
 RECORD_LINK_GRAPH_ID = 0
 
@@ -41,18 +39,12 @@ PAM_CONFIGURATIONS = [
     PAM_GCP_CONFIGURATION
 ]
 
-# These are configuration that could domain users.
-# Azure included because of AADDS.
+
 DOMAIN_USER_CONFIGS = [
     PAM_DOMAIN_CONFIGURATION,
     PAM_AZURE_CONFIGURATION
 ]
 
-# The record types to process.
-# The order defined the order the user will be presented the new discovery objects.
-# The sort defined how the discovery objects for a record type are sorted and presented.
-# Cloud-based users are presented first, then directories second.
-# We want to prompt about users that may appear on machines before processing the machine.
 VERTICES_SORT_MAP = {
     PAM_USER: {"order": 1, "sort": "sort_infra_name", "item": "DiscoveryUser", "key": "user"},
     PAM_DIRECTORY: {"order": 1, "sort": "sort_infra_name", "item": "DiscoveryDirectory", "key": "host_port"},

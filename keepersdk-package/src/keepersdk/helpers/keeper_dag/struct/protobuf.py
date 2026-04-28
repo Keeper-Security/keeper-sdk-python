@@ -50,8 +50,6 @@ class DataStructBase:
 
 class DataStruct(DataStructBase):
 
-    # https://github.com/Keeper-Security/keeperapp-protobuf/blob/master/GraphSync.proto
-
     REF_TO_PB_MAP = {
         RefType.GENERAL: gs_pb2.RefType.RFT_GENERAL,
         RefType.USER: gs_pb2.RefType.RFT_USER,
@@ -94,8 +92,6 @@ class DataStruct(DataStructBase):
             streamId=dag_crypto.urlsafe_str_to_bytes(stream_id),
             origin=dag_crypto.generate_random_bytes(16),
             syncPoint=sync_point,
-
-            # Use the default from KRouter; currently 500
             maxCount=0
         )
 
@@ -116,7 +112,6 @@ class DataStruct(DataStructBase):
             data_list.append(
                 SyncDataItem(
                     type=DataStruct.PB_TO_DATA_MAP.get(item.data.type),
-                    # content=bytes_to_str(item.data.content),
                     content=item.data.content,
                     content_is_base64=False,
                     ref=Ref(
@@ -166,15 +161,11 @@ class DataStruct(DataStructBase):
         return gs_pb2.GraphSyncData(
             type=DataStruct.DATA_TO_PB_MAP.get(data_type),
             content=content,
-            # tail point at this vertex, so it uses this vertex's uid.
             ref=gs_pb2.GraphSyncRef(
                 type=DataStruct.REF_TO_PB_MAP.get(tail_ref_type),
                 value=tail_uid,
                 name=tail_name
             ),
-            # Head, the arrowhead, points at the vertex this vertex belongs to, the parent.
-            # Apparently, for DATA edges, the parentRef is allowed to be None.
-            # Doesn't hurt to send it.
             parentRef=gs_pb2.GraphSyncRef(
                 type=DataStruct.REF_TO_PB_MAP.get(head_ref_type),
                 value=head_uid,

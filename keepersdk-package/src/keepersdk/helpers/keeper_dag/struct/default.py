@@ -53,15 +53,13 @@ class DataStruct(DataStructBase):
         return DAGData(
             type=data_type,
             content=content,
-            # tail point at this vertex, so it uses this vertex's uid.
+
             ref=Ref(
                 type=tail_ref_type,
                 value=tail_uid,
                 name=tail_name
             ),
-            # Head, the arrowhead, points at the vertex this vertex belongs to, the parent.
-            # Apparently, for DATA edges, the parentRef is allowed to be None.
-            # Doesn't hurt to send it.
+
             parentRef=Ref(
                 type=head_ref_type,
                 value=head_uid,

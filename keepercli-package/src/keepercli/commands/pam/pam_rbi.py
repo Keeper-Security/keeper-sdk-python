@@ -103,7 +103,6 @@ class PAMRbiEditCommand(base.ArgparseCommand):
         if not record_name:
             raise base.CommandError('Record parameter is required.')
 
-        # Check if any setting argument is provided
         has_new_settings = any([
             allow_url_navigation is not None,
             ignore_server_cert is not None,
@@ -137,7 +136,6 @@ class PAMRbiEditCommand(base.ArgparseCommand):
                                "cannot be set up for RBI connections. "
                                f"RBI connection records must be of type: pamRemoteBrowser")
 
-        # record data (JSON) manipulations: autofill, key_events
         dirty = False
         traffic_encryption_key = record.get_typed_field('trafficEncryptionSeed')
         if not traffic_encryption_key or not traffic_encryption_key.value:
@@ -208,11 +206,8 @@ class PAMRbiEditCommand(base.ArgparseCommand):
             else:
                 logger.debug(f'Unexpected value for --key-events {key_events} (ignored)')
 
-        # Handle new RBI settings (KC-1034)
-        # Helper function to update connection settings with on/off/default pattern
         def update_connection_toggle(field_name, setting_value, invert=False):
             """Update a connection field using on/off/default pattern.
-
             Args:
                 field_name: The field name in the connection dict
                 setting_value: 'on', 'off', or 'default'
@@ -250,7 +245,6 @@ class PAMRbiEditCommand(base.ArgparseCommand):
                 else:
                     logger.debug(f'Unexpected value for {field_name}: {setting_value} (ignored)')
 
-        # Helper function for multi-value string fields
         def update_connection_string(field_name, values):
             nonlocal dirty
             rbs_fld = record.get_typed_field('pamRemoteBrowserSettings')
@@ -264,7 +258,6 @@ class PAMRbiEditCommand(base.ArgparseCommand):
                 else:
                     logger.debug(f'{field_name} is already set to {new_value!r} on record={record_uid}')
 
-        # Helper function for integer fields
         def update_connection_int(field_name, value):
             nonlocal dirty
             rbs_fld = record.get_typed_field('pamRemoteBrowserSettings')

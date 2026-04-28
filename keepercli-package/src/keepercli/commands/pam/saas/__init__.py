@@ -50,7 +50,6 @@ class GatewayActionSaasListCommand(GatewayAction):
         return json.dumps(self, default=lambda o: o.__dict__, sort_keys=True, indent=4)
 
 
-# These are from KDNRM saas_type.py
 class SaasConfigEnum(BaseModel):
     value: str
     desc: Optional[str] = None
@@ -93,17 +92,15 @@ class SaasCatalog(BaseModel):
     @property
     def file_name(self):
         # `file` will be either a file name or URL to a file.
-        # This will just get the file name.
+        # This will get the file name.
         return self.file.split("/")[-1] if self.file else None
 
 
 def get_gateway_saas_schema(context: KeeperParams, gateway_context: GatewayContext) -> Optional[List[dict]]:
-
     """
     Get a plugins list from the Gateway.
 
     Using the plugins from the Gateway handles problem with versions.
-    We can work off the builtin, and custom, plugins available to the version of the Gateway.
     """
 
     if gateway_context is None:
@@ -146,24 +143,18 @@ def get_gateway_saas_schema(context: KeeperParams, gateway_context: GatewayConte
 
 
 def find_user_saas_configurations(context: KeeperParams, gateway_context: GatewayContext) -> dict:
-
     """
-    Find all the SaaS configuration being uses by a gateway.
-
-
-
+    Find all the SaaS configuration being used by a gateway.
     """
 
     record_linking = RecordLink(record=gateway_context.configuration,  context=context, logger=logger)
 
     def _walk_graph(v: DAGVertex, m: dict, pv: Optional[DAGVertex] = None):
-
-        # Skip any disabled vertices
         if not v.active:
             return
 
-        # Get the record for this vertex; skip is not a pamUser.
-        record = context.vault.vault_data.load_record(v.uid)
+        # Get the record for this vertex; skip if not a pamUser.
+        record = context.vault.vault_data.get_record(v.uid)
         if record is not None and record.record_type == "pamUser" and pv is not None:
             acl = record_linking.get_acl(v.uid, pv.uid)
             if acl is not None and acl.rotation_settings is not None:
@@ -205,24 +196,13 @@ def find_user_saas_configurations(context: KeeperParams, gateway_context: Gatewa
 
 
 def get_plugins_map(context: KeeperParams, gateway_context: GatewayContext) -> Optional[dict[str, SaasCatalog]]:
-
     """
     Get a map of all the available plugins.
-
-    This will first get the latest catalog from the GitHub repo.
-    The catalog will contain the plugin available from the repo and built in.
-
-    Then the Gateway is checked for custom plugin; plugins outside our control.
-
+    Then the Gateway is checked for custom plugin; plugins outside control.
     The result is a dictionary, with the plugin name as the key.
-
     """
 
     plugin_map = {}
-
-    # #### GATEWAY PLUGINS
-
-    # Get a list of installed plugins (custom and builtin) from the Gateway
     gateway_plugins = get_gateway_saas_schema(context, gateway_context)
     if gateway_plugins is None:
         return None
@@ -283,7 +263,6 @@ def get_plugins_map(context: KeeperParams, gateway_context: GatewayContext) -> O
 
 def make_script_signature(plugin_code_bytes: bytes) -> str:
 
-    # To use HMAC, we need to have a key; the key is not a secret, we just want to make a unique digest.
     this_is_not_a_secret = b"NOT_IMPORTANT"
     return hmac.new(this_is_not_a_secret, plugin_code_bytes, hashlib.sha256).hexdigest()
 
@@ -357,8 +336,7 @@ def set_record_field_value(record: vault_record.TypedRecord, label: str, value: 
                 vault_record.TypedField.create_field(
                     field_type=field_type,
                     field_label=label,
-                    required=False,
-                    value=[value]
+                    required=False
                 )
             )
     elif value is not None:

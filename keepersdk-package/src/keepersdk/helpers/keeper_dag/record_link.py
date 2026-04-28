@@ -29,7 +29,6 @@ class RecordLink:
                                    use_write_protobuf=use_write_protobuf,
                                    **kwargs)
 
-        # This will either be a KSM Record, or Commander KeeperRecord
         self.record = record
         self._dag = None
         if logger is None:
@@ -39,9 +38,6 @@ class RecordLink:
         self.debug_level = debug_level
         self.save_batch_count = save_batch_count
 
-        # Based on the connection type, use_write_protobuf might be set to False is True was passed.
-        # Use self.conn.use_write_protobuf; don't use passed in use_write_protobuf.
-        # If using protobuf to write, then use the endpoint.
         self.write_endpoint = None
         if self.conn.use_write_protobuf:
             self.write_endpoint = PamEndpoints.PAM
@@ -54,16 +50,12 @@ class RecordLink:
         if agent is not None:
             self.agent += "; " + agent
 
-        # Technically, since there is no encryption in this graph, there should be no corruption.
-        # Allow it to be set regardlessly.
         self.fail_on_corrupt = fail_on_corrupt
 
     @property
     def dag(self) -> DAG:
         if self._dag is None:
 
-            # Make sure this auto save is False.
-            # Since we don't have transactions, we want to save the record link if everything worked.
             self._dag = DAG(conn=self.conn,
                             record=self.record,
                             write_endpoint=self.write_endpoint,
@@ -137,7 +129,6 @@ class RecordLink:
     def get_record_uid(discovery_vertex: DAGVertex, validate_record_type: Optional[str] = None) -> str:
         """
         Get the record UID from the vertex
-
         """
         data = discovery_vertex.get_data()
         if data is None:
@@ -156,9 +147,7 @@ class RecordLink:
     def add_configuration(self, discovery_vertex: DAGVertex):
         """
         Add the configuration vertex to the DAG root.
-
         The configuration record UID will be the same as root UID.
-
         """
 
         record_uid = self.get_record_uid(discovery_vertex)
@@ -170,10 +159,8 @@ class RecordLink:
 
     def discovery_belongs_to(self, discovery_vertex: DAGVertex, discovery_parent_vertex: DAGVertex,
                              acl: Optional[UserAcl] = None):
-
         """
         Link vault record using the vertices from discovery.
-
         If a link already exists, no additional link will be created.
         """
 
@@ -183,8 +170,6 @@ class RecordLink:
             self.logger.warning(f"The discovery vertex is missing a record uid, cannot connect record: {err}")
             return
 
-        # If the parent_vertex is the root, then don't get the record UID from the data.
-        # The root vertex will have no data, and the record UID is the same as the vertex UID.
         if discovery_parent_vertex.uid == self.dag.uid:
             parent_record_uid = discovery_parent_vertex.uid
         else:
@@ -205,15 +190,11 @@ class RecordLink:
 
     def belongs_to(self, record_uid: str, parent_record_uid: str, acl: Optional[UserAcl] = None,
                    record_name: Optional[str] = None, parent_record_name: Optional[str] = None):
-
         """
         Link vault records using record UIDs.
-
         If a link already exists, no additional link will be created.
         """
 
-        # Get the record's vertices.
-        # If a vertex does not exist, then add the vertex using the record UID
         record_vertex = self.dag.get_vertex(record_uid)
         if record_vertex is None:
             self.logger.debug(f"adding record linking vertex for record UID {record_uid} ({record_name})")
@@ -227,19 +208,15 @@ class RecordLink:
         self.logger.debug(f"record UID {record_vertex.uid} belongs to {parent_record_vertex.uid} "
                           f"({parent_record_name})")
 
-        # By default, the LINK edge will link records.
-        # If ACL information was passed in, use the ACL edge.
         edge_type = EdgeType.LINK
         if acl is not None:
             edge_type = EdgeType.ACL
 
-        # Get the current edge if it exists.
-        # We need to create it if it does not exist and only add it if the ACL changed.
         existing_edge = record_vertex.get_edge(parent_record_vertex, edge_type=edge_type)
         add_edge = True
         if existing_edge is not None and existing_edge.active is True:
             if edge_type == EdgeType.ACL:
-                content = existing_edge.content_as_object(UserAcl)  # type: UserAcl
+                content = existing_edge.content_as_object(UserAcl)
                 if content.model_dump_json() == acl.model_dump_json():
                     add_edge = False
             else:
@@ -252,8 +229,6 @@ class RecordLink:
     def get_acl(self, record_uid: str, parent_record_uid: str, record_name: Optional[str] = None,
                 parent_record_name: Optional[str] = None) -> Optional[UserAcl]:
 
-        # Get the record's vertices.
-        # If a vertex does not exist, then add the vertex using the record UID
         record_vertex = self.dag.get_vertex(record_uid)
         if record_vertex is None:
             self.logger.debug(f"adding record linking vertex for record UID {record_uid} ({record_name})")
@@ -282,7 +257,6 @@ class RecordLink:
         return self.acl_has_belong_to_record_uid(record_uid)
 
     def acl_has_belong_to_record_uid(self, record_uid: str) -> Optional[DAGVertex]:
-
         """
         Get the resource vertex for this user vertex that handles rotation. using the user's record UID.
         """
@@ -301,7 +275,6 @@ class RecordLink:
     def get_parent_record_uid(self, record_uid: str) -> Optional[str]:
         """
         Get the parent record uid.
-
         Check the ACL edges for the one where belongs_to is True
         If there is a LINK edge that leads to the parent.
         """
@@ -321,7 +294,6 @@ class RecordLink:
     def get_child_record_uids(self, record_uid: str) -> List[str]:
         """
         Get a list of child record for this parent.
-
         The list contains any parent that this record uid has a LINK or ACL edge to.
         """
 
@@ -342,7 +314,6 @@ class RecordLink:
     def get_parent_record_uids(self, record_uid: str) -> List[str]:
         """
         Get a list of parent record this child record belongs to.
-
         The list contains any parent that this record uid has a LINK or ACL edge to.
         """
 
@@ -363,7 +334,6 @@ class RecordLink:
     def get_admin_record_uid(self, record_uid: str) -> Optional[str]:
         """
         Get the record that admins this resource record.
-
         """
 
         record_vertex = self.dag.get_vertex(record_uid)
@@ -387,9 +357,6 @@ class RecordLink:
         record_vertex = self.dag.get_vertex(record_uid)
         parent_record_vertex = self.dag.get_vertex(parent_record_uid)
 
-        # Check if we got vertex for the record UIDs.
-        # Log info if we didn't.
-        # Since we are disconnecting, we are not going to treat this as a fatal error.
         if record_vertex is None:
             self.logger.info(f"for record linking, could not find the vertex for record UID {record_uid}."
                              f"  cannot disconnect from parent vertex for record UID {parent_record_uid}")
@@ -446,14 +413,12 @@ class RecordLink:
                 color = "grey"
                 style = "solid"
 
-                # To reduce the number of edges, only show the active edges
                 if edge.active is True:
                     color = "black"
                     style = "bold"
                 elif show_only_active_edges is True:
                     continue
 
-                # If the vertex is not active, gray out the DATA edge
                 if edge.edge_type == EdgeType.DATA and v.active is False:
                     color = "grey"
 
@@ -484,7 +449,6 @@ class RecordLink:
                 if show_version is True:
                     label += f"\\nv={edge.version}"
 
-                # tail, head (arrow side), label, ...
                 dot.edge(v.uid, edge.head_uid, label, style=style, fontcolor=color, color=color, tooltip=edge_tip)
 
             shape = "ellipse"

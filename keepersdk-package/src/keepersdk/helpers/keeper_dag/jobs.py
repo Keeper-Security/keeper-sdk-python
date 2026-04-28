@@ -4,7 +4,6 @@ import copy
 import logging
 import os
 from time import time
-from typing import Any, Optional
 
 
 from ..keeper_dag.dag_utils import get_connection, make_agent
@@ -20,18 +19,12 @@ class Jobs:
 
     KEY_PATH = "jobs"
 
-    # Break up the serialized delta.
-    # This is so it fits in data edge with is limit to a MySQL BLOB, 65k
-    # The content will be encrypted and base64, so this delta size needs to take that in account.
     DELTA_SIZE = 48_000
 
-    # Only keep history for the last 30 runs.
     HISTORY_LIMIT = 30
 
-    # Limit stacktrace characters
     STACKTRACE_LIMIT = 20_000
 
-    # Limit the length of the error message in JobContent
     ERROR_LIMIT = 10_000
     SUMMARY_ERROR_LIMIT = 40
 
@@ -41,7 +34,6 @@ class Jobs:
 
         self.conn = get_connection(logger=logger, **kwargs)
 
-        # This will either be a KSM Record, or Commander KeeperRecord
         self.record = record
         self._dag = None
         if logger is None:
@@ -63,7 +55,6 @@ class Jobs:
 
             self._dag = DAG(conn=self.conn,
                             record=self.record,
-                            # endpoint=PamEndpoints.DISCOVERY_JOBS,
                             graph_id=PamGraphId.DISCOVERY_JOBS,
                             auto_save=False,
                             logger=self.logger,
@@ -78,7 +69,6 @@ class Jobs:
             self._dag.load()
             self.logger.debug(f"jobs took {time() - ts} secs to load")
 
-            # Has the status been initialized?
             if not self._dag.has_graph:
                 self._dag.allow_auto_save = False
                 status = self._dag.add_vertex()
@@ -136,8 +126,6 @@ class Jobs:
             )
             current_dict = vertex.content_as_dict
 
-        # For job_history, settings will be blank/defaults.
-        # This make sure setting is set to blank, if it was None.
         for job in current_dict.get("job_history", []):
             job["settings"] = {}
 
@@ -145,10 +133,6 @@ class Jobs:
 
     def _chunk_delta_data(self, job_vertex: "DAGVertex", delta: DiscoveryDelta):
 
-        # From the job vertex we want to create vertices to hold the delta information.
-        # Break them up based on the DELTA_SIZE.
-        # Each DATA edge will contain part of the content.
-        # Each delta vertex has a path so we know the order on how to re-assemble them.
         delta_content = delta.model_dump_json()
         self.logger.debug(f"job delta content is {len(delta_content)} bytes, chunk size is {Jobs.DELTA_SIZE} bytes")
 
@@ -177,14 +161,11 @@ class Jobs:
 
         self.logger.debug("saving discovery jobs to DAG")
 
-        # Get the main vertex.
         jobs_vertex = self.dag.walk_down_path(self.data_path)
 
         clean_jobs = []
         for job in jobs.job_history:
 
-            # Does the job vertex exist?
-            # If not created it.
             job_vertex = jobs_vertex.walk_down_path(job.job_id)
             if job_vertex is None:
                 self.logger.debug(f"  create a job vertex for {job.job_id}")
@@ -193,8 +174,6 @@ class Jobs:
             else:
                 self.logger.debug(f"  job vertex for {job.job_id} exists")
 
-            # If the job has delta data, chunk save it and remove it from the JobItem.
-            # If is not store in the history anymore.
             if job.delta is not None:
                 self.logger.debug("  included discovery delta")
                 self._chunk_delta_data(job_vertex, job.delta)
@@ -202,7 +181,6 @@ class Jobs:
             else:
                 self.logger.debug("  did not include discovery delta")
 
-            # In-case the stacktrace is too large, take only a limit about of characters from the end.
             if job.stacktrace is not None:
                 self.logger.debug(f"stacktrace is {len(job.stacktrace)} characters")
                 if len(job.stacktrace) > Jobs.STACKTRACE_LIMIT:
@@ -210,19 +188,16 @@ class Jobs:
                     start = len(job.stacktrace) - Jobs.STACKTRACE_LIMIT
                     job.stacktrace = job.stacktrace[start:]
 
-            # Reduce the error message, if set, and remove stacktrace.
             if job.error is not None:
                 self.logger.debug(f"error is {len(job.error)} characters")
                 if len(job.error) > Jobs.ERROR_LIMIT:
                     self.logger.debug(f"  error too long; truncate to {Jobs.ERROR_LIMIT} characters")
                     job.error = job.error[:Jobs.ERROR_LIMIT] + "..."
 
-            # Store the full JobItem (minus delta) on the job vertex.
             job_vertex.add_data(
                 content=job
             )
 
-            # Reduce the error message, if set, and remove stacktrace.
             if job.error is not None and len(job.error) > Jobs.SUMMARY_ERROR_LIMIT:
                 job.error = job.error[:Jobs.SUMMARY_ERROR_LIMIT] + "..."
             job.stacktrace = None
@@ -230,8 +205,6 @@ class Jobs:
 
             clean_jobs.append(job)
 
-        # Store the JobContent, with reduced JobItems, on the main vertex.
-        # This still has the actives and list of job history.
         jobs.job_history = clean_jobs
         jobs_vertex.add_data(
             content=jobs
@@ -247,10 +220,8 @@ class Jobs:
 
         self.logger.debug("clean up job history and migrate discovery delta")
 
-        # The oldest will be first (lower start_ts, older the job)
         job_history = sorted(job_history, key=lambda j: j.start_ts)
 
-        # Limit the number of job history to the last few jobs.
         while (len(list(job_history))) > limit:
             job = job_history[0]
             self.logger.debug(f"remove job {job.job_id} item")
@@ -276,14 +247,12 @@ class Jobs:
         if settings is None:
             settings = Settings()
         else:
-            # We want to remove the user_map, because it may contain a lot of data; It might break the graph.
-            # Make a copy of settings, remove the user map, and save this version of settings.
+
             settings = copy.deepcopy(settings)
             settings.user_map = None
 
         jobs = self.get_jobs()
 
-        # The -1 is for the new job we are going to add. When done we are done starting the job have the limit.
         job_history = self._remove_old_history(jobs.job_history, limit=Jobs.HISTORY_LIMIT - 1)
 
         new_job = JobItem(
@@ -292,10 +261,6 @@ class Jobs:
             settings=settings,
             resource_uid=resource_uid,
             conversation_id=conversation_id,
-
-            # Create a blank discovery delta.
-            # Commander has a bug where it needs at least one.
-            # It will be overwritten when the job is finished.
             delta=DiscoveryDelta()
         )
         jobs.active_job_id = new_job.job_id
@@ -318,14 +283,11 @@ class Jobs:
                 job_vertex = self.dag.walk_down_path(path=f"{self.data_path}/{job.job_id}")
                 if job_vertex is not None:
 
-                    # Get the job item from the job vertex DATA edge.
-                    # Replace the one from the job history if we have it.
                     try:
                         job = job_vertex.content_as_object(JobItem)
                     except Exception as err:
                         self.logger.debug(f"could not find job item on job vertex, use job histry entry: {err}")
 
-                    # If the job delta is None, check to see if it chunked as vertices.
                     delta_lookup = {}
                     vertices = job_vertex.has_vertices()
                     self.logger.debug(f"found {len(vertices)} delta vertices")
@@ -334,8 +296,7 @@ class Jobs:
                         delta_lookup[int(edge.path)] = vertex
 
                     json_value = ""
-                    # Sort numerically increasing and then append their content.
-                    # This will re-assemble the JSON
+
                     for key in sorted(delta_lookup):
                         json_value += delta_lookup[key].content_as_str
                     if json_value != "":
@@ -344,7 +305,6 @@ class Jobs:
                 else:
                     self.logger.debug("could not find job vertex")
 
-                # If settings was not set, then set it the default.
                 if job.settings is None:
                     job.settings = Settings()
 
@@ -457,14 +417,12 @@ class Jobs:
                 color = "grey"
                 style = "solid"
 
-                # To reduce the number of edges, only show the active edges
                 if edge.active:
                     color = "black"
                     style = "bold"
                 elif show_only_active_edges:
                     continue
 
-                # If the vertex is not active, gray out the DATA edge
                 if edge.edge_type == EdgeType.DATA:
                     if not v.active:
                         color = "grey"

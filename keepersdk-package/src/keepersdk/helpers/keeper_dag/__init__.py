@@ -29,14 +29,12 @@ class ConnectionBase:
                  use_read_protobuf: bool = False,
                  use_write_protobuf: bool = False):
 
-        # device is a gateway device if is_device is False then we use user authentication flow
         self.is_device = is_device
 
         if logger is None:
             logger = logging.getLogger()
         self.logger = logger
 
-        # Debug tool; log transaction to the file
         if log_transactions is not None:
             self.log_transactions = dag_utils.value_to_boolean(log_transactions)
         else:
@@ -53,7 +51,6 @@ class ConnectionBase:
         self.use_read_protobuf = use_read_protobuf
         self.use_write_protobuf = use_write_protobuf
 
-        # This should stay none for KSM
         self.transmission_key = None
 
     def close(self):
@@ -108,7 +105,6 @@ class ConnectionBase:
         :return:
         """
 
-        # Make sure endpoint is /path/to/endpoint; starting / and no ending /
         if endpoint is not None and endpoint != "":
             if isinstance(endpoint, Enum):
                 endpoint = endpoint.value
@@ -140,7 +136,6 @@ class ConnectionBase:
                               request: Optional[Any] = None,
                               response: Optional[Any] = None,
                               error: Optional[str] = None):
-        # If log transaction is True, we want to append to the log file.
 
         if self.log_transactions is True:
 
@@ -264,7 +259,7 @@ class ConnectionBase:
                  agent: Optional[str] = None):
 
         if agent is None:
-            f"keeper-dag/{dag_version.__version__}"
+            f"keeper-dag/{dag_version}"
 
         endpoint = self._endpoint(ConnectionBase.ADD_DATA, endpoint)
         self.logger.debug(f"endpoint {endpoint}")

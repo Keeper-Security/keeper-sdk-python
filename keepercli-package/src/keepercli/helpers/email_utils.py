@@ -1,3 +1,4 @@
+import sys
 from abc import ABC, abstractmethod
 import os
 from typing import Any, Dict, List, Optional
@@ -650,7 +651,7 @@ class GmailOAuthProvider(EmailProvider):
 
     def _load_credentials(self):
         """Load OAuth credentials from config."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         if not self.config.oauth_access_token:
             raise ValueError("Gmail OAuth access token is required")
@@ -1050,16 +1051,16 @@ def find_email_config_record(vault: vault_online.VaultOnline, name: str) -> Opti
     Returns:
         Record UID if found, None otherwise
     """
-    for record_uid in vault.vault_data.records:
+    for record_uid in vault.vault_data._records:
         record = vault.vault_data.load_record(record_uid)
         if not isinstance(record, vault_record.TypedRecord):
             continue
         if record.record_type != 'login':
             continue
 
-        # Check if this is an email config by looking for custom field
         try:
-            record_dict = vault_extensions.extract_typed_record_data(record)
+            record_type = vault.vault_data.get_record_type_by_name(record.record_type)
+            record_dict = vault_extensions.extract_typed_record_data(record, record_type)
             custom_fields = record_dict.get('custom', [])
             for field in custom_fields:
                 if field.get('type') == 'text' and field.get('label') == '__email_config__':
@@ -1092,10 +1093,9 @@ def load_email_config_from_record(vault: vault_online.VaultOnline, record_uid: s
     if not isinstance(record, vault_record.TypedRecord):
         raise ValueError(f'Record {record_uid} is not a typed record')
 
-    # Extract record data
-    record_dict = vault_extensions.extract_typed_record_data(record)
+    record_type = vault.vault_data.get_record_type_by_name(record.record_type)
+    record_dict = vault_extensions.extract_typed_record_data(record, record_type)
 
-    # Get login/password fields
     fields = record_dict.get('fields', [])
     login = None
     password = None
@@ -1110,20 +1110,18 @@ def load_email_config_from_record(vault: vault_online.VaultOnline, record_uid: s
             if values:
                 password = values[0]
 
-    # Get custom fields with provider configuration
     custom_fields = record_dict.get('custom', [])
     provider_data = {}
 
     for field in custom_fields:
         label = field.get('label', '')
         if label.startswith('__email_'):
-            continue  # Skip marker fields
+            continue
 
         values = field.get('value', [])
         if values:
             provider_data[label] = values[0]
 
-    # Build EmailConfig
     provider = provider_data.get('provider', 'smtp')
 
     config = EmailConfig(
@@ -1134,7 +1132,6 @@ def load_email_config_from_record(vault: vault_online.VaultOnline, record_uid: s
         from_name=provider_data.get('from_name', 'Keeper Commander')
     )
 
-    # Provider-specific fields
     if provider == 'smtp':
         config.smtp_host = provider_data.get('smtp_host')
         config.smtp_port = int(provider_data.get('smtp_port', 587))
@@ -1152,11 +1149,10 @@ def load_email_config_from_record(vault: vault_online.VaultOnline, record_uid: s
         config.sendgrid_api_key = password or provider_data.get('sendgrid_api_key')
 
     elif provider in ('gmail-oauth', 'microsoft-oauth'):
-        # OAuth tokens stored in login/password fields
+
         config.oauth_access_token = login
         config.oauth_refresh_token = password
 
-        # OAuth configuration from custom fields
         config.oauth_client_id = provider_data.get('oauth_client_id')
         config.oauth_client_secret = provider_data.get('oauth_client_secret')
         config.oauth_token_expiry = provider_data.get('oauth_token_expiry')
@@ -1188,17 +1184,14 @@ def build_onboarding_email(
     Raises:
         FileNotFoundError: If email template not found
     """
-    # Load template
     template = load_email_template('onboarding.html')
 
-    # Prepare variables
     expiration_text = (
         f"This link will expire in {expiration}"
         if expiration
         else "This link will expire after first use"
     )
 
-    # Fill in template
     html = template.format(
         custom_message=custom_message,
         share_url=share_url,
@@ -1222,7 +1215,6 @@ def load_email_template(template_name: str = 'onboarding.html') -> str:
     Raises:
         FileNotFoundError: If template file doesn't exist
     """
-    # Get path to template file
     module_dir = os.path.dirname(os.path.abspath(__file__))
     template_path = os.path.join(module_dir, 'resources', 'email_templates', template_name)
 
@@ -1264,7 +1256,7 @@ def validate_email_provider_dependencies(provider: str) -> tuple[bool, Optional[
     # SendGrid
     if provider == 'sendgrid':
         try:
-            import sendgrid  # noqa: F401
+            import sendgrid
             return True, None
         except ImportError:
             return False, (
@@ -1276,7 +1268,7 @@ def validate_email_provider_dependencies(provider: str) -> tuple[bool, Optional[
     # AWS SES
     if provider == 'ses':
         try:
-            import boto3  # noqa: F401
+            import boto3
             return True, None
         except ImportError:
             return False, (
@@ -1285,13 +1277,12 @@ def validate_email_provider_dependencies(provider: str) -> tuple[bool, Optional[
                 "Or install manually: pip install boto3>=1.26.0"
             )
 
-    # Gmail OAuth
     if provider == 'gmail-oauth':
         try:
-            import google.auth  # noqa: F401
-            import google.auth.transport.requests  # noqa: F401
-            import google.oauth2.credentials  # noqa: F401
-            import googleapiclient.discovery  # noqa: F401
+            import google.auth
+            import google.auth.transport.requests
+            import google.oauth2.credentials
+            import googleapiclient.discovery
             return True, None
         except ImportError:
             return False, (
@@ -1303,7 +1294,7 @@ def validate_email_provider_dependencies(provider: str) -> tuple[bool, Optional[
     # Microsoft OAuth
     if provider == 'microsoft-oauth':
         try:
-            import msal  # noqa: F401
+            import msal
             return True, None
         except ImportError:
             return False, (
@@ -1339,26 +1330,22 @@ def update_oauth_tokens_in_record(vault: vault_online.VaultOnline, record_uid: s
     Raises:
         CommandError: If record not found or update fails
     """
-    # Load the record
     if record_uid not in vault.vault_data.records:
         vault.sync_down(force=True)
 
     if record_uid not in vault.vault_data.records:
         raise ValueError(f'Email configuration record not found: {record_uid}')
 
-    # Load as TypedRecord
     record = vault.vault_data.load_record(record_uid)
     if not isinstance(record, vault_record.TypedRecord):
         raise ValueError(f'Record is not a TypedRecord: {record_uid}')
 
-    # Update token fields (login = access_token, password = refresh_token)
     for field in record.fields:
         if field.type == 'login':
             field.value = [access_token]
         elif field.type == 'password':
             field.value = [refresh_token]
 
-    # Update token expiry in custom fields
     expiry_field_found = False
     for field in record.custom:
         if field.label == 'oauth_token_expiry':
@@ -1366,14 +1353,11 @@ def update_oauth_tokens_in_record(vault: vault_online.VaultOnline, record_uid: s
             expiry_field_found = True
             break
 
-    # Add expiry field if it doesn't exist
     if not expiry_field_found:
         record.custom.append(vault_record.TypedField.create_field(field_type='text', field_label='oauth_token_expiry', required=False))
 
-    # Update the record
     record_management.update_record(vault, record)
 
-    # Sync changes
     vault.sync_down(force=True)
 
     logging.debug(f'[EMAIL-CONFIG] Updated OAuth tokens for record: {record_uid}')

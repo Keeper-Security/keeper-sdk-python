@@ -122,9 +122,6 @@ class EdgeType(BaseEnum):
     DENIAL = "denial"
     UNDENIAL = "undenial"
 
-    # To store discovery, you would need data and key. To store relationships between records after the discovery
-    # data was converted, you use Link.
-
     def __str__(self) -> str:
         return str(self.value)
 
@@ -217,16 +214,11 @@ class UserAclRotationSettings(BaseModel):
 
 
 class UserAcl(BaseModel):
-    # Is this user's password/private key managed by this resource?
-    # This should be unique for all the ACL edges of this user vertex; only one ACL edge should have a True value.
+
     belongs_to: bool = False
 
-    # Is this user an admin for the resource?
-    # This can be set True for multiple ACL edges; a user can be admin on multiple resources.
     is_admin: bool = False
 
-    # Is this user a cloud-based user?
-    # This will only be True if the ACL of the PAM User connects to a configuration vertex.
     is_iam_user: Optional[bool] = False
 
     rotation_settings: Optional[UserAclRotationSettings] = None
@@ -253,8 +245,6 @@ class DiscoveryConfiguration(DiscoveryItem):
     type: str
     info: dict
 
-    # Configurations never allows an admin user.
-    # This should always be False.
     allows_admin: bool = False
 
 
@@ -269,13 +259,10 @@ class DiscoveryUser(DiscoveryItem):
     expired: bool = False
     source: Optional[str] = None
 
-    # Normally these do not get set, except for the access_user.
     password: Optional[str] = None
     private_key: Optional[str] = None
     private_key_passphrase: Optional[str] = None
 
-    # Simple flag, for access user in discovery, that states could connect with creds.
-    # Local connection might not have passwords, so this is our flag to indicate that the user connected.
     could_login: Optional[bool] = False
 
 
@@ -384,19 +371,12 @@ class DiscoveryObject(BaseModel):
     error: Optional[str] = None
     stacktrace: Optional[str] = None
 
-    # If the object is missing, this will show a timestamp on when it went missing.
     missing_since_ts: Optional[int] = None
 
-    # Should this object be deleted? This does not prevent user from deleting, but prevents automated processed from
-    #  deleting.
     allow_delete: bool = False
 
-    # This is not the official admin.
-    # This is the user discovery used to access to the resource.
-    # This will be used to help the user create an admin user.
     access_user: Optional[DiscoveryUser] = None
 
-    # Specific information for a record type.
     item: Union[DiscoveryConfiguration, DiscoveryUser, DiscoveryMachine, DiscoveryDatabase, DiscoveryDirectory]
 
     @property
@@ -454,7 +434,7 @@ class DiscoveryObject(BaseModel):
       
 
 class CredentialBase(BaseModel):
-    # Use Any because it might be a str or Secret, but Secret is defined to discover-and_rotation.
+
     user: Optional[Any] = None
     dn: Optional[Any] = None
     password: Optional[Any] = None
@@ -492,7 +472,6 @@ class Settings(BaseModel):
     skip_directories: bool = False
     skip_cloud_users: bool = False
 
-    # For now, don't delete anything.
     allow_resource_deletion: bool = False
     allow_user_deletion: bool = False
 
@@ -536,7 +515,6 @@ class JobItem(BaseModel):
 
     sync_point: Optional[int] = None
 
-    # Stored chunked, in multiple DATA edges
     delta: Optional[DiscoveryDelta] = None
 
     @property
@@ -569,8 +547,6 @@ class JobItem(BaseModel):
 
     @property
     def is_running(self):
-        # If no end timestamp, and there is a start timestamp, and the job has not been processed, and there is no
-        # success is running.
         return self.end_ts is None and self.start_ts is not None and self.success is None
   
 
@@ -614,9 +590,6 @@ class RuleItem(BaseModel):
     case_sensitive: bool = True
     statement: List[Statement]
 
-    # Do not set this.
-    # This needs to be here for the RuleEngine.
-    # The RuleEngine will set this to its self.
     engine_rule: Optional[object] = None
 
     @property
@@ -755,42 +728,31 @@ class PromptResult(BaseModel):
     # Existing record that should be the admin.
     record_uid: Optional[str] = None
 
-    # Is this is a pamUser and a directory user?
     is_directory_user: bool = False
 
-    # Note to include with record
     note:  Optional[str] = None
 
 
 class BulkRecordAdd(BaseModel):
 
-    # The title of the record.
-    # This is used for debug reasons.
     title: str
 
-    # Record note
     note: Optional[str] = None
 
-    # This could be a Commander KeeperRecord, Commander RecordAdd, NormalizedRecord, or KSM Record
     record: Any
     record_type: str
 
-    # If record_type is a PAM User, is this user the admin of the resource?
     admin_uid: Optional[str] = None
 
-    # Normal record UID strings
     record_uid: str
     parent_record_uid: Optional[str] = None
 
-    # The shared folder UID where the record should be created.
     shared_folder_uid: str
 
 
 class BulkRecordConvert(BaseModel):
     record_uid: str
     parent_record_uid: Optional[str] = None
-
-    # Record note
     note: Optional[str] = None
 
 

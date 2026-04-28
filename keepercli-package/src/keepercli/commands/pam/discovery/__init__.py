@@ -12,7 +12,7 @@ from ....helpers import router_utils
 from ....helpers.gateway_utils import get_all_gateways
 from ..pam_config import PAM_CONFIG_RECORD_TYPES
 
-from keepersdk.vault import vault_record, vault_online
+from keepersdk.vault import ksm_management, vault_record, vault_online
 from keepersdk.helpers.pam_config_facade import PamConfigurationRecordFacade
 from keepersdk.helpers.keeper_dag.constants import PAM_USER, PAM_MACHINE, PAM_DATABASE, PAM_DIRECTORY
 from keepersdk.proto import pam_pb2, APIRequest_pb2
@@ -45,20 +45,16 @@ class GatewayContext:
     In the configuration record, the gateway is selected.
     This means multiple configuration can use the same gateway.
     Commander is gateway centric, we need to treat gateway and configuration as a `primary key`
-
-    Since we get the configuration record from the vault, go through each of them and see if that gateway
-      is only used by one configuration.
-    If it is, then that gateway and configuration pair are used.
-    If there are multiple configuration, we need to throw an MultiConfigurationException.
-
     """
 
     def __init__(self, configuration: vault_record.KeeperRecord, facade: PamConfigurationRecordFacade,
-                 gateway: pam_pb2.PAMController, application: vault_record.ApplicationRecord):
+                 gateway: pam_pb2.PAMController, application: vault_record.ApplicationRecord,
+                 vault: vault_online.VaultOnline):
         self.configuration = configuration
         self.facade = facade
         self.gateway = gateway
         self.application = application
+        self._vault = vault
         self._shared_folders = None
 
     @staticmethod
@@ -68,11 +64,9 @@ class GatewayContext:
     @staticmethod
     def find_gateway(vault: vault_online.VaultOnline, find_func: Callable, gateways: Optional[List] = None) \
             -> Tuple[Optional["GatewayContext"], Any]:
-
         """
         Populate the context from matching using the function passed in.
         The function needs to return a non-None value to be considered a positive match.
-
         """
         if gateways is None:
             gateways = GatewayContext.all_gateways(vault)
@@ -95,12 +89,9 @@ class GatewayContext:
     @staticmethod
     def from_configuration_uid(vault: vault_online.VaultOnline, configuration_uid: str, gateways: Optional[List] = None) \
             -> Optional["GatewayContext"]:
-
         """
         Populate context using the configuration UID.
-
         From the configuration record, get the gateway from the settings.
-
         """
 
         if gateways is None:
@@ -129,29 +120,26 @@ class GatewayContext:
             configuration=configuration_record,
             facade=configuration_facade,
             gateway=gateway,
-            application=application
+            application=application,
+            vault=vault
         )
 
     @staticmethod
     def from_gateway(vault: vault_online.VaultOnline, gateway: str, configuration_uid: Optional[str] = None) \
             -> Optional["GatewayContext"]:
-
         """
         Populate context use the gateway, and optional configuration UID.
 
         This will scan all configuration to find which ones use this gateway.
         If there are multiple ones, a MultiConfigurationException is thrown.
         If there is only one gateway, then that gateway is used.
-
         """
-        # Get all the PAM configuration records in the Vault; not Application
         configuration_records = list(vault.vault_data.find_records(
             criteria=None, record_type=PAM_CONFIG_RECORD_TYPES, record_version=6))
 
         if configuration_uid:
             logger.debug(f"find the gateway with configuration record {configuration_uid}")
 
-        # You get this if the user has not setup any PAM related records.
         if len(configuration_records) == 0:
             logger.error(f"Cannot find any PAM configuration records in the Vault")
             return None
@@ -179,8 +167,6 @@ class GatewayContext:
                 logger.debug(f" * configuration does not use desired gateway")
                 continue
 
-            # If the configuration_uid was passed in, and we find it, just set the found items to this
-            #   configuration and stop checking for more.
             if configuration_uid is not None and configuration_uid == configuration_record.record_uid:
                 logger.debug(f" * configuration record uses this gateway and matches desire configuration, "
                               "skipping the rest")
@@ -222,7 +208,8 @@ class GatewayContext:
                     configuration=configuration_record,
                     facade=configuration_facade,
                     gateway=found_gateway,
-                    application=application
+                    application=application,
+                    vault=vault
                 )
 
         return None
@@ -253,37 +240,49 @@ class GatewayContext:
         if self._shared_folders is None:
             self._shared_folders = []
             application_uid = utils.base64_url_encode(self.gateway.applicationUid)
-            app_info = vault.vault_data.load_record(application_uid)
-            for info in app_info:
-                if info.shares is None:
+            app_infos = ksm_management.get_app_info(vault, application_uid)
+            if not app_infos:
+                return self._shared_folders
+            for shared in getattr(app_infos[0], 'shares', None) or []:
+                if APIRequest_pb2.ApplicationShareType.Name(shared.shareType) != 'SHARE_TYPE_FOLDER':
                     continue
-                for shared in info.shares:
-                    uid_str = utils.base64_url_encode(shared.secretUid)
-                    shared_type = APIRequest_pb2.ApplicationShareType.Name(shared.shareType)
-                    if shared_type == 'SHARE_TYPE_FOLDER':
-                        if uid_str not in vault.vault_data._shared_folders:
-                            continue
-                        cached_shared_folder = vault.vault_data._shared_folders[uid_str]
-                        self._shared_folders.append({
-                            "uid": uid_str,
-                            "name": cached_shared_folder.get('name_unencrypted'),
-                            "folder": cached_shared_folder
-                        })
+                uid_str = utils.base64_url_encode(shared.secretUid)
+                sf_info = vault.vault_data.get_shared_folder(uid_str)
+                if sf_info is None:
+                    continue
+                full_sf = vault.vault_data.load_shared_folder(uid_str)
+                records: List[Dict[str, str]] = []
+                if full_sf is not None:
+                    records = [{"record_uid": rp.record_uid} for rp in full_sf.record_permissions]
+                self._shared_folders.append({
+                    "uid": uid_str,
+                    "name": sf_info.name,
+                    "folder": {"records": records},
+                })
         return self._shared_folders
+
+    def _configuration_record_key(self) -> bytes:
+        key = self._vault.vault_data.get_record_key(self.configuration.record_uid)
+        if not key:
+            raise RuntimeError(
+                f'No record key for PAM configuration {self.configuration.record_uid!r}; '
+                f'ensure the vault is unlocked and records are synced.'
+            )
+        return key
 
     def decrypt(self, cipher_base64: bytes) -> dict:
         ciphertext = base64.b64decode(cipher_base64.decode())
-        return json.loads(decrypt_aes_v2(ciphertext, self.configuration.record_key))
+        return json.loads(decrypt_aes_v2(ciphertext, self._configuration_record_key()))
 
     def encrypt(self, data: dict) -> str:
         json_data = json.dumps(data)
-        ciphertext = encrypt_aes_v2(json_data.encode(), self.configuration.record_key)
+        ciphertext = encrypt_aes_v2(json_data.encode(), self._configuration_record_key())
         return base64.b64encode(ciphertext).decode()
 
     def encrypt_str(self, data: Union[bytes, str]) -> str:
         if isinstance(data, str):
             data = data.encode()
-        ciphertext = encrypt_aes_v2(data, self.configuration.record_key)
+        ciphertext = encrypt_aes_v2(data, self._configuration_record_key())
         return base64.b64encode(ciphertext).decode()
 
     @staticmethod
@@ -299,19 +298,17 @@ class GatewayContext:
 
         configuration_list = []
         if dag_utils.value_to_boolean(os.environ.get("PAM_RECORD_TYPE_MATCH")):
-            for record in list(vault.vault_data.find_records(record_version=iter([3, 6]))):
+            for record in list(vault.vault_data.find_records(record_version=iter([3, 6]), record_type=None)):
                 if re.search(r"pam.+Configuration", record.record_type):
                     configuration_list.append(record)
         else:
-            configuration_list = list(vault.vault_data.find_records(record_version=6))
+            configuration_list = list(vault.vault_data.find_records(record_version=6, record_type=None))
         return configuration_list
 
 
 class PAMGatewayActionDiscoverCommandBase(base.ArgparseCommand):
-
     """
     The discover command base.
-
     Contains static methods to get the configuration record, get and update the discovery store. These are methods
     used by multiple discover actions.
     """
@@ -369,7 +366,6 @@ class PAMGatewayActionDiscoverCommandBase(base.ArgparseCommand):
     @staticmethod
     def _n(record_type):
         return PAMGatewayActionDiscoverCommandBase.type_name_map.get(record_type, "PAM Configuration")
-
 
 
 def multi_conf_msg(gateway: str, err: MultiConfigurationException):

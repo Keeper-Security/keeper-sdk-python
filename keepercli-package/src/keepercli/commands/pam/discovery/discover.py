@@ -19,8 +19,8 @@ from ..pam_config import PAM_CONFIG_RECORD_TYPES
 from keepersdk.helpers.pam_user_record_facade import PamUserRecordFacade
 from keepersdk.helpers.keeper_dag.jobs import Jobs
 from keepersdk.helpers.keeper_dag.dag_types import (CredentialBase, DiscoveryDelta, DiscoveryObject, JobItem, UserAcl, DirectoryInfo, 
-                BulkRecordConvert, BulkRecordAdd, BulkRecordSuccess, BulkRecordFail, BulkProcessResults, NormalizedRecord, BulkRecordFail, PromptResult,
-                PromptActionEnum)
+                BulkRecordConvert, BulkRecordAdd, BulkRecordSuccess, BulkProcessResults, NormalizedRecord, BulkRecordFail, PromptResult,
+                PromptActionEnum, RecordField)
 from keepersdk.helpers.keeper_dag.dag_vertex import DAGVertex
 from keepersdk.helpers.keeper_dag.dag import DAG
 from keepersdk.helpers.keeper_dag.dag_sort import sort_infra_vertices
@@ -28,7 +28,7 @@ from keepersdk.helpers.keeper_dag.constants import VERTICES_SORT_MAP, DIS_INFRA_
 from keepersdk.helpers.keeper_dag.infrastructure import Infrastructure
 from keepersdk.helpers.keeper_dag.process import Process, NoDiscoveryDataException, QuitException
 from keepersdk.helpers.keeper_dag.record_link import RecordLink
-from keepersdk.vault import record_types, vault_extensions, vault_online, vault_record
+from keepersdk.vault import vault_extensions, vault_online, vault_record
 from keepersdk.proto import pam_pb2, record_pb2, router_pb2
 
 logger = api.get_logger()
@@ -37,9 +37,7 @@ logger = api.get_logger()
 class PAMGatewayActionDiscoverJobStatusCommand(PAMGatewayActionDiscoverCommandBase):
     """
     Get the status of discovery jobs.
-
     If no parameters are given, it will check all gateways for discovery job status.
-
     """
 
     def __init__(self):
@@ -62,14 +60,6 @@ class PAMGatewayActionDiscoverJobStatusCommand(PAMGatewayActionDiscoverCommandBa
     def print_job_table(jobs: List[Dict],
                         max_gateway_name: int,
                         show_history: bool = False):
-
-        """
-        Print jobs in a table.
-
-        This method takes a list of dictionary item which contains the cooked job information.
-
-        """
-
         logger.info("")
         logger.info(f"{'Job ID'.ljust(14, ' ')} "
               f"{'Gateway Name'.ljust(max_gateway_name, ' ')} "
@@ -200,7 +190,6 @@ class PAMGatewayActionDiscoverJobStatusCommand(PAMGatewayActionDiscoverCommandBa
             logger.info(f"Completed: {job.end_ts_str}")
             logger.info(f"Duration: {job.duration_sec_str}")
 
-            # If it failed, show the error and stacktrace.
             if status == "FAILED":
                 logger.info("")
                 logger.info(f"Gateway Error:")
@@ -208,7 +197,7 @@ class PAMGatewayActionDiscoverJobStatusCommand(PAMGatewayActionDiscoverCommandBa
                 logger.info("")
                 logger.info(f"Gateway Stacktrace:")
                 logger.info(f"{job.stacktrace}")
-            # If it finished, show information about what was discovered.
+
             elif job.end_ts is not None:
 
                 try:
@@ -264,38 +253,25 @@ class PAMGatewayActionDiscoverJobStatusCommand(PAMGatewayActionDiscoverCommandBa
         
         vault = context.vault
 
-        # If this is set, only show status for this gateway and history for this gateway.
         gateway_filter = kwargs.get("gateway")
 
-        # If this is set, only show detailed information about this job.
         job_id = kwargs.get("job_id")
 
-        # Show the history for the gateway.
-        # gateway_filter needs to be set for
         show_history = kwargs.get("show_history")
 
-        # Get all the gateways here so we don't have to keep calling this method.
-        # It gets passed into find_gateway, and find_gateway will pass it around.
         all_gateways = GatewayContext.all_gateways(vault)
 
-        # If we are showing all gateways, disable show history.
-        # History is shown for a specific gateway.
         if gateway_filter is None:
             show_history = False
 
         # This is used to format the table. Start with a length of 12 characters for the gateway.
         max_gateway_name = 12
 
-        # If we have a job id, only display information about the one job
         if job_id:
             self.print_job_detail(vault=vault,
                                   all_gateways=all_gateways,
                                   job_id=job_id)
-
-        # Else show jobs in a table
         else:
-
-            # Based on parameters set by user, select specific jobs to be displayed.
             selected_jobs = []  # type: List[Dict]
 
             # For each configuration/ gateway, we are going to get all jobs.
@@ -313,11 +289,10 @@ class PAMGatewayActionDiscoverJobStatusCommand(PAMGatewayActionDiscoverCommandBa
                 if gateway_context is None:
                     continue
 
-                # If we are using a gateway filter, and this gateway is not the one, then go onto the next conf/gateway.
                 if gateway_filter is not None and gateway_context.is_gateway(gateway_filter) is False:
                     continue
 
-                # If the gateway name is longer that the prior, set the max length to this gateway's name.
+                # If the gateway name is longer than the prior, set the max length to this gateway's name.
                 if len(gateway_context.gateway_name) > max_gateway_name:
                     max_gateway_name = len(gateway_context.gateway_name)
 
@@ -344,7 +319,6 @@ class PAMGatewayActionDiscoverJobStatusCommand(PAMGatewayActionDiscoverCommandBa
                     job["gateway_uid"] = gateway_context.gateway_uid
                     job["configuration_uid"] = gateway_context.configuration_uid
 
-                    # This is needs for details
                     job["gateway_context"] = gateway_context
                     job["job_item"] = job_item
 
@@ -365,7 +339,7 @@ class PAMGatewayActionDiscoverJobStatusCommand(PAMGatewayActionDiscoverCommandBa
                                  show_history=show_history)
 
 
-class PAMGatewayActionDiscoverJobStartCommand(base.ArgparseCommand):
+class PAMGatewayActionDiscoverJobStartCommand(PAMGatewayActionDiscoverCommandBase):
     def __init__(self):
         parser = argparse.ArgumentParser(prog='pam action discover start')
         PAMGatewayActionDiscoverJobStartCommand.add_arguments_to_parser(parser)
@@ -500,7 +474,7 @@ class PAMGatewayActionDiscoverJobStartCommand(base.ArgparseCommand):
                 self.make_protobuf_user_map(
                     context=context,
                     gateway_context=gateway_context
-                )
+                )[0]
             ),
 
             shared_folder_uid=gateway_context.default_shared_folder_uid,
@@ -550,8 +524,6 @@ class PAMGatewayActionDiscoverJobStartCommand(base.ArgparseCommand):
         Make a user map for PAM Users.
 
         The map is used to find existing records.
-        Since KSM cannot read the rotation settings using protobuf,
-          it cannot match a vault record to a discovered users.
         This map will map a login/DN and parent UID to a record UID.
         """
 
@@ -605,8 +577,6 @@ class PAMGatewayActionDiscoverJobRemoveCommand(PAMGatewayActionDiscoverCommandBa
 
         job_id = kwargs.get("job_id")
 
-        # Get all the gateways here so we don't have to keep calling this method.
-        # It gets passed into find_gateway, and find_gateway will pass it around.
         all_gateways = GatewayContext.all_gateways(vault)
 
         def _find_job(configuration_record) -> Optional[Dict]:
@@ -624,9 +594,7 @@ class PAMGatewayActionDiscoverJobRemoveCommand(PAMGatewayActionDiscoverCommandBa
 
         if gateway_context is not None:
             jobs = payload["jobs"]
-
             try:
-                # First, cancel the running discovery job if it is running.
                 logger.debug("cancel job on the gateway, if running")
                 action_inputs = GatewayActionDiscoverJobRemoveInputs(
                     configuration_uid=gateway_context.configuration_uid,
@@ -734,8 +702,7 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
                            record: vault_record.TypedRecord) -> List[str]:
         """
         For the record, get the values of fields that are key for this record type.
-
-        :param params:
+        :param context:
         :param gateway_context:
         :param record:
         :return:
@@ -764,10 +731,6 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
                 keys.append(host.lower())
 
         elif key_field == "user":
-
-            # This is user protobuf values.
-            # We could make this also use record linking if we stop using protobuf.
-
             record_rotation = context.get_record_rotation(record.record_uid)
             if record_rotation is not None:
                 controller_uid = record_rotation.configuration_uid
@@ -789,15 +752,12 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
 
     @staticmethod
     def _record_lookup(record_uid: str,  context:KeeperParams) -> Optional[NormalizedRecord]:
-
         """
         Get the record from the Vault, normalize it, and return it.
-
-        Since common code is using this method we want to flatten/abstract the KeeperRecord/TypedRecord.
         """
 
         vault = context.vault
-        record = vault.vault_data.load_record(record_uid)
+        record = vault.vault_data.get_record(record_uid)
         if record is None:
             return None
 
@@ -806,37 +766,36 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
             record_type=record.record_type,
             title=record.title,
         )
-        for field in record.fields:
-            normalized_record.fields.append(
-                record_types.RecordField(
-                    type=field.type,
-                    label=field.label,
-                    value=field.value,
-                )
+
+        record = vault.vault_data.load_record(record_uid)
+        if not isinstance(record, vault_record.TypedRecord):
+            return normalized_record
+
+        def _typed_to_normalized(tf: vault_record.TypedField) -> RecordField:
+            v = tf.value
+            if not isinstance(v, list):
+                v = [v] if v not in (None, '', []) else []
+            return RecordField(
+                type=tf.type,
+                label=(tf.label or None),
+                value=list(v),
+                required=tf.required,
             )
-        if record.custom is not None:
-            for field in record.custom:
-                normalized_record.fields.append(
-                    record_types.RecordField(
-                        type=field.type,
-                        label=field.label,
-                        value=field.value,
-                    )
-                )
+
+        for field in record.fields:
+            normalized_record.fields.append(_typed_to_normalized(field))
+        for field in (record.custom or ()):
+            normalized_record.fields.append(_typed_to_normalized(field))
         return normalized_record
 
     def _build_record_cache(self, context: KeeperParams, gateway_context: GatewayContext) -> dict:
-
         """
         Make a lookup cache for all the records.
-
         This is used to flag discovered items as existing if the record has already been added. This is used to
         prevent duplicate records being added.
         """
-
         logger.debug(f"building the PAM record cache")
 
-        # Make a cache of existing record by the criteria per record type
         cache = {
             "pamUser": {},
             "pamMachine": {},
@@ -849,11 +808,9 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
         # Set all the PAM Records
         records = vault.vault_data.find_records(criteria="pam*", record_type=None, record_version=None)
         for record in records:
-            # If the record type is not part of the cache, skip the record
             if record.record_type not in cache:
                 continue
 
-            # Load the full record
             record = vault.vault_data.load_record(record.record_uid)
 
             cache_keys = self.get_keys_by_record(
@@ -864,8 +821,9 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
             if len(cache_keys) == 0:
                 continue
 
+            record_info = vault.vault_data.get_record(record.record_uid)
             for cache_key in cache_keys:
-                cache[record.record_type][cache_key] = record.record_uid
+                cache[record_info.record_type][cache_key] = record.record_uid
 
         return cache
 
@@ -873,16 +831,13 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
 
         edit_label = input(f"{pad}Enter 'title' or the name of the Label to edit, RETURN to cancel> ")
 
-        # Just pressing return exits the edit
         if edit_label == "":
             return False
 
-        # If the "title" is entered, then edit the title of the record.
         if edit_label.lower() == "title":
             new_title = input(f"{pad}Enter new title> ")
             content.title = new_title
 
-        # If a field label is entered, and it's in the list of editable fields, then allow the user to edit.
         elif edit_label in editable:
             new_value = None
             if edit_label in self.FIELD_MAPPING:
@@ -907,7 +862,6 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
                         if line == "END":
                             break
 
-                        # If this is the first line, check if line is a path to a file.
                         if first_line:
                             try:
                                 test_file = line.strip()
@@ -935,7 +889,6 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
             else:
                 new_value = input(f"{pad}Enter new value, or path to a file that contains the value > ")
 
-                # Is the value a path to a file, i.e., a private key file.
                 try:
                     if os.path.exists(new_value):
                         with open(new_value, "r") as fh:
@@ -948,7 +901,6 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
                 if edit_field.label == edit_label:
                     edit_field.value = [new_value]
 
-        # Else, the label they entered cannot be edited.
         else:
             logger.error(f"{pad}The field is not editable.")
             return False
@@ -958,20 +910,12 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
     @staticmethod
     def _add_all_preprocess(vertex: DAGVertex, content: DiscoveryObject, parent_vertex: DAGVertex,
                             acl: Optional[UserAcl] = None) -> Optional[PromptResult]:
-        """
-        This is client side check if we should skip prompting the user.
-
-        The checks are
-        * A directory with the same domain already has a record.
-
-        """
 
         _ = vertex
         _ = acl
 
         # Check if the directory for a domain exists.
         # From the parent, find any directory objects.
-        # If they already have a record UID, don't prompt about this one.
         # Once a directory for the domain exists, the user should not be prompted about this domain anymore.
         if content.record_type == "pamDirectory":
             for v in parent_vertex.has_vertices():
@@ -990,7 +934,6 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
                 has_editable = True
             value = field.value
 
-            # If there is a value, and it's not just [], also make sure the
             if len(value) > 0 and value[0] is not None:
                 # PAM records will have only 1 item in the value array.
                 value = value[0]
@@ -1072,9 +1015,6 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
         if block_auto_add:
             add_all = False
 
-        # If auto add is True, there are sometime we don't want to add the object.
-        # If we get a result, we want to return it.
-        # Skip the prompt.
         if add_all is True and vertex is not None:
             result = self._add_all_preprocess(vertex, content, parent_vertex, acl)
             if result is not None:
@@ -1147,10 +1087,6 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
 
                     # This happens when the record is a pamUser and parent resource record does not have an
                     #   administrator.
-                    # It's like the reverse of creating an admin after adding the resource.
-                    # It would make this user the admin for the parent resource.
-                    # This condition would be really rare, since to get the users, the resource would have to have an
-                    #  admin user.
                     if content.record_type == "pamUser" and resource_has_admin is False:
 
                         logger.info(f"{parent_content.description} does not have an administrator.")
@@ -1216,11 +1152,8 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
 
         vault = context.vault
 
-        # Get the latest records
         vault.vault_data.sync_data = True
 
-        # Make a list of all records in the shared folders.
-        # We will use this to check if a selected user is in the shared folders.
         shared_record_uids = []
         for shared_folder in gateway_context.get_shared_folders(vault):
             folder = shared_folder.get("folder")
@@ -1228,7 +1161,6 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
                 for record in folder["records"]:
                     shared_record_uids.append(record.get("record_uid"))
 
-        # Make a list of record we are already converting so we don't show them again.
         converting_list = [x.record_uid for x in bulk_convert_records]
 
         logger.debug(f"shared folders record uid {shared_record_uids}")
@@ -1239,14 +1171,11 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
                 logger.error(f"No search terms, not performing search.")
                 return None, False
 
-            # Search for record with the search string.
-            # Currently, this only works with TypedRecord, version 3.
             user_records = list(vault.vault_data.find_records(
                 criteria=user_search,
                 record_version=3,
                 record_type=None
             ))
-            # If not record are returned by the search just return None,
             if len(user_records) == 0:
                 logger.error(f"Could not find any records that contain the search text.")
                 return None, False
@@ -1259,7 +1188,6 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
                 if user_record.record_type == "pamUser":
                     logger.debug(f"{record.record_uid} is a pamUser")
 
-                    # If we are already converting this pamUser record, then don't show it.
                     if record.record_uid in converting_list:
                         logger.debug(f"pamUser {user_record.title}, {user_record.record_uid} is being converted; "
                                       "BAD for search")
@@ -1273,16 +1201,10 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
                         )
                         continue
 
-                    # Does the record exist in the gateway shared folder?
-                    # We want to filter our other gateway's pamUser, or it will get overwhelming.
                     if user_record.record_uid not in shared_record_uids:
                         logger.debug(f"pamUser {record.title}, {user_record.record_uid} not in shared "
                                       "folder, BAD for search")
                         continue
-
-                    # If the record does not exist in the record linking, it's orphaned; accept it
-                    # If it does exist, then check if it belonged to a directory.
-                    # Very unlikely a user that belongs to a database or another machine can be used.
 
                     record_vertex = record_link.get_record_link(user_record.record_uid)
                     is_directory_user = False
@@ -1315,13 +1237,12 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
                         )
                     )
 
-                # Else this is a non-PAM record.
-                # Make sure it has a login, password, private key
                 else:
                     logger.debug(f"{record.record_uid} is NOT a pamUser")
-                    login_field = next((x for x in record.fields if x.type == "login"), None)
-                    password_field = next((x for x in record.fields if x.type == "password"), None)
-                    private_key_field = next((x for x in record.fields if x.type == "keyPair"), None)
+                    record_data = vault.vault_data.load_record(record.record_uid)
+                    login_field = next((x for x in record_data.fields if x.type == "login"), None)
+                    password_field = next((x for x in record_data.fields if x.type == "password"), None)
+                    private_key_field = next((x for x in record_data.fields if x.type == "keyPair"), None)
 
                     if login_field is not None and (password_field is not None or private_key_field is not None):
                         admin_search_results.append(
@@ -1335,7 +1256,6 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
                     else:
                         logger.debug(f"{record.title} is missing full credentials, BAD for search")
 
-            # If all the users have been filtered out, then just return None
             if len(admin_search_results) == 0:
                 logger.error(f"Could not find any available records.")
                 return None, False
@@ -1396,8 +1316,6 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
 
         vault = context.vault
 
-        # Is this a pamUser record?
-        # Return the record UID and set its ACL to be the admin.
         if record.record_type == "pamUser":
             return PromptResult(
                 action=PromptActionEnum.ADD,
@@ -1405,12 +1323,6 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
                 record_uid=record.record_uid,
             )
 
-        # If we are here, this was not a pamUser
-        # We need to duplicate the record.
-        # But confirm first
-
-        # Get fields from the old record.
-        # Copy them into the fields.
         login_field = next((x for x in record.fields if x.type == "login"), None)
         password_field = next((x for x in record.fields if x.type == "password"), None)
         private_key_field = next((x for x in record.fields if x.type == "keyPair"), None)
@@ -1426,9 +1338,6 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
                 if private_key is not None:
                     content.set_field_value("private_key", private_key)
 
-        # Check if we have more than one shared folder.
-        # If we have one, confirm about adding the user.
-        # If multiple shared folders, allow user to select which one.
         shared_folders = gateway_context.get_shared_folders(vault)
         if len(shared_folders) == 0:
             while True:
@@ -1546,11 +1455,9 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
 
     @staticmethod
     def _display_auto_add_results(bulk_add_records: List[BulkRecordAdd]):
-
         """
         Display the number of record created from rule engine ADD results and smart add function.
         """
-
         add_count = len(bulk_add_records)
         if add_count > 0:
             logger.info("")
@@ -1559,11 +1466,6 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
 
     @staticmethod
     def _prompt_confirm_add(bulk_add_records: List[BulkRecordAdd]):
-
-        """
-        If we quit, we want to ask the user if they want to add record for discovery objects that they selected
-        for addition.
-        """
 
         logger.info("")
         count = len(bulk_add_records)
@@ -1589,17 +1491,11 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
         """
         Prepare the Vault record side.
 
-        It's not created here.
-        It will be created at the end of the processing run in bulk.
-        We to build a record to get a record UID.
-
         :params content: The discovery object instance.
         :params context: Optionally, it will contain information set from the run() method.
         :returns: Returns an unsaved Keeper record instance.
         """
-
         # DEFINE V3 RECORD
-
         # Create an instance of a vault record to structure the data
         record = vault_record.TypedRecord()
         record.type_name = content.record_type
@@ -1624,7 +1520,6 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
             folder_key = shared_folder.folder_key
 
         # DEFINE PROTOBUF FOR RECORD
-
         record_add_protobuf = record_pb2.RecordAdd()
         record_add_protobuf.record_uid = utils.base64_url_decode(record.record_uid)
         record_add_protobuf.record_key = crypto.encrypt_aes_v2(record.record_key, context.vault.keeper_auth.auth_context.data_key)
@@ -1654,7 +1549,6 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
 
     @classmethod
     def _create_records(cls, bulk_add_records: List[BulkRecordAdd], context: KeeperParams, gateway_context: GatewayContext) -> BulkProcessResults:
-
         """
         Create Vault records, setup rotation settings, and configure the resource (if resource).
         """
@@ -1671,17 +1565,16 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
         # STEP 1 - Batch add new records
 
         # Generate a list of RecordAdd instance.
-        # In BulkRecordAdd they will be the record instance.
         record_add_list = [r.record for r in bulk_add_records]  # type: List[record_pb2.RecordAdd]
 
         records_per_request = 999
 
         add_results = []
         logger.debug("adding record in batches")
-        logger.info("batch record create: ", end="")
+        logger.info("batch record create: ")
         sys.stdout.flush()
         while record_add_list:
-            logger.info(".", end="")
+            logger.info(".")
             sys.stdout.flush()
             logger.debug(f"* adding batch")
             rq = record_pb2.RecordsAddRequest()
@@ -1701,31 +1594,23 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
         ##############################################################################################################
         #
         # STEP 2 - Add rotation settings for user  and resource configuration for resources
-        #          At this point the all the records have been created.
 
-        # Keep track of each record we create a rotation for to avoid version problems, if there was a dup.
         created_cache = []
 
-        # TODO: There is a bulk version of the following code, it's not live.
-        #       Wait until live, then switch code to use that.
-
-        # For the records passed in to be created.
-        logger.info("add rotation settings: ", end="")
+        logger.info("add rotation settings: ")
         sys.stdout.flush()
         for bulk_record in bulk_add_records:
             if bulk_record.record_uid in created_cache:
                 logger.debug(f"found a duplicate of record uid: {bulk_record.record_uid}")
                 continue
-            logger.info(".", end="")
+            logger.info(".")
             sys.stdout.flush()
 
-            # Grab the type Keeper record instance, and title from that record.
             pb_add_record = bulk_record.record
             title = bulk_record.title
 
             rotation_disabled = False
 
-            # Find the result for this record.
             result = None
             for x in add_results:
                 logger.debug(f"{pb_add_record.record_uid} vs {x.record_uid}")
@@ -1733,7 +1618,6 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
                     result = x
                     break
 
-            # If we didn't get a result, then don't add the rotation settings.
             if result is None:
                 build_process_results.failure.append(
                     BulkRecordFail(
@@ -1771,14 +1655,12 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
                 if bulk_record.parent_record_uid is not None:
                     rq.resourceUid = utils.base64_url_decode(bulk_record.parent_record_uid)
 
-                # Right now, the schedule and password complexity are not set. This would be part of a rule engine.
                 rq.schedule = ''
                 rq.pwdComplexity = b''
                 rq.disabled = rotation_disabled
 
-                router_utils.router_set_record_rotation_information(context, rq)
+                router_utils.router_set_record_rotation_information(context.vault, rq)
 
-            # This will be a resource.
             # A LINK edge will be created between the configuration and resource.
             # If there is an admin user, it will be set on the resource.
             else:
@@ -1790,7 +1672,7 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
                 if bulk_record.admin_uid:
                     rq.adminUid = utils.base64_url_decode(bulk_record.admin_uid)
 
-                router_utils.router_configure_resource(context, rq)
+                router_utils.router_configure_resource(context.vault, rq)
 
             created_cache.append(bulk_record.record_uid)
 
@@ -1813,14 +1695,13 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
         vault = context.vault
         for bulk_convert_record in bulk_convert_records:
 
-            record = vault.vault_data.load_record(bulk_convert_record.record_uid)
+            record = vault.vault_data.get_record(bulk_convert_record.record_uid)
 
             rotation_disabled = False
 
             rq = router_pb2.RouterRecordRotationRequest()
             rq.recordUid = utils.base64_url_decode(bulk_convert_record.record_uid)
 
-            # We can't set the version to 0 if it's greater than 0, look up prior version.
             record_rotation_revision = context.get_record_rotation(bulk_convert_record.record_uid)
             rq.revision = record_rotation_revision.revision if record_rotation_revision else 0
 
@@ -1832,12 +1713,11 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
             if record.record_type == "pamUser" and bulk_convert_record.parent_record_uid is not None:
                 rq.resourceUid = utils.base64_url_decode(bulk_convert_record.parent_record_uid)
 
-            # Right now, the schedule and password complexity are not set. This would be part of a rule engine.
             rq.schedule = ''
             rq.pwdComplexity = b''
             rq.disabled = rotation_disabled
 
-            router_utils.router_set_record_rotation_information(context, rq)
+            router_utils.router_set_record_rotation_information(context.vault, rq)
 
         vault.sync_down(force=True)
         context.refresh_record_rotations()
@@ -1849,14 +1729,12 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
                             gateway_context: Optional[GatewayContext] = None) -> Optional[DirectoryInfo]:
         """
         Get information about this record from the vault records.
-
         """
 
         directory_info = DirectoryInfo()
 
         vault = context.vault
 
-        # Find the all directory records, in for this gateway, that have a domain that matches what we are looking for.
         for directory_record in vault.vault_data.find_records(criteria=None, record_type="pamDirectory", record_version=None):
             directory_record = vault.vault_data.load_record(directory_record.record_uid)
 
@@ -1922,8 +1800,6 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
 
         record_type_to_vertices_map = sort_infra_vertices(configuration)
 
-        # ------------
-
         def _print_resource(rt: str, rule_result: str):
 
             printed_something = False
@@ -1945,7 +1821,7 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
                         continue
 
                     user_content = DiscoveryObject.get_discovery_object(user_vertex)
-                    if user_content.ignore_object or self._record_lookup(user_content.record_uid, context, gateway_context) is not None:
+                    if user_content.ignore_object or self._record_lookup(user_content.record_uid, context) is not None:
                         continue
 
                     user_list.append(f"      . {user_content.item.user} ({user_content.name})")
@@ -1957,7 +1833,7 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
                 has_record = ""
                 record_uid = c.record_uid
                 if record_uid is not None:
-                    if self._record_lookup(record_uid, context, gateway_context):
+                    if self._record_lookup(record_uid, context):
                         has_record = f" (record exists: {record_uid})"
                         if len(user_list) == 0:
                             continue
@@ -1989,8 +1865,6 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
 
             return printed_something
 
-        # ------------
-
         def _print_cloud_user(rt: str, rule_result: str):
 
             title = "Users"
@@ -2003,7 +1877,7 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
 
                 if (uc.action_rules_result != rule_result
                         or uc.ignore_object
-                        or self._record_lookup(uc.record_uid, context, gateway_context) is not None):
+                        or self._record_lookup(uc.record_uid, context) is not None):
                     continue
 
                 if title is not None:
@@ -2011,8 +1885,6 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
                     title = None
 
                 logger.info(f"    * {uc.item.user} ({uc.name})")
-
-        # ------------
 
         logger.info("")
         logger.info("Will Be Automatically Added")
@@ -2069,13 +1941,11 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
 
             # Get the current job.
             # There can only be one active job.
-            # This will give us the sync point for the delta
             jobs = Jobs(record=configuration_record, context=context, logger=logger, debug_level=debug_level)
             job_item = jobs.current_job
             if job_item is None:
                 continue
 
-            # If this is not the job we are looking for, continue to the next gateway.
             if job_item.job_id != job_id:
                 continue
 
@@ -2086,7 +1956,6 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
                 logger.error(f'Discovery job failed. Cannot process.')
                 return
 
-            # Preview is a just a way to list which items will be added or prompted.
             if do_preview:
                 self.preview(
                     job_item=job_item,
@@ -2109,21 +1978,11 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
 
             try:
                 results = process.run(
-
-                    # This method can get a record using the record UID
-                    record_lookup_func=self._record_lookup,
-
-                    # Prompt user the about adding records
                     prompt_func=self._prompt,
 
-                    # Prompt user for an admin for a resource
-                    prompt_admin_func=self._prompt_admin,
-
-                    # If quit, confirm if the user wants to add records
-                    prompt_confirm_add_func=self._prompt_confirm_add,
-
-                    # Prepare records and place in queue; does not add record to vault
                     record_prepare_func=self._prepare_record,
+
+                    record_lookup_func=self._record_lookup,
 
                     # Add record to the vault, protobuf, and record-linking graph
                     record_create_func=self._create_records,
@@ -2132,21 +1991,23 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
                     #  gateway.
                     record_convert_func=self._convert_records,
 
-                    # A function to get directory users
-                    directory_info_func=self._get_directory_info,
+                    # If quit, confirm if the user wants to add records
+                    prompt_confirm_add_func=self._prompt_confirm_add,
+
+                    # Prompt user for an admin for a resource
+                    prompt_admin_func=self._prompt_admin,
 
                     # Pass method that will display auto added records.
                     auto_add_result_func=self._display_auto_add_results,
 
-                    # Provides a cache of the record key to record UID.
-                    record_cache=record_cache,
+                    # A function to get directory users
+                    directory_info_func=self._get_directory_info,
 
-                    # Commander-specific context.
                     # Record link will be added by Process run as "record_link"
                     context=context,
-                    gateway_context=gateway_context,
-                    dry_run=False,
-                    add_all=add_all,
+
+                    # Provides a cache of the record key to record UID.
+                    record_cache=record_cache
                 )
 
                 logger.debug(f"Results: {results}")

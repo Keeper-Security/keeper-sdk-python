@@ -47,7 +47,7 @@ class PAMDebugRotationSettingsCommand(PAMGatewayActionDiscoverCommandBase):
 
         logger.info("")
 
-        user_record = vault.vault_data.load_record(user_record_uid)
+        user_record = vault.vault_data.get_record(user_record_uid)
         if user_record is None:
             logger.error(f"The PAM user record does not exists.")
             return
@@ -66,7 +66,7 @@ class PAMDebugRotationSettingsCommand(PAMGatewayActionDiscoverCommandBase):
                       f"-c, --configuration-record-uid parameter for this command.")
                 return
 
-            configuration_record = vault.vault_data.load_record(configuration_record_uid)
+            configuration_record = vault.vault_data.get_record(configuration_record_uid)
             if configuration_record is None:
                 logger.error(f"Configuration record does not exists.")
                 return
@@ -91,7 +91,7 @@ class PAMDebugRotationSettingsCommand(PAMGatewayActionDiscoverCommandBase):
 
             if resource_record_uid is not None:
 
-                resource_record = vault.vault_data.load_record(resource_record_uid)
+                resource_record = vault.vault_data.get_record(resource_record_uid)
                 if resource_record is None:
                     logger.error(f"The resource record does not exists.")
                     return
@@ -104,7 +104,6 @@ class PAMDebugRotationSettingsCommand(PAMGatewayActionDiscoverCommandBase):
 
             parent_uid = resource_record_uid or configuration_record_uid
 
-            # Create rotation settings for the pamUser.
             rq = router_pb2.RouterRecordRotationRequest()
             rq.recordUid = utils.base64_url_encode(user_record_uid)
             rq.revision = 0
@@ -115,7 +114,7 @@ class PAMDebugRotationSettingsCommand(PAMGatewayActionDiscoverCommandBase):
             rq.disabled = False
 
             if not dry_run:
-                router_utils.router_set_record_rotation_information(context, rq)
+                router_utils.router_set_record_rotation_information(context.vault, rq)
 
                 context.sync_data = True
                 vault.sync_down()
@@ -149,7 +148,7 @@ class PAMDebugRotationSettingsCommand(PAMGatewayActionDiscoverCommandBase):
 
             logger.info(f"Resource Record UID: {resource_record_uid}")
 
-            resource_record = vault.vault_data.load_record(resource_record_uid)
+            resource_record = vault.vault_data.get_record(resource_record_uid)
             if resource_record is None:
                 logger.error(f"The resource record does not exists.")
                 return
@@ -194,16 +193,13 @@ class PAMDebugRotationSettingsCommand(PAMGatewayActionDiscoverCommandBase):
                 logger.error(f"Rotation settings exist in graph, use --force to reset.")
                 return
 
-        # Reset the rotation settings.
         user_acl.rotation_settings = UserAclRotationSettings()
         user_acl.rotation_settings.noop = noop
         if resource_record_uid is None:
             user_acl.is_iam_user = True
 
-        # Connect the user to the parent (configuration or resource)
         record_link.belongs_to(user_record_uid, parent_uid, acl=user_acl)
 
-        # If parent is not a configuration, make sure there is a LINK from the resource to the configuration.
         if parent_uid != configuration_record_uid:
             if record_link.get_parent_record_uid(parent_uid) is None:
                 logger.warning(f"Resource record has no LINK to configuration record; "

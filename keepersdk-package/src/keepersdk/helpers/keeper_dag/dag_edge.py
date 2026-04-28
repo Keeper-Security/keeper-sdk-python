@@ -65,7 +65,6 @@ class DAGEdge:
 
         # If the content is being populated from a the load() method, and the edge type is a KEY or DATA, then the
         # content will be encrypted (str).
-        # We want to keep a str, unless KEYs are decrypted.
 
         # If the edge data need encryption, is _content, currently encrypted.
         self.is_encrypted = is_encrypted
@@ -114,10 +113,8 @@ class DAGEdge:
     def content(self) -> Optional[Union[str, bytes]]:
         """
         Get the content of the edge.
-
         If the content is a str, then the content is encrypted.
         """
-
         return self._content
 
     @property
@@ -186,9 +183,6 @@ class DAGEdge:
         self.debug(f"vertex {self.vertex.uid}, type {self.vertex.dag.__class__.EDGE_LABEL.get(self.edge_type)}, "
                    f"head {self.head_uid} setting content", level=2)
 
-        # If the data is encrypted, set it.
-        # Don't try to make it bytes.
-        # Also don't set the modified flag to True.
         if self.is_encrypted:
             self.debug("  content is encrypted.", level=3)
             self._content = value
@@ -200,7 +194,6 @@ class DAGEdge:
         if isinstance(value, dict):
             value = json.dumps(value)
 
-        # Is this a Pydantic based class?
         if hasattr(value, "model_dump_json"):
             value = value.model_dump_json()
 
@@ -217,28 +210,22 @@ class DAGEdge:
         It will create another edge with the same tail and head, but will be type DELETION.
         """
 
-        # If already inactive, return
         if not self.active:
             return
 
         version, _ = self.vertex.get_highest_edge_version(head_uid=self.head_uid)
 
-        # Flag all other edges as inactive.
         for edge in self.vertex.edges:
             edge.active = False
             if self.vertex.dag.dedup_edge and edge.modified:
                 edge.skip_on_save = True
 
-        # Check if the all the edges for this vertex are all newly added/modified for the session.
-        # If they are all new, then we don't need to delete anything; we just don't add the edges.
         all_modified_edges = True
         for edge in self.vertex.edges:
             if not edge.modified:
                 all_modified_edges = False
                 break
 
-        # If not all the edges are modified, then we actually want to add a deletion edge.
-        # There is actually something to delete.
         if not all_modified_edges:
             self.vertex.edges.append(
                 DAGEdge(
@@ -249,8 +236,6 @@ class DAGEdge:
                 )
             )
 
-        # Perform the DELETION edges save in one batch.
-        # Get the current allowed auto save state, and disable auto save.
         current_allow_auto_save = self.vertex.dag.allow_auto_save
         self.vertex.dag.allow_auto_save = False
 
@@ -269,15 +254,12 @@ class DAGEdge:
         :return:
         """
 
-        # We shouldn't be checking the DELETION edge if it deleted.
-        # Throw some info message to make sure the coder knows their code might be something foolish.
         if self.edge_type == EdgeType.DELETION:
             logging.info(f"The edge is_deleted() just check if the DELETION edge is DELETION "
                          f"for vertex {self.vertex.uid}, head UID {self.head_uid}. Returned True, but code should "
                          "not be checking this edge.")
             return True
 
-        # Check the other edges for this vertex for an active DELETION-edge type.
         for edge in self.vertex.edges:
             if edge.edge_type == EdgeType.DELETION and edge.head_uid == self.head_uid and edge.active is True:
                 return True

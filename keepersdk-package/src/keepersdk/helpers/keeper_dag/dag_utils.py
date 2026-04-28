@@ -29,7 +29,6 @@ def get_connection(**kwargs):
     It returns a child instance of the Connection class.
     """
 
-    # if the connection is passed in, return it.
     if kwargs.get("connection") is not None:
         return kwargs.get("connection")
 
@@ -57,7 +56,6 @@ def make_agent(text) -> str:
     return f"{text}/{__version__}"
 
 
-
 def split_user_and_domain(user: str) -> Tuple[Optional[str], Optional[str]]:
 
     if user is None:
@@ -81,9 +79,6 @@ def user_check_list(user: str, name: Optional[str] = None, source: Optional[str]
     user, domain = split_user_and_domain(user)
     user = user.lower()
 
-    # TODO: Add boolean for tasks to include `local users` patterns.
-    #       It appears that for task lists, directory users do not have domains.
-    #       A problem could arise where the customer uses a local user and directory with the same name.
     check_list = [user, f".\\{user}"]
     if name is not None:
         name = name.lower()

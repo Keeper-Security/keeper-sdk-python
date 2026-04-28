@@ -39,7 +39,7 @@ class PAMDebugInfoCommand(PAMGatewayActionDiscoverCommandBase):
 
         record_uid = kwargs.get("record_uid")
         vault = context.vault
-        record = vault.vault_data.load_record(record_uid)
+        record = vault.vault_data.get_record(record_uid)
         if record is None:
             logger.error(f"Record does not exists.")
             return
@@ -54,12 +54,10 @@ class PAMDebugInfoCommand(PAMGatewayActionDiscoverCommandBase):
 
         record_rotation = context.get_record_rotation(record_uid)
 
-        # Rotation setting don't exist, check each configuration for an active record.
         if record_rotation is None:
             logger.warning(f"PAM record does not have protobuf rotation settings, "
                   f"checking all configurations.")
 
-            # Get all the PAM configuration records in the Vault; configurations are version 6
             configuration_records = GatewayContext.get_configuration_records(vault=vault)
             if len(configuration_records) == 0:
                 logger.error(f"Cannot find any PAM configuration records in the Vault")
@@ -76,7 +74,6 @@ class PAMDebugInfoCommand(PAMGatewayActionDiscoverCommandBase):
                       f"checked all configuration records.")
                 return
 
-        # Else just get information from the rotation settings
         else:
 
             controller_uid = record_rotation.configuration_uid
@@ -87,11 +84,12 @@ class PAMDebugInfoCommand(PAMGatewayActionDiscoverCommandBase):
             resource_uid = record_rotation.resource_uid
 
         configuration_record = vault.vault_data.load_record(controller_uid)
+        record_key = vault.vault_data.get_record_key(controller_uid)
         if configuration_record is None:
             logger.error(f"The configuration record {controller_uid} does not exist.")
             return
 
-        gateway_context = GatewayContext.from_configuration_uid(vault=vault, configuration_uid=controller_uid)
+        gateway_context = GatewayContext.from_configuration_uid(vault=vault, configuration_uid=controller_uid, gateways=None)
         if gateway_context is None:
             logger.error(f"Could not find the gateway for configuration record.{controller_uid}")
             return
@@ -107,7 +105,7 @@ class PAMDebugInfoCommand(PAMGatewayActionDiscoverCommandBase):
         logger.info(f"  {('Record Title')}: {record.title}")
         logger.info(f"  {('Record Type')}: {record.record_type}")
         logger.info(f"  {('Configuration UID')}: {configuration_record.record_uid}")
-        logger.info(f"  {('Configuration Key Bytes Hex')}: {configuration_record.record_key.hex()}")
+        logger.info(f"  {('Configuration Key Bytes Hex')}: {record_key.hex()}")
         if resource_uid is not None:
             logger.info(f"  {('Resource UID')}: {resource_uid}")
 
@@ -143,15 +141,16 @@ class PAMDebugInfoCommand(PAMGatewayActionDiscoverCommandBase):
 
         logger.info(f"Fields")
         logger.info(f"  Record Type Fields")
-        if record.fields is not None and len(record.fields) > 0:
-            for field in record.fields:
+        record_data = vault.vault_data.load_record(record_uid)
+        if record_data.fields is not None and len(record_data.fields) > 0:
+            for field in record_data.fields:
                 _print_field(field)
         else:
             logger.error(f"    Record does not have record type fields!")
         logger.info("")
         logger.info(f"  Custom Fields")
-        if record.custom is not None and len(record.custom) > 0:
-            for field in record.custom:
+        if record_data.custom is not None and len(record_data.custom) > 0:
+            for field in record_data.custom:
                 _print_field(field)
         else:
             logger.error(f"    Record does not have custom fields.")
@@ -167,7 +166,7 @@ class PAMDebugInfoCommand(PAMGatewayActionDiscoverCommandBase):
             if len(record_parent_vertices) > 0:
                 for record_parent_vertex in record_parent_vertices:
 
-                    parent_record = vault.vault_data.load_record(
+                    parent_record = vault.vault_data.get_record(
                                                             record_parent_vertex.uid)
                     if parent_record is None:
                         logger.error(f"   * Parent record {record_parent_vertex.uid} "
@@ -199,7 +198,8 @@ class PAMDebugInfoCommand(PAMGatewayActionDiscoverCommandBase):
                                     or acl_content.rotation_settings.pwd_complexity == ""):
                                 logger.info(f"      . No Password Complexity")
                             else:
-                                key_bytes = record.record_key
+                                record_key = vault.vault_data.get_record_key(record_uid)
+                                key_bytes = record_key
                                 logger.info(f"      . Password Complexity = "
                                       f"{acl_content.rotation_settings.get_pwd_complexity(key_bytes)}")
                             logger.info(f"      . Disabled = {acl_content.rotation_settings.disabled}")
@@ -214,7 +214,6 @@ class PAMDebugInfoCommand(PAMGatewayActionDiscoverCommandBase):
                         logger.info(f"    * LINK to {parent_record.record_type}; {parent_record.title}; "
                               f"{record_parent_vertex.uid}")
             else:
-                # This really should not happen
                 logger.error(f"   Record does not have a parent record.")
             logger.info("")
 
@@ -222,7 +221,7 @@ class PAMDebugInfoCommand(PAMGatewayActionDiscoverCommandBase):
             logger.info(f"  Child Records")
             if len(record_child_vertices) > 0:
                 for record_child_vertex in record_child_vertices:
-                    child_record = vault.vault_data.load_record(
+                    child_record = vault.vault_data.get_record(
                                                            record_child_vertex.uid)
 
                     if child_record is None:
@@ -250,7 +249,6 @@ class PAMDebugInfoCommand(PAMGatewayActionDiscoverCommandBase):
                             logger.info(f"    * {edge.edge_type}?")
 
             else:
-                # This is OK
                 logger.error(f"    Record does not have any children.")
             logger.info("")
 
@@ -258,15 +256,12 @@ class PAMDebugInfoCommand(PAMGatewayActionDiscoverCommandBase):
             logger.error(f"Cannot find record in record linking.")
 
         # Only PAM User and PAM Machine can have services and tasks.
-        # This is really only Windows machines.
         if record.record_type == PAM_USER or record.record_type == PAM_MACHINE:
 
-            # Get the user to service/task vertex.
             user_service_vertex = user_service.dag.get_vertex(record_uid)
 
             if user_service_vertex is not None:
 
-                # If the record is a PAM User
                 if record.record_type == PAM_USER:
 
                     user_results = {
@@ -274,10 +269,8 @@ class PAMDebugInfoCommand(PAMGatewayActionDiscoverCommandBase):
                         "is_service": []
                     }
 
-                    # Get a list of all the resources the user is the username/password on service/task.
                     for us_machine_vertex in user_service.get_resource_vertices(record_uid):
 
-                        # Get the resource record
                         us_machine_record = (
                             vault.vault_data.load_record(us_machine_vertex.uid))
 
@@ -286,12 +279,8 @@ class PAMDebugInfoCommand(PAMGatewayActionDiscoverCommandBase):
                             value = getattr(acl, attr)
                             if value is True:
 
-                                # If the resource record does not exist.
                                 if us_machine_record is None:
 
-                                    # Default the title to Unknown (in red).
-                                    # See if we have an infrastructure vertex with this record UID.
-                                    # If we do have it, use the title inside the first vertex's data content.
                                     title = "Unknown"
                                     infra_resource_vertices = infra.dag.search_content(
                                         {"record_uid": us_machine_vertex.uid})
@@ -304,7 +293,6 @@ class PAMDebugInfoCommand(PAMGatewayActionDiscoverCommandBase):
                                     user_results[attr].append(f"  * Record {us_machine_vertex.uid}, "
                                                               f"{title} does not exists.")
 
-                                # Record exists; just use information from the record.
                                 else:
                                     user_results[attr].append(f"  * {us_machine_record.title}, "
                                                               f"{us_machine_vertex.uid}")
@@ -325,14 +313,12 @@ class PAMDebugInfoCommand(PAMGatewayActionDiscoverCommandBase):
                         logger.info("  PAM User is not used for any scheduled tasks.")
                     logger.info("")
 
-                # If the record is a PAM Machine
                 else:
                     user_results = {
                         "is_task": [],
                         "is_service": []
                     }
 
-                    # Get the users that are used for tasks/services on this machine.
                     for us_user_vertex in user_service.get_user_vertices(record_uid):
 
                         us_user_record = vault.vault_data.load_record(
@@ -342,12 +328,8 @@ class PAMDebugInfoCommand(PAMGatewayActionDiscoverCommandBase):
                             value = getattr(acl, attr)
                             if value is True:
 
-                                # If the user record does not exist.
                                 if us_user_record is None:
 
-                                    # Default the title to Unknown (in red).
-                                    # See if we have an infrastructure vertex with this record UID.
-                                    # If we do have it, use the title inside the first vertex's data content.
                                     title = "Unknown"
                                     infra_resource_vertices = infra.dag.search_content(
                                         {"record_uid": us_user_vertex.uid})
@@ -360,7 +342,6 @@ class PAMDebugInfoCommand(PAMGatewayActionDiscoverCommandBase):
                                     user_results[attr].append(f"  * Record {us_user_vertex.uid}, "
                                                               f"{title} does not exists.")
 
-                                # Record exists; just use information from the record.
                                 else:
                                     user_results[attr].append(f"  * {us_user_record.title}, "
                                                               f"{us_user_vertex.uid}")
@@ -446,7 +427,7 @@ class PAMDebugInfoCommand(PAMGatewayActionDiscoverCommandBase):
                     logger.info(f"  Allows Admin: {content.item.allows_admin}")
                     logger.info(f"  Admin Reason: {content.item.admin_reason}")
                     logger.info("")
-                    # If facts are not set, inside discover may not have been performed for the machine.
+
                     if content.item.facts.id is not None and content.item.facts.name is not None:
                         logger.info(f"  Machine Name: {content.item.facts.name}")
                         logger.info(f"  Machine ID: {content.item.facts.id.machine_id}")
@@ -510,7 +491,6 @@ class PAMDebugInfoCommand(PAMGatewayActionDiscoverCommandBase):
                     for k, v in content.item:
                         logger.info(f"  {k}: {v}")
 
-                # Configuration records do not belong to other record; don't show.
                 if record.version != 6:
                     logger.info("")
                     logger.info(f"Belongs To Vertices (Parents)")

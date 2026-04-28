@@ -17,10 +17,8 @@ class DAGVertex:
 
         self.dag = dag
 
-        # If the UID is not set, generate a UID.
         if uid is None:
             uid = dag_crypto.generate_uid_str()
-        # Else verify that the UID is valid. The UID should be a 16-byte value that is web-safe base64 serialized.
         else:
             if len(uid) != 22:
                 raise ValueError(f"The uid {uid} is not a 22 characters in length.")

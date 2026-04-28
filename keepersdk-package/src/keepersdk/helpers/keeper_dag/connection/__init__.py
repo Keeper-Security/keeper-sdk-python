@@ -13,16 +13,11 @@ import sys
 from enum import Enum
 from pydantic import BaseModel
 from typing import Optional, Union, Any, Dict, Tuple, TYPE_CHECKING
-if TYPE_CHECKING:  # pragma: no cover
+if TYPE_CHECKING:
     Logger = Union[logging.RootLogger, logging.Logger]
 
-# What is this?
-# If used with Commander, router_abbr_pb2 will interfere with router_pb2.
-#   `TypeError: Couldn't build proto file into descriptor pool: duplicate symbol 'Router.RouterResponseCode'`
-# Try to import the Commander first, then fallback to router_abbr_pb2.
 try:
-    # noinspection PyUnresolvedReferences
-    from ....proto import router_pb2 as router_pb2  # type: ignore[import]
+    from ....proto import router_pb2 as router_pb2
 except (Exception,):
     from ....proto import router_abbr_pb2 as router_pb2
 
@@ -42,14 +37,12 @@ class ConnectionBase:
                  use_read_protobuf: bool = False,
                  use_write_protobuf: bool = False):
 
-        # device is a gateway device if is_device is False then we use user authentication flow
         self.is_device = is_device
 
         if logger is None:
             logger = logging.getLogger()
         self.logger = logger
 
-        # Debug tool; log transaction to the file
         if log_transactions is not None:
             self.log_transactions = value_to_boolean(log_transactions)
         else:
@@ -66,7 +59,6 @@ class ConnectionBase:
         self.use_read_protobuf = use_read_protobuf
         self.use_write_protobuf = use_write_protobuf
 
-        # This should stay none for KSM
         self.transmission_key = None
 
     def close(self):
@@ -100,8 +92,6 @@ class ConnectionBase:
     @staticmethod
     def get_router_host(server_hostname: str):
 
-        # Only PROD GovCloud strips the subdomain (workaround for prod infrastructure).
-        # DEV/QA GOV (govcloud.dev.keepersecurity.us, govcloud.qa.keepersecurity.us) keep govcloud.
         if server_hostname == 'govcloud.keepersecurity.us':
             configured_host = 'connect.keepersecurity.us'
         else:
@@ -122,7 +112,6 @@ class ConnectionBase:
         return b""
 
     def _endpoint(self, action: str, endpoint: Optional[str] = None) -> str:
-
         """
         Build the endpoint on the remote site.
 
@@ -133,7 +122,6 @@ class ConnectionBase:
         :return:
         """
 
-        # Make sure endpoint is /path/to/endpoint; starting / and no ending /
         if endpoint is not None and endpoint != "":
             if isinstance(endpoint, Enum):
                 endpoint = endpoint.value
@@ -165,7 +153,6 @@ class ConnectionBase:
                               request: Optional[Any] = None,
                               response: Optional[Any] = None,
                               error: Optional[str] = None):
-        # If log transaction is True, we want to append to the log file.
 
         if self.log_transactions is True:
 

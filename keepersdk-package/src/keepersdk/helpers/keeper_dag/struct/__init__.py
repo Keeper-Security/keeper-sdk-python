@@ -5,7 +5,7 @@ from ....proto import GraphSync_pb2 as gs_pb2
 from pydantic import BaseModel
 from typing import Optional, Union, List, TYPE_CHECKING
 
-if TYPE_CHECKING:  # pragma: no cover
+if TYPE_CHECKING:
     Logger = Union[logging.RootLogger, logging.Logger]
 
 

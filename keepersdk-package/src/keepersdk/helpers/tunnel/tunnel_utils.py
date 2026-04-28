@@ -57,7 +57,7 @@ def get_dag_leafs(vault: vault_online.VaultOnline, encrypted_session_token: byte
                               data=json.dumps(payload).encode('utf-8')
                               )
     except ConnectionError as e:
-        raise errors.KeeperApiError(-1, f"KRouter is not reachable on '{krouter_host}'. Error: ${e}")
+        raise errors.KeeperApiError("-1", f"KRouter is not reachable on '{krouter_host}'. Error: ${e}")
     except Exception as ex:
         raise ex
 

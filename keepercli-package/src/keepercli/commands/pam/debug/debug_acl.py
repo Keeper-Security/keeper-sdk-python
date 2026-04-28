@@ -40,19 +40,14 @@ class PAMDebugACLCommand(PAMGatewayActionDiscoverCommandBase):
 
         configuration_uid = kwargs.get('configuration_uid')
 
-        gateway_context = GatewayContext.from_gateway(context=context,
-                                                        gateway=gateway,
-                                                        configuration_uid=configuration_uid)
+        gateway_context = GatewayContext.from_gateway(vault=context.vault,
+                                                     gateway=gateway,
+                                                     configuration_uid=configuration_uid)
         if gateway_context is None:
             logger.error(f"Could not find the gateway configuration for {gateway}.")
             return
-
-        record_link = RecordLink(record=gateway_context.configuration,
-                                 context=context,
-                                 logger=logger,
-                                 debug_level=debug_level)
-
-        user_record = context.vault.vault_data.load_record(user_uid)
+        record_link = RecordLink(record=gateway_context.configuration, vault=context.vault, fail_on_corrupt=False)
+        user_record = context.vault.vault_data.get_record(user_uid)
         if user_record is None:
             logger.error(f"The user record does not exists.")
             return
@@ -63,7 +58,7 @@ class PAMDebugACLCommand(PAMGatewayActionDiscoverCommandBase):
             logger.error(f"The user record is not a PAM User record.")
             return
 
-        parent_record = context.vault.vault_data.load_record(parent_uid)
+        parent_record = context.vault.vault_data.get_record(parent_uid)
         if parent_record is None:
             logger.error(f"The parent record does not exists.")
             return
@@ -80,8 +75,6 @@ class PAMDebugACLCommand(PAMGatewayActionDiscoverCommandBase):
 
         parent_is_config = parent_record.record_type.endswith("Configuration")
 
-        # Get the ACL between the user and the parent.
-        # It might not exist.
         acl_exists = True
         acl = record_link.get_acl(user_uid, parent_uid)
         if acl is None:
@@ -89,7 +82,6 @@ class PAMDebugACLCommand(PAMGatewayActionDiscoverCommandBase):
             acl = UserAcl()
             acl_exists = False
 
-        # Make sure the ACL for cloud user is set.
         if parent_is_config is True:
             logger.info("Is an IAM user.")
             acl.is_iam_user = True

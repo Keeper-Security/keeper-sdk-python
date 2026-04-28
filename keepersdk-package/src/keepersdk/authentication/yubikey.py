@@ -1,7 +1,6 @@
 import abc
 import getpass
 import json
-import logging
 import os
 import threading
 from typing import Optional, Any, Dict
@@ -12,13 +11,6 @@ from fido2.hid import CtapHidDevice
 from fido2.webauthn import PublicKeyCredentialRequestOptions, UserVerificationRequirement, AuthenticationResponse, PublicKeyCredentialCreationOptions
 from fido2.ctap2 import Ctap2, ClientPin
 from .. import utils
-from prompt_toolkit import PromptSession
-
-
-prompt_session = None
-if os.isatty(0) and os.isatty(1):
-    prompt_session = PromptSession(multiline=False, complete_while_typing=False)
-
 
 
 class IKeeperUserInteraction(abc.ABC):

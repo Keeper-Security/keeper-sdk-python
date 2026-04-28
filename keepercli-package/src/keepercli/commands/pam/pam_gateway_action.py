@@ -99,7 +99,6 @@ class PAMGatewayActionRotateCommand(base.ArgparseCommand):
 
         vault = context.vault
 
-        # Validate email setup early (before rotation) to avoid rotating password without being able to send email
         if self.send_email:
             if not self.email_config:
                 raise base.CommandError('--send-email requires --email-config to specify email configuration')
@@ -109,37 +108,30 @@ class PAMGatewayActionRotateCommand(base.ArgparseCommand):
                 config_uid = email_utils.find_email_config_record(vault, self.email_config)
                 email_config_obj = email_utils.load_email_config_from_record(vault, config_uid)
 
-                # Check if required dependencies are installed for this provider
                 is_valid, error_message = email_utils.validate_email_provider_dependencies(email_config_obj.provider)
 
                 if not is_valid:
                     raise base.CommandError(f'\n{error_message}')
 
             except Exception as e:
-                # Re-raise CommandError as-is, wrap other exceptions
                 if isinstance(e, base.CommandError):
                     raise
                 raise base.CommandError(f'Failed to validate email configuration: {e}')
 
-        # record, folder or pattern - at least one required
         if not record_uid and not folder:
             logger.info(f'the following arguments are required: --record-uid/-r or --folder/-f')
             return
 
-        # single record UID - ignore all folder options
         if not folder:
             self.record_rotate(context, record_uid)
             return
 
-        # folder UID or pattern (ignore --record-uid/-r option)
         folders = []  # root folders matching UID or title pattern
         records = []  # record UIDs of all v3/pamUser records
 
-        # 1. find all shared_folder/shared_folder_folder matching --folder=UID/pattern
-        if folder in vault.vault_data.folders():  # folder UID
+        if folder in vault.vault_data.folders():
             fldr = vault.vault_data.get_folder(folder)
-            # only shared_folder can be shared to KSM App/Gateway for rotation
-            # but its children shared_folder_folder can contain rotation records too
+
             if fldr.folder_type in ('shared_folder', 'shared_folder_folder'):
                 folders.append(folder)
             else:
@@ -147,26 +139,25 @@ class PAMGatewayActionRotateCommand(base.ArgparseCommand):
         else:
             rx_name = self.str_to_regex(folder)
             for fuid in vault.vault_data.folders():
-                fldr = vault.vault_data.get_folder(fuid)
-                # requirement - shared folder only (not for user_folder containing shf w/ recursion)
+                fldr = vault.vault_data.get_folder(fuid.folder_uid)
                 if fldr.folder_type in ('shared_folder', 'shared_folder_folder'):
                     if fldr.name and rx_name.search(fldr.name):
-                        folders.append(fldr.uid)
+                        folders.append(fldr.folder_uid)
 
-        folders = list(set(folders))  # Remove duplicate UIDs
-        # 2. pattern could match both parent and child - drop all children (w/ a matching parent)
+        folders = list(set(folders))
+
         if recursive and len(folders) > 1:
-            roots: Dict[str, list] = {}  # group by shared_folder_uid
-            for fuid in folders:  # no shf inside shf yet
+            roots: Dict[str, list] = {}
+            for fuid in folders:
                 roots.setdefault(vault.vault_data.get_folder(fuid).folder_scope_uid, []).append(fuid)
             uniq = []
             for fuid in roots:
                 fldrs = list(set(roots[fuid]))
-                if len(fldrs) == 1:  # no siblings
+                if len(fldrs) == 1:
                     uniq.append(fldrs[0])
-                elif fuid in fldrs:  # parent shf is topmost
+                elif fuid in fldrs:
                     uniq.append(fuid)
-                else:  # topmost sibling(s)
+                else:
                     fldrset = set(fldrs)
                     for fldr in fldrs:
                         path = []
@@ -174,13 +165,12 @@ class PAMGatewayActionRotateCommand(base.ArgparseCommand):
                         while vault.vault_data.get_folder(child).folder_uid != fuid:
                             path.append(child)
                             child = vault.vault_data.get_folder(child).parent_uid
-                        path.append(child)  # add root shf
-                        path = path[1:] if path else [] # skip child uid
-                        if not set(path) & fldrset:  # no intersect
+                        path.append(child)
+                        path = path[1:] if path else []
+                        if not set(path) & fldrset:
                             uniq.append(fldr)
             folders = list(set(uniq))
 
-        # 3. collect all recs pamUsers w/ rotation set-up --recursive or not
         for fldr in folders:
             if recursive:
                 logger.warning('--recursive/-a option not implemented (ignored)')
@@ -195,12 +185,10 @@ class PAMGatewayActionRotateCommand(base.ArgparseCommand):
                 record = vault.vault_data.get_record(ruid)
                 if record and record.record_type == 'pamUser':
                     records.append(ruid)
-        records = list(set(records))  # Remove duplicate UIDs
+        records = list(set(records))
 
-        # 4. print number of folders and records to rotate - folders: 2+0/16, records 50,000
         logger.info(f'Selected for rotation - folders: {len(folders)}, records: {len(records)}, recursive={recursive}')
 
-        # 5. in debug - print actual folders and records selected for rotation
         if logger.isEnabledFor(logger.DEBUG):
             for fldr in folders:
                 fobj = vault.vault_data.get_folder(fldr)
@@ -211,22 +199,19 @@ class PAMGatewayActionRotateCommand(base.ArgparseCommand):
                 title = record.title if record else ''
                 logger.debug(f'Rotation Record UID: {rec} {title}')
 
-        # 6. exit if --dry-run
         if dry_run:
             return
 
-        # 7. rotate and handle any throttles (to work with 50,000 records)
         for record_uid in records:
             delay = 0
             while True:
                 try:
-                    # Handle throttles in-loop on in-record_rotate
                     self.record_rotate(context, record_uid, True)
                     break
                 except Exception as e:
-                    msg = str(e)  # what is considered a throttling error...
+                    msg = str(e)
                     if re.search(r"throttle", msg, re.IGNORECASE):
-                        delay = (delay+10) % 100  # reset every 1.5 minutes
+                        delay = (delay+10) % 100
                         logger.debug(f'Record UID: {record_uid} was throttled (retry in {delay} sec)')
                         time.sleep(1+delay)
                     else:
@@ -240,7 +225,6 @@ class PAMGatewayActionRotateCommand(base.ArgparseCommand):
             logger.error(f'Record [{record_uid}] is not available.')
             return
 
-        # Find record by record uid
         ri = record_utils.record_rotation_get(vault, utils.base64_url_decode(record.record_uid))
         ri_pwd_complexity_encrypted = ri.pwdComplexity
         if not ri_pwd_complexity_encrypted:
@@ -251,15 +235,14 @@ class PAMGatewayActionRotateCommand(base.ArgparseCommand):
                 'digits': 1,
                 'special': 1,
             }
-            ri_pwd_complexity_encrypted = utils.base64_url_encode(router_utils.encrypt_pwd_complexity(rule_list_dict, record.record_key))
+            record_key = vault.vault_data.get_record_key(record.record_uid)
+            ri_pwd_complexity_encrypted = utils.base64_url_encode(router_utils.encrypt_pwd_complexity(rule_list_dict, record_key))
 
         resource_uid = None
 
         encrypted_session_token, encrypted_transmission_key, transmission_key = tunnel_utils.get_keeper_tokens(vault)
         config_uid = tunnel_utils.get_config_uid(vault, encrypted_session_token, encrypted_transmission_key, record_uid)
         if not config_uid:
-            # Still try it the old way
-            # Configuration on the UI is "Rotation Setting"
             ri_rotation_setting_uid = utils.base64_url_encode(ri.configurationUid)
             resource_uid = utils.base64_url_encode(ri.resourceUid)
             pam_config = vault.vault_data.load_record(ri_rotation_setting_uid)
@@ -272,15 +255,12 @@ class PAMGatewayActionRotateCommand(base.ArgparseCommand):
             config_uid = facade.controller_uid
 
         if not resource_uid:
-            tmp_dag = tunnel_graph.TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, record.record_uid,
-                                transmission_key=transmission_key)
+            tmp_dag = tunnel_graph.TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, record.record_uid)
             resource_uid = tmp_dag.get_resource_uid(record_uid)
             if not resource_uid:
-                # NOOP records don't need resource_uid
                 is_noop = False
                 pam_config = vault.vault_data.load_record(config_uid)
 
-                # Check the graph for the noop setting.
                 record_link = record_link_utils.RecordLink(record=pam_config,
                                          context=context,
                                          fail_on_corrupt=False)
@@ -288,7 +268,6 @@ class PAMGatewayActionRotateCommand(base.ArgparseCommand):
                 if acl is not None and acl.rotation_settings is not None:
                     is_noop = acl.rotation_settings.noop
 
-                # If it was false  in the graph, or did not exist, check the record.
                 if is_noop is False:
                     noop_field = record.get_typed_field('text', 'NOOP')
                     is_noop = dag_utils.value_to_boolean(noop_field.value[0]) if noop_field and noop_field.value else False
@@ -303,7 +282,6 @@ class PAMGatewayActionRotateCommand(base.ArgparseCommand):
             raise base.CommandError(f'Gateway UID not found for configuration '
                                    f'{config_uid}.')
 
-        # Find connected controllers
         enterprise_controllers_connected = router_utils.router_get_connected_gateways(vault)
 
         controller_from_config_bytes = controller.controllerUid
@@ -337,18 +315,14 @@ class PAMGatewayActionRotateCommand(base.ArgparseCommand):
             encrypted_transmission_key=encrypted_transmission_key,
             encrypted_session_token=encrypted_session_token)
 
-        # Handle post-rotation email/share if requested
         if (self.self_destruct or self.send_email) and router_response:
             try:
-                # Sync params to get updated record with rotated password
                 vault.sync_down(force=True)
-                # Reload record to get latest credentials
                 record = vault.vault_data.load_record(record_uid)
                 if isinstance(record, vault_record.TypedRecord):
                     self._handle_post_rotation_email(vault, record)
             except Exception as e:
                 logger.warning(f'Post-rotation email handling failed: {e}')
-                # Don't fail the rotation if email fails
 
         if not slient:
             router_utils.print_router_response(router_response, 'job_info', conversation_id, gateway_uid=gateway_uid)
@@ -356,25 +330,20 @@ class PAMGatewayActionRotateCommand(base.ArgparseCommand):
     def _handle_post_rotation_email(self, vault: vault_online.VaultOnline, record):
         """Handle email sending and share link creation after successful rotation."""
         try:
-            # 1. Validate email arguments
             if self.send_email and not self.email_config:
                 logger.warning(f'--send-email requires --email-config. Skipping email.')
                 return
 
-            # Track whether user explicitly requested self-destruct
             user_requested_self_destruct = bool(self.self_destruct)
 
-            # Auto-set expiration to 24 hours if send-email is used without explicit self-destruct
             if self.send_email and not self.self_destruct:
                 self.self_destruct = '24h'
                 logger.info('--send-email used without --self-destruct, creating 24 hour time-based share link')
 
-            # 2. Parse timeout and create share link
             share_url = None
             expiration_text = None
             if self.self_destruct:
                 try:
-                    # parse_timeout returns a timedelta object
                     expiration_period = timeout_utils.parse_timeout(self.self_destruct)
                     expire_seconds = int(expiration_period.total_seconds())
 
@@ -382,18 +351,16 @@ class PAMGatewayActionRotateCommand(base.ArgparseCommand):
                         logger.warning(f'Invalid --self-destruct value. Skipping share link.')
                         return
 
-                    # Calculate human-readable expiration text
-                    if expire_seconds >= 86400:  # days
+                    if expire_seconds >= 86400:
                         days = expire_seconds // 86400
                         expiration_text = f"{days} day{'s' if days > 1 else ''}"
-                    elif expire_seconds >= 3600:  # hours
+                    elif expire_seconds >= 3600:
                         hours = expire_seconds // 3600
                         expiration_text = f"{hours} hour{'s' if hours > 1 else ''}"
-                    else:  # minutes
+                    else:
                         minutes = expire_seconds // 60
                         expiration_text = f"{minutes} minute{'s' if minutes > 1 else ''}"
 
-                    # 3. Create one-time share link manually (same as record_edit.py)
                     logger.info(f'Creating one-time share link expiring in {self.self_destruct}...')
                     record_uid = record.record_uid
                     record_key = record.record_key
@@ -410,7 +377,6 @@ class PAMGatewayActionRotateCommand(base.ArgparseCommand):
                         request=rq,
                         response_type=APIRequest_pb2.Device
                     )
-                    # Extract hostname from context.auth.keeper_endpoint.server
                     parsed = urlparse(vault.keeper_auth.keeper_endpoint.server)
                     server_netloc = parsed.netloc if parsed.netloc else parsed.path
                     share_url = urlunparse(('https', server_netloc, '/vault/share', None, None, utils.base64_url_encode(client_key)))
@@ -419,20 +385,16 @@ class PAMGatewayActionRotateCommand(base.ArgparseCommand):
                     logger.warning(f'Failed to create share link: {e}')
                     return
 
-            # 4. Send email if requested
             if self.send_email and self.email_config and share_url:
                 try:
-                    # Find email configuration record by name
                     logger.info(f'Loading email configuration: {self.email_config}')
                     config_uid = email_utils.find_email_config_record(vault, self.email_config)
                     if not config_uid:
                         logger.warning(f'Email configuration "{self.email_config}" not found. Skipping email.')
                         return
 
-                    # Load the email configuration
                     email_config = email_utils.load_email_config_from_record(vault, config_uid)
 
-                    # 5. Build email HTML content with share link
                     custom_message = self.email_message or 'Your password has been rotated. Click the link below to view your new credentials.'
 
                     html_content = email_utils.build_onboarding_email(
@@ -442,7 +404,6 @@ class PAMGatewayActionRotateCommand(base.ArgparseCommand):
                         expiration=expiration_text
                     )
 
-                    # 6. Send email
                     logger.info(f'Sending email to {self.send_email}...')
                     email_sender = email_utils.EmailSender(email_config)
                     email_sender.send(
@@ -452,7 +413,6 @@ class PAMGatewayActionRotateCommand(base.ArgparseCommand):
                         html=True
                     )
 
-                    # 7. Persist OAuth tokens if refreshed
                     if email_config.is_oauth_provider() and email_config._oauth_tokens_updated:
                         logger.info('Updating OAuth tokens in email configuration record...')
                         email_utils.update_oauth_tokens_in_record(
@@ -467,18 +427,16 @@ class PAMGatewayActionRotateCommand(base.ArgparseCommand):
 
                 except Exception as e:
                     logger.warning(f'Failed to send email: {e}')
-                    # Don't fail the rotation if email fails
                     return
 
         except Exception as e:
             logger.warning(f'Error in post-rotation email handler: {e}')
-            # Don't fail the rotation if email fails
 
     def str_to_regex(self, text):
         text = str(text)
         try:
             pattern = re.compile(text, re.IGNORECASE)
-        except: # re.error: yet maybe TypeError, MemoryError, RecursionError etc.
+        except:
             pattern = re.compile(re.escape(text), re.IGNORECASE)
             logger.debug(f"regex pattern {text} failed to compile (using it as plaintext pattern)")
         return pattern

@@ -42,7 +42,7 @@ class PAMDebugVertexCommand(PAMGatewayActionDiscoverCommandBase):
 
         configuration_uid = kwargs.get('configuration_uid')
 
-        gateway_context = GatewayContext.from_gateway(context=context,
+        gateway_context = GatewayContext.from_gateway(vault=context.vault,
                                                         gateway=gateway,
                                                         configuration_uid=configuration_uid)
         if gateway_context is None:
@@ -107,7 +107,7 @@ class PAMDebugVertexCommand(PAMGatewayActionDiscoverCommandBase):
             logger.info(f"Allows Admin: {content.item.allows_admin}")
             logger.info(f"Admin Reason: {content.item.admin_reason}")
             logger.info("")
-            # If facts are not set, inside discover may not have been performed for the machine.
+
             if content.item.facts.id is not None and content.item.facts.name is not None:
                 logger.info(f"Machine Name: {content.item.facts.name}")
                 logger.info(f"Machine ID: {content.item.facts.id.machine_id}")

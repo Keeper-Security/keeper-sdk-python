@@ -44,7 +44,7 @@ class PAMActionServiceListCommand(PAMGatewayActionDiscoverCommandBase):
 
         service_map = {}
         for resource_vertex in user_service.dag.get_root.has_vertices(edge_type=EdgeType.LINK):
-            resource_record = vault.vault_data.load_record(resource_vertex.uid)
+            resource_record = vault.vault_data.get_record(resource_vertex.uid)
             if resource_record is None or resource_record.record_type != PAM_MACHINE:
                 continue
             user_vertices = user_service.get_user_vertices(resource_vertex.uid)
@@ -84,7 +84,6 @@ class PAMActionServiceListCommand(PAMGatewayActionDiscoverCommandBase):
             logger.info("")
         if not printed_something:
             logger.error(f"There are no service mappings.")
-
 
 
 class PAMActionServiceAddCommand(PAMGatewayActionDiscoverCommandBase):
@@ -134,14 +133,11 @@ class PAMActionServiceAddCommand(PAMGatewayActionDiscoverCommandBase):
                                  agent=f"Cmdr/{__version__}")
 
         ###############
-
-        # Check to see if the record exists.
-        machine_record = vault.vault_data.load_record(machine_uid)
+        machine_record = vault.vault_data.get_record(machine_uid)
         if machine_record is None:
             logger.error(f"The machine record does not exists.")
             return
 
-        # Make sure the record is a PAM Machine.
         if machine_record.record_type != PAM_MACHINE:
             logger.error(f"The machine record is not a PAM Machine.")
             return
@@ -161,13 +157,11 @@ class PAMActionServiceAddCommand(PAMGatewayActionDiscoverCommandBase):
 
         ###############
 
-        # Check to see if the record exists.
-        user_record = vault.vault_data.load_record(user_uid)
+        user_record = vault.vault_data.get_record(user_uid)
         if user_record is None:
             logger.error(f"The user record does not exists.")
             return
 
-        # Make sure this user is a PAM User.
         if user_record.record_type != PAM_USER:
             logger.error(f"The user record is not a PAM User.")
             return
@@ -184,8 +178,9 @@ class PAMActionServiceAddCommand(PAMGatewayActionDiscoverCommandBase):
 
         ########
 
-        # Make sure we are setting up a Windows machine.
+        # Make sure it is a Windows machine.
         # Linux and Mac do not use passwords in services and cron jobs; no need to link.
+        machine_record = vault.vault_data.load_record(machine_uid)
         os_field = next((x for x in machine_record.fields if x.label == "operatingSystem"), None)
         if os_field is None:
             logger.error(f"Cannot find the operating system field in this record.")
@@ -201,8 +196,6 @@ class PAMActionServiceAddCommand(PAMGatewayActionDiscoverCommandBase):
                           "PAM can only rotate the services and scheduled task password on Windows.")
             return
 
-        # Get the machine service vertex.
-        # If it doesn't exist, create one.
         machine_vertex = user_service.get_record_link(machine_record.record_uid)
         if machine_vertex is None:
             machine_vertex = user_service.dag.add_vertex(
@@ -210,8 +203,6 @@ class PAMActionServiceAddCommand(PAMGatewayActionDiscoverCommandBase):
                 name=machine_record.title,
                 vertex_type=RefType.PAM_MACHINE)
 
-        # Get the user service vertex.
-        # If it doesn't exist, create one.
         user_vertex = user_service.get_record_link(user_record.record_uid)
         if user_vertex is None:
             user_vertex = user_service.dag.add_vertex(
@@ -230,11 +221,9 @@ class PAMActionServiceAddCommand(PAMGatewayActionDiscoverCommandBase):
         else:
             acl.is_iis_pool = True
 
-        # Make sure the machine has a LINK connection to the configuration.
         if not user_service.dag.get_root.has(machine_vertex):
             user_service.belongs_to(gateway_context.configuration_uid, machine_vertex.uid)
 
-        # Add our new ACL edge between the machine and the yser.
         user_service.belongs_to(machine_vertex.uid, user_vertex.uid, acl=acl)
 
         user_service.save()
@@ -302,7 +291,7 @@ class PAMActionServiceRemoveCommand(PAMGatewayActionDiscoverCommandBase):
         user_service = UserService(record=gateway_context.configuration, context=context, fail_on_corrupt=False,
                                    agent=f"Cmdr/{__version__}")
 
-        machine_record = vault.vault_data.load_record(machine_uid)
+        machine_record = vault.vault_data.get_record(machine_uid)
         if machine_record is None:
             logger.error(f"The machine record does not exists.")
             return
@@ -311,7 +300,7 @@ class PAMActionServiceRemoveCommand(PAMGatewayActionDiscoverCommandBase):
             logger.error(f"The machine record is not a PAM Machine.")
             return
 
-        user_record = vault.vault_data.load_record(user_uid)
+        user_record = vault.vault_data.get_record(user_uid)
         if user_record is None:
             logger.error(f"The user record does not exists.")
             return

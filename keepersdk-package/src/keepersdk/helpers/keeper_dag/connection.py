@@ -24,7 +24,6 @@ class Connection(ConnectionBase):
                  use_write_protobuf: bool = False,
                  **kwargs):
 
-        # Commander uses /api/user; hence is_device=False
         super().__init__(is_device=False,
                          logger=logger,
                          log_transactions=log_transactions,
@@ -36,7 +35,6 @@ class Connection(ConnectionBase):
         self.verify_ssl = dag_utils.value_to_boolean(os.environ.get("VERIFY_SSL", verify_ssl))
         self.is_ws = is_ws
 
-        # Deprecated; setting this will override the per-transaction values.
         self.transmission_key = kwargs.get("transmission_key")
         self.dep_encrypted_transmission_key = kwargs.get("encrypted_transmission_key")
         self.dep_encrypted_session_token = kwargs.get("encrypted_session_token")
@@ -45,9 +43,16 @@ class Connection(ConnectionBase):
     def get_record_uid(record: vault_record.KeeperRecord) -> str:
         return record.record_uid
 
-    @staticmethod
-    def get_key_bytes(record: vault_record.KeeperRecord) -> bytes:
-        return record.record_key
+    def get_key_bytes(self, record: vault_record.KeeperRecord) -> Optional[bytes]:
+        if hasattr(record, "record_key_bytes"):
+            rk = getattr(record, "record_key_bytes", None)
+            if rk:
+                return rk
+        if hasattr(record, "record_key"):
+            rk = getattr(record, "record_key", None)
+            if rk:
+                return rk
+        return self.vault.vault_data.get_record_key(record.record_uid)
 
     @property
     def hostname(self) -> str:

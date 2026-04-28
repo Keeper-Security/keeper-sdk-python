@@ -43,10 +43,9 @@ def router_get_connected_gateways(vault: vault_online.VaultOnline) -> Optional[p
 def router_send_action_to_gateway(context: KeeperParams, gateway_action: GatewayAction, message_type, is_streaming,
                                   destination_gateway_uid_str=None, gateway_timeout=15000, transmission_key=None,
                                   encrypted_transmission_key=None, encrypted_session_token=None):
-    # Default time out how long the response from the Gateway should be
+
     krouter_host = context.auth.keeper_endpoint.get_router_server()
 
-    # 1. Find connected gateway to send action to
     try:
         router_enterprise_controllers_connected = \
             [x.controllerUid for x in router_get_connected_gateways(context.vault).controllers]
@@ -58,8 +57,6 @@ def router_send_action_to_gateway(context: KeeperParams, gateway_action: Gateway
         raise e
 
     if destination_gateway_uid_str:
-        # Means that we want to get info for a specific Gateway
-
         destination_gateway_uid_bytes = utils.base64_url_decode(destination_gateway_uid_str)
 
         if destination_gateway_uid_bytes not in router_enterprise_controllers_connected:
@@ -73,7 +70,7 @@ def router_send_action_to_gateway(context: KeeperParams, gateway_action: Gateway
         elif len(router_enterprise_controllers_connected) == 1:
             destination_gateway_uid_bytes = router_enterprise_controllers_connected[0]
             destination_gateway_uid_str = utils.base64_url_encode(destination_gateway_uid_bytes)
-        else:  # There are more than two Gateways connected. Selecting the right one
+        else:
 
             if not gateway_action.gateway_destination:
                 logging.warning(f"There are more than one Gateways running in your enterprise. "
@@ -121,12 +118,10 @@ def router_send_action_to_gateway(context: KeeperParams, gateway_action: Gateway
             raise Exception(router_response.errorMessage + ' response code: ' + rrc)
 
         elif router_response.responseCode == router_pb2.RRC_TIMEOUT:
-            # Router tried to send message to the Controller but the response didn't arrive on time
-            # ex. if Router is expecting response to be within 3 sec, but the gateway didn't respond within that time
+
             raise Exception(router_response.errorMessage + ' response code: ' + rrc)
 
         elif router_response.responseCode == router_pb2.RRC_CONTROLLER_DOWN:
-            # Sent an action to the Controller that is no longer online
             raise Exception(router_response.errorMessage + ' response code: ' + rrc)
 
         else:
@@ -201,8 +196,7 @@ def print_router_response(router_response, response_type, original_conversation_
                 logging.warning(f'{w}')
 
     if original_conversation_id:
-        # gateway_response_conversation_id = utils.base64_url_decode(router_response_response_payload_dict.get('conversation_id')).decode("utf-8")
-        # IDs are either bytes or base64 encoded strings which may be padded
+
         gateway_response_conversation_id = router_response_response_payload_dict.get('conversation_id', None)
         oid = (utils.base64_url_decode(original_conversation_id)
                if isinstance(original_conversation_id, str)
@@ -265,14 +259,12 @@ def print_router_response(router_response, response_type, original_conversation_
 
         gateway_info = router_response_response_payload_dict.get('data')
 
-        # Version and Gateway Details
         logging.info(f'\nGateway Details')
         gateway_config = gateway_info.get('gateway-config', {})
         version_info = gateway_config.get('version', {})
         if version_info.get("current"):
             logging.info(f'\tVersion           : {version_info.get("current")}')
 
-        # Convert Unix timestamp to readable format
         started_time = gateway_config.get("connection_info", {}).get("started")
         try:
             if started_time:
@@ -286,7 +278,6 @@ def print_router_response(router_response, response_type, original_conversation_
         if gateway_config.get("ws_log_file"):
             logging.info(f'\tLogs Location     : {gateway_config.get("ws_log_file")}')
 
-        # Environment Info
         machine_env = gateway_info.get('machine', {}).get('environment', {})
         if machine_env and machine_env.get('provider'):
             logging.info(f'\nEnvironment Details')
@@ -299,7 +290,6 @@ def print_router_response(router_response, response_type, original_conversation_
                 if machine_env.get('instance_type'):
                     logging.info(f'\tInstance Type     : {machine_env.get("instance_type")}')
 
-        # Machine Details
         machine = gateway_info.get('machine', {})
         logging.info(f'\nMachine Details')
 
@@ -320,7 +310,6 @@ def print_router_response(router_response, response_type, original_conversation_
         if memory.get('free_gb') is not None and memory.get('total_gb') is not None:
             logging.info(f'\tMemory            : {memory.get("free_gb")}GB free / {memory.get("total_gb")}GB total')
 
-        # Core Package Versions - Extract from installed packages
         installed_packages = {
             pkg.split('==')[0]: pkg.split('==')[1]
             for pkg in machine.get('installed-python-packages', [])
@@ -332,11 +321,10 @@ def print_router_response(router_response, response_type, original_conversation_
             ('Discovery Common', installed_packages.get('discovery-common'))
         ]
 
-        # Only print Core Components section if at least one core package is found
         if any(version for _, version in core_packages):
             logging.info(f'\nCore Components')
             for name, version in core_packages:
-                if version:  # Only print if version is found
+                if version:
                     logging.info(f'\t{name:<16} : {version}')
 
         # KSM Details

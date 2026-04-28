@@ -23,7 +23,6 @@ logger = api.get_logger()
 
 choices = ['on', 'off', 'default']
 
-# These characters are based on the Vault
 PAM_DEFAULT_SPECIAL_CHAR = '''!@#$%^?();',.=+[]<>{}-_/\\*&:"`~|'''
 
 
@@ -94,7 +93,6 @@ class PAMListRecordRotationCommand(base.ArgparseCommand):
                 record_type = '[record inaccessible]'
 
             if record_type != "pamUser":
-                # only pamUser records are supported for rotation
                 continue
 
             row.append(f'{record_uid}')
@@ -102,9 +100,6 @@ class PAMListRecordRotationCommand(base.ArgparseCommand):
             row.append(record_type)
 
             if s.noSchedule is True:
-                # Per Sergey A:
-                # > noSchedule=true means manual
-                # > false is by default in proto and matches the default state for most records (would have a schedule)
                 schedule_str = '[Manual Rotation]'
             else:
                 if s.scheduleData:
@@ -119,8 +114,6 @@ class PAMListRecordRotationCommand(base.ArgparseCommand):
                     schedule_str = '[empty]'
 
             row.append(f'{schedule_str}')
-
-            # Controller Info
 
             enterprise_controllers_connected = router_utils.router_get_connected_gateways(vault)
             connected_controller = None
@@ -161,7 +154,6 @@ class PAMListRecordRotationCommand(base.ArgparseCommand):
         print(f"\tpam action rotate -r [RECORD UID]")
 
 
-
 def validate_cron_field(field, min_val, max_val):
     # Accept *, single number, range, step, list, and L suffix for last day/week
     pattern = r'^(\*|\d+L?|L[W]?|\d+-\d+|\*/\d+|\d+(,\d+)*|\d+-\d+/\d+)$'
@@ -179,8 +171,6 @@ def validate_cron_field(field, min_val, max_val):
 def validate_cron_expression(expr, for_rotation=False):
     parts = expr.strip().split()
 
-    # All internal docs, MRD etc. specify that rotation schedule is using CRON format
-    # but actually back-end don't accept all valid standard CRON and uses unspecified custom CRON format
     if for_rotation is True:
         if len(parts) != 6:
             return False, f"CRON: Rotation schedules require all 6 parts incl. seconds - ex. Daily at 04:00:00 cron: 0 0 4 * * ? got {len(parts)} parts"
@@ -216,6 +206,7 @@ def validate_cron_expression(expr, for_rotation=False):
 
     return True, "Valid cron expression"
 
+
 def parse_schedule_data(kwargs):
     schedule_json_data = kwargs.get('schedule_json_data')
     schedule_cron_data = kwargs.get('schedule_cron_data')
@@ -224,7 +215,6 @@ def parse_schedule_data(kwargs):
     if isinstance(schedule_json_data, list):
         schedule_data = [json.loads(x) for x in schedule_json_data]
     elif isinstance(schedule_cron_data, list):
-        # more details: http://www.quartz-scheduler.org/documentation/quartz-2.3.0/tutorials/crontrigger.html#examples
         if schedule_cron_data and isinstance(schedule_cron_data[0], str):
             valid, err = validate_cron_expression(schedule_cron_data[0], for_rotation=True)
             if valid:
@@ -297,7 +287,6 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
 
         def config_resource(_dag, target_record, target_config_uid, silent=None):
             if not _dag.linking_dag.has_graph:
-                # Add DAG for resource
                 if target_config_uid:
                     _dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, target_config_uid)
                     _dag.edit_tunneling_config(rotation=True)
@@ -308,7 +297,6 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                                            f'--config CONFIG')
             resource_dag = None
             if not _dag.resource_belongs_to_config(target_record.record_uid):
-                # Change DAG to this new configuration.
                 resource_dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key,
                                          target_record.record_uid)
                 _dag.link_resource_to_config(target_record.record_uid)
@@ -329,7 +317,6 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                                           allowed_settings_name="rotation")
 
             if resource_dag is not None and resource_dag.linking_dag.has_graph:
-                # TODO: Make sure this doesn't remove everything from the new dag too
                 resource_dag.remove_from_dag(target_record.record_uid)
 
             if not silent:
@@ -339,7 +326,6 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
             current_record_rotation = context.get_record_rotation(target_record.record_uid)
             schedule_only = kwargs.get('schedule_only')
 
-            # Handle schedule-only operations first to avoid unnecessary resource validation
             if schedule_only:
                 if kwargs.get('folder_name') and (
                         not current_record_rotation or current_record_rotation.disabled):
@@ -362,7 +348,7 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                         record_schedule_data = []
                 pwd_complexity_rule_list_encrypted = current_record_rotation.pwd_complexity or b''
                 record_resource_uid = current_record_rotation.resource_uid
-                # IAM users have resource_uid == config_uid; should be empty to preserve rotation profile
+
                 if record_resource_uid == record_config_uid:
                     record_resource_uid = None
                 disabled = current_record_rotation.disabled
@@ -385,9 +371,8 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                     target_record.record_uid, target_record.title, not disabled, record_config_uid,
                     record_resource_uid, schedule, complexity])
 
-                # Check if we have NOOP rotation for schedule-only operations
                 noop_rotation = str(kwargs.get('noop', False) or False).upper() == 'TRUE'
-                if target_record and not noop_rotation:  # check from record data
+                if target_record and not noop_rotation:
                     noop_field = target_record.get_typed_field('text', 'NOOP')
                     if (noop_field and noop_field.value and
                             isinstance(noop_field.value, list) and
@@ -416,7 +401,6 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
             if old_dag.linking_dag.has_graph and old_dag.record.record_uid != target_iam_aad_config_uid:
                 old_dag.remove_from_dag(target_record.record_uid)
 
-            # with IAM users the user is at the level the resource is usually at,
             if not _dag.user_belongs_to_config(target_record.record_uid):
                 old_resource_uid = _dag.get_resource_uid(target_record.record_uid)
                 if old_resource_uid is not None:
@@ -429,7 +413,6 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                     _dag.link_user_to_resource(target_record.record_uid, old_resource_uid, belongs_to=False)
                 _dag.link_user_to_config(target_record.record_uid)
 
-            # 1. PAM Configuration UID
             record_config_uid = _dag.record.record_uid
             record_pam_config = pam_config
             if not record_config_uid:
@@ -453,7 +436,6 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                          'Specify a configuration UID parameter [--config]'])
                     return
 
-            # 2. Schedule
             record_schedule_data = schedule_data
             if record_schedule_data is None:
                 if current_record_rotation and not schedule_config:
@@ -469,7 +451,6 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                         if isinstance(schedule_field.value[0], dict):
                             record_schedule_data = [schedule_field.value[0]]
 
-            # 3. Password complexity
             if pwd_complexity_rule_list is None:
                 if current_record_rotation:
                     pwd_complexity_rule_list_encrypted = current_record_rotation.pwd_complexity or b''
@@ -482,7 +463,6 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                 else:
                     pwd_complexity_rule_list_encrypted = b''
 
-            # 4. Resource record
             record_resource_uid = target_iam_aad_config_uid
             if record_resource_uid is None:
                 if current_record_rotation:
@@ -503,7 +483,7 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                                 return
 
             disabled = False
-            # 5. Enable rotation
+
             if kwargs.get('enable'):
                 _dag.set_resource_allowed(target_iam_aad_config_uid, rotation=True,
                                           is_config=bool(target_iam_aad_config_uid))
@@ -535,14 +515,14 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                  schedule,
                  complexity])
 
-            # 6. Construct Request object for IAM: empty resourceUid and noop=False
+
             rq = router_pb2.RouterRecordRotationRequest()
             if current_record_rotation:
                 rq.revision = current_record_rotation.revision
             rq.recordUid = utils.base64_url_decode(target_record.record_uid)
             rq.configurationUid = utils.base64_url_decode(record_config_uid)
-            rq.resourceUid = b''  # non-empty resourceUid sets is as General rotation
-            rq.noop = False  # True sets it as NOOP
+            rq.resourceUid = b''
+            rq.noop = False
             rq.schedule = json.dumps(record_schedule_data) if record_schedule_data else ''
             rq.pwdComplexity = pwd_complexity_rule_list_encrypted
             rq.disabled = disabled
@@ -552,7 +532,6 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
             current_record_rotation = context.get_record_rotation(target_record.record_uid)
             schedule_only = kwargs.get('schedule_only')
 
-            # Handle schedule-only operations first to avoid unnecessary resource validation
             if schedule_only:
                 if kwargs.get('folder_name') and (
                         not current_record_rotation or current_record_rotation.disabled):
@@ -575,7 +554,7 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                         record_schedule_data = []
                 pwd_complexity_rule_list_encrypted = current_record_rotation.pwd_complexity or b''
                 record_resource_uid = current_record_rotation.resource_uid
-                # IAM users have resource_uid == config_uid; should be empty to preserve rotation profile
+
                 if record_resource_uid == record_config_uid:
                     record_resource_uid = None
                 disabled = current_record_rotation.disabled
@@ -598,9 +577,8 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                     target_record.record_uid, target_record.title, not disabled, record_config_uid,
                     record_resource_uid, schedule, complexity])
 
-                # Check if we have NOOP rotation for schedule-only operations
                 noop_rotation = str(kwargs.get('noop', False) or False).upper() == 'TRUE'
-                if target_record and not noop_rotation:  # check from record data
+                if target_record and not noop_rotation:
                     noop_field = target_record.get_typed_field('text', 'NOOP')
                     if (noop_field and noop_field.value and
                             isinstance(noop_field.value, list) and
@@ -621,9 +599,8 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                 r_requests.append(rq)
                 return
 
-            # NOOP rotation (for non-schedule-only operations)
             noop_rotation = str(kwargs.get('noop', False) or False).upper() == 'TRUE'
-            if target_record and not noop_rotation:  # check from record data
+            if target_record and not noop_rotation:
                 noop_field = target_record.get_typed_field('text', 'NOOP')
                 if (noop_field and noop_field.value and
                         isinstance(noop_field.value, list) and
@@ -632,7 +609,6 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
             if _dag and _dag.linking_dag:
                 admin_record_uids = _dag.get_all_admins()
                 if folder_name and target_record.record_uid in admin_record_uids:
-                    # If iterating through a folder, skip admin records
                     skipped_records.append([target_record.record_uid, target_record.title, 'Admin Credential',
                                             'This record is used as Admin credentials on a PAM Configuration. Skipped'])
                     return
@@ -662,16 +638,14 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                                            f'with any configuration. '
                                            f'pam rotation edit -rs {target_resource_uid} '
                                            f'--config CONFIG')
-            # Noop and resource cannot be both assigned
+
             if noop_rotation:
                 target_resource_uid = target_record.record_uid
                 record_resource_uid = None
             else:
                 if not target_resource_uid:
-                    # Get the resource configuration from DAG
                     resource_uids = _dag.get_all_owners(target_record.record_uid)
                     if len(resource_uids) > 1:
-                        # When processing folders, skip records with multiple resources
                         if folder_name:
                             skipped_records.append([
                                 target_record.record_uid,
@@ -693,13 +667,13 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                     target_resource_uid = resource_uids[0]
 
                 if not _dag.resource_belongs_to_config(target_resource_uid):
-                    # some rotations (iam_user/noop) link straight to pamConfiguration
                     if target_resource_uid != _dag.record.record_uid:
                         raise base.CommandError(
                                            f'Resource "{target_resource_uid}" is not associated with the '
                                            f'configuration of the user "{target_record.record_uid}". To associated the resources '
                                            f'to this config run "pam rotation resource {target_resource_uid} '
                                            f'--config {_dag.record.record_uid}"')
+
                 if not _dag.user_belongs_to_resource(target_record.record_uid, target_resource_uid):
                     old_resource_uid = _dag.get_resource_uid(target_record.record_uid)
                     if old_resource_uid is not None and old_resource_uid != target_resource_uid:
@@ -711,7 +685,6 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                         _dag.link_user_to_resource(target_record.record_uid, old_resource_uid, belongs_to=False)
                     _dag.link_user_to_resource(target_record.record_uid, target_resource_uid, belongs_to=True)
 
-            # 1. PAM Configuration UID
             record_config_uid = _dag.record.record_uid
             record_pam_config = pam_config
             if not record_config_uid:
@@ -735,7 +708,6 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                          'Specify a configuration UID parameter [--config]'])
                     return
 
-            # 2. Schedule
             record_schedule_data = schedule_data
             if record_schedule_data is None:
                 if current_record_rotation:
@@ -753,7 +725,6 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                 else:
                     record_schedule_data = []
 
-            # 3. Password complexity
             if pwd_complexity_rule_list is None:
                 if current_record_rotation:
                     pwd_complexity_rule_list_encrypted = current_record_rotation.pwd_complexity or b''
@@ -766,18 +737,14 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                 else:
                     pwd_complexity_rule_list_encrypted = b''
 
-            # 4. Resource record
-            # Noop and resource cannot be both assigned
             if not noop_rotation:
                 record_resource_uid = target_resource_uid
-                # IAM users are linked directly to config (target_resource_uid == config_uid)
-                # In this case, resourceUid should be empty to preserve IAM rotation profile
+
                 if record_resource_uid == _dag.record.record_uid:
                     record_resource_uid = None
                 if record_resource_uid is None:
                     if current_record_rotation:
                         record_resource_uid = current_record_rotation.resource_uid
-                        # Also check if the cached resource_uid is actually the config UID
                         if record_resource_uid == record_config_uid:
                             record_resource_uid = None
                 if record_resource_uid is None:
@@ -796,7 +763,7 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                                     return
 
             disabled = False
-            # 5. Enable rotation
+
             if kwargs.get('enable'):
                 _dag.set_resource_allowed(target_resource_uid, rotation=True)
             elif kwargs.get('disable'):
@@ -826,7 +793,6 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                  schedule,
                  complexity])
 
-            # 6. Construct Request object
             rq = router_pb2.RouterRecordRotationRequest()
             if current_record_rotation:
                 rq.revision = current_record_rotation.revision
@@ -838,10 +804,9 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
             rq.disabled = disabled
             if noop_rotation:
                 rq.noop = True
-                rq.resourceUid = b''  # Noop and resource cannot be both assigned
+                rq.resourceUid = b''
             r_requests.append(rq)
 
-        # Main execute() logic starts here
         record_uids = set()
 
         folder_uids = set()
@@ -955,9 +920,6 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
 
                 special_chars = PAM_DEFAULT_SPECIAL_CHAR
                 if len(pwd_complexity_list) == 6:
-
-                    # Get the special characters.
-                    # Only take chars in our special char list.
                     special_chars = ""
                     for char in PAM_DEFAULT_SPECIAL_CHAR:
                         if char in pwd_complexity_list[5]:
@@ -987,9 +949,6 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
 
         r_requests = []
 
-        # Note: --folder, -fd FOLDER_NAME sets up General rotation
-        # use --schedule-only, -so to preserve individual setups (General, IAM, NOOP)
-        # use --iam-aad-config, -iac IAM_AAD_CONFIG_UID to convert to IAM User
         for _record in pam_records:
             tmp_dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, _record.record_uid)
             if _record.record_type in ['pamMachine', 'pamDatabase', 'pamDirectory', 'pamRemoteBrowser']:
@@ -1006,10 +965,8 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                                            ' --resource is used to configure users found on a resource.'
                                            ' --iam-aad-config-uid is used to configure AWS IAM or Azure AD users')
 
-                # Handle --rotation-profile option
                 if rotation_profile:
                     if rotation_profile == 'iam_user':
-                        # Use iam_aad_config_uid if provided, otherwise try to get from current rotation or --config
                         effective_config_uid = iam_aad_config_uid or config_uid
                         if not effective_config_uid:
                             current_rotation = context.get_record_rotation(_record.record_uid)
@@ -1022,18 +979,19 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                             raise base.CommandError(
                                                f'Record uid {effective_config_uid} is not a PAM Configuration record.')
                         config_iam_aad_user(tmp_dag, _record, effective_config_uid)
+
                     elif rotation_profile == 'scripts_only':
-                        # Set noop flag for scripts_only profile
                         kwargs['noop'] = 'TRUE'
                         config_user(tmp_dag, _record, resource_uid, config_uid, silent=kwargs.get('silent'))
+
                     elif rotation_profile == 'general':
-                        # General rotation requires a resource
                         if not resource_uid:
                             raise base.CommandError('General rotation profile requires --resource to be specified.')
                         config_user(tmp_dag, _record, resource_uid, config_uid, silent=kwargs.get('silent'))
-                # NB! --folder=UID without --iam-aad-config, or --schedule-only converts to General rotation
+
                 elif iam_aad_config_uid:
                     config_iam_aad_user(tmp_dag, _record, iam_aad_config_uid)
+
                 else:
                     config_user(tmp_dag, _record, resource_uid, config_uid, silent=kwargs.get('silent'))
 
@@ -1142,7 +1100,6 @@ class PAMRouterGetRotationInfo(base.ArgparseCommand):
 
             logger.info(f"Is Rotation Disabled: {rri.disabled}")
 
-            # Get schedule information
             rq = pam_pb2.PAMGenericUidsRequest()
             schedules_proto = router_utils.router_get_rotation_schedules(context, rq)
             if schedules_proto:
@@ -1429,4 +1386,3 @@ class PAMScriptDeleteCommand(base.ArgparseCommand):
         script_field.value.remove(script_value)
         record_management.update_record(vault, record)
         vault.sync_data = True
-

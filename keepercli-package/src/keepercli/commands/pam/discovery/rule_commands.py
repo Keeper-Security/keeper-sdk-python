@@ -76,12 +76,11 @@ class PAMGatewayActionDiscoverRuleListCommand(PAMGatewayActionDiscoverCommandBas
 
             action_value = f"NONE"
             if rule.action is not None:
-                color = ""
                 action_value = rule.action.value
 
             logger.info(f"{rule.rule_id.ljust(14, ' ')} "
                   f"{name[:20].ljust(20, ' ')} "
-                  f"{color}{action_value.ljust(6, ' ')} "
+                  f"{action_value.ljust(6, ' ')} "
                   f"{str(rule.priority).rjust(8, ' ')} "
                   f"{ignore_case_str.ljust(12, ' ')} "
                   f"{rule.added_ts_str.ljust(19, ' ')} "
@@ -95,7 +94,7 @@ class PAMGatewayActionDiscoverRuleListCommand(PAMGatewayActionDiscoverCommandBas
         configuration_uid = kwargs.get('configuration_uid')
         vault = context.vault
         gateway_context = GatewayContext.from_gateway(vault=vault,
-                                                      gateway_uid=gateway,
+                                                      gateway=gateway,
                                                       configuration_uid=configuration_uid)
         if gateway_context is None:
             logger.error(f"Could not find the gateway configuration for {gateway}.")
@@ -200,7 +199,6 @@ class PAMGatewayActionDiscoverRuleAddCommand(PAMGatewayActionDiscoverCommandBase
                 logger.error(f"Could not find the gateway configuration for {gateway_uid}.")
                 return
 
-            # If we are setting the shared_folder_uid, make sure it exists.
             shared_folder_uid = kwargs.get("shared_folder_uid")
             if shared_folder_uid is not None:
                 shared_folder_uids = gateway_context._shared_folders if gateway_context._shared_folders is not None else []
@@ -351,7 +349,6 @@ class PAMGatewayActionDiscoverRuleUpdateCommand(PAMGatewayActionDiscoverCommandB
 
             statement = kwargs.get("statement")
             if statement is not None:
-                # validate_rule_statement will throw exceptions.
                 statement_struct = PAMGatewayActionDiscoverRuleAddCommand.validate_rule_statement(
                     context=context,
                     gateway_context=gateway_context,

@@ -9,12 +9,10 @@ from tempfile import TemporaryDirectory
 
 from keepersdk.helpers.keeper_dag import dag_utils
 
-from .... import api
 from ..discovery.__init__ import GatewayContext, PAMGatewayActionDiscoverCommandBase
 from ..pam_dto import GatewayAction
 from ....params import KeeperParams
 from .... import api
-from ....__init__ import __version__
 from . import (
     SaasCatalog,
     get_plugins_map,
@@ -222,15 +220,16 @@ class PAMActionSaasConfigCommand(PAMGatewayActionDiscoverCommandBase):
         add_record.client_modified_time = utils.current_milli_time()
         add_record.folder_type = record_pb2.user_folder
         if folder:
-            add_record.folder_uid = utils.base64_url_decode(folder.uid)
-            if folder.type == 'shared_folder':
+            add_record.folder_uid = utils.base64_url_decode(folder.folder_uid)
+            if folder.folder_type == 'shared_folder':
                 add_record.folder_type = record_pb2.shared_folder
-            elif folder.type == 'shared_folder_folder':
+            elif folder.folder_type == 'shared_folder_folder':
                 add_record.folder_type = record_pb2.shared_folder_folder
             if folder_key:
                 add_record.folder_key = crypto.encrypt_aes_v2(record.record_key, folder_key)
 
-        data = vault_extensions.extract_typed_record_data(record)
+        record_type = vault.vault_data.get_record_type_by_name(record.record_type)
+        data = vault_extensions.extract_typed_record_data(record, record_type)
         json_data = vault_extensions.get_padded_json_bytes(data)
         add_record.data = crypto.encrypt_aes_v2(json_data, record.record_key)
 
@@ -247,7 +246,7 @@ class PAMActionSaasConfigCommand(PAMGatewayActionDiscoverCommandBase):
         record_rs = next((x for x in rs.records if utils.base64_url_encode(x.record_uid) == record.record_uid), None)
         if record_rs:
             if record_rs.status != record_pb2.RS_SUCCESS:
-                raise KeeperApiError(record_rs.status, rs.message)
+                raise KeeperApiError(record_rs.status.__str__(), rs.message)
         record.revision = rs.revision
 
         vault.sync_down()
@@ -276,17 +275,16 @@ class PAMActionSaasConfigCommand(PAMGatewayActionDiscoverCommandBase):
                     if script_signature != plugin.file_sig:
                         raise ValueError("The plugin signature in catalog does not match what was downloaded.")
 
-                attachment.upload_attachments(context, existing_record, [task])
+                attachment.upload_attachments(vault, existing_record, [task])
 
                 record.fields = [
                     vault_record.TypedField.create_field(
                         field_type="fileRef",
                         field_label="rotationScripts",
-                        required=False,
-                        value=list(existing_record.linked_keys.keys()))
+                        required=False)
                 ]
 
-                record_management.update_record(context, existing_record)
+                record_management.update_record(vault, existing_record)
                 context.vault.sync_down()
 
         logger.info("")
@@ -392,7 +390,6 @@ class PAMActionSaasSetCommand(PAMGatewayActionDiscoverCommandBase):
 
         vault = context.vault
 
-        # Check to see if the record exists.
         user_record = vault.vault_data.get_record(user_uid)
         if user_record is None:
             logger.error(f"The user record does not exists.")
@@ -431,7 +428,6 @@ class PAMActionSaasSetCommand(PAMGatewayActionDiscoverCommandBase):
             return
 
         # Make sure this config is a Login record.
-
         if config_record.record_type not in ["login", "saasConfiguration"]:
             logger.error(f"The SaaS configuration record is not a SaaS configuration record: "
                          f"{config_record.record_type}")
@@ -474,10 +470,8 @@ class PAMActionSaasSetCommand(PAMGatewayActionDiscoverCommandBase):
 
         parent_uid = gateway_context.configuration_uid
 
-        # Not sure if SaaS type rotation should be limited to NOOP rotation.
         # Allow a resource record to be used.
         if resource_uid is not None:
-            # Check to see if the record exists.
             resource_record = vault.vault_data.load_record(resource_uid)
             if resource_record is None:
                 logger.error(f"The resource record does not exists.")
@@ -507,13 +501,12 @@ class PAMActionSaasSetCommand(PAMGatewayActionDiscoverCommandBase):
                          f"This combination is not allowed.")
             return
 
-        # If there is a resource record, it not NOOP.
+        # If there is a resource record, it is not NOOP.
         # If there is NO resource record, it is NOOP.
         # However, if this is an IAM User, don't set the NOOP
         if acl.is_iam_user is False:
             acl.rotation_settings.noop = resource_uid is None
 
-        # Make sure we are not re-adding the same SaaS config.
         if config_record_uid in acl.rotation_settings.saas_record_uid_list:
             logger.error(f"The SaaS configuration record is already being used for this user.")
             return
@@ -525,7 +518,6 @@ class PAMActionSaasSetCommand(PAMGatewayActionDiscoverCommandBase):
 
         logger.info(f"Setting {plugin_name} rotation for the user record.")
         logger.info("")
-
 
 
 class PAMActionSaasRemoveCommand(PAMGatewayActionDiscoverCommandBase):
@@ -550,7 +542,6 @@ class PAMActionSaasRemoveCommand(PAMGatewayActionDiscoverCommandBase):
         logger.info("")
         vault = context.vault
 
-        # Check to see if the record exists.
         user_record = vault.vault_data.get_record(user_uid)
         if user_record is None:
             logger.error(f"The user record does not exists.")
@@ -579,14 +570,10 @@ class PAMActionSaasRemoveCommand(PAMGatewayActionDiscoverCommandBase):
             return
 
         # Don't check config record
-        # Just accept the record UID; the record might not exist anymore.
-
         parent_uid = gateway_context.configuration_uid
 
-        # Not sure if SaaS type rotation should be limited to NOOP rotation.
         # Allow a resource record to be used.
         if resource_uid is not None:
-            # Check to see if the record exists.
             resource_record = vault.vault_data.get_record(resource_uid)
             if resource_record is None:
                 logger.error(f"The resource record does not exists.")
@@ -644,7 +631,6 @@ class PAMActionSaasUserCommand(PAMGatewayActionDiscoverCommandBase):
         logger.info("")
         vault = context.vault
 
-        # Check to see if the record exists.
         user_record = vault.vault_data.get_record(user_uid)
         if user_record is None:
             logger.error(f"The user record does not exists.")
@@ -684,11 +670,8 @@ class PAMActionSaasUserCommand(PAMGatewayActionDiscoverCommandBase):
 
         missing_configs = []
 
-        # User's can have multiple ACL edges to different parents.
-        # One of those ACL edges, in the rotation settings, may a populated saas_record_uid_list
         for parent_vertex in user_vertex.belongs_to_vertices():
 
-            # Check to see if the record exists.
             parent_record = vault.vault_data.get_record(parent_vertex.uid)
             if parent_record is None:
                 logger.error(f"* Parent record UID {parent_vertex.uid} does not exists.")
@@ -721,7 +704,6 @@ class PAMActionSaasUserCommand(PAMGatewayActionDiscoverCommandBase):
 
                     plugin = plugins.get(plugin_name)
 
-                    # This might have been a valid plugin, or the name is mistyped, so it's not supported.
                     if plugin is None:
                         plugin_name += " (Not Supported)"
 
@@ -825,7 +807,6 @@ class PAMActionSaasUpdateCommand(PAMGatewayActionDiscoverCommandBase):
             task.title = f"{plugin.name} Script"
             task.mime_type = "text/x-python"
 
-            # Get the existing attached; we are going to remove these
             existing_file_refs = cls._get_file_refs(config_record)
             logger.debug(f"existing file ref: {existing_file_refs}")
 
@@ -849,8 +830,7 @@ class PAMActionSaasUpdateCommand(PAMGatewayActionDiscoverCommandBase):
                 vault_record.TypedField.create_field(
                     field_type="fileRef",
                     field_label="rotationScripts",
-                    required=False,
-                    value=new_file_refs
+                    required=False
                 )
             ]
 
@@ -869,8 +849,6 @@ class PAMActionSaasUpdateCommand(PAMGatewayActionDiscoverCommandBase):
 
         missing_fields = []
         for field in plugin.fields:
-
-            # We only care about required fields.
             if not field.required or field.default_value is not None:
                 continue
             record_field = records_field_map.get(field.label)
@@ -905,8 +883,7 @@ class PAMActionSaasUpdateCommand(PAMGatewayActionDiscoverCommandBase):
             logger.debug(f"plugin is {plugin_name} for config {config_record.title}")
             attachments = list(attachment.prepare_attachment_download(context.vault, config_record.record_uid))
 
-            # If there is no script, just attach script to record.
-            # Someone might have deleted the script from the record.
+            # If there is no script, attach script to record.
             if len(attachments) == 0:
                 logger.info("  * the record does not contain a plugin script.")
                 logger.debug("  * configuration did not have script, add current script.")
@@ -942,11 +919,10 @@ class PAMActionSaasUpdateCommand(PAMGatewayActionDiscoverCommandBase):
                         temp_file = str(os.path.join(temp_dir, plugin.file_name))
                     logger.debug(f"download to {temp_file}")
 
-                    # download_to_file prints to the screen, we don't want that.
                     log_level = logger.getEffectiveLevel()
                     try:
                         logger.setLevel(logging.WARNING)
-                        atta.download_to_file(context.vault, temp_file)
+                        atta.download_to_file(temp_file)
                     finally:
                         logger.setLevel(log_level)
 
@@ -1005,7 +981,7 @@ class PAMActionSaasUpdateCommand(PAMGatewayActionDiscoverCommandBase):
         configuration_uid = kwargs.get('configuration_uid')  # type Optional[str]
         vault = context.vault
 
-        gateway_context = GatewayContext.from_gateway(context=context,
+        gateway_context = GatewayContext.from_gateway(vault=vault,
                                                         gateway=gateway,
                                                         configuration_uid=configuration_uid)
         if gateway_context is None:
@@ -1063,15 +1039,15 @@ class PAMActionSaasUpdateCommand(PAMGatewayActionDiscoverCommandBase):
                     missing_fields = self._missing_fields(config_record=config_record, plugin=plugin)
 
                     if len(missing_fields) > 0:
-
-                        # If we added a script, we need to sync down to get the record version number correct.
                         vault.sync_down()
-                        config_record = vault.vault_data.load_record(config_record_uid)
+                        config_record = vault.vault_data.get_record(config_record_uid)
 
                         # If the record type is login, migrate to saasConfiguration
                         if config_record.record_type == "login":
                             logger.debug("migrating from login to saasConfiguration record type")
                             config_record.type_name = "saasConfiguration"
+
+                        config_record = vault.vault_data.load_record(config_record_uid)
 
                         for required in [True, False]:
                             for field in plugin.fields:
@@ -1110,4 +1086,4 @@ class PAMActionSaasUpdateCommand(PAMGatewayActionDiscoverCommandBase):
             logger.error("")
             logger.error(f"Requires either the --all or --config-record-uid parameters.")
             logger.info("")
-            PAMActionSaasUpdateCommand.parser.print_help()
+            self._parser.print_help()

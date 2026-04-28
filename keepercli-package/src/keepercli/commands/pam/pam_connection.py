@@ -81,11 +81,10 @@ class PAMConnectionEditCommand(base.ArgparseCommand):
         if not isinstance(record, vault_record.TypedRecord):
             raise base.CommandError(f'Record \"{record_name}\" can not be edited.')
 
-        # config parameter is optional and maybe (auto)resolved from PAM record
         config_name = kwargs.get('config', None)
         cfg_rec = vault.vault_data.load_record(config_name)
         if not cfg_rec and record.version == 6:
-            cfg_rec = record  # trying to edit PAM Config itself
+            cfg_rec = record
         config_uid = cfg_rec.record_uid if cfg_rec else None
 
         record_uid = record.record_uid
@@ -104,18 +103,18 @@ class PAMConnectionEditCommand(base.ArgparseCommand):
             if not kwargs.get("silent", False): tdag.print_tunneling_config(record_uid, None)
         else:
             traffic_encryption_key = record.get_typed_field('trafficEncryptionSeed')
-            # Generate a 256-bit (32-byte) random seed
+
             seed = os.urandom(32)
             dirty = False
             if not traffic_encryption_key or not traffic_encryption_key.value:
                 base64_seed = utils.base64_url_encode(seed)
                 record_seed = vault_record.TypedField.create_field('trafficEncryptionSeed', base64_seed, required=False)
-                # if field is present update in-place, if in rec definition add to fields[] else custom[]
+
                 record_types_with_seed = ("pamDatabase", "pamDirectory", "pamMachine", "pamRemoteBrowser")
                 if traffic_encryption_key:
                     traffic_encryption_key.value = [base64_seed]
                 elif record.record_type in record_types_with_seed:
-                    record.fields.append(record_seed)  # DU-469
+                    record.fields.append(record_seed)
                 else:
                     record.custom.append(record_seed)
                 dirty = True
@@ -145,18 +144,17 @@ class PAMConnectionEditCommand(base.ArgparseCommand):
                 if _connections:
                     if connection_override_port:
                         pam_settings.value[0]["connection"]["port"] = connection_override_port
-                    elif connection_override_port is not None:  # empty string means remove port override
+                    elif connection_override_port is not None:
                         pam_settings.value[0]["connection"].pop("port", None)
                     if protocol:
                         pam_settings.value[0]["connection"]["protocol"] = protocol
-                    elif protocol is not None:  # empty string means remove protocol
+                    elif protocol is not None:
                         pam_settings.value[0]["connection"].pop("protocol", None)
                     dirty = True
                 elif protocol or connection_override_port:
                     logger.warning(f'Connection override port and protocol can be set only when connections are enabled '
                             f'with --connections=on option')
 
-            # pam_settings.value already initialized above
             key_events = kwargs.get('key_events')  # on/off/default
             if key_events:
                 psv = pam_settings.value[0] if pam_settings and pam_settings.value else {}
@@ -253,14 +251,12 @@ class PAMConnectionEditCommand(base.ArgparseCommand):
                                           session_recording=kwargs.get('recording', None),
                                           typescript_recording=kwargs.get('typescriptrecording', None))
 
-            # admin parameter is optional yet if not set connections may fail
             admin_name = kwargs.get('admin')
             adm_rec = vault.vault_data.load_record(admin_name)
             admin_uid = adm_rec.record_uid if adm_rec else None
             if admin_uid and record_type in ("pamDatabase", "pamDirectory", "pamMachine"):
                 tdag.link_user_to_resource(admin_uid, record_uid, is_admin=True, belongs_to=True)
 
-            # launch-user parameter sets the launch credential on the resource
             launch_user_name = kwargs.get('launch_user')
             if launch_user_name:
                 launch_rec = vault.vault_data.load_record(launch_user_name)

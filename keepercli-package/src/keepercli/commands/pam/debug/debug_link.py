@@ -35,7 +35,7 @@ class PAMDebugLinkCommand(PAMGatewayActionDiscoverCommandBase):
 
         configuration_uid = kwargs.get('configuration_uid')
 
-        gateway_context = GatewayContext.from_gateway(context=context,
+        gateway_context = GatewayContext.from_gateway(vault=context.vault,
                                                         gateway=gateway,
                                                         configuration_uid=configuration_uid)
         if gateway_context is None:
@@ -47,7 +47,7 @@ class PAMDebugLinkCommand(PAMGatewayActionDiscoverCommandBase):
                                  logger=logger,
                                  debug_level=debug_level)
 
-        resource_record = context.vault.vault_data.load_record(resource_uid)
+        resource_record = context.vault.vault_data.get_record(resource_uid)
         if resource_record is None:
             logger.error(f"The parent record does not exists.")
             return

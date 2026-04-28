@@ -56,7 +56,6 @@ def sort_infra_host(vertices: List[DAGVertex]) -> List[DAGVertex]:
         t1_name = t1.content_as_dict.get("name")
         t2_name = t2.content_as_dict.get("name")
 
-        # Both names are ip addresses
         if _is_ip(t1_name) and _is_ip(t2_name):
             t1_num = _make_ip_number(t1_name)
             t2_num = _make_ip_number(t2_name)
@@ -91,10 +90,8 @@ def sort_infra_vertices(current_vertex: DAGVertex, logger: Optional[logging.Logg
     if logger is None:
         logger = logging.getLogger()
 
-    # Make a map, record type to list of vertices (of that record type)
     record_type_to_vertices_map = {k: [] for k, v in VERTICES_SORT_MAP.items()}
 
-    # Collate the vertices into a record type lookup.
     vertices = current_vertex.has_vertices()
     logger.debug(f"  found {len(vertices)} vertices")
     for vertex in vertices:
@@ -105,14 +102,12 @@ def sort_infra_vertices(current_vertex: DAGVertex, logger: Optional[logging.Logg
         if vertex.active is False:
             logger.debug("  vertex is not active")
             continue
-        # We can't load into a pydantic object since Pydantic has a problem with Union type.
-        # We only want the record type, so it is too much work to try to get into an object.
+
         content_dict = vertex.content_as_dict
         record_type = content_dict.get("record_type")
         if record_type in record_type_to_vertices_map:
             record_type_to_vertices_map[record_type].append(vertex)
 
-    # Sort the vertices for each record type.
     for k, v in VERTICES_SORT_MAP.items():
         if v["sort"] == "sort_infra_name":
             record_type_to_vertices_map[k] = sort_infra_name(record_type_to_vertices_map[k])

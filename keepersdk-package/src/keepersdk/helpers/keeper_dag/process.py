@@ -55,17 +55,12 @@ class NoDiscoveryDataException(Exception):
 
 
 class Process:
-
     """
     Process discovery results
-
     While this class update the PAM/record linking graph, it does not save it.
-
     """
 
-    # Warn when bulk record lists exceed this size (potential memory issue)
     BULK_LIST_WARNING_THRESHOLD = 10000
-    # Hard limit for bulk record lists (safety mechanism)
     BULK_LIST_MAX_SIZE = 50000
 
     def __init__(self, record: Any, job_id: str, logger: Optional[Any] = None, debug_level: int = 0, **kwargs):
@@ -76,13 +71,11 @@ class Process:
         if env_debug_level is not None:
             debug_level = int(env_debug_level)
 
-        # Remember what passed in a kwargs
         self.passed_kwargs = kwargs
 
         self.jobs = Jobs(record=record, logger=logger, debug_level=debug_level, **kwargs)
         self.job = self.jobs.get_job(self.job_id)
 
-        # These are lazy load, so the graph is not loaded here.
         self.infra = Infrastructure(record=record, logger=logger,
                                     debug_level=debug_level,
                                     fail_on_corrupt=False,
@@ -90,7 +83,6 @@ class Process:
         self.record_link = RecordLink(record=record, logger=logger, debug_level=debug_level, **kwargs)
         self.user_service = UserService(record=record, logger=logger, debug_level=debug_level, **kwargs)
 
-        # This is the root UID for all graphs; get it from one of them.
         self.configuration_uid = self.jobs.dag.uid
 
         if logger is None:
@@ -147,8 +139,6 @@ class Process:
         parent_content = DiscoveryObject.get_discovery_object(parent_vertex)
         object_id = content.item.user
         if "\\" in content.item.user:
-            # Remove the domain name from the user.
-            # [0] will be the domain, [1] will be the user.
             object_id = object_id.split("\\")[1]
         if parent_content.record_type == PAM_DIRECTORY:
             domain = parent_content.name
@@ -166,7 +156,6 @@ class Process:
         content.uid = bytes_to_urlsafe_str(m.digest()[:16])
 
     def populate_admin_content_ids(self, content: DiscoveryObject, parent_vertex: Optional[DAGVertex] = None):
-
         """
         Populate the id and uid attributes for content.
         """
@@ -203,36 +192,27 @@ class Process:
         return keys
 
     def _update_with_record_uid(self, record_cache: dict, current_vertex: DAGVertex):
-
-        # If the current vertex is not active, then return.
-        # It won't have a DATA edge.
         if not current_vertex.active:
             return
 
         for vertex in current_vertex.has_vertices():
 
-            # Skip if the vertex is not active.
-            # It won't have a DATA edge.
             if vertex.active is False or vertex.has_data is False:
                 continue
 
-            # Don't worry about "item" class type
             content = DiscoveryObject.get_discovery_object(vertex)
 
-            # If we are ignoring the object, then skip.
             if content.action_rules_result == RuleActionEnum.IGNORE.value or content.ignore_object is True:
                 continue
             elif content.record_uid is not None:
                 cache_keys = self.get_keys_for_vertex(vertex)
                 for key in cache_keys:
 
-                    # If we find an item in the cache, update the vertex with the record UID
                     if key in record_cache.get(content.record_type):
                         content.record_uid = record_cache.get(content.record_type).get(key)
                         vertex.add_data(content)
                         break
 
-            # Process the vertices that belong to the current vertex.
             self._update_with_record_uid(
                 record_cache=record_cache,
                 current_vertex=vertex,
@@ -293,31 +273,24 @@ class Process:
                      discovery_vertex: DAGVertex,
                      content: DiscoveryObject,
                      discovery_parent_vertex: DAGVertex) -> UserAcl:
-        # Check to see if this user already belongs to another record vertex, or belongs to this one.
+
         belongs_to = False
         is_admin = False
         is_iam_user = False
 
         parent_content = DiscoveryObject.get_discovery_object(discovery_parent_vertex)
 
-        # User record the already exists.
-        # This means the vertex has a record UID, doesn't mean it exists in the vault.
-        # It may have been added during this processing.
         if content.record_exists is False:
             belongs_to = True
 
-            # Is this user the admin for the resource?
             if parent_content.access_user is not None:
-                # If this user record's user matches the user that was used to log into the parent resource,
-                #   then this user is the admin for the parent resource.
+
                 if parent_content.access_user.user == content.item.user:
                     is_admin = True
 
-        # User record does not exist.
         else:
             belongs_to_record_vertex = self.record_link.acl_has_belong_to_vertex(discovery_vertex)
 
-            # If the user doesn't belong to any other vertex, it will be long the parent resource.
             if belongs_to_record_vertex is None:
                 self.logger.debug("  user vertex does not belong to another resource vertex")
                 belongs_to = True
@@ -331,7 +304,6 @@ class Process:
                 else:
                     self.logger.debug("  user vertex does not belong to any other resource vertex")
 
-        # If the parent resource is a provider, then this user is an IAM user.
         if parent_content.object_type_value == "providers":
             is_iam_user = True
 
@@ -368,8 +340,6 @@ class Process:
 
         self.logger.debug(f"search for directories: {', '.join(domains)}")
 
-        # Some providers provider directory type services.
-        # They can also provide multiple domains
         provider_vertices = self.infra.dag.search_content({
             "record_type": ["pamAzureConfiguration", "pamDomainConfiguration"],
         }, ignore_case=True)
@@ -389,9 +359,6 @@ class Process:
         if len(found_provider_directories) > 0:
             return found_provider_directories
 
-        # Check the graph first.
-        # `search_content` does an "is in" type match; so subdomains should match a full domain
-        # pamDomainConfiguration is an edge case because it's name in the record is the domain name.
         for domain_name in domains:
             directories = self.infra.dag.search_content({
                 "record_type": ["pamDirectory", "pamDomainConfiguration"],
@@ -400,17 +367,12 @@ class Process:
 
             self.logger.debug(f"found {len(directories)} directories in the graph")
 
-            # If we found directories, return the list of directory vertices.
             if len(directories) > 0:
-                # Return vertices
                 return directories
 
-        # Check the vault secondly.
         for domain_name in domains:
             info = directory_info_func(domain=domain_name, skip_users=False, context=context)
             if info is not None:
-                # If we found directories in the Vault, then return directory info
-                # This will be an instance of DirectoryInfo
                 return info
 
         return None
@@ -422,7 +384,6 @@ class Process:
                              find_user: Optional[str] = None,
                              find_dn: Optional[str] = None) -> Optional[DirectoryUserResult]:
 
-        # If the passed in results were a DirectoryInfo then check the Vault for users.
         if isinstance(results, DirectoryInfo):
             self.logger.debug("search for directory user from vault records")
             self.logger.debug(f"have {len(results.directory_user_record_uids)} users")
@@ -438,14 +399,12 @@ class Process:
                     return found
             return None
 
-        # Else it was a list of directory vertices, check its children for the users.
         else:
             self.logger.debug("search for directory user from the graph")
             for directory_vertex in results:  # type: DAGVertex
                 for user_vertex in directory_vertex.has_vertices():
                     user_content = DiscoveryObject.get_discovery_object(user_vertex)
 
-                    # We should only have pamUser vertices.
                     if user_content.record_type != PAM_USER:
                         self.logger.debug(f"in find directory user, a vertex {user_vertex.uid} was not a pamUser, "
                                           f"was {user_content.record_type}.")
@@ -471,24 +430,21 @@ class Process:
                                      directory_content: DiscoveryObject,
                                      directory_info_func: Callable,
                                      context: Optional[Any] = None):
-
         """
         Link user record to directory when adding a new directory.
 
         When adding a new directory, there may be other directories for the same domain.
         We need to link existing directory users, of the same domain, to this new directory.
-
         """
 
         self.logger.debug(f"resource is directory; connect users to this directory for {directory_vertex.uid}")
 
-        record_link = context.get("record_link")  # type: RecordLink
+        record_link = context.get("record_link")
 
-        # Get the directory user record UIDs from the vault that belong to directories using the same domain.
         directory_info = directory_info_func(
             domain=directory_content.name,
             context=context
-        )  # type: DirectoryInfo
+        )
         if directory_info is None:
             self.logger.debug("there were no directory record for this domain")
             directory_info = DirectoryInfo()
@@ -498,11 +454,6 @@ class Process:
         self.logger.debug(f"found {len(directory_info.directory_user_record_uids)} users"
                           f"from {len(directory_info.directory_record_uids)} directories.")
 
-        # Check our current discovery data.
-        # This is a delta, it will not contain discovery from prior runs.
-        # This will only contain objects in this run.
-        # Make sure the object is a directory and the domain is the same.
-        # Also make sure there is a record UID; it might not be added yet.
         self.logger.debug("finding directories in discovery vertices")
         for parent_vertex in directory_vertex.belongs_to_vertices():
             self.logger.debug(f"find directories under {parent_vertex.uid}")
@@ -527,13 +478,10 @@ class Process:
 
         self.logger.debug(f"found {len(user_record_uids)} user to connect to directory")
 
-        # Make sure there is a link from the user record to the directory record.
-        # We also might need to make a KEY edge from the user to the directory if one does not exist.
         for record_uid in user_record_uids:
             if record_link.get_acl(record_uid,  directory_content.record_uid) is None:
                 record_link.belongs_to(record_uid, directory_content.record_uid, acl=UserAcl.default())
 
-            # Check if the user vertex has a KEY edge to the directory_vertex.
             found_vertices = directory_vertex.dag.search_content({"record_uid": record_uid})
             if len(found_vertices) == 1:
                 user_vertex = found_vertices[0]
@@ -552,13 +500,11 @@ class Process:
                                    user: Optional[str] = None,
                                    dn: Optional[str] = None) -> Optional[str]:
 
-        # Check any directories for the domain exist.
         results = self._directory_exists(domain=domain,
                                          directory_info_func=directory_info_func,
                                          context=context)
 
         if results is not None:
-            # Find the user (clean of domain) or DN in the found directories.
             directory_user = self._find_directory_user(results=results,
                                                        record_lookup_func=record_lookup_func,
                                                        context=context,
@@ -566,25 +512,18 @@ class Process:
                                                        find_dn=dn)
             if directory_user is not None:
 
-                # If we got a normalized record, then a Vault record exists.
-                # No need to create a record, just link, belongs_to is False
-                # Since we are using records, just the belongs_to method instead of
-                #   discovery_belongs_to.
                 if isinstance(directory_user, NormalizedRecord):
                     admin_acl.belongs_to = False
                     return directory_user.record_uid
                 else:
                     admin_content = DiscoveryObject.get_discovery_object(directory_user)
 
-                    # If not a PAM User, then this is bad.
                     if admin_content.record_type != PAM_USER:
                         self.logger.warning(
                             f"found record type {admin_content.record_type} instead of "
                             f"pamUser for record UID {admin_content.record_uid}")
                         return None
 
-                    # If the record UID exists, then connect the directory user to the
-                    #   resource.
                     if admin_content.record_uid is not None:
                         admin_acl.belongs_to = False
                         return admin_content.record_uid

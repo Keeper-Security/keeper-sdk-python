@@ -15,4 +15,4 @@ def get_connection(vault: vault_online.VaultOnline) -> ConnectionBase:
         return CommanderConnection(vault=vault, logger=get_logger())
     else:
         from keepersdk.helpers.keeper_dag.connection.local import Connection as LocalConnection
-        return LocalConnection(vault=vault, logger=get_logger())
+        return LocalConnection()

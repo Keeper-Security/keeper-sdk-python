@@ -23,13 +23,11 @@ QueryValue = Union[list, dict, str, float, int, bool]
 
 class DAG:
 
-    # Debug level. Increase to get finer debug messages.
     DEBUG_LEVEL = 0
 
     UID_KEY_BYTES_SIZE = 16
     UID_KEY_STR_SIZE = 22
 
-    # For the dot output, enum to text.
     EDGE_LABEL = {
         EdgeType.DATA: "DATA",
         EdgeType.KEY: "KEY",
@@ -93,9 +91,6 @@ class DAG:
         if debug_level is None:
             debug_level = int(os.environ.get("GS_DEBUG_LEVEL", os.environ.get("DAG_DEBUG_LEVEL", 0)))
 
-        # Prevent duplicate edges to be added.
-        # The goal is to prevent unneeded edges.
-        # If warning is turned on, log dup and stacktrace.
         self.dedup_edge = dag_utils.value_to_boolean(os.environ.get("GS_DEDUP_EDGES", dedup_edges))
         self.dedup_edge_warning = dag_utils.value_to_boolean(os.environ.get("GS_DEDUP_EDGES_WARN", False))
 
@@ -121,7 +116,6 @@ class DAG:
             is_dev = dag_utils.value_to_boolean(gs_is_dev)
         self.is_dev = is_dev
 
-        # If the record is passed in, use the UID and key bytes from the record.
         self.uid = None
         if record is not None:
             self.uid = conn.get_record_uid(record)
@@ -132,14 +126,12 @@ class DAG:
         if key_bytes is None:
             raise ValueError("Either the record or the key_bytes needs to be passed.")
 
-        # If the UID is blank, use the key bytes to generate a UID
         if self.uid is None:
             self.uid = dag_crypto.generate_uid_str(key_bytes[:16])
 
         if graph_id is None and (read_endpoint is None or write_endpoint is None):
             raise ValueError("Either graph_id or read/write endpoints needs to be set.")
 
-        # graph_id and endpoint determine how/where the graph is stored on the GraphSync service.
         if graph_id is not None:
             if isinstance(read_endpoint, Enum):
                 graph_id = ENDPOINT_TO_GRAPH_ID_MAP.get(read_endpoint.value)
@@ -159,41 +151,22 @@ class DAG:
             name = f"{self.log_prefix} ROOT"
         self.name = name
 
-        # The order of the vertices is important.
-        # The order creates the history.
-        # The web service will order edge by their edge_id
-        # Store in and array.
-        # The lookup table to make UID to DAGVertex easier.
-        # The integer is the index into the array.
         self._vertices = []
         self._uid_lookup = {}
 
-        # This is like the batch
         self.origin_ref_value = dag_crypto.generate_uid_bytes(16)
         self.origin_uid = dag_crypto.generate_uid_str(uid_bytes=self.origin_ref_value)
 
-        # If True, any addition or changes will automatically be saved.
         self.auto_save = auto_save
 
-        # To auto save, both allow_auto_save and auto_save needs to be True.
-        # If the graph has not been saved before and the root vertex has not been connected,
-        #   we want to disable auto save.
         self._allow_auto_save = False
 
-        # For big changes, we need a confirmation to save.
         self.need_save_confirm = False
 
-        # The last sync point after save.
         self.last_sync_point = 0
 
-        # Amount of history to keep.
-        # The default is 0, which will keep all history.
-        # Setting to 1 will only keep the latest edges.
-        # Settings to 2 will keep the latest and prior edges.
-        # And so on.
         self.history_level = history_level
 
-        # If data was corrupt in the graph, the vertex UID will appear in this list.
         self.corrupt_uids = []
 
         self.conn = conn
@@ -251,7 +224,6 @@ class DAG:
         except (Exception,):
             pass
         finally:
-            # Always attempt to clear these collections, even if clean_edges() fails
             try:
                 if hasattr(self, '_vertices'):
                     self._vertices.clear()
@@ -262,7 +234,6 @@ class DAG:
             except (Exception,):
                 pass
 
-        # Clear all collections to break circular references
         self.read_struct_obj = None
         del self.read_struct_obj
         self.write_struct_obj = None
@@ -292,7 +263,6 @@ class DAG:
 
     def debug_stacktrace(self):
         exc = sys.exc_info()[0]
-        # the last one would be full_stack()
         stack = traceback.extract_stack()[:-1]
         if exc is not None:
             del stack[-1]
@@ -331,7 +301,6 @@ class DAG:
         Return the flag indicating if auto save is allowed.
         :return:
         """
-
         return self._allow_auto_save
 
     @allow_auto_save.setter
@@ -341,7 +310,6 @@ class DAG:
         :param value: True enables, False disables.
         :return:
         """
-
         if value:
             self.debug("ability to auto save has been ENABLED", level=2)
         else:
@@ -351,12 +319,10 @@ class DAG:
 
     @property
     def origin_ref(self) -> Ref:
-
         """
         Return an instance of the origin reference for adding data
         :return:
         """
-
         return Ref(
             type=RefType.DEVICE,
             value=self.origin_uid,
@@ -366,21 +332,16 @@ class DAG:
     @property
     def has_graph(self) -> bool:
         """
-        Do we have any graph items?
-
         :return: True if there are vertices. False if no vertices.
         """
-
         return len(self._vertices) > 0
 
     @property
     def vertices(self) -> List[DAGVertex]:
         """
         Get all active vertices
-
         :return: List of DAGVertex instance
         """
-
         return [
             vertex
             for vertex in self._vertices
@@ -393,7 +354,6 @@ class DAG:
         Get all vertices
         :return: List of DAGVertex instance
         """
-
         return self._vertices
 
     def get_vertex(self, key) -> Optional[DAGVertex]:
@@ -421,20 +381,16 @@ class DAG:
         if key is None:
             return None
 
-        # Is the key a UID? If so, return the vertex from the lookup.
         if key in self._uid_lookup:
             index = self._uid_lookup[key]
             return self._vertices[index]
 
-        # Is the key a path?
-        # We also want to include any deleted edges.
         vertices = self.get_vertices_by_path_value(key, inc_deleted=True)
         if len(vertices) > 0:
             if len(vertices) > 1:
                 raise DAGPathException("Cannot get vertex using the path. Found multiple vertex that use the path.")
             return vertices[0]
 
-        # Is the key a name? This is a last resort.
         for vertex in vertices:
             if vertex.name == key:
                 return vertex
@@ -445,9 +401,7 @@ class DAG:
     def get_root(self) -> Optional[DAGVertex]:
         """
         Get the root vertex
-
         If the root vertex does not exist, it will create the vertex with a ref type of PAM_NETWORK.
-
         :return:
         """
         root = self.get_vertex(self.uid)
@@ -461,7 +415,6 @@ class DAG:
         :param key: UID, path, or name
         :return:
         """
-
         return self.get_vertex(key) is not None
 
     def get_vertices_by_path_value(self, path: str, inc_deleted: bool = False) -> List[DAGVertex]:
@@ -484,15 +437,10 @@ class DAG:
         return results
 
     def _sync(self, sync_point: int = 0) -> Tuple[List[DAGData], int]:
-
-        # The web service will send 500 items, if there is more the 'has_more' flag is set to True.
         has_more = True
 
-        # Make the web service call to set all the data
         all_data = []
         while has_more:
-            # Load a page worth of items
-
             sync_query = self.read_struct_obj.sync_query(stream_id=self.uid,
                                                          sync_point=sync_point,
                                                          graph_id=self.graph_id)
@@ -510,10 +458,8 @@ class DAG:
 
             all_data += results.data
 
-            # The server will tell us if there is more data to get.
             has_more = results.hasMore
 
-            # The sync_point will indicate where we need to start the sync from. Think syncPoint > value
             sync_point = results.syncPoint
 
         return all_data, sync_point
@@ -535,56 +481,42 @@ class DAG:
         :param sync_point: Where to load
         """
 
-        # Clear the existing vertices.
         self._vertices = []  # type: List[DAGVertex]
         self._uid_lookup = {}  # type: dict[str, int]
 
         self.debug("# SYNC THE GRAPH ##################################################################", level=1)
 
-        # Make the web service call to set all the data
         all_data, sync_point = self._sync(sync_point=sync_point)
 
         self.debug("  PROCESS the non-DATA edges", level=2)
 
-        # Process the non-DATA edges
         for data in all_data:
 
-            # Skip all the DATA edge
             edge_type = EdgeType.find_enum(data.type)
             if edge_type == EdgeType.DATA:
                 continue
 
-            # The ref the tail. It connects to stored in the vertex.
             tail_uid = data.ref.value
 
-            # The parentRef is the head. It's the arrowhead on the edge. For DATA edges, it will be None.
             head_uid = None
             if data.parentRef is not None:
                 head_uid = data.parentRef.value
 
             self.debug(f"  * edge {edge_type}, tail {tail_uid} to head {head_uid}", level=3)
 
-            # We want to store this edge in the Vertex with the same value/UID as the ref.
             if not self.vertex_exists(tail_uid):
                 self.debug(f"    * tail vertex {tail_uid} does not exists. create.", level=3)
                 self.add_vertex(
                     uid=tail_uid,
                     name=data.ref.name,
-
-                    # This will be 0/GENERAL right now. We do the lookup just in case things will change in the
-                    # future.
                     vertex_type=RefType.find_enum(data.ref.type)
                 )
 
-            # Get the tail vertex.
             tail = self.get_vertex(tail_uid)
 
-            # This most likely is a DELETION edge of a DATA edge.
-            # Set the head to be the same as the tail.
             if head_uid is None:
                 head_uid = tail_uid
 
-            # If the head vertex doesn't exist, we need to create.
             if not self.vertex_exists(head_uid):
                 self.debug(f"    * head vertex {head_uid} does not exists. create.", level=3)
                 self.add_vertex(
@@ -592,7 +524,6 @@ class DAG:
                     name=data.parentRef.name,
                     vertex_type=RefType.GENERAL
                 )
-            # Get the head vertex, which will exist now.
             head = self.get_vertex(head_uid)
             self.debug(f"    * tail {tail_uid} belongs to {head_uid}, "
                        f"edge type {edge_type}", level=3)
@@ -605,12 +536,10 @@ class DAG:
                     if data.content_is_base64:
                         content = utils.base64_url_decode(content)
 
-                # Connect this vertex to the head vertex. It belongs to that head vertex.
                 tail.belongs_to(
                     vertex=head,
                     edge_type=edge_type,
                     content=content,
-                    # ACL and LINK edges are not encrypted.
                     is_encrypted=False,
                     path=data.path,
                     modified=False,
@@ -620,26 +549,19 @@ class DAG:
         self.debug("", level=2)
         self.debug("  PROCESS the DATA edges", level=2)
 
-        # Process the DATA edges
-        # We don't have to worry about vertex creation since they will all exist.
         for data in all_data:
 
-            # Only process the data edges.
             edge_type = EdgeType.find_enum(data.type)
             if edge_type != EdgeType.DATA:
                 continue
 
-            # Get the tail vertex.
             tail_uid = data.ref.value
-            # We want to store this edge in the Vertex with the same value/UID as the ref.
+
             if not self.vertex_exists(tail_uid):
                 self.debug(f"    * tail vertex {tail_uid} does not exists. create.", level=3)
                 self.add_vertex(
                     uid=tail_uid,
                     name=data.ref.name,
-
-                    # This will be 0/GENERAL right now. We do the lookup just in case things will change in the
-                    # future.
                     vertex_type=RefType.find_enum(data.ref.type)
                 )
             tail = self.get_vertex(tail_uid)
@@ -652,7 +574,6 @@ class DAG:
             self.debug(f"  * DATA edge belongs to {tail.uid}", level=3)
             tail.add_data(
                 content=content,
-                # Assume DATA is encrypted; it might not be but, we will handle that later.
                 is_encrypted=True,
                 path=data.path,
                 modified=False,

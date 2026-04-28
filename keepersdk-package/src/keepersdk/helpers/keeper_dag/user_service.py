@@ -14,8 +14,6 @@ if TYPE_CHECKING:
     from .dag_edge import DAGEdge
 
 
-# TODO: Refactor this code; we can make this smaller since method basically do the same functions, just different
-#       attributes.
 class UserService:
 
     def __init__(self, record: Any, logger: Optional[Any] = None, history_level: int = 0,
@@ -25,7 +23,6 @@ class UserService:
 
         self.conn = get_connection(**kwargs)
 
-        # This will either be a KSM Record, or Commander KeeperRecord
         self.record = record
         self._dag = None
         if logger is None:
@@ -50,7 +47,6 @@ class UserService:
 
             self._dag = DAG(conn=self.conn,
                             record=self.record,
-                            # endpoint=PamEndpoints.SERVICE_LINKS,
                             graph_id=PamGraphId.SERVICE_LINKS,
                             auto_save=False,
                             logger=self.logger,
@@ -101,7 +97,6 @@ class UserService:
     def get_record_uid(discovery_vertex: DAGVertex) -> str:
         """
         Get the record UID from the vertex
-
         """
         data = discovery_vertex.get_data()
         if data is None:
@@ -114,15 +109,11 @@ class UserService:
 
     def belongs_to(self, resource_uid: str, user_uid: str, acl: Optional[ServiceAcl] = None,
                    resource_name: Optional[str] = None, user_name: Optional[str] = None):
-
         """
         Link vault records using record UIDs.
-
         If a link already exists, no additional link will be created.
         """
 
-        # Get thr record vertices.
-        # If a vertex does not exist, then add the vertex using the record UID
         resource_vertex = self.dag.get_vertex(resource_uid)
         if resource_vertex is None:
             self.logger.debug(f"adding resource vertex for record UID {resource_uid} ({resource_name})")
@@ -147,12 +138,9 @@ class UserService:
         user_vertex.disconnect_from(resource_vertex)
 
     def get_acl(self, resource_uid, user_uid) -> Optional[ServiceAcl]:
-
         """
         Get the service/task ACL between a resource and the user.
-
         """
-
         resource_vertex = self.dag.get_vertex(resource_uid)
         user_vertex = self.dag.get_vertex(user_uid)
         if resource_vertex is None or user_vertex is None:
@@ -169,7 +157,6 @@ class UserService:
         """
         Is this resource linked to the configuration?
         """
-
         resource_vertex = self.dag.get_vertex(resource_uid)
         if resource_vertex is None:
             return False
@@ -177,10 +164,8 @@ class UserService:
         return link_edge is not None
 
     def get_resource_vertices(self, user_uid: str) -> List[DAGVertex]:
-
         """
         Get the resource vertices where the user is used for a service or task.
-
         """
 
         user_vertex = self.dag.get_vertex(user_uid)
@@ -189,10 +174,8 @@ class UserService:
         return user_vertex.belongs_to_vertices()
 
     def get_user_vertices(self, resource_uid: str) -> List[DAGVertex]:
-
         """
         Get the user vertices that control a service or task on this machine.
-
         """
         resource_vertex = self.dag.get_vertex(resource_uid)
         if resource_vertex is None:
@@ -287,7 +270,6 @@ class UserService:
                 if show_version:
                     label += f"\\nv={edge.version}"
 
-                # tail, head (arrow side), label, ...
                 dot.edge(v.uid, edge.head_uid, label, style=style, fontcolor=color, color=color, tooltip=edge_tip)
 
             shape = "ellipse"
@@ -310,9 +292,6 @@ class UserService:
 
         user_vertices: List[DAGVertex] = []
 
-        # Check the configuration; it might provide domains.
-        # Need to only include the user vertices.
-        # If we find it here, we don't need to check for directories; so return with the list.
         config_content = DiscoveryObject.get_discovery_object(configuration_vertex)
         if config_content.record_type in DOMAIN_USER_CONFIGS:
             config_domains = config_content.item.info.get("domains", [])
@@ -329,7 +308,6 @@ class UserService:
 
         self.logger.debug("  checking pam directories for users")
 
-        # If the configuration did not have domain users, or there were do users, check the PAM Directories.
         for resource_vertex in configuration_vertex.has_vertices():
             content = DiscoveryObject.get_discovery_object(resource_vertex)
             if content.record_type != PAM_DIRECTORY:
@@ -347,15 +325,11 @@ class UserService:
 
         self.logger.debug(f"  getting users for {infra_resource_content.name}")
 
-        # If this machine joined to a directory.
-        # Since this a Windows machine, we can have only one joined directory; take the first one.
         domain_name = None
         if len(infra_resource_content.item.facts.directories) > 0:
             domain_name = infra_resource_content.item.facts.directories[0].domain
             self.logger.debug(f"  joined to {domain_name}")
 
-        # Get a list of local users.
-        # If the machine is joined to a domain, get a list of users from that domain.
         user_vertices = infra_resource_vertex.has_vertices()
         self.logger.debug(f"  found {len(user_vertices)} local users")
         if domain_name is not None:
@@ -375,7 +349,6 @@ class UserService:
 
         self.logger.debug(f"processing services for {infra_resource_content.description} ({infra_resource_vertex.uid})")
 
-        # We don't care about the name of the service, we just need a list users.
         lookup = {}
         for service in services:
             lookup[service.user.lower()] = True
@@ -411,7 +384,6 @@ class UserService:
 
         self.logger.debug(f"processing tasks for {infra_resource_content.description} ({infra_resource_vertex.uid})")
 
-        # We don't care about the name of the tasks, we just need a list users.
         lookup = {}
         for task in tasks:
             lookup[task.user.lower()] = True
@@ -448,7 +420,6 @@ class UserService:
         self.logger.debug(f"processing iis pools for "
                           f"{infra_resource_content.description} ({infra_resource_vertex.uid})")
 
-        # We don't care about the name of the tasks, we just need a list users.
         lookup = {}
         for iis_pool in iis_pools:
             lookup[iis_pool.user.lower()] = True
@@ -480,13 +451,10 @@ class UserService:
     def _validate_users(self,
                         infra_resource_content: DiscoveryObject,
                         infra_resource_vertex: DAGVertex):
-
         """
         This method will check to see if a resource's users' ACL edges are still valid.
-
         This check will check both local and directory users.
         """
-
         self.logger.debug(f"validate existing user service edges to see if still valid to "
                           f"{infra_resource_content.name}")
 
@@ -502,15 +470,12 @@ class UserService:
         for iss_pool in infra_resource_content.item.facts.iis_pools:
             iis_pool_lookup[iss_pool.user.lower()] = True
 
-        # Get the user service resource vertex.
-        # If it does not exist, then we cannot validate users.
         user_service_resource_vertex = self.dag.get_vertex(infra_resource_content.record_uid)
         if user_service_resource_vertex is None:
             return
 
         infra_dag = infra_resource_vertex.dag
 
-        # The users from the service graph will contain local and directory users.
         for user_service_user_vertex in user_service_resource_vertex.has_vertices():
             acl_edge = user_service_user_vertex.get_edge(
                 user_service_resource_vertex, edge_type=EdgeType.ACL)  # type: DAGEdge
@@ -526,8 +491,6 @@ class UserService:
 
             acl = acl_edge.content_as_object(ServiceAcl)
 
-            # This will check the entire infrastructure graph for the user with the record UID.
-            # This could be a local or directory users.
             user = infra_dag.search_content({"record_type": PAM_USER, "record_uid": user_service_user_vertex.uid})
             infra_user_content = None
             found_user = len(user) > 0
@@ -589,7 +552,6 @@ class UserService:
     def run(self, infra: Optional[Infrastructure] = None, **kwargs):
         """
         Map users to services/tasks on machines.
-
         IMPORTANT: To avoid memory leaks, pass an existing Infrastructure instance
         instead of letting this method create a new one. Example:
             user_service.run(infra=process.infra)
@@ -608,24 +570,18 @@ class UserService:
             self.logger.warning("Creating new Infrastructure instance - consider passing existing instance to avoid memory leaks")
 
             # Get ksm from the connection.
-            # However, this might be a local connection, so check first.
-            # Local connections don't need ksm.
             if hasattr(self.conn, "ksm"):
                 kwargs["ksm"] = getattr(self.conn, "ksm")
 
-            # Get the entire infrastructure graph; sync point = 0
             infra = Infrastructure(record=self.record, **kwargs)
             infra.load()
             _cleanup_infra_on_exit = True
 
-        # Work ourselves to the configuration vertex.
         infra_root_vertex = infra.get_root
         infra_config_vertex = infra_root_vertex.has_vertices()[0]
 
-        # For the user service, the root vertex is the equivalent to the infrastructure configuration vertex.
         user_service_config_vertex = self.dag.get_root
 
-        # Find all the resources that are machines.
         for infra_resource_vertex in infra_config_vertex.has_vertices():
             if infra_resource_vertex.active is False or infra_resource_vertex.has_data is False:
                 continue
@@ -634,14 +590,10 @@ class UserService:
 
                 self.logger.debug(f"checking {infra_resource_content.name}")
 
-                # Check the user on the resource if they still are part of a service or task.
                 self._validate_users(infra_resource_content, infra_resource_vertex)
 
-                # Do we have services, tasks, iis_pools that are run as a user with a password?
                 if infra_resource_content.item.facts.has_service_items is True:
 
-                    # If the resource does not exist in the user service graph, add a vertex and link it to the
-                    #  user service root/configuration vertex.
                     user_service_resource_vertex = self.dag.get_vertex(infra_resource_content.record_uid)
                     if user_service_resource_vertex is None:
                         user_service_resource_vertex = self.dag.add_vertex(uid=infra_resource_content.record_uid,
@@ -649,21 +601,18 @@ class UserService:
                     if not user_service_config_vertex.has(user_service_resource_vertex):
                         user_service_resource_vertex.belongs_to_root(EdgeType.LINK)
 
-                    # Do we have services that are run as a user with a password?
                     if infra_resource_content.item.facts.has_services is True:
                         self._connect_service_users(
                             infra_resource_content,
                             infra_resource_vertex,
                             infra_resource_content.item.facts.services)
 
-                    # Do we have tasks that are run as a user with a password?
                     if infra_resource_content.item.facts.has_tasks is True:
                         self._connect_task_users(
                             infra_resource_content,
                             infra_resource_vertex,
                             infra_resource_content.item.facts.tasks)
 
-                    # Do we have tasks that are run as a user with a password?
                     if infra_resource_content.item.facts.has_iis_pools is True:
                         self._connect_iis_pool_users(
                             infra_resource_content,
@@ -672,7 +621,6 @@ class UserService:
 
         self.save()
 
-        # Clean up the Infrastructure instance if we created it
         if _cleanup_infra_on_exit and infra is not None:
             self.logger.debug("cleaning up Infrastructure instance created in run()")
             infra.close()

@@ -116,10 +116,7 @@ class PAMDebugGraphCommand(PAMGatewayActionDiscoverCommandBase):
             logger.info(text)
 
             record_type_to_vertices_map = sort_infra_vertices(current_vertex)
-            # Process the record type by their map order in ascending order.
 
-            # Sort the record types by their order in the constant.
-            # 'order' is an int.
             for record_type in sorted(record_type_to_vertices_map, key=lambda i: VERTICES_SORT_MAP[i]['order']):
                 for vertex in record_type_to_vertices_map[record_type]:
                     if last_record_type is None or last_record_type != record_type:
@@ -148,7 +145,7 @@ class PAMDebugGraphCommand(PAMGatewayActionDiscoverCommandBase):
                                  debug_level=debug_level)
         configuration = record_link.dag.get_root
         
-        record = context.vault.vault_data.load_record(record_uid=configuration.uid)
+        record = context.vault.vault_data.get_record(record_uid=configuration.uid)
         if record is None:
             logger.error(f"Configuration record does not exists.")
             return
@@ -176,7 +173,7 @@ class PAMDebugGraphCommand(PAMGatewayActionDiscoverCommandBase):
             }
 
             for vertex in configuration_vertex.has_vertices():
-                record = context.vault.vault_data.load_record(record_uid=vertex.uid)
+                record = context.vault.vault_data.get_record(record_uid=vertex.uid)
                 if record is None:
                     group[PAMDebugGraphCommand.NO_RECORD].append({
                         "v": vertex
@@ -205,7 +202,6 @@ class PAMDebugGraphCommand(PAMGatewayActionDiscoverCommandBase):
                         text += " Inactive"
                     logger.info(f"{pad}    * {text}")
 
-                    # These are cloud users
                     if record_type == PAM_USER:
                         acl = record_link.get_acl(vertex.uid, configuration.uid)
                         if acl is None:
@@ -287,7 +283,6 @@ class PAMDebugGraphCommand(PAMGatewayActionDiscoverCommandBase):
 
         if len(group[PAMDebugGraphCommand.NO_RECORD]) > 0:
 
-            # TODO: Check the infra graph for information
             logger.info(f"{pad}  In Graph, No Vault Record")
             for item in group[PAMDebugGraphCommand.NO_RECORD]:
                 vertex = item.get("v")
@@ -306,7 +301,7 @@ class PAMDebugGraphCommand(PAMGatewayActionDiscoverCommandBase):
             if indent > 0:
                 pad = "".ljust(2 * indent, ' ') + "* "
 
-            record = context.vault.vault_data.load_record(record_uid=current_vertex.uid)
+            record = context.vault.vault_data.get_record(record_uid=current_vertex.uid)
             if record is None:
                 if not current_vertex.active:
                     logger.info(f"{pad}Record {current_vertex.uid} does not exists, inactive in the graph.")
@@ -563,7 +558,7 @@ class PAMDebugGraphCommand(PAMGatewayActionDiscoverCommandBase):
 
             edge_types = []
             if last_vertex is not None:
-                for edge in current_vertex.edges:  # type: DAGEdge
+                for edge in current_vertex.edges:
                     if not edge.active:
                         continue
                     if edge.head_uid == last_vertex.uid:

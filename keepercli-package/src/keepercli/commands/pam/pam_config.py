@@ -1120,8 +1120,6 @@ def validate_cron_field(field: str, min_val: int, max_val: int) -> bool:
 def validate_cron_expression(expr: str, for_rotation: bool = False) -> tuple[bool, str]:
     parts = expr.strip().split()
 
-    # All internal docs, MRD etc. specify that rotation schedule is using CRON format
-    # but actually back-end don't accept all valid standard CRON and uses unspecified custom CRON format
     if for_rotation is True:
         if len(parts) != 6:
             return False, f"CRON: Rotation schedules require all 6 parts incl. seconds - ex. Daily at 04:00:00 cron: 0 0 4 * * ? got {len(parts)} parts"

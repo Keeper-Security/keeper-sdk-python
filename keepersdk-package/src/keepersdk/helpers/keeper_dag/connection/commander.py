@@ -8,14 +8,14 @@ import os
 import requests
 import time
 
-try:  # pragma: no cover
+try:
     from .... import crypto, utils
-except ImportError:  # pragma: no cover
+except ImportError:
     raise Exception("Please install the keepercommander module to use the Commander connection.")
 
 from typing import Optional, Union, Dict, Tuple, Any, TYPE_CHECKING
 
-if TYPE_CHECKING:  # pragma: no cover
+if TYPE_CHECKING:
     from ....vault import vault_online
     from ....vault.vault_record import KeeperRecord
     Content = Union[str, bytes, dict]
@@ -36,7 +36,6 @@ class Connection(ConnectionBase):
                  use_write_protobuf: bool = False,
                  **kwargs):
 
-        # Commander uses /api/user; hence is_device=False
         super().__init__(is_device=False,
                          logger=logger,
                          log_transactions=log_transactions,
@@ -48,7 +47,6 @@ class Connection(ConnectionBase):
         self.verify_ssl = value_to_boolean(os.environ.get("VERIFY_SSL", verify_ssl))
         self.is_ws = is_ws
 
-        # Deprecated; setting this will override the per-transaction values.
         self.transmission_key = kwargs.get("transmission_key")
         self.dep_encrypted_transmission_key = kwargs.get("encrypted_transmission_key")
         self.dep_encrypted_session_token = kwargs.get("encrypted_session_token")
@@ -75,7 +73,6 @@ class Connection(ConnectionBase):
     @property
     def dag_server_url(self) -> str:
 
-        # Allow override of the URL. If not set, get the hostname from the config.
         hostname = os.environ.get("KROUTER_URL", self.hostname)
         if hostname.startswith('ws') or hostname.startswith('http'):
             return hostname
@@ -90,7 +87,6 @@ class Connection(ConnectionBase):
 
         return f'{prot_pref}://{hostname}'
 
-    # deprecated
     def get_keeper_tokens(self):
         self.transmission_key = utils.generate_aes_key()
         server_public_key = endpoint.SERVER_PUBLIC_KEYS[self.vault.keeper_auth.keeper_endpoint.server_key_id]
@@ -104,17 +100,13 @@ class Connection(ConnectionBase):
 
     def payload_and_headers(self, payload: Any) -> Tuple[Union[str, bytes], Dict]:
 
-        # If the dep_encrypted_transmission_key, use the set value over the generated ones.
         if self.dep_encrypted_transmission_key is not None:
             encrypted_transmission_key = self.dep_encrypted_transmission_key
             encrypted_session_token = self.dep_encrypted_session_token
 
-        # This is what we want to use; it's different for each call.
         else:
-            # Create a new transmission key
             self.transmission_key = utils.generate_aes_key()
             self.logger.debug(f"transmission key is {self.transmission_key}")
-            # self.params.rest_context.transmission_key = self.transmission_key
             server_public_key = endpoint.SERVER_PUBLIC_KEYS[self.vault.keeper_auth.keeper_endpoint.server_key_id]
 
             if self.vault.keeper_auth.keeper_endpoint.server_key_id < 7:
@@ -124,7 +116,6 @@ class Connection(ConnectionBase):
             encrypted_session_token = crypto.encrypt_aes_v2(
                 self.vault.keeper_auth.auth_context.session_token, self.transmission_key)
 
-        # We need the transmission_key for protobuf sync since it returns values encrypted with the transmission_key.
         if self.transmission_key is None:
             raise DAGConnectionException("The transmission key has not been set. If setting encrypted_transmission_key "
                                          "and encrypted_session_token, also set transmission_key to 32 bytes. "

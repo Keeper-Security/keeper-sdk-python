@@ -39,7 +39,6 @@ class Infrastructure:
                  save_batch_count: int = 200, agent: Optional[str] = None,
                  **kwargs):
 
-        # This will either be a KSM Record, or Commander KeeperRecord
         self.record = record
         self._dag = None
         if logger is None:
@@ -85,11 +84,10 @@ class Infrastructure:
 
     @property
     def has_discovery_data(self) -> bool:
-        # Does the graph array have any vertices?
+
         if not self.dag.has_graph:
             return False
 
-        # If we at least have the root, does is have the configuration?
         if not self.get_root.has_vertices():
             return False
 
@@ -269,7 +267,6 @@ class Infrastructure:
             head_uids = []
             for edge in v.edges:
 
-                # Don't show edges that reference self, DATA and data that has been DELETION
                 if edge.head_uid == v.uid:
                     continue
 
@@ -283,14 +280,12 @@ class Infrastructure:
 
                 if e.corrupt is False:
 
-                    # To reduce the number of edges, only show the active edges
                     if e.active is True:
                         edge_color = "black"
                         style = "bold"
                     elif show_only_active_edges:
                         return
 
-                    # If the vertex is not active, gray out the DATA edge
                     if e.edge_type == EdgeType.DATA and v.active is False:
                         edge_color = "grey"
 
@@ -317,7 +312,6 @@ class Infrastructure:
                     edge_color = "red"
                     edge_tip = "CORRUPT"
 
-                # tail, head (arrow side), label, ...
                 dot.edge(v.uid, e.head_uid, edge_label, style=style, fontcolor=edge_color, color=edge_color,
                          tooltip=edge_tip)
 

@@ -13,7 +13,6 @@ class GatewayAction(metaclass=abc.ABCMeta):
         self.gateway_destination = gateway_destination
         self.inputs = inputs
         self.conversationId = conversation_id
-        # messageId is derived from conversationId for WebRTC sessions
         self.messageId = message_id
 
     def toJSON(self):
@@ -32,7 +31,6 @@ class GatewayAction(metaclass=abc.ABCMeta):
     def conversation_id_to_message_id(conversation_id):
         """Convert conversationId to messageId format (replace + with -, / with _)"""
         if conversation_id:
-            # Remove any padding '=' characters and replace special chars
             return conversation_id.rstrip('=').replace('+', '-').replace('/', '_')
         return None
 
@@ -57,6 +55,7 @@ class GatewayActionRotate(GatewayAction):
 
     def toJSON(self):
         return json.dumps(self, default=lambda o: o.__dict__, sort_keys=True, indent=4)
+
 
 class GatewayActionJobInfoInputs:
 
@@ -137,6 +136,7 @@ class GatewayActionDiscoverJobRemove(GatewayAction):
     def toJSON(self):
         return json.dumps(self, default=lambda o: o.__dict__, sort_keys=True, indent=4)
 
+
 class GatewayActionDiscoverRuleValidateInputs:
 
     def __init__(self, configuration_uid, statement):
@@ -145,6 +145,7 @@ class GatewayActionDiscoverRuleValidateInputs:
 
     def toJSON(self):
         return json.dumps(self, default=lambda o: o.__dict__, sort_keys=True, indent=4)
+
 
 class GatewayActionDiscoverRuleValidate(GatewayAction):
 

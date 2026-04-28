@@ -40,7 +40,7 @@ class PAMDebugGatewayCommand(PAMGatewayActionDiscoverCommandBase):
         configuration_uid = kwargs.get('configuration_uid')
         vault = context.vault
 
-        gateway_context = GatewayContext.from_gateway(context=context,
+        gateway_context = GatewayContext.from_gateway(vault=vault,
                                                         gateway=gateway,
                                                         configuration_uid=configuration_uid)
         if gateway_context is None:
@@ -62,9 +62,10 @@ class PAMDebugGatewayCommand(PAMGatewayActionDiscoverCommandBase):
         logger.info(f"  Gateway UID: {gateway_context.gateway_uid}")
         logger.info(f"  Gateway Name: {gateway_context.gateway_name}")
         if gateway_context.configuration is not None:
+            record_key = vault.vault_data.get_record_key(gateway_context.configuration_uid)
             logger.info(f"  Configuration UID: {gateway_context.configuration_uid}")
             logger.info(f"  Configuration Title: {gateway_context.configuration.title}")
-            logger.info(f"  Configuration Key Bytes Hex: {gateway_context.configuration.record_key.hex()}")
+            logger.info(f"  Configuration Key Bytes Hex: {record_key.hex()}")
         else:
             logger.error(f"The gateway appears to not have a configuration.")
         logger.info("")

@@ -57,8 +57,6 @@ class Rules:
         "domainName": {"type": str},
         "directoryId": {"type": str},
         "directoryType": {"type": str},
-
-        # Progmatically added
         "ip": {"type": str},
     }
 
@@ -85,8 +83,6 @@ class Rules:
                  agent: Optional[str] = None, **kwargs):
 
         self.conn = get_connection(**kwargs)
-
-        # This will either be a KSM Record, or Commander KeeperRecord
         self.record = record
         self._dag = None
         self.logger = logger
@@ -102,10 +98,8 @@ class Rules:
         if self._dag is None:
 
             # Turn auto_save on after the DAG has been created.
-            # No need to call it six times in a row to initialize it.
             self._dag = DAG(conn=self.conn,
                             record=self.record,
-                            # endpoint=PamEndpoints.DISCOVERY_RULES,
                             graph_id=PamGraphId.DISCOVERY_RULES,
                             auto_save=False,
                             logger=self.logger,
@@ -114,7 +108,6 @@ class Rules:
                             agent=self.agent)
             self._dag.load()
 
-            # Has the status been initialized?
             if not self._dag.has_graph:
                 for rule_type_enum in Rules.RULE_TYPE_TO_SET_MAP:
                     rules = self._dag.add_vertex()
@@ -128,7 +121,6 @@ class Rules:
                     )
                 self._dag.save()
 
-            # The graph exists now, turn on the auto_save.
             self._dag.auto_save = True
         return self._dag
 
@@ -137,7 +129,6 @@ class Rules:
         Clean up resources held by this Rules instance.
         Releases the DAG instance and connection to prevent memory leaks.
         """
-
         try:
             if hasattr(self, "_dag"):
                 self.conn = None
@@ -163,7 +154,6 @@ class Rules:
     def __del__(self):
         self.close()
 
-
     @staticmethod
     def data_path(rule_type: RuleTypeEnum):
         return f"/{rule_type.value}"
@@ -181,7 +171,6 @@ class Rules:
         self.dag.walk_down_path(path).add_data(
             content=rules,
         )
-        # Auto save should save the data
 
     def _rule_transaction(self, func: Callable, rule: Optional[RuleItem] = None):
         rule_type = rule.__class__.__name__
@@ -189,16 +178,13 @@ class Rules:
         if rule_type_enum is None:
             raise ValueError("rule is not a known rule instance")
 
-        # Get the ruleset and the rule list for the type
         ruleset = self.get_ruleset(rule_type_enum)
 
-        # Call the specialized code
         rules = func(
             r=rule,
             rs=ruleset.rules
         )
 
-        # Sort the rule by priority in asc order.
         ruleset.rules = list(sorted(rules, key=lambda x: x.priority))
         self.set_ruleset(rule_type_enum, ruleset)
 
@@ -257,7 +243,6 @@ class Rules:
         def _remove_all_rules(r: Any, rs: List[RuleItem]):
             return []
 
-        # _rule_transaction determines the graph vertex from Rule class type
         fake_rule = None
         if rule_type == RuleTypeEnum.ACTION:
             fake_rule = ActionRuleItem(statement=[])
