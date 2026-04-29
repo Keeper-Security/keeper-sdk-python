@@ -70,7 +70,7 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
             '-f', '--force', dest='force', action='store_true', help='Force add or remove app'
             )
         parser.add_argument(
-            '--email', action='store', type=str, dest='email', help='Email of user to grant / remove application access to / from'
+            '--email', '-e', action='store', type=str, dest='email', help='Email of user to grant / remove application access to / from'
             )
         parser.add_argument(
             '--admin', action='store_true', help='Allow share recipient to manage application'
@@ -385,7 +385,8 @@ class SecretsManagerClientCommand(base.ArgparseCommand):
                 first_access_expire_duration_ms=first_access_expire_duration_ms,
                 access_expire_in_ms=access_expire_in_ms,
                 master_key=master_key,
-                server=server
+                server=server,
+                client_type=GENERAL
             )
             
             tokens.append(token_data['token_info'])

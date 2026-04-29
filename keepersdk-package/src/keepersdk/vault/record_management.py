@@ -468,7 +468,7 @@ def move_vault_objects(vault: vault_online.VaultOnline,
     record_uid: str
     if len(record_uid_to_move) > 0:
         for record_uid in record_uid_to_move:
-            folders = vault_utils.get_folders_for_record(vault.vault_data, record_uid)
+            folders = vault_utils.get_folders_for_move(vault.vault_data, record_uid)
             if record_uid in dst_folder.subfolders:
                 notify_on_warning(f'Destination folder already contains record \"{record_uid}\".')
             else:
@@ -486,7 +486,7 @@ def move_vault_objects(vault: vault_online.VaultOnline,
                     else:
                         selected_folder_uid = f.folder_scope_uid
                 if selected_folder_uid is None:
-                    selected_folder_uid = next((x for x in record_uid_to_move))
+                    selected_folder_uid = ''
                 folders = [x for x in folders if x.folder_uid != selected_folder_uid]
 
                 if selected_folder_uid not in record_to_move:
