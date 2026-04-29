@@ -3,15 +3,26 @@ import json
 import requests
 from datetime import datetime
 
+from .pam_config import PAMConfigListCommand, PAMConfigNewCommand, PAMConfigEditCommand, PAMConfigRemoveCommand
+from .pam_gateway_action import (PAMGatewayActionServerInfoCommand, PAMGatewayActionRotateCommand, 
+                                PAMGatewayActionJobCommand, PAMDiscoveryCommand, PAMActionServiceCommand, 
+                                PAMActionSaasCommand, PAMDebugCommand)
+from .pam_rotation import PAMCreateRecordRotationCommand, PAMListRecordRotationCommand, PAMRouterGetRotationInfo, PAMRouterScriptCommand
+from .pam_connection import PAMConnectionEditCommand
+from .pam_rbi import PAMRbiEditCommand
+from .. import enterprise_utils
 from .. import base
 from ... import api
 from ...helpers import report_utils, router_utils, gateway_utils
 from ...params import KeeperParams
 
+
 from keepersdk import utils
+from keepersdk.vault import ksm_management
 
 
 logger = api.get_logger()
+
 
 # Constants
 DATETIME_FORMAT = '%Y-%m-%d %H:%M:%S'
@@ -67,6 +78,11 @@ class PAMControllerCommand(base.GroupCommand):
     def __init__(self):
         super().__init__('PAM Controller')
         self.register_command(PAMGatewayCommand(), 'gateway', 'g')
+        self.register_command(PAMConfigCommand(), 'config', 'c')
+        self.register_command(PAMGatewayActionCommand(), 'action', 'a')
+        self.register_command(PAMRotationCommand(), 'rotation', 'r')
+        self.register_command(PAMConnectionCommand(), 'connection', 'n')
+        self.register_command(PAMRbiCommand(), 'rbi', 'b')
 
 
 class PAMGatewayCommand(base.GroupCommand):
@@ -75,9 +91,58 @@ class PAMGatewayCommand(base.GroupCommand):
         super().__init__('PAM Gateway')
         self.register_command(PAMGatewayListCommand(), 'list', 'l')
         self.register_command(PAMGatewayNewCommand(), 'new', 'n')
+        self.register_command(PAMGatewayEditCommand(), 'edit', 'e')
         self.register_command(PAMGatewayRemoveCommand(), 'remove', 'rm')
         self.register_command(PAMGatewaySetMaxInstancesCommand(), 'set-max-instances', 'smi')
         self.default_verb = 'list'
+
+
+class PAMConfigCommand(base.GroupCommand):
+
+    def __init__(self):
+        super().__init__('PAM Configurations')
+        self.register_command(PAMConfigListCommand(), 'list', 'l')
+        self.register_command(PAMConfigNewCommand(), 'new', 'n')
+        self.register_command(PAMConfigEditCommand(), 'edit', 'e')
+        self.register_command(PAMConfigRemoveCommand(), 'remove', 'rm')
+        self.default_verb = 'list'
+
+
+class PAMGatewayActionCommand(base.GroupCommand):
+    def __init__(self):
+        super().__init__('PAM Gateway Action')
+        self.register_command(PAMGatewayActionServerInfoCommand(), 'gateway-info', 'i')
+        self.register_command(PAMGatewayActionRotateCommand(), 'rotate', 'r')
+        self.register_command(PAMGatewayActionJobCommand(), 'job-info', 'ji')
+        self.register_command(PAMGatewayActionJobCommand(), 'job-cancel', 'jc')
+        self.register_command(PAMDiscoveryCommand(), 'discover', 'd')
+        self.register_command(PAMActionServiceCommand(), 'service', 's')
+        self.register_command(PAMActionSaasCommand(), 'saas', 'sa')
+        self.register_command(PAMDebugCommand(), 'debug', 'd')
+
+
+class PAMRotationCommand(base.GroupCommand):
+    def __init__(self):
+        super().__init__('PAM Rotation')
+        self.register_command(PAMListRecordRotationCommand(), 'list', 'l')
+        self.register_command(PAMRouterGetRotationInfo(), 'info', 'i')
+        self.register_command(PAMCreateRecordRotationCommand(), 'edit', 'new')
+        self.register_command(PAMRouterScriptCommand(), 'script', 's')
+        self.default_verb = 'list'
+
+
+class PAMConnectionCommand(base.GroupCommand):
+    def __init__(self):
+        super().__init__('PAM Connection')
+        self.register_command(PAMConnectionEditCommand(), 'edit', 'e')
+        self.default_verb = 'edit'
+
+class PAMRbiCommand(base.GroupCommand):
+    def __init__(self):
+        super().__init__('PAM Remote Browser Isolation')
+        self.register_command(PAMRbiEditCommand(), 'edit', 'e')
+        self.default_verb = 'edit'
+
 
 class PAMGatewayListCommand(base.ArgparseCommand):
 
@@ -104,7 +169,10 @@ class PAMGatewayListCommand(base.ArgparseCommand):
         format_type = kwargs.get('format', 'table')
 
         enterprise_controllers_connected, is_router_down = self._fetch_connected_gateways(vault, is_force)
-        enterprise_controllers_all = gateway_utils.get_all_gateways(vault)
+        enterprise_controllers_all = list(context.pam_plugin.controllers.get_all_entities())
+        if not enterprise_controllers_all:
+            context.pam_plugin.sync_down()
+            enterprise_controllers_all = list(context.pam_plugin.controllers.get_all_entities())
 
         if not enterprise_controllers_all:
             return self._handle_no_gateways(format_type)
@@ -190,8 +258,8 @@ class PAMGatewayListCommand(base.ArgparseCommand):
         gateways_data = []
 
         for controller in enterprise_controllers_all:
-            gateway_uid_bytes = controller.controllerUid
-            gateway_uid_str = utils.base64_url_encode(controller.controllerUid)
+            gateway_uid_bytes = utils.base64_url_decode(controller.controller_uid)
+            gateway_uid_str = controller.controller_uid
             connected_instances = connected_controllers_dict.get(gateway_uid_bytes, [])
 
             ksm_app_info = self._get_ksm_app_info(vault, controller)
@@ -213,7 +281,7 @@ class PAMGatewayListCommand(base.ArgparseCommand):
 
     def _get_ksm_app_info(self, vault, controller):
         """Retrieves KSM application information for a controller."""
-        ksm_app_uid_str = utils.base64_url_encode(controller.applicationUid)
+        ksm_app_uid_str = controller.application_uid
         ksm_app = vault.vault_data.load_record(ksm_app_uid_str)
 
         if ksm_app:
@@ -276,7 +344,7 @@ class PAMGatewayListCommand(base.ArgparseCommand):
             "ksm_app_name": ksm_app_info['ksm_app_name'],
             "ksm_app_uid": ksm_app_info['ksm_app_uid_str'],
             "ksm_app_accessible": ksm_app_info['ksm_app_accessible'],
-            "gateway_name": controller.controllerName,
+            "gateway_name": controller.controller_name,
             "gateway_uid": gateway_uid_str,
             "status": overall_status,
             "gateway_version": version
@@ -285,11 +353,11 @@ class PAMGatewayListCommand(base.ArgparseCommand):
         if is_verbose:
             os_name, os_release, machine_type, os_version = self._extract_version_info(version_parts)
             gateway_data.update({
-                "device_name": controller.deviceName,
-                "device_token": controller.deviceToken,
+                "device_name": controller.device_name,
+                "device_token": controller.device_token,
                 "created_on": self._format_timestamp(controller.created),
-                "last_modified": self._format_timestamp(controller.lastModified),
-                "node_id": controller.nodeId,
+                "last_modified": self._format_timestamp(controller.last_modified),
+                "node_id": controller.node_id,
                 "os": os_name,
                 "os_release": os_release,
                 "machine_type": machine_type,
@@ -309,7 +377,7 @@ class PAMGatewayListCommand(base.ArgparseCommand):
         """Builds a table row for a single gateway."""
         row = [
             ksm_app_info['ksm_app_info_plain'],
-            controller.controllerName,
+            controller.controller_name,
             gateway_uid_str,
             overall_status,
             version
@@ -318,11 +386,11 @@ class PAMGatewayListCommand(base.ArgparseCommand):
         if is_verbose:
             os_name, os_release, machine_type, os_version = self._extract_version_info(version_parts)
             row.extend([
-                controller.deviceName,
-                controller.deviceToken,
+                controller.device_name,
+                controller.device_token,
                 datetime.fromtimestamp(controller.created / MILLISECONDS_TO_SECONDS),
-                datetime.fromtimestamp(controller.lastModified / MILLISECONDS_TO_SECONDS),
-                controller.nodeId,
+                datetime.fromtimestamp(controller.last_modified / MILLISECONDS_TO_SECONDS),
+                controller.node_id,
                 os_name,
                 os_release,
                 machine_type,
@@ -341,7 +409,7 @@ class PAMGatewayListCommand(base.ArgparseCommand):
                 "ksm_app_name": ksm_app_info['ksm_app_name'],
                 "ksm_app_uid": ksm_app_info['ksm_app_uid_str'],
                 "ksm_app_accessible": ksm_app_info['ksm_app_accessible'],
-                "gateway_name": controller.controllerName,
+                "gateway_name": controller.controller_name,
                 "gateway_uid": gateway_uid_str,
                 "status": overall_status,
                 "instances": instances_data
@@ -349,11 +417,11 @@ class PAMGatewayListCommand(base.ArgparseCommand):
 
             if is_verbose:
                 gateway_data.update({
-                    "device_name": controller.deviceName,
-                    "device_token": controller.deviceToken,
+                    "device_name": controller.device_name,
+                    "device_token": controller.device_token,
                     "created_on": self._format_timestamp(controller.created),
-                    "last_modified": self._format_timestamp(controller.lastModified),
-                    "node_id": controller.nodeId
+                    "last_modified": self._format_timestamp(controller.last_modified),
+                    "node_id": controller.node_id
                 })
 
             gateways_data.append(gateway_data)
@@ -401,7 +469,7 @@ class PAMGatewayListCommand(base.ArgparseCommand):
         """Builds a table row for a pool gateway header."""
         row = [
             ksm_app_info['ksm_app_info_plain'],
-            controller.controllerName,
+            controller.controller_name,
             gateway_uid_str,
             overall_status,
             ''
@@ -409,11 +477,11 @@ class PAMGatewayListCommand(base.ArgparseCommand):
 
         if is_verbose:
             row.extend([
-                controller.deviceName,
-                controller.deviceToken,
+                controller.device_name,
+                controller.device_token,
                 datetime.fromtimestamp(controller.created / MILLISECONDS_TO_SECONDS),
-                datetime.fromtimestamp(controller.lastModified / MILLISECONDS_TO_SECONDS),
-                controller.nodeId,
+                datetime.fromtimestamp(controller.last_modified / MILLISECONDS_TO_SECONDS),
+                controller.node_id,
                 '', '', '', ''
             ])
 
@@ -527,7 +595,8 @@ class PAMGatewayNewCommand(base.ArgparseCommand):
         token_expire_in_min = kwargs.get('token_expire_in_min')
 
         self._log_gateway_creation_params(gateway_name, ksm_app, token_expire_in_min)
-        one_time_token = gateway_utils.create_gateway(vault, gateway_name, ksm_app, token_expire_in_min)
+        ksm_app_info = ksm_management.get_secrets_manager_app(vault, ksm_app)
+        one_time_token = gateway_utils.create_gateway(vault, gateway_name, ksm_app_info.uid, token_expire_in_min)
 
         if is_return_value:
             return one_time_token
@@ -557,6 +626,66 @@ class PAMGatewayNewCommand(base.ArgparseCommand):
         logger.info(TOKEN_SEPARATOR)
 
 
+class PAMGatewayEditCommand(base.ArgparseCommand):
+
+    def __init__(self):
+        parser = argparse.ArgumentParser(prog='dr-edit-gateway')
+        PAMGatewayEditCommand.add_arguments_to_parser(parser)
+        super().__init__(parser)
+
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
+        parser.add_argument('--gateway', '-g', required=True, dest='gateway',
+                            help='Gateway UID or Name', action='store')
+        parser.add_argument('--name', '-n', required=False, dest='gateway_name',
+                            help='Name of the Gateway', action='store')
+        parser.add_argument('--node-id', '-i', required=False, dest='node_id',
+                        help='Node ID', action='store')
+                            
+    def execute(self, context: KeeperParams, **kwargs):
+        self._validate_vault_and_permissions(context)
+        vault = context.vault
+
+        gateway_uid = kwargs.get('gateway')
+        gateway_name = kwargs.get('gateway_name')
+        node_id = kwargs.get('node_id')
+        if not gateway_uid:
+            raise base.CommandError('Gateway UID is required')
+
+        gateway = self._find_gateway(context, gateway_uid)
+        if not gateway:
+            raise base.CommandError(f'Gateway {gateway_uid} not found')
+        
+        if not node_id and not gateway_name:
+            logger.info("Nothing to do. Provide new name or node ID to edit the gateway.")
+            return
+        
+        if node_id:
+            node = enterprise_utils.NodeUtils.resolve_single_node(context.enterprise_data, node_id)
+            if not node:
+                raise base.CommandError(f'Node {node_id} not found')
+            node_id = node.node_id
+        else:
+            node_id = gateway.node_id
+        
+        if not gateway_name:
+            gateway_name = gateway.controller_name
+        
+        gateway_utils.edit_gateway(
+            vault, utils.base64_url_decode(gateway.controller_uid), gateway_name, node_id)
+        logger.info('Gateway %s has been edited.', gateway.controller_name)
+
+    def _validate_vault_and_permissions(self, context: KeeperParams):
+        """Validates that vault is initialized and user has enterprise admin permissions."""
+        if not context.vault:
+            raise ValueError(ERROR_VAULT_NOT_INITIALIZED)
+        base.require_enterprise_admin(context)
+
+    def _find_gateway(self, context: KeeperParams, gateway_uid):
+        """Finds a gateway by UID or name."""
+        gateway = context.pam_plugin.controllers.get_entity(gateway_uid)
+        return gateway
+
 class PAMGatewayRemoveCommand(base.ArgparseCommand):
 
     def __init__(self):
@@ -574,11 +703,11 @@ class PAMGatewayRemoveCommand(base.ArgparseCommand):
         vault = context.vault
 
         gateway_uid = kwargs.get('gateway')
-        gateway = self._find_gateway(vault, gateway_uid)
+        gateway = self._find_gateway(context, gateway_uid)
 
         if gateway:
-            gateway_utils.remove_gateway(vault, gateway.controllerUid)
-            logger.info('Gateway %s has been removed.', gateway.controllerName)
+            gateway_utils.remove_gateway(vault, utils.base64_url_decode(gateway.controller_uid))
+            logger.info('Gateway %s has been removed.', gateway.controller_name)
         else:
             logger.warning('Gateway %s not found', gateway_uid)
 
@@ -588,12 +717,9 @@ class PAMGatewayRemoveCommand(base.ArgparseCommand):
             raise ValueError(ERROR_VAULT_NOT_INITIALIZED)
         base.require_enterprise_admin(context)
 
-    def _find_gateway(self, vault, gateway_uid):
+    def _find_gateway(self, context: KeeperParams, gateway_uid):
         """Finds a gateway by UID or name."""
-        gateways = gateway_utils.get_all_gateways(vault)
-        return next((x for x in gateways
-                    if utils.base64_url_encode(x.controllerUid) == gateway_uid
-                    or x.controllerName.lower() == gateway_uid.lower()), None)
+        return context.pam_plugin.controllers.get_entity(gateway_uid)
 
 
 class PAMGatewaySetMaxInstancesCommand(base.ArgparseCommand):
@@ -618,7 +744,7 @@ class PAMGatewaySetMaxInstancesCommand(base.ArgparseCommand):
         max_instances = kwargs.get('max_instances')
 
         self._validate_max_instances(max_instances)
-        gateway = self._find_gateway(vault, gateway_uid)
+        gateway = self._find_gateway(context, gateway_uid)
 
         if not gateway:
             raise base.CommandError(f'Gateway "{gateway_uid}" not found')
@@ -636,18 +762,15 @@ class PAMGatewaySetMaxInstancesCommand(base.ArgparseCommand):
         if max_instances < MIN_INSTANCES:
             raise base.CommandError(f'pam gateway set-max-instances: --max-instances must be at least {MIN_INSTANCES}')
 
-    def _find_gateway(self, vault, gateway_uid):
+    def _find_gateway(self, context: KeeperParams, gateway_uid):
         """Finds a gateway by UID or name."""
-        gateways = gateway_utils.get_all_gateways(vault)
-        return next((x for x in gateways
-                    if utils.base64_url_encode(x.controllerUid) == gateway_uid
-                    or x.controllerName.lower() == gateway_uid.lower()), None)
+        return context.pam_plugin.controllers.get_entity(gateway_uid)
 
     def _set_max_instances(self, vault, gateway, max_instances):
         """Sets the maximum number of instances for a gateway."""
         try:
-            gateway_utils.set_gateway_max_instances(vault, gateway.controllerUid, max_instances)
-            logger.info('%s: max instance count set to %d', gateway.controllerName, max_instances)
+            gateway_utils.set_gateway_max_instances(
+                vault, utils.base64_url_decode(gateway.controller_uid), max_instances)
+            logger.info('%s: max instance count set to %d', gateway.controller_name, max_instances)
         except Exception as e:
             raise base.CommandError(f'Error setting max instances: {e}')
-

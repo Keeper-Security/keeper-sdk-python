@@ -118,7 +118,6 @@ class ShareRecordCommand(base.ArgparseCommand):
         if not context.vault:
             raise ValueError("Vault is not initialized.")
         vault = context.vault
-
         uid_or_name = kwargs.get('record')
         if not uid_or_name:
             return self.get_parser().print_help()
@@ -208,7 +207,6 @@ class ShareRecordCommand(base.ArgparseCommand):
                 return contact
                 
         return None
-
 
 class ShareFolderCommand(base.ArgparseCommand):
     def __init__(self):

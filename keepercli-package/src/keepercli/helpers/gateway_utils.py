@@ -1,8 +1,9 @@
 from time import time
 from typing import List
 
+from keepersdk import utils
 from keepersdk.vault import vault_online
-from keepersdk.proto import pam_pb2
+from keepersdk.proto import pam_pb2, enterprise_pb2
 from keepersdk.vault import ksm_management
 
 
@@ -69,7 +70,8 @@ def create_gateway(
         first_access_expire_duration_ms=first_access_expire_duration_ms,
         access_expire_in_ms=None,
         master_key=master_key,
-        server=vault.keeper_auth.keeper_endpoint.server
+        server=vault.keeper_auth.keeper_endpoint.server,
+        client_type=enterprise_pb2.DISCOVERY_AND_ROTATION_CONTROLLER
     )
 
     return _extract_one_time_token(one_time_token_dict)
@@ -109,3 +111,23 @@ def set_gateway_max_instances(vault: vault_online.VaultOnline, gateway_uid: byte
         rest_endpoint=REST_ENDPOINT_SET_MAX_INSTANCE_COUNT,
         request=rq
     )
+
+
+def find_connected_gateways(all_controllers, identifier):
+
+    found_connected_controller_uid_bytes = next((c for c in all_controllers if (utils.base64_url_encode(c) == identifier)), None)
+
+    if found_connected_controller_uid_bytes:
+        return found_connected_controller_uid_bytes
+    else:
+        return None
+
+
+def edit_gateway(vault: vault_online.VaultOnline, gateway_uid, gateway_name, node_id):
+    rq = pam_pb2.PAMController()
+    rq.controllerUid = gateway_uid
+    rq.controllerName = gateway_name
+    rq.nodeId = node_id
+    vault.keeper_auth.execute_auth_rest(
+        rest_endpoint='pam/modify_controller',
+        request=rq)

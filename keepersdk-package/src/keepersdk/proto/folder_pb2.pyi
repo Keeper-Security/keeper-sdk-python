@@ -3,7 +3,8 @@ from google.protobuf.internal import containers as _containers
 from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
-from typing import ClassVar as _ClassVar, Iterable as _Iterable, Mapping as _Mapping, Optional as _Optional, Union as _Union
+from collections.abc import Iterable as _Iterable, Mapping as _Mapping
+from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
@@ -135,7 +136,7 @@ class SharedFolderFields(_message.Message):
     manageRecords: bool
     canEdit: bool
     canShare: bool
-    def __init__(self, encryptedFolderName: _Optional[bytes] = ..., manageUsers: bool = ..., manageRecords: bool = ..., canEdit: bool = ..., canShare: bool = ...) -> None: ...
+    def __init__(self, encryptedFolderName: _Optional[bytes] = ..., manageUsers: _Optional[bool] = ..., manageRecords: _Optional[bool] = ..., canEdit: _Optional[bool] = ..., canShare: _Optional[bool] = ...) -> None: ...
 
 class SharedFolderFolderFields(_message.Message):
     __slots__ = ("sharedFolderUid",)
@@ -209,7 +210,7 @@ class SharedFolderUpdateRecord(_message.Message):
     expiration: int
     timerNotificationType: _record_pb2.TimerNotificationType
     rotateOnExpiration: bool
-    def __init__(self, recordUid: _Optional[bytes] = ..., sharedFolderUid: _Optional[bytes] = ..., teamUid: _Optional[bytes] = ..., canEdit: _Optional[_Union[SetBooleanValue, str]] = ..., canShare: _Optional[_Union[SetBooleanValue, str]] = ..., encryptedRecordKey: _Optional[bytes] = ..., revision: _Optional[int] = ..., expiration: _Optional[int] = ..., timerNotificationType: _Optional[_Union[_record_pb2.TimerNotificationType, str]] = ..., rotateOnExpiration: bool = ...) -> None: ...
+    def __init__(self, recordUid: _Optional[bytes] = ..., sharedFolderUid: _Optional[bytes] = ..., teamUid: _Optional[bytes] = ..., canEdit: _Optional[_Union[SetBooleanValue, str]] = ..., canShare: _Optional[_Union[SetBooleanValue, str]] = ..., encryptedRecordKey: _Optional[bytes] = ..., revision: _Optional[int] = ..., expiration: _Optional[int] = ..., timerNotificationType: _Optional[_Union[_record_pb2.TimerNotificationType, str]] = ..., rotateOnExpiration: _Optional[bool] = ...) -> None: ...
 
 class SharedFolderUpdateUser(_message.Message):
     __slots__ = ("username", "manageUsers", "manageRecords", "sharedFolderKey", "expiration", "timerNotificationType", "typedSharedFolderKey", "rotateOnExpiration")
@@ -229,7 +230,7 @@ class SharedFolderUpdateUser(_message.Message):
     timerNotificationType: _record_pb2.TimerNotificationType
     typedSharedFolderKey: EncryptedDataKey
     rotateOnExpiration: bool
-    def __init__(self, username: _Optional[str] = ..., manageUsers: _Optional[_Union[SetBooleanValue, str]] = ..., manageRecords: _Optional[_Union[SetBooleanValue, str]] = ..., sharedFolderKey: _Optional[bytes] = ..., expiration: _Optional[int] = ..., timerNotificationType: _Optional[_Union[_record_pb2.TimerNotificationType, str]] = ..., typedSharedFolderKey: _Optional[_Union[EncryptedDataKey, _Mapping]] = ..., rotateOnExpiration: bool = ...) -> None: ...
+    def __init__(self, username: _Optional[str] = ..., manageUsers: _Optional[_Union[SetBooleanValue, str]] = ..., manageRecords: _Optional[_Union[SetBooleanValue, str]] = ..., sharedFolderKey: _Optional[bytes] = ..., expiration: _Optional[int] = ..., timerNotificationType: _Optional[_Union[_record_pb2.TimerNotificationType, str]] = ..., typedSharedFolderKey: _Optional[_Union[EncryptedDataKey, _Mapping]] = ..., rotateOnExpiration: _Optional[bool] = ...) -> None: ...
 
 class SharedFolderUpdateTeam(_message.Message):
     __slots__ = ("teamUid", "manageUsers", "manageRecords", "sharedFolderKey", "expiration", "timerNotificationType", "typedSharedFolderKey", "rotateOnExpiration")
@@ -249,7 +250,7 @@ class SharedFolderUpdateTeam(_message.Message):
     timerNotificationType: _record_pb2.TimerNotificationType
     typedSharedFolderKey: EncryptedDataKey
     rotateOnExpiration: bool
-    def __init__(self, teamUid: _Optional[bytes] = ..., manageUsers: bool = ..., manageRecords: bool = ..., sharedFolderKey: _Optional[bytes] = ..., expiration: _Optional[int] = ..., timerNotificationType: _Optional[_Union[_record_pb2.TimerNotificationType, str]] = ..., typedSharedFolderKey: _Optional[_Union[EncryptedDataKey, _Mapping]] = ..., rotateOnExpiration: bool = ...) -> None: ...
+    def __init__(self, teamUid: _Optional[bytes] = ..., manageUsers: _Optional[bool] = ..., manageRecords: _Optional[bool] = ..., sharedFolderKey: _Optional[bytes] = ..., expiration: _Optional[int] = ..., timerNotificationType: _Optional[_Union[_record_pb2.TimerNotificationType, str]] = ..., typedSharedFolderKey: _Optional[_Union[EncryptedDataKey, _Mapping]] = ..., rotateOnExpiration: _Optional[bool] = ...) -> None: ...
 
 class SharedFolderUpdateV3Request(_message.Message):
     __slots__ = ("sharedFolderUpdateOperation_dont_use", "sharedFolderUid", "encryptedSharedFolderName", "revision", "forceUpdate", "fromTeamUid", "defaultManageUsers", "defaultManageRecords", "defaultCanEdit", "defaultCanShare", "sharedFolderAddRecord", "sharedFolderAddUser", "sharedFolderAddTeam", "sharedFolderUpdateRecord", "sharedFolderUpdateUser", "sharedFolderUpdateTeam", "sharedFolderRemoveRecord", "sharedFolderRemoveUser", "sharedFolderRemoveTeam", "sharedFolderOwner")
@@ -293,7 +294,7 @@ class SharedFolderUpdateV3Request(_message.Message):
     sharedFolderRemoveUser: _containers.RepeatedScalarFieldContainer[str]
     sharedFolderRemoveTeam: _containers.RepeatedScalarFieldContainer[bytes]
     sharedFolderOwner: str
-    def __init__(self, sharedFolderUpdateOperation_dont_use: _Optional[int] = ..., sharedFolderUid: _Optional[bytes] = ..., encryptedSharedFolderName: _Optional[bytes] = ..., revision: _Optional[int] = ..., forceUpdate: bool = ..., fromTeamUid: _Optional[bytes] = ..., defaultManageUsers: _Optional[_Union[SetBooleanValue, str]] = ..., defaultManageRecords: _Optional[_Union[SetBooleanValue, str]] = ..., defaultCanEdit: _Optional[_Union[SetBooleanValue, str]] = ..., defaultCanShare: _Optional[_Union[SetBooleanValue, str]] = ..., sharedFolderAddRecord: _Optional[_Iterable[_Union[SharedFolderUpdateRecord, _Mapping]]] = ..., sharedFolderAddUser: _Optional[_Iterable[_Union[SharedFolderUpdateUser, _Mapping]]] = ..., sharedFolderAddTeam: _Optional[_Iterable[_Union[SharedFolderUpdateTeam, _Mapping]]] = ..., sharedFolderUpdateRecord: _Optional[_Iterable[_Union[SharedFolderUpdateRecord, _Mapping]]] = ..., sharedFolderUpdateUser: _Optional[_Iterable[_Union[SharedFolderUpdateUser, _Mapping]]] = ..., sharedFolderUpdateTeam: _Optional[_Iterable[_Union[SharedFolderUpdateTeam, _Mapping]]] = ..., sharedFolderRemoveRecord: _Optional[_Iterable[bytes]] = ..., sharedFolderRemoveUser: _Optional[_Iterable[str]] = ..., sharedFolderRemoveTeam: _Optional[_Iterable[bytes]] = ..., sharedFolderOwner: _Optional[str] = ...) -> None: ...
+    def __init__(self, sharedFolderUpdateOperation_dont_use: _Optional[int] = ..., sharedFolderUid: _Optional[bytes] = ..., encryptedSharedFolderName: _Optional[bytes] = ..., revision: _Optional[int] = ..., forceUpdate: _Optional[bool] = ..., fromTeamUid: _Optional[bytes] = ..., defaultManageUsers: _Optional[_Union[SetBooleanValue, str]] = ..., defaultManageRecords: _Optional[_Union[SetBooleanValue, str]] = ..., defaultCanEdit: _Optional[_Union[SetBooleanValue, str]] = ..., defaultCanShare: _Optional[_Union[SetBooleanValue, str]] = ..., sharedFolderAddRecord: _Optional[_Iterable[_Union[SharedFolderUpdateRecord, _Mapping]]] = ..., sharedFolderAddUser: _Optional[_Iterable[_Union[SharedFolderUpdateUser, _Mapping]]] = ..., sharedFolderAddTeam: _Optional[_Iterable[_Union[SharedFolderUpdateTeam, _Mapping]]] = ..., sharedFolderUpdateRecord: _Optional[_Iterable[_Union[SharedFolderUpdateRecord, _Mapping]]] = ..., sharedFolderUpdateUser: _Optional[_Iterable[_Union[SharedFolderUpdateUser, _Mapping]]] = ..., sharedFolderUpdateTeam: _Optional[_Iterable[_Union[SharedFolderUpdateTeam, _Mapping]]] = ..., sharedFolderRemoveRecord: _Optional[_Iterable[bytes]] = ..., sharedFolderRemoveUser: _Optional[_Iterable[str]] = ..., sharedFolderRemoveTeam: _Optional[_Iterable[bytes]] = ..., sharedFolderOwner: _Optional[str] = ...) -> None: ...
 
 class SharedFolderUpdateV3RequestV2(_message.Message):
     __slots__ = ("sharedFoldersUpdateV3",)
