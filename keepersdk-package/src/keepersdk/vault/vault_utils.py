@@ -71,6 +71,23 @@ def get_folders_for_record(vault: vault_data.VaultData, record_uid: str) -> List
     return result
 
 
+def get_folders_for_move(vault: vault_data.VaultData, record_uid: str) -> List[vault_types.Folder]:
+    """
+    Folders to use as the move source, matching ``get_folders_for_record`` when possible.
+
+    The folder tree only includes a record where there is a ``folder_records`` link after
+    :meth:`VaultData.build_folders`. Records created by some endpoints (e.g. PAM
+    ``pam/add_configuration_record``) can appear in the vault on sync without a
+    ``userFolderRecord`` link yet, so :func:`get_folders_for_record` is empty even though
+    the record exists. For ``move`` those records should still be treated as coming from
+    the user root (``folder_uid`` of the root folder, ``''``).
+    """
+    folders = get_folders_for_record(vault, record_uid)
+    if not folders and vault.get_record(record_uid) is not None:
+        return [vault.root_folder]
+    return folders
+
+
 def load_available_teams(auth: keeper_auth.KeeperAuth) -> Iterable[vault_types.TeamInfo]:
     rq = { 'command': 'get_available_teams' }
     rs = auth.execute_auth_command(rq)

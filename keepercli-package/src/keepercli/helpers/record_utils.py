@@ -3,12 +3,15 @@ import datetime
 import fnmatch
 import hashlib
 import hmac
+import json
 import re
 from typing import Iterator, List, Optional
 from urllib import parse
 
-from keepersdk import utils
+from keepersdk import crypto, utils
 from keepersdk.proto.enterprise_pb2 import GetSharingAdminsRequest, GetSharingAdminsResponse
+from keepersdk.proto.router_pb2 import RouterRotationInfo
+from keepersdk.proto.pam_pb2 import PAMGenericUidRequest
 from keepersdk.vault import vault_online, vault_record, vault_types, vault_utils
 
 from ..commands.base import CommandError
@@ -144,3 +147,34 @@ def resolve_record(context: KeeperParams, name: str) -> str:
                             return uid
     if record_uid is None:
         raise CommandError(f'Record not found: {name}')
+
+
+def record_rotation_get(vault: vault_online.VaultOnline, record_uid_bytes: bytes) -> RouterRotationInfo:
+
+    rq = PAMGenericUidRequest()
+    rq.uid = record_uid_bytes
+
+    rotation_info_rs = vault.keeper_auth.execute_auth_rest(rest_endpoint='pam/get_rotation_info', request=rq, response_type=RouterRotationInfo)
+
+    return rotation_info_rs
+
+
+def pam_configurations_get_all(vault: vault_online.VaultOnline):
+    all_records = vault.vault_data.records()
+    all_v6_records = [rec for rec in list(all_records) if rec.version == 6]
+
+    return all_v6_records
+
+
+def pam_decrypt_configuration_data(pam_config_v6_record):
+    data = pam_config_v6_record.get('data')
+    record_key_unencrypted = pam_config_v6_record.get('record_key_unencrypted')
+    data_unencrypted_bytes = crypto.decrypt_aes_v2(
+        utils.base64_url_decode(data),
+        record_key_unencrypted
+    )
+
+    data_unencrypted_json_str = utils.base64_url_encode(data_unencrypted_bytes)
+    data_unencrypted_dict = json.loads(data_unencrypted_json_str)
+
+    return data_unencrypted_dict

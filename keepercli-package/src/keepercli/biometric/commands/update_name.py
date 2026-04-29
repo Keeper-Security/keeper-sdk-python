@@ -23,9 +23,6 @@ class BiometricUpdateNameCommand(BiometricArgparseCommand):
         parser = argparse.ArgumentParser(prog='biometric update-name', description='Update friendly name of a biometric passkey')
         super().__init__(parser)
 
-    # def get_parser(self):
-    #     return self.parser
-
     def execute(self, context: KeeperParams, **kwargs):
         """Execute biometric update-name command"""
         def _update_name():
@@ -147,4 +144,4 @@ class BiometricUpdateNameCommand(BiometricArgparseCommand):
         print(f"Old Name: {credential['name']}")
         print(f"New Name: {new_name}")
         print(f"Message: {result['message']}")
-        print("=" * 30) 
+        print("=" * 30)
