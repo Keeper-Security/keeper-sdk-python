@@ -59,6 +59,10 @@ def try_resolve_path(context: KeeperParams, path: str) -> Tuple[vault_types.Fold
                     break
     path = '/'.join(component.replace('/', '//') for component in components)
 
+    # Return a 2-tuple of BaseFolderNode, str
+    # The first is the folder/s containing the second, or the folder of the last component if the second is ''.
+    # The second is the final component of the path we're passed as an argument to this function. It could be a record, or
+    # a not-yet-existent directory.
     return folder, path
 
 

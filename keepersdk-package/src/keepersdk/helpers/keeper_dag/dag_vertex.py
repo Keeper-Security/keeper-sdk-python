@@ -35,8 +35,6 @@ class DAGVertex:
             vertex_type = RefType.PAM_NETWORK
         self.vertex_type = vertex_type
 
-        # If the name is not defined, use the UID. Name is not persistent in the DAG.
-        # If you load the DAG, the web service will not return the name.
         if name is None:
             name = uid
 
@@ -52,20 +50,13 @@ class DAGVertex:
                 keychain = [keychain]
             self._keychain += keychain
 
-        # Is the keychain corrupt?
         self.corrupt = False
 
-        # These are edges to which vertex own this vertex. This vertex belongs to. So this would
         self.edges: list[Optional[DAGEdge]] = []
         self.has_uid = []
 
-        # Flag indicating that this vertex is active.
-        # This means this vertex has an active edge connected to another vertex.
         self.active = True
 
-        # By default, we will save this vertex; not skip_save.
-        # If in the process building the graph, it is decided that a vertex should not be saved; this can be set to
-        #  prevent the vertex from being saved.
         self._skip_save = False
 
     def __str__(self):
@@ -114,7 +105,6 @@ class DAGVertex:
 
         :return:
         """
-
         keychain = self.keychain
         if len(keychain) > 0:
             return self.keychain[0]
@@ -164,12 +154,9 @@ class DAGVertex:
 
         If there are no edges that require a key, then return None.
         """
-
-        # If the vertex is root, then the keychain will be the key bytes.
         if self.dag.get_root == self:
             self._keychain = [self.dag.key]
 
-        # If the keychain is empty, generate a key for a specific edge type.
         elif len(self._keychain) == 0:
             for e in self.edges:
                 if e.edge_type in [EdgeType.KEY, EdgeType.DATA]:
@@ -191,8 +178,6 @@ class DAGVertex:
     @property
     def has_decrypted_keys(self) -> Optional[bool]:
         """
-        Does the vertex have a decrypted keys?
-
         If the vertex contains a KEY, ACL or DATA edge and if the key is bytes, then the key is decrypted.
         If it is a str type, then it is encrypted.
         """
@@ -211,8 +196,6 @@ class DAGVertex:
     def uid(self):
         """
         Get the vertex UID.
-
-        Once set, don't allow it to be changed.
         """
         return self._uid
 
@@ -220,8 +203,6 @@ class DAGVertex:
         high_edge = None
         high_version = -1
         for edge in self.edges:
-            # Get all the edge point at the same vertex.
-            # Don't include DATA edges.
             if edge.head_uid == vertex.uid and edge.edge_type == edge_type:
                 if edge.version > high_version:
                     high_version = edge.version
@@ -239,8 +220,6 @@ class DAGVertex:
         high_edge = None
         high_version = -1
         for edge in self.edges:
-            # Get all the edge point at the same vertex.
-            # Don't include DATA edges.
             if edge.head_uid == head_uid:
                 if edge.version > high_version:
                     high_edge = edge
@@ -270,10 +249,7 @@ class DAGVertex:
 
     @property
     def has_data(self) -> bool:
-
         """
-        Does this vertex contain a DATA edge?
-
         :return: True if vertex has a DATA edge.
         """
 
@@ -302,15 +278,13 @@ class DAGVertex:
         if data_count == 0:
             return None
 
-        # If the index is None, get the latest.
         if index is None or index == 0:
             index = -1
-        # Since -1 is the current, switch index to a negative number and subtract one more.
-        # For example, 1 means prior, -1 would be the latest, so we need to subtract one to get -2.
+
         elif index > 0:
             index *= -1
             index -= 1
-        # If already a negative index, just subtract one.
+
         else:
             index -= 1
 
@@ -348,8 +322,6 @@ class DAGVertex:
 
         self.debug(f"connect {self.uid} to DATA edge", level=1)
 
-        # Are we trying to add DATA to a deleted vertex?
-
         if not self.active:
             # If deleted, there will not be a KEY to decrypt the data.
             # Throw an exception if not from the loading method.
@@ -358,14 +330,10 @@ class DAGVertex:
             # If from loading, do not add and do not throw an exception.
             return
 
-        # Make sure the vertex belongs before auto saving. If it does not belong, it's just an orphan right now.
-        # This only is checked if using this module is used to create the graph.
+        # Make sure the vertex belongs before auto saving. If it does not belong, it is an orphan right now.
+        # This only is checked if using this module to create the graph.
         if self.belongs_to_a_vertex is False and from_load is False:
             raise DAGVertexException(f"Before adding data, connect this vertex {self.uid} to another vertex.")
-
-        # Make sure that we have a KEY.
-        # Allow a DATA edge to be connected to the root vertex, which will not have a KEY edge.
-        # Or if we are loading, allow out of sync edges.
 
         if needs_encryption:
             found_key_edge = self.dag.get_root == self or from_load is True
@@ -376,7 +344,6 @@ class DAGVertex:
             if found_key_edge is False:
                 raise DAGKeyException(f"Cannot add DATA edge without a KEY edge for vertex {self.uid}.")
 
-        # Get the prior data, set the version and inactive the prior data.
         version = 0
         prior_data = self.get_data()
         if prior_data is not None:
@@ -384,15 +351,12 @@ class DAGVertex:
             prior_data.active = False
 
             # Check if DATA has already been created/modified per this session.
-            # If it has, the prior will be overwritten, no sense on saving this edge.
-            # If warning is enabled, print a debug message and the stacktrace to we what added the DATA.
             if self.dag.dedup_edge and prior_data.modified:
                 prior_data.skip_on_save = True
                 if self.dag.dedup_edge_warning:
                     self.dag.debug("DATA edge added multiple times for session. stacktrace on what did it follows ...")
                     self.dag.debug_stacktrace()
 
-        # The tail UID is the UID of the vertex. Since data loops back to the vertex, the head UID is the same.
         self.edges.append(
             DAGEdge(
                 vertex=self,
@@ -408,9 +372,6 @@ class DAGVertex:
             )
         )
 
-        # If using a history level, we want to remove edges if we exceed the history level.
-        # The history level is per edge type.
-        # It's FIFO, so we will remove the first edge type if we exceed the history level.
         if self.dag.history_level > 0:
             data_count = self.data_count()
             while data_count > self.dag.history_level:
@@ -426,9 +387,6 @@ class DAGVertex:
         return self.edge_count(self, EdgeType.DATA)
 
     def data_delete(self):
-
-        # Get the DATA edge.
-        # It will be a reference to itself.
         data_edge = self.get_edge(self, EdgeType.DATA)
         if data_edge is None:
             self.debug("cannot delete the data, no data edge exists.")
@@ -500,10 +458,7 @@ class DAGVertex:
 
     @property
     def has_key(self) -> bool:
-
         """
-        Does this vertex contain any KEY or ACL edges?
-
         :return: True if vertex has a KEY or ACL edge.
         """
 
@@ -520,7 +475,6 @@ class DAGVertex:
                    path: Optional[str] = None,
                    modified: bool = True,
                    from_load: bool = False):
-
         """
         Connect a vertex to another vertex (as the owner).
 
@@ -552,30 +506,21 @@ class DAGVertex:
             return
 
         # Cannot make an edge to the same vertex, unless the edge type is a DELETION.
-        # Normally an edge to self is a DATA type, use add_data for that.
         # A DELETION edge to self is allowed.
-        # Just means the DATA edge is being deleted.
         if self.uid == vertex.uid and not (edge_type == EdgeType.DATA or edge_type == EdgeType.DELETION):
             if not from_load:
                 raise DAGIllegalEdgeException(f"Cannot create edge to self for edge type {edge_type}.")
             self.dag.debug(f"vertex {self.uid} attempted to make '{edge_type.value}' to self, skipping.")
             return
 
-        # Figure out what version of the edge we are.
-
         version, version_edge = self.get_highest_edge_version(head_uid=vertex.uid)
 
         # If the new edge is not DELETION
         if edge_type != EdgeType.DELETION:
-
-            # Find the current active edge for this edge type to make it inactive.
             current_edge_by_type = self.get_edge(vertex, edge_type)
             if current_edge_by_type is not None:
                 current_edge_by_type.active = False
 
-                # Check if edge has already been created/modified per this session.
-                # If it has, the prior will be overwritten, no sense on saving this edge.
-                # If warning is enabled, print a debug message and the stacktrace to we what added the DATA.
                 if self.dag.dedup_edge and current_edge_by_type.modified:
                     current_edge_by_type.skip_on_save = True
                     if self.dag.dedup_edge_warning:
@@ -583,19 +528,15 @@ class DAGVertex:
                                        "stacktrace on what did it follows ...")
                         self.dag.debug_stacktrace()
 
-            # If we are adding a non-DELETION edge, it will inactivate the DELETION edge.
             highest_deletion_edge = self.get_edge(vertex, EdgeType.DELETION)
             if highest_deletion_edge is not None:
                 highest_deletion_edge.active = False
 
-        # For this purpose, only DATA edge are allow to set the is_encrypted flag.
         if edge_type != EdgeType.DATA:
             is_encrypted = False
 
-        # Should we activate the vertex again?
         if not self.active:
 
-            # If the vertex is already inactive, and we are trying to delete, return.
             if edge_type == EdgeType.DELETION:
                 return
 
@@ -609,8 +550,6 @@ class DAGVertex:
             self.active = True
 
         # Create and append a new DAGEdge instance.
-        # Disable the auto saving after the content is changed since the edge has not been appended yet.
-        # Once the edge is created, disable blocking auto save for content changes.
         edge = DAGEdge(
             vertex=self,
             edge_type=edge_type,
@@ -633,7 +572,6 @@ class DAGVertex:
     def belongs_to_root(self,
                         edge_type: EdgeType,
                         path: Optional[str] = None):
-
         """
         Connect the vertex to the root vertex.
 
@@ -650,8 +588,6 @@ class DAGVertex:
         if not self.active:
             raise DAGDeletionException("This vertex is not active. Cannot connect to root.")
 
-        # We are adding the root, we can enable auto save now.
-        # We can get the correct stream id with an edge to the root vertex.
         self.belongs_to(self.dag.get_root, edge_type=edge_type, path=path)
 
         self.dag.allow_auto_save = True
@@ -659,7 +595,6 @@ class DAGVertex:
 
     def has_vertices(self, edge_type: Optional[EdgeType] = None, allow_inactive: bool = False,
                      allow_self_ref: bool = False) -> List["DAGVertex"]:
-
         """
         Get a list of vertices that belong to this vertex.
         :return: List of DAGVertex
@@ -668,8 +603,6 @@ class DAGVertex:
         vertices = []
         for uid in self.has_uid:
 
-            # This will remove DATA and DATA that have changed to DELETION edges.
-            # Prevent looping.
             if uid == self.uid and allow_self_ref is False:
                 continue
 
@@ -679,8 +612,6 @@ class DAGVertex:
                 if edge is not None:
                     vertices.append(vertex)
 
-            # If no edge type was specified, do not return DATA and DELETION.
-            # Also do not include vertices that are inactive by default.
             elif edge_type != EdgeType.DATA and edge_type != EdgeType.DELETION:
                 if vertex.active is True or allow_inactive is True:
                     vertices.append(vertex)
@@ -688,10 +619,7 @@ class DAGVertex:
         return vertices
 
     def has(self, vertex: "DAGVertex", edge_type: Optional[EdgeType] = None) -> bool:
-
         """
-        Does this vertex have the passed in vertex?
-
         :return: True if request vertex belongs to this vertex.
                  False if it does not.
         """
@@ -707,11 +635,8 @@ class DAGVertex:
 
         vertices = []
         for edge in self.edges:
-            # If the edge is not a DATA or DELETION type, and the edge is the highest version/active
             if edge.edge_type != EdgeType.DATA and edge.edge_type != EdgeType.DELETION and edge.active is True:
 
-                # The head will point at the remote vertex.
-                # If it is active, and not already in the list, add it to the list of vertices this vertex belongs to.
                 vertex = self.dag.get_vertex(edge.head_uid)
                 if vertex.active is True and vertex not in vertices:
                     vertices.append(vertex)
@@ -723,16 +648,12 @@ class DAGVertex:
         Does this vertex belong to another vertex?
         :return:
         """
-
-        # If this is the root vertex, return True.
-        # Where this is being called should handle operations involving the root vertex.
         if self.dag.get_root == self:
             return True
 
         return len(self.belongs_to_vertices()) > 0
 
     def disconnect_from(self, vertex: "DAGVertex", path: Optional[str] = None):
-
         """
         Disconnect this vertex from another vertex.
 
@@ -747,20 +668,16 @@ class DAGVertex:
         if vertex is None:
             raise ValueError("Vertex is blank.")
 
-        # Flag all the edges as inactive.
         for edge in self.edges:
             if edge.head_uid == vertex.uid and edge.edge_type:
                 edge.active = False
 
-        # Add the DELETION edge
         self.belongs_to(
             vertex=vertex,
             edge_type=EdgeType.DELETION,
             path=path
         )
 
-        # If all the KEY edges are inactive now, the DATA edge needs to be made inactive.
-        # There is no longer a KEY edge to decrypt the DATA.
         has_active_key_edge = False
         for edge in self.edges:
             if edge.edge_type == EdgeType.KEY and edge.active is True:
@@ -776,7 +693,6 @@ class DAGVertex:
             self.active = False
 
     def delete(self, ignore_vertex: Optional["DAGVertex"] = None):
-
         """
         Delete a vertex
 
@@ -787,21 +703,15 @@ class DAGVertex:
         """
 
         def _delete(vertex, prior_vertex):
-
-            # Do not delete the root vertex
             if vertex.uid == self.dag.uid:
                 self.debug(f"  * vertex is root, cannot delete root", level=2)
                 return
 
             self.debug(f"> checking vertex {vertex.uid}")
 
-            # Should we ignore a vertex?
-            # If deleting an edge, we want to ignore the vertex that owns the edge.
-            # This prevents circular calls.
             if ignore_vertex is not None and vertex.uid == ignore_vertex.uid:
                 return
 
-            # Get a list of vertices that belong to this vertex (v)
             has_v = vertex.has_vertices()
 
             if len(has_v) > 0:
@@ -821,60 +731,50 @@ class DAGVertex:
 
         self.debug(f"DELETING vertex {self.uid}", level=3)
 
-        # Perform the DELETION edges save in one batch.
-        # Get the current allowed auto save state, and disable auto save.
         current_allow_auto_save = self.dag.allow_auto_save
         self.dag.allow_auto_save = False
 
         _delete(self, None)
 
-        # Restore the allow auto save and trigger auto save()
         self.dag.allow_auto_save = current_allow_auto_save
         self.dag.do_auto_save()
 
     def walk_down_path(self, path: Union[str, List[str]]) -> Optional["DAGVertex"]:
-
         """
         Walk the vertices using the path and return the vertex starting at this vertex.
 
-        :param path: An array of path string, or string where the path is joined with a "/" (i.e., think URL)
+        :param path: An array of path string, or string where the path is joined with a "/"
         :return: DAGVertex is the path completes, None is failure.
         """
 
         self.debug(f"walking path in vertex {self.uid}", level=2)
 
-        # If the path is str, break it into an array. Get rid of leading /
         if isinstance(path, str):
             self.debug("path is str, break into array", level=2)
             if path.startswith("/"):
                 path = path[1:]
             path = path.split("/")
 
-        # Unshift the path
-
         current_path = path[0]
         path = path[1:]
         self.debug(f"current path: {current_path}", level=2)
         self.debug(f"path left: {path}", level=2)
 
-        # Check the DATA edges.
-        # If a DATA edge has the current path, return this vertex.
         for edge in self.edges:
             if edge.edge_type != EdgeType.DATA:
                 continue
             if edge.path == current_path:
                 return self
 
-        # Check the vertices that belong to this vertex for edges going to this vertex and the path matches.
         for vertex in self.has_vertices():
             self.debug(f"vertex {self.uid} has {vertex.uid}", level=2)
             for edge in vertex.edges:
-                # If the edge matches the current path, the head of the edge is this vertex, a route exists.
+
                 if edge.path == current_path and edge.head_uid == self.uid:
-                    # If there is no path left, this is our vertex
+
                     if len(path) == 0:
                         return vertex
-                    # If there is still more path, call vertex to walk more of the path.
+
                     else:
                         return vertex.walk_down_path(path)
         return None
@@ -902,10 +802,8 @@ class DAGVertex:
         Python's garbage collector clean up circular references between
         DAG, DAGVertex, and DAGEdge objects.
         """
-        # Recursively clean child vertices first
         for vertex in self.has_vertices():
             vertex.clean_edges()
 
-        # Clear all reference lists
         self.edges.clear()
         self.has_uid.clear()

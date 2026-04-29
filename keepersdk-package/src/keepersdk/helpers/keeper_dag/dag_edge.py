@@ -35,7 +35,6 @@ class DAGEdge:
         :param path: Short tag about this edge. Do
         :param modified:
         :param block_content_auto_save:
-        :param from_load: Is this being called from the load() method?
         :param is_serialized: From the load, is the content serialized from to a base64 string?
         :param needs_encryption: Flag to indicate if the content needs to be encrypted.
         :return: An instance of DAGEdge

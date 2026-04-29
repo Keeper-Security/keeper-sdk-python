@@ -58,7 +58,7 @@ class Connection(ConnectionBase):
     def hostname(self) -> str:
         # The host is connect.keepersecurity.com, connect.dev.keepersecurity.com, etc. Append "connect" in front
         # of host used for Commander.
-        configured_host = f'connect.{self.params.config.get("server")}'
+        configured_host = f'connect.{self.vault.keeper_auth.keeper_endpoint.server}'
         
         # In GovCloud environments, the router service is not under the govcloud subdomain
         if 'govcloud.' in configured_host:

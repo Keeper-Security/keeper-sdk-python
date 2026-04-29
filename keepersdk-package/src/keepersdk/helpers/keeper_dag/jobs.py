@@ -237,7 +237,6 @@ class Jobs:
 
     def start(self, settings: Optional[Settings] = None, resource_uid: Optional[str] = None,
               conversation_id: Optional[str] = None) -> str:
-
         """
         Start a discovery job.
         """
@@ -367,7 +366,6 @@ class Jobs:
     def current_job(self) -> Optional[JobItem]:
         """
         Get the current job
-
         The current job is the oldest unprocessed job
         """
         jobs = self.get_jobs()
@@ -468,7 +466,6 @@ class Jobs:
                 if show_version:
                     label += f"\\nv={edge.version}"
 
-                # tail, head (arrow side), label, ...
                 dot.edge(v.uid, edge.head_uid, label, style=style, fontcolor=color, color=color)
 
             shape = "ellipse"

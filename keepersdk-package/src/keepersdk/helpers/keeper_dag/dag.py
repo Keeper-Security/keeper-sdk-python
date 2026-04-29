@@ -14,7 +14,7 @@ from .dag_vertex import DAGVertex
 from .struct.protobuf import DataStruct as ProtobufDataStruct
 from .struct.default import DataStruct as DefaultDataStruct
 from .exceptions import (DAGPathException, DAGDataException, DAGKeyException, DAGCorruptException, 
-                    DAGVertexException, DAGConfirmException, DAGVertexAlreadyExistsException, DAGEdgeException)
+                    DAGVertexException, DAGConfirmException, DAGVertexAlreadyExistsException)
 from .connection import ConnectionBase
 from .__version__ import __version__ as dag_version
 from ... import utils
@@ -585,7 +585,6 @@ class DAG:
         return sync_point
 
     def _mark_deletion(self):
-
         """
         Mark vertices as deleted.
 
@@ -613,7 +612,7 @@ class DAG:
                     found_edge_to_another_vertex = True
                     break
 
-            # If the vertex belongs to no vertex, and it not the root, then flag it for deletion.
+            # If the vertex belongs to no vertex, and it is not the root, then flag it for deletion.
             if found_edge_to_another_vertex is False and vertex.uid != self.uid:
                 self.debug(f"  * vertex is deleted", level=3)
                 vertex.active = False
@@ -621,16 +620,8 @@ class DAG:
         self.debug("", level=1)
 
     def _decrypt_keychain(self):
-
         """
         Decrypt KEY/ACL edges
-
-        Part one is to decrypt the KEY and ACL edges.
-        To decrypt the edge, we need to walk up the edges until we can no longer.
-        If we get the point where we can't walk up any farther, we need to use the record key bytes.
-        While walking up, if we get to a keychain that has been decrypted, we return that keychain.
-        As we walk back, we can decrypt any keychain that is still encrypted.
-        The decrypt keychain is set in the vertex.
         """
 
         self.debug("  DECRYPT the dag KEY edges", level=1)
@@ -643,7 +634,6 @@ class DAG:
                 self.debug("  found a decrypted keychain on vertex", level=3)
                 return v.keychain
 
-            # Else we need KEY/ACL edge and get the key from the vertex that this vertex belongs to
             found_key_edge = False
             for e in v.edges:
                 if e.edge_type == EdgeType.KEY:
@@ -652,17 +642,11 @@ class DAG:
                     head = self.get_vertex(e.head_uid)
                     keychain = _get_keychain(head)
 
-                    # No need to check if keychain exists.
-                    # At default, it should contain the record bytes if no KEY/ACL edges existed for a vertex.
-
                     self.debug(f"  * decrypt {v.uid} with keys {keychain}", level=3)
                     was_able_to_decrypt = False
 
-                    # Try the keys in the keychain. One should be able to decrypt the content.
                     for key in keychain:
                         try:
-                            # The edge will contain a single key.
-                            # Adding a key to
                             self.debug(f"    decrypt with key {key}", level=3)
                             content = dag_crypto.decrypt_aes(e.content, key)
                             self.debug(f"    content {content}", level=3)
@@ -675,10 +659,6 @@ class DAG:
                             self.debug(f"      !! this is not the key", level=3)
 
                     if not was_able_to_decrypt:
-
-                        # Flag that the edge is corrupt, flag that the vertex keychain is corrupt,
-                        #   and store vertex UID/tail UID.
-                        # If we fail on corrupt keys, then raise exceptions.
                         e.corrupt = True
                         v.corrupt = True
                         self.corrupt_uids.append(v.uid)
@@ -702,11 +682,9 @@ class DAG:
         self.debug("", level=1)
 
     def _decrypt_data(self):
-
         """
         Decrypt DATA edges
 
-        At this point, all the vertex should have an encrypted key.
         This key is used to decrypt the DATA edge's content.
         Walk each vertex and decrypt the DATA edge if there is a DATA edge.
         """
@@ -721,7 +699,6 @@ class DAG:
                 if edge.edge_type != EdgeType.DATA:
                     continue
 
-                # If the vertex/KEY edge that tail is this vertex is corrupt, we cannot decrypt data.
                 if vertex.corrupt:
                     self.debug(f"the key for the DATA edge is corrupt for vertex {vertex.uid}; "
                                "cannot decrypt data.", level=3)
@@ -738,7 +715,6 @@ class DAG:
 
                 keychain = vertex.keychain
 
-                # Try the keys in the keychain. One should be able to decrypt the content.
                 for key in keychain:
                     try:
                         edge.content = dag_crypto.decrypt_aes(content, key)
@@ -749,8 +725,6 @@ class DAG:
                         self.debug(f"      !! this is not the key", level=3)
 
                 if not able_to_decrypt:
-
-                    # If the DATA edge requires encryption, throw error if we cannot decrypt.
                     if self.data_requires_encryption:
                         self.corrupt_uids.append(vertex.uid)
                         raise DAGDataException(f"The data edge {vertex.uid} could not be decrypted.")
@@ -759,25 +733,21 @@ class DAG:
                     edge.needs_encryption = False
                     self.debug(f"  * edge is not encrypted or key is incorrect.")
 
-                # Change the flag indicating that the content is in decrypted state.
                 edge.is_encrypted = False
 
         self.debug("", level=1)
 
     def _flag_as_not_modified(self):
-
         """
-        Flag all edges a not modified.
+        Flag all edges as not modified.
 
         :return:
         """
-
         for vertex in self.all_vertices:
             for edge in vertex.edges:
                 edge.modified = False
 
     def load(self, sync_point: int = 0) -> int:
-
         """
         Load data from the graph.
 
@@ -788,8 +758,6 @@ class DAG:
 
         :return: The sync point of the graph stream
         """
-
-        # During the load, turn off auto save
         self.allow_auto_save = False
 
         self.debug("== LOAD DAG ========================================================================", level=2)
@@ -804,7 +772,6 @@ class DAG:
         self._flag_as_not_modified()
         self.debug("====================================================================================", level=2)
 
-        # We have loaded the graph, enable the ability to use auto save.
         self.allow_auto_save = True
 
         self.last_sync_point = sync_point
@@ -838,7 +805,6 @@ class DAG:
                 self.debug(f"  FOUND ROOT", level=3)
                 return True
 
-            # Check if we have any of these edges in this order.
             found_path = False
             for edge_type in [EdgeType.KEY, EdgeType.ACL, EdgeType.LINK]:
                 seen = {}
@@ -850,8 +816,6 @@ class DAG:
                         next_vertex = self.get_vertex(e.head_uid)
 
                         if is_deletion is None:
-
-                            # If the most recent edge a DELETION edge?
                             version, highest_edge = v.get_highest_edge_version(next_vertex.uid)
                             is_deletion = highest_edge.edge_type == EdgeType.DELETION
                             if is_deletion:
@@ -870,7 +834,6 @@ class DAG:
                 if found_path is True:
                     break
 
-            # If we found a path, we may need to duplicate the DATA edge.
             if found_path is True and duplicate_data is True:
                 for e in v.edges:
                     if e.edge_type == EdgeType.DATA:
@@ -885,11 +848,8 @@ class DAG:
         self.logger.debug("END delta graph edge detection")
 
     def save(self, confirm: bool = False, delta_graph: bool = False):
-
         """
         Save the graph
-
-        We will not save if using the default graph.
 
         The save process will only save edges that have been flagged as modified, or are newly added.
         The process will get the edges from all vertices.
@@ -897,7 +857,7 @@ class DAG:
         For DATA edges, the key (first key in the keychain) will be used for encryption.
 
         If the web service takes too long or hangs, the batch_count can be used to reduce the amount the web service
-          needs to handle per request. If set to None or non-postivie value, it will not send in batches.
+          needs to handle per request. If set to None or non-positive value, it will not send in batches.
 
         :param confirm: Confirm save.
                         Only need this when deleting all vertices.
@@ -922,8 +882,6 @@ class DAG:
         if root_vertex.vertex_type != RefType.PAM_NETWORK and root_vertex.vertex_type != RefType.PAM_USER:
             raise DAGVertexException("Cannot save. Root vertex type needs to be PAM_NETWORK or PAM_USER.")
 
-        # Do we need to the 'confirm' parameter set to True?
-        # This is needed if the entire graph is being deleted.
         if self.need_save_confirm is True and confirm is False:
             raise DAGConfirmException("Cannot save. Confirmation is required.")
         self.need_save_confirm = False
@@ -935,7 +893,7 @@ class DAG:
 
         def _add_data(vertex):
             self.debug(f"processing vertex {vertex.uid}, key {vertex.key}, type {vertex.vertex_type}", level=3)
-            # The vertex UID and edge tail UID
+
             uid = vertex.uid
             for edge in vertex.edges:
 
@@ -944,15 +902,12 @@ class DAG:
 
                 self.debug(f"  * edge {edge.edge_type.value}, head {edge.head_uid}, tail {vertex.uid}", level=3)
 
-                # If this edge is not modified, don't add to the data list to save.
                 if not edge.modified:
                     self.debug(f"    not modified, not saving.", level=3)
                     continue
 
                 content = edge.content
 
-                # If we are decrypting the edge data, then we want to encrypt it when we save.
-                # Else, save the content as it is.
                 if self.decrypt:
                     if edge.edge_type == EdgeType.DATA:
                         self.debug(f"    edge is data, encrypt data: {edge.needs_encryption}", level=3)
@@ -961,7 +916,6 @@ class DAG:
                         if isinstance(content, str):
                             content = content.encode()
 
-                        # If individual edges require encryption or all DATA edge require encryption, then encrypt
                         if edge.needs_encryption is True or self.data_requires_encryption is True:
                             self.debug(f"    content {edge.content}, enc key {vertex.key}", level=3)
                             content = dag_crypto.encrypt_aes(content, vertex.key)
@@ -1003,22 +957,15 @@ class DAG:
 
                 data_list.append(dag_data)
 
-                # Flag that this edge is no longer modified.
                 edge.modified = False
 
-        # Add the root vertex first
         _add_data(self.get_root)
 
-        # Add the rest.
-        # Only add is the skip_save is False.
         for v in self.all_vertices:
             if v.skip_save is False:
                 if v.uid != self.uid:
                     _add_data(v)
 
-        # Save the keys before the data.
-        # This is done to make sure the web service can figure out the stream id.
-        # By saving the keys before data, the structure of the graph is formed.
         if len(data_list) > 0:
 
             if self.debug_level >= 4:
@@ -1035,18 +982,14 @@ class DAG:
             batch_num = 0
             while len(data_list) > 0:
 
-                # If using batch add, then take the first batch_count items.
-                # Remove them from the data list
                 if self.save_batch_count > 0:
                     batch_list = data_list[:self.save_batch_count]
                     data_list = data_list[self.save_batch_count:]
 
-                # Else take everything and clear the data list (else infinite loop)
                 else:
                     batch_list = data_list
                     data_list = []
 
-                # Little sanity check
                 if len(batch_list) == 0:
                     break
 
@@ -1072,16 +1015,12 @@ class DAG:
 
                 batch_num += 1
 
-                # It's a POST that returns no data
         else:
             self.debug("data list was empty, not saving.", level=2)
 
         self.debug("====================================================================================", level=2)
 
     def do_auto_save(self):
-        # If allow_auto_save is False, we will not allow auto saving.
-        # On newly created graph, this will happen if the root vertex has not been connected.
-        # The root vertex/disconnect edge head is needed to get a proper stream ID.
         if not self.allow_auto_save:
             self.debug("cannot auto_save, allow_auto_save is False.", level=3)
             return
@@ -1091,7 +1030,6 @@ class DAG:
 
     def add_vertex(self, name: Optional[str] = None, uid: Optional[str] = None,  keychain: Optional[List[bytes]] = None,
                    vertex_type: RefType = RefType.GENERAL) -> DAGVertex:
-
         """
         Add a vertex to the graph.
 
@@ -1116,9 +1054,6 @@ class DAG:
         if self.vertex_exists(vertex.uid):
             raise DAGVertexAlreadyExistsException(f"Vertex {vertex.uid} already exists.")
 
-        # Set the UID to array index lookup.
-        # This is where the vertex will be in the vertices list.
-        # Then append the vertex to the vertices list.
         self._uid_lookup[vertex.uid] = len(self._vertices)
         self._vertices.append(vertex)
 
@@ -1158,7 +1093,6 @@ class DAG:
     def _search(self, content: Any, value: QueryValue, ignore_case: bool = False):
 
         if isinstance(value, dict):
-            # If the object is not a dictionary, then it's not match
             if not isinstance(content, dict):
                 return False
             for next_key, next_value in value.items():
@@ -1170,7 +1104,6 @@ class DAG:
                     return False
             return True
         elif isinstance(value, list):
-            # If the object is not a dictionary, then it's not match
             for next_value in value:
                 if self._search(content=content,
                                 value=next_value,
@@ -1218,11 +1151,10 @@ class DAG:
         return results
 
     def walk_down_path(self, path: Union[str, List[str]]) -> Optional[DAGVertex]:
-
         """
         Walk the vertices using the path and return the vertex starting at root vertex.
 
-        :param path: An array of path string, or string where the path is joined with a "/" (i.e., think URL)
+        :param path: An array of path string, or string where the path is joined with a "/"
         :return: DAGVertex is the path completes, None is failure.
         """
 
@@ -1234,10 +1166,10 @@ class DAG:
         """
         Return number of edges in graph.
 
-        Edges that have neen flags as dups will not be inclued.
+        Edges that have been flagged as dups will not be included.
 
         :param only_active: Default True. If True, only edges that are active (not DELETION) are counted.
-        :param only_modified: Default False. If Trtue, only edges that are new or have been modified are counted.
+        :param only_modified: Default False. If True, only edges that are new or have been modified are counted.
         :return:
         """
 
@@ -1254,7 +1186,6 @@ class DAG:
 
     def to_dot(self, graph_format: str = "svg", show_hex_uid: bool = False,
                show_version: bool = True, show_only_active: bool = False):
-
         """
         Generate a graphviz Gigraph in DOT format that is marked up.
 
@@ -1298,14 +1229,12 @@ class DAG:
                     color = "grey"
                     style = "solid"
 
-                    # To reduce the number of edges, only show the active edges
                     if edge.active:
                         color = "black"
                         style = "bold"
                     elif show_only_active:
                         continue
 
-                    # If the vertex is not active, gray out the DATA edge
                     if not edge.active:
                         color = "grey"
 
@@ -1319,7 +1248,6 @@ class DAG:
                         label += f"\\npath={edge.path}"
                     if show_version:
                         label += f"\\ne{edge.version}"
-                    # tail, head (arrow side), label
                 else:
                     color = "red"
                     style = "solid"
@@ -1330,7 +1258,6 @@ class DAG:
         return dot
 
     def to_dot_raw(self, graph_format: str = "svg", sync_point: int = 0, rank_dir="BT"):
-
         """
         Generate a graphviz Gigraph in DOT format that is not (heavily) marked up.
 

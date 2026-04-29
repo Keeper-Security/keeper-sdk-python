@@ -8,7 +8,7 @@ from .record_link import RecordLink
 from .user_service import UserService
 from .rule import Rules
 from .dag_types import (DiscoveryObject, DiscoveryUser, RecordField, RuleActionEnum, UserAcl,
-                    PromptActionEnum, PromptResult, BulkRecordAdd, BulkRecordConvert, BulkProcessResults,
+                    PromptActionEnum, BulkRecordAdd, BulkRecordConvert, BulkProcessResults,
                     DirectoryInfo, NormalizedRecord)
 from .dag_utils import value_to_boolean, split_user_and_domain
 from .dag_sort import sort_infra_vertices
@@ -543,7 +543,6 @@ class Process:
                                 directory_info_func: Callable,
                                 record_cache: dict,
                                 context: Optional[Any] = None):
-
         """
         This method will add items to the bulk_add_records queue to be added by the client.
 
@@ -564,8 +563,6 @@ class Process:
             self.logger.debug(f"vertex {current_vertex.uid} is not active, skip")
             return
 
-        # Check if this vertex has a record.
-        # We cannot add child vertices to a vertex that does not have a record.
         current_content = DiscoveryObject.get_discovery_object(current_vertex)
         if current_content.record_uid is None:
             self.logger.debug(f"vertex {current_content.uid} does not have a record id")
@@ -574,12 +571,8 @@ class Process:
         self.logger.debug(f"Current Vertex: {current_content.record_type}, {current_vertex.uid}, "
                           f"{current_content.name}")
 
-        # Sort all the vertices under the current vertex.
-        # Return a dictionary where the record type is the key.
-        # The value will be an array of vertices of the specific record type.
         record_type_to_vertices_map = sort_infra_vertices(current_vertex, logger=self.logger)
 
-        # Process the record type by their map order in ascending order.
         for record_type in sorted(record_type_to_vertices_map, key=lambda i: VERTICES_SORT_MAP[i]['order']):
             self.logger.debug(f"  processing {record_type}")
             for vertex in record_type_to_vertices_map[record_type]:
@@ -587,12 +580,9 @@ class Process:
                 child_content = DiscoveryObject.get_discovery_object(vertex)
                 self.logger.debug(f"    child vertex {vertex.uid}, {child_content.name}")
 
-                # If we are going to add an admin user, this is the default ACL
-                # This is for the smart add feature
                 admin_acl = UserAcl.default()
                 admin_acl.is_admin = True
 
-                # This ACL is None for resource, and populated for users.
                 default_acl = None
                 if child_content.record_type == PAM_USER:
                     default_acl = self._default_acl(
@@ -603,8 +593,6 @@ class Process:
                 # Check for a vault record, if it exists.
                 # Default to the DAG content.
                 # Check the bulk_add_records list, to make sure it is not in the list of record we are about to add.
-                # We are doing this because the record might be an active directory user, that we have
-                #  not created a record for yet, however it might have been assigned a record UID from a prior prompt.
 
                 existing_record = child_content.record_exists
                 if record_lookup_func is not None:
@@ -621,8 +609,6 @@ class Process:
                 else:
                     self.logger.debug(f"    record lookup function not defined, record existing: {existing_record}")
 
-                # Determine if we are going to add the item.
-                # If the item has a record UID already, we don't need to add.
                 add_record = False
                 if (child_content.record_exists is False
                         and child_content.action_rules_result == RuleActionEnum.ADD.value):
@@ -633,12 +619,10 @@ class Process:
 
                     self.logger.debug(f"adding resource record")
 
-                    # For a resource, the ACL will be None.
-                    # It will a UserAcl if a user.
                     self.record_link.belongs_to(child_content.record_uid, current_content.record_uid, acl=default_acl)
 
                     admin_uid = None
-                    # If the rules have set the admin_uid then connect the user to the resource.
+
                     if (child_content.admin_uid is not None
                             and child_content.record_type != PAM_USER
                             and record_lookup_func is not None):
@@ -671,9 +655,6 @@ class Process:
                     if child_content.record_uid is None:
                         raise Exception(f"the record uid is blank for {child_content.description} after prepare")
 
-                # If the record type is a PAM User, we don't need to go deeper.
-                # In the future we might need to change if PAM User becomes a branch and not a leaf.
-                # This is for safety reasons
                 if child_content.record_type != PAM_USER:
                     # Process the vertices that belong to the current vertex.
                     self._process_auto_add_level(
@@ -714,12 +695,8 @@ class Process:
                        items_left: int = 0,
                        indent: int = 0,
                        context: Optional[Any] = None):
-
         """
         This method will walk the user through discovery delta objects.
-
-        At this point, we only have the delta objects from the graph.
-        We do not have the full graph.
 
         :param current_vertex: The current/parent discovery vertex.
         :param bulk_add_records: List of records to be added.
@@ -735,8 +712,6 @@ class Process:
             self.logger.debug(f"vertex {current_vertex.uid} is not active, skip")
             return
 
-        # Check if this vertex has a record.
-        # We cannot add child vertices to a vertex that does not have a record.
         current_content = DiscoveryObject.get_discovery_object(current_vertex)
         if current_content.record_uid is None:
             self.logger.debug(f"vertex {current_content.uid} does not have a record id")
@@ -745,9 +720,7 @@ class Process:
         self.logger.debug(f"Current Vertex: {current_content.record_type}, {current_vertex.uid}, "
                           f"{current_content.name}")
 
-        # Sort all the vertices under the current vertex.
         # Return a dictionary where the record type is the key.
-        # The value will be an array of vertices of the specific record type.
         record_type_to_vertices_map = sort_infra_vertices(current_vertex, logger=self.logger)
 
         # Process the record type by their map order in ascending order.
@@ -768,8 +741,6 @@ class Process:
                 # Check for a vault record, if it exists.
                 # Default to the DAG content.
                 # Check the bulk_add_records list, to make sure it is not in the list of record we are about to add.
-                # We are doing this because the record might be an active directory user, that we have
-                #  not created a record for yet, however it might have been assigned a record UID from a prior prompt.
 
                 existing_record = child_content.record_exists
                 if record_lookup_func is not None:
@@ -786,43 +757,29 @@ class Process:
                 else:
                     self.logger.debug(f"    record lookup function not defined, record existing: {existing_record}")
 
-                # If we have a record UID, the record exists; we don't need to prompt the user.
-                # If a user, we do want to make sure an ACL exists between this user and the resource.
                 if existing_record is True:
                     self.logger.debug(f"    record already exists.")
-                    # Don't continue since we might want to recurse into its children.
 
-                # If the rule engine result is to ignore this object, then continue.
-                # This normally would not happen since discovery wouldn't add the object.
-                # However, make sure we skip any object where the rule engine action is to ignore the object.
                 elif child_content.action_rules_result == RuleActionEnum.IGNORE.value:
                     self.logger.debug(f"    vertex {vertex.uid} had a IGNORE result for the rule engine, "
                                       "skip processing")
-                    # If the rule engine result is to ignore this object, then continue.
                     continue
 
-                # If this flag is set, the user set the ignore_object flag when prompted.
                 elif child_content.ignore_object:
                     self.logger.debug(f"    vertex {vertex.uid} was flagged as ignore, skip processing")
-                    # If the ignore_object flag is set, then continue.
                     continue
 
-                # If the record doesn't exist, then prompt the user.
                 else:
                     self.logger.debug(f"    vertex {vertex.uid} had an PROMPT result, prompt user")
 
                     # For user record, check if the resource record has an admin.
                     # If not, prompt the user if they want to add this user as the admin.
-                    # The returned ACL will have the is_admin flag set to True if they do.
                     resource_has_admin = False
                     if child_content.record_type == PAM_USER:
                         resource_has_admin = (self.record_link.get_admin_record_uid(current_content.record_uid)
                                               is not None)
                         self.logger.debug(f"resource has an admin is {resource_has_admin}")
 
-                    # If the current resource does not allow an admin, then it has and admin, it's just controlled by
-                    #   us.
-                    # This is going to be a resource record, or a configuration record.
                     if hasattr(current_content.item, "allows_admin"):
                         if not current_content.item.allows_admin:
                             self.logger.debug(f"resource allows an admin is {current_content.item.allows_admin}")
@@ -840,7 +797,7 @@ class Process:
                         indent=indent,
                         item_count=item_count,
                         items_left=items_left,
-                        context=context)  # type: PromptResult
+                        context=context)
 
                     if result.action == PromptActionEnum.IGNORE:
                         self.logger.debug(f"    vertex {vertex.uid} is being ignored from prompt")
@@ -851,30 +808,21 @@ class Process:
                             action=RuleActionEnum.IGNORE
                         )
 
-                        # Add a rule to ignore this object when doing future discovery.
                         rules = Rules(record=self.record, **self.passed_kwargs)
                         rules.add_rule(action_rule_item)
 
-                        # Even though we are ignoring the object, we will still add it to the infrastructure graph.
-                        # This is user selected ignored, not from the rule engine.
-                        # vertex.belongs_to(current_vertex, EdgeType.KEY)
                         vertex.add_data(result.content)
 
                     elif result.action == PromptActionEnum.ADD:
                         self.logger.debug(f"    vertex {vertex.uid} is being added from prompt")
 
-                        # Use the content from the prompt.
-                        # The user may have modified it.
                         add_content = result.content
                         acl = result.acl
 
-                        # If the current content is a PAM configuration and the child content/add content is a PAM User;
-                        #   then the user is an IAM user.
                         if current_content.record_type in PAM_CONFIGURATIONS and add_content.record_type == PAM_USER:
                             acl.is_iam_user = True
 
                         # The record could be a resource or user record.
-                        # add_content will have record UID after this.
                         self._prepare_record(
                             record_prepare_func=record_prepare_func,
                             bulk_add_records=bulk_add_records,
@@ -886,7 +834,6 @@ class Process:
 
                         admin_uid = None
 
-                        # Make a record link.
                         # The acl will be None if not a pamUser.
                         self.record_link.discovery_belongs_to(vertex, current_vertex, acl)
 
@@ -899,37 +846,28 @@ class Process:
 
                             self.logger.debug("checking if can add admin")
 
-                            # If the rule engine sets the admin UID
                             if child_content.admin_uid is not None and record_lookup_func is not None:
 
                                 self.logger.debug(f"the resource rule set the admin uid to {add_content.admin_uid}")
 
                                 admin_record = record_lookup_func(record_uid=add_content.admin_uid,
-                                                                  context=context)  # type: NormalizedRecord
+                                                                  context=context)
                                 if admin_record is not None and admin_record.record_type == PAM_USER:
                                     self.logger.debug("was able to find the admin record, connect to resource")
 
                                     admin_uid = add_content.admin_uid
-                                    # admin_acl = UserAcl.default()
-                                    # admin_acl.is_admin = True
-                                    # self.record_link.belongs_to(child_content.admin_uid, child_content.record_uid,
-                                    #                             acl=admin_acl)
                                     should_prompt_for_admin = False
                                 else:
                                     self.logger.info(f"The PAM User record {child_content.admin_uid} does not exists. "
                                                      "Cannot set the administrator for an auto added "
                                                      f"record {child_content.title}.")
 
-                            # This block checks to see if the admin is a directory user that exists.
-                            # We don't want to prompt the user for an admin if we have one already.
                             elif add_content.access_user is not None and add_content.access_user.user is not None:
 
                                 self.logger.debug("    for this resource, credentials were provided.")
                                 self.logger.error(f"    {add_content.access_user.user}, {add_content.access_user.dn}, "
                                                   f"{add_content.access_user.password}")
 
-                                # Check if this user is a directory users, first check the source.
-                                # If local, check the username incase the domain in part of the username.
                                 source = add_content.access_user.source
                                 if add_content.record_type == PAM_DIRECTORY:
                                     source = add_content.name
@@ -958,7 +896,6 @@ class Process:
 
                                         if admin_uid is not None:
                                             self.logger.debug("    found directory user admin, connect to resource")
-                                            # self.record_link.belongs_to(admin_uid, add_content.record_uid, acl=acl)
                                             should_prompt_for_admin = False
                                         else:
                                             self.logger.debug("    did not find the directory user for the admin, "
@@ -983,8 +920,6 @@ class Process:
                                     context=context
                                 )
 
-                        # If we have an admin UID, add it to the last bulk record.
-                        # It will be the one we added above.
                         if admin_uid is not None:
 
                             self._apply_admin_uid(
@@ -995,9 +930,6 @@ class Process:
 
                     items_left -= 1
 
-                # If the record type is a PAM User, we don't need to go deeper.
-                # In the future we might need to change if PAM User becomes a branch and not a leaf.
-                # This is for safety reasons
                 if child_content.record_type != PAM_USER:
                     # Process the vertices that belong to the current vertex.
                     self._process_level(
@@ -1030,13 +962,8 @@ class Process:
                             indent: int = 0,
                             context: Optional[Any] = None) -> Optional[str]:
 
-        # If the access_user is None, create an empty one.
-        # We will need this below when adding values to the fields.
         if resource_content.access_user is None:
             resource_content.access_user = DiscoveryUser()
-
-        # Initialize a discovery object for the admin user.
-        # The PLACEHOLDER will be replaced after the admin user prompt.
 
         values = {}
         for field in ["user", "password", "private_key", "dn", "database"]:
@@ -1077,8 +1004,6 @@ class Process:
         admin_acl.is_admin = True
 
         # Prompt to add an admin user to this resource.
-        # We are not passing an ACL instance.
-        # We'll make it based on if the user is adding a new record or linking to an existing record.
         admin_result = prompt_admin_func(
             parent_vertex=resource_vertex,
             content=admin_content,
@@ -1088,7 +1013,6 @@ class Process:
             context=context
         )
 
-        # If the action is to ADD, replace the PLACEHOLDER data.
         if admin_result.action == PromptActionEnum.ADD:
             self.logger.debug("adding admin user")
 
@@ -1101,7 +1025,6 @@ class Process:
             if admin_record_uid is None:
                 admin_content = admin_result.content
 
-                # With the result, we can fill in information in the object item.
                 admin_content.item.user = admin_content.get_field_value("login")
                 admin_content.item.password = admin_content.get_field_value("password")
                 admin_content.item.private_key = admin_content.get_field_value("privatePEMKey")
@@ -1121,7 +1044,6 @@ class Process:
                     admin_content.description = (resource_content.description + ", User " +
                                                  admin_content.name)
 
-                # We need to populate the id and uid of the content, now that we have data in the content.
                 self.populate_admin_content_ids(admin_content, resource_vertex)
 
                 ad_user, ad_domain = split_user_and_domain(admin_content.item.user)
@@ -1153,9 +1075,6 @@ class Process:
                                                     acl=admin_acl)
                         return found_admin_record_uid
 
-                # Does an admin vertex already exist for this user?
-                # This most likely user on the gateway, since without a resource record users can be discovered.
-                # If we did find it, get the content for the admin; we really want any existing record uid.
                 admin_vertex = self.infra.dag.get_vertex(admin_content.uid)
                 if admin_vertex is not None and admin_vertex.active is True and admin_vertex.has_data is True:
                     self.logger.debug("admin exists in the graph")
@@ -1164,11 +1083,9 @@ class Process:
                 else:
                     self.logger.debug("admin does not exists in the graph")
 
-                # If there is a record UID for the admin user, connect it.
                 if admin_record_uid is not None:
                     self.logger.debug("the admin has a record UID")
 
-                    # If the admin record does not belong to another resource, make this resource its owner.
                     if self.record_link.get_parent_record_uid(admin_record_uid) is None:
                         self.logger.debug("the admin does not belong to another resources, "
                                           "setting it belong to this resource")
@@ -1182,11 +1099,9 @@ class Process:
                         admin_vertex = self.infra.dag.add_vertex(uid=admin_content.uid,
                                                                  name=admin_content.description)
 
-                    # Since this record does not exist, it will belong to the resource,
                     admin_acl.belongs_to = True
 
                     # Connect the user vertex to the resource vertex.
-                    # We need to add a KEY edge for the admin content stored on the DATA edge.
                     admin_vertex.belongs_to(resource_vertex, edge_type=EdgeType.KEY)
                     admin_vertex.add_data(admin_content)
 
@@ -1206,15 +1121,10 @@ class Process:
             else:
                 self.logger.debug("add admin user from existing record")
 
-                # If this is NOT existing directory user, we want to convert the record rotation setting to
-                #   work with this gateway/controller.
-                # If it is a directory user, we just want link this record; no conversion.
                 if admin_result.is_directory_user is False:
 
                     self.logger.debug("the admin user is NOT a directory user, convert record's rotation settings")
 
-                    # This is a pamUser record that may need to have the controller set.
-                    # Add it to this queue to make sure the protobuf items are current.
                     parent_record_uid = resource_content.record_uid
                     if resource_content.object_type_value == "providers":
                         parent_record_uid = None
@@ -1226,49 +1136,31 @@ class Process:
                         )
                     )
 
-                    # If this user record does not belong to another resource, make it belong to this one.
                     record_vertex = self.record_link.acl_has_belong_to_record_uid(admin_record_uid)
                     if record_vertex is None:
                         admin_acl.belongs_to = True
 
-                    # There is _prepare_record, the record exists.
-                    # Needs to add to records linking.
                 else:
                     self.logger.debug("the admin user is a directory user")
-
-                # Link the record UIDs.
-                # We might not have this user in discovery data.
-                # It might not belong to the resource; if so, it cannot be rotated.
-                # It only has is_admin in the ACL.
-                # self.record_link.belongs_to(
-                #    admin_record_uid,
-                #    record_uid,
-                #    acl=admin_acl
-                # )
 
             return admin_record_uid
 
         return None
 
     def _get_count(self, current_vertex: DAGVertex) -> int:
-
         """
         Get the number of vertices that have not been converted to record.
 
         This will recurse down the graph.
         To be counted, the current vertex being evaluated, must ...
-
         * not have record UID.
         * not be ignored either by flag or rule.
         * not be auto added.
 
         To recurse down, the current vertex being evaluated, must ...
-
         * have a record UID
         * not be ignored either by flag or rule.
-
         """
-
         count = 0
 
         for vertex in current_vertex.has_vertices():
@@ -1276,15 +1168,12 @@ class Process:
                 continue
             content = DiscoveryObject.get_discovery_object(vertex)
 
-            # Add this record to the count, if no record UID, not ignoring, and we are not auto adding or
-            #  ignoring from rules.
             if (content.record_uid is None
                     and content.ignore_object is False
                     and content.action_rules_result != "add"
                     and content.action_rules_result != "ignore"):
                 count += 1
 
-            # Go deeper if there is a record UID, and we are not ignoring, and the rule result is not to ignore.
             if (
                     content.record_uid is not None
                     and content.ignore_object is False
@@ -1335,16 +1224,11 @@ class Process:
         if sync_point is None:
             raise Exception("The job does not have a sync point for the graph.")
 
-        # Get the root vertex, which has nothing we care about.
-        # But from the root, get the configuration vertex.
-        # There will be only one.
         self.logger.debug(f"loading the graph at sync point {sync_point}")
         self.infra.load(sync_point=sync_point)
         if not self.infra.has_discovery_data:
             raise NoDiscoveryDataException("There is no discovery data to process.")
 
-        # If the graph is corrupted, delete the bad vertices.
-        #
         if self.infra.dag.is_corrupt is True:
             self.logger.debug("the graph is corrupt, deleting vertex")
             for uid in self.infra.dag.corrupt_uids:
@@ -1356,28 +1240,21 @@ class Process:
         root = self.infra.get_root
         configuration = root.has_vertices()[0]
 
-        # If we have a record cache, attempt to find vertices where the content does not have the record UID set and
-        #   then update them with cached records from the vault.
-        # This is done incase someone has manually created a record after discovery has been done.
         if record_cache is not None:
             self._update_with_record_uid(
                 record_cache=record_cache,
                 current_vertex=configuration,
             )
 
-        # Store records that to be created and record where their protobuf settings need to be updated.
         bulk_add_records = []  # type: List[BulkRecordAdd]
         bulk_convert_records = []  # type: List[BulkRecordConvert]
 
         should_add_records = True
         bulk_process_results = None
 
-        # Pass an empty
         if context is None:
             context = {}
 
-        # We need record linking and infra graphs in the context.
-        # We are adding admin users to check existing admin relationships and to see if AD user.
         context["record_link"] = self.record_link
         context["infra"] = self.infra
 
@@ -1388,8 +1265,6 @@ class Process:
             self.logger.debug("#")
             self.logger.debug(f"smart add = {smart_add}")
 
-            # Process the auto add entries first.
-            # There are no prompts.
             self._process_auto_add_level(
                 current_vertex=configuration,
                 bulk_add_records=bulk_add_records,
@@ -1400,8 +1275,6 @@ class Process:
                 record_cache=record_cache,
                 context=context)
 
-            # If set, give the client a list of record that will be added.
-            # Can be used for displaying how many record are auto added.
             if auto_add_result_func is not None:
                 auto_add_result_func(bulk_add_records=bulk_add_records)
 
@@ -1409,8 +1282,6 @@ class Process:
             self.logger.debug("# PROMPT USER ITEMS")
             self.logger.debug("#")
 
-            # This is the total number of items that processing needs to process.
-            # We start with items_left equal to item_count.
             item_count = self._get_count(configuration)
 
             self._process_level(
@@ -1428,16 +1299,11 @@ class Process:
                 items_left=item_count,
                 context=context)
 
-            # This mainly for testing.
-            # If throw and quit exception, so we can prompt the user.
             if force_quit:
                 raise QuitException()
 
         except QuitException:
             should_add_records = False
-
-            # If we have record ready to be created, and the confirm prompt function was set, ask the user if they want
-            # to add the records.
             if (len(bulk_add_records) > 0 and prompt_confirm_add_func is not None and
                     prompt_confirm_add_func(bulk_add_records) is True):
                 should_add_records = True
@@ -1445,18 +1311,15 @@ class Process:
             modified_count = len(self.infra.dag.modified_edges)
             self.logger.debug(f"quiting and there are {modified_count} modified edges.")
 
-        # If we don't have a create function, then there is no way to add record.
         if record_create_func is None:
             should_add_records = False
 
-        # We should add the record, and a method was passed in to create them; then add the records.
         if should_add_records:
 
             self.logger.debug("# ####################################################################################")
             self.logger.debug("# CREATE NEW RECORD")
             self.logger.debug("#")
 
-            # Save new records.
             bulk_process_results = record_create_func(
                 bulk_add_records=bulk_add_records,
                 context=context
@@ -1467,7 +1330,6 @@ class Process:
             self.logger.debug("# CONVERT EXISTING RECORD")
             self.logger.debug("#")
 
-            # Update existing record to use this gateway.
             record_convert_func(
                 bulk_convert_records=bulk_convert_records,
                 context=context
@@ -1496,12 +1358,10 @@ class Process:
         self.logger.debug("# Save INFRASTRUCTURE graph")
         self.logger.debug("#")
 
-        # Disable delta save.
         self.logger.debug(f"saving additions from process run")
         self.infra.save(delta_graph=False)
         self.logger.debug("# ####################################################################################")
 
-        # Update the user service mapping
         self.user_service.run(infra=self.infra)
 
         return bulk_process_results
