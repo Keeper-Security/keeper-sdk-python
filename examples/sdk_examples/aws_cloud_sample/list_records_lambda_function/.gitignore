@@ -1,0 +1,7 @@
+# Dependencies are produced with: pip install -r requirements.txt -t .
+# Track only hand-edited example files; do not commit the install tree.
+/*
+!/.gitignore
+!/lambda_function.py
+!/requirements.txt
+!/README.md
