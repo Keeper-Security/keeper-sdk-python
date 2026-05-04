@@ -401,7 +401,7 @@ def sync_down_request(auth: keeper_auth.KeeperAuth,
                 s_sfp.user_type = SharedFolderUserType.Team
                 s_sfp.user_uid = utils.base64_url_encode(sft.teamUid)
                 s_sfp.manage_records = sft.manageRecords
-                s_sfp.manage_users = sft.manageRecords
+                s_sfp.manage_users = sft.manageUsers
                 s_sfp.expiration_time = sft.expiration
                 return s_sfp
 
