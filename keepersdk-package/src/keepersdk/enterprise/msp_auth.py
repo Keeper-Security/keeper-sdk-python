@@ -1,5 +1,6 @@
 import json
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 from urllib.parse import urlunparse
 
@@ -14,6 +15,33 @@ _KEPM_ADDON = 'keeper_endpoint_privilege_manager'
 _REMOTE_BROWSER_ISOLATION_ADDON = 'remote_browser_isolation'
 _CONNECTION_MANAGER_ADDON = 'connection_manager'
 _KEPM_VALID_SEATS = frozenset({1, 25, 50, 100, 500, 1000, 5000, 10000})
+
+# API uses signed 32-bit INT_MAX for unlimited seat counts.
+_INT32_MAX = (1 << 31) - 1
+_SEATS_UNLIMITED_THRESHOLD = _INT32_MAX - 1
+
+_CMD_ENTERPRISE_REGISTRATION_BY_MSP = 'enterprise_registration_by_msp'
+_CMD_ENTERPRISE_UPDATE_BY_MSP = 'enterprise_update_by_msp'
+_CMD_ENTERPRISE_REMOVE_BY_MSP = 'enterprise_remove_by_msp'
+_REST_LOGIN_TO_MC = 'authentication/login_to_mc'
+_REST_NODE_TO_MANAGED_COMPANY = 'enterprise/node_to_managed_company'
+_REST_USER_DATA_KEY_BY_NODE = 'enterprise/get_enterprise_user_data_key_by_node'
+_REST_MC_PUBLIC_KEY = 'enterprise/get_enterprise_public_key'
+_BI_CONSOLE_ADDONS_MAPPING = 'mapping/addons'
+_BI_CONSOLE_MC_PRICING = 'subscription/mc_pricing'
+_BI_API_PREFIX = '/bi_api/v2/enterprise_console/'
+
+_JSON_KEY_DISPLAYNAME = 'displayname'
+_DISPLAYNAME_KEEPER_ADMIN = 'Keeper Administrator'
+_DISPLAYNAME_ROOT = 'root'
+
+_MSG_NO_MC_RESTRICTIONS = 'MSP has no restrictions'
+_MSG_NO_MANAGED_COMPANIES = 'No Managed Companies'
+_DEFAULT_CONVERT_PLAN = 'business'
+_KEY_TYPE_NO_KEY = 'no_key'
+_ENCRYPTED_BY_DATA_KEY = 'encrypted_by_data_key'
+_USER_DATA_KEY_TYPE_ID_ECC = 4
+_UNKNOWN_USER_LABEL = '?'
 
 
 @dataclass(frozen=True)
@@ -30,7 +58,7 @@ def login_to_managed_company(loader: enterprise_types.IEnterpriseLoader, mc_ente
     tree_key = loader.enterprise_data.enterprise_info.tree_key
     rq = enterprise_pb2.LoginToMcRequest()
     rq.mcEnterpriseId = mc_enterprise_id
-    rs = auth.execute_auth_rest('authentication/login_to_mc', rq, response_type=enterprise_pb2.LoginToMcResponse)
+    rs = auth.execute_auth_rest(_REST_LOGIN_TO_MC, rq, response_type=enterprise_pb2.LoginToMcResponse)
     assert rs is not None
     auth_context = keeper_auth.AuthContext()
     auth_context.username = auth.auth_context.username
@@ -69,7 +97,7 @@ def decrypt_managed_company_tree_key(encrypted_tree_key_b64: str, msp_tree_key: 
 
 def _bi_enterprise_console_url(auth: keeper_auth.KeeperAuth, endpoint: str) -> str:
     host = auth.keeper_endpoint.server
-    path = '/bi_api/v2/enterprise_console/' + endpoint.lstrip('/')
+    path = _BI_API_PREFIX + endpoint.lstrip('/')
     return urlunparse(('https', host, path, '', '', ''))
 
 
@@ -91,23 +119,46 @@ def _node_path(enterprise_data: enterprise_types.IEnterpriseData, node_id: int, 
     return '\\'.join(nodes)
 
 
+class _MspBillingCurrency(str, Enum):
+    """API ``currency`` codes from billing/price payloads."""
+
+    USD = '$'
+    EUR = '\u20ac'
+    GBP = '\u00a3'
+    JPY = '\u00a5'
+
+
+class _MspPriceUnit(str, Enum):
+    """API ``unit`` codes from billing/price payloads."""
+
+    USER_MONTH = 'user/month'
+    MONTH = 'month'
+    USER_CONSUMED_MONTH = '50k API calls/month'
+
+
+def _billing_currency_display(currency: Any) -> Optional[str]:
+    if currency is None or currency == '':
+        return None
+    key = str(currency)
+    member = _MspBillingCurrency.__members__.get(key)
+    return member.value if member is not None else key
+
+
+def _price_unit_display(unit: Any) -> Optional[str]:
+    if unit is None or unit == '':
+        return None
+    key = str(unit)
+    member = _MspPriceUnit.__members__.get(key)
+    return member.value if member is not None else key
+
+
 def _price_text_short(price_info: Dict[str, Any]) -> str:
     price = ''
     amount = price_info.get('amount')
     if amount is not None:
-        currency = price_info.get('currency')
-        if currency == 'USD':
-            currency = '$'
-        elif currency == 'EUR':
-            currency = '\u20ac'
-        elif currency == 'GBP':
-            currency = '\u00a3'
-        elif currency == 'JPY':
-            currency = '\u00a5'
-        if currency and len(str(currency)) > 1:
-            price += str(currency)
-        elif currency:
-            price += str(currency)
+        display_currency = _billing_currency_display(price_info.get('currency'))
+        if display_currency:
+            price += display_currency
         price += str(amount)
     return price
 
@@ -115,20 +166,14 @@ def _price_text_short(price_info: Dict[str, Any]) -> str:
 def _price_text(price_info: Dict[str, Any]) -> str:
     price = _price_text_short(price_info)
     if price:
-        unit = price_info.get('unit')
-        if unit == 'USER_MONTH':
-            unit = 'user/month'
-        elif unit == 'MONTH':
-            unit = 'month'
-        elif unit == 'USER_CONSUMED_MONTH':
-            unit = '50k API calls/month'
-        if unit:
-            price += '/' + unit
+        display_unit = _price_unit_display(price_info.get('unit'))
+        if display_unit:
+            price += '/' + display_unit
     return price
 
 
 def _fetch_msp_addon_id_to_name(auth: keeper_auth.KeeperAuth) -> Dict[int, str]:
-    url = _bi_enterprise_console_url(auth, 'mapping/addons')
+    url = _bi_enterprise_console_url(auth, _BI_CONSOLE_ADDONS_MAPPING)
     rq = BI_pb2.MappingAddonsRequest()
     rs = auth.execute_auth_rest(url, rq, response_type=BI_pb2.MappingAddonsResponse)
     if not rs:
@@ -147,7 +192,7 @@ def _fetch_mc_pricing(auth: keeper_auth.KeeperAuth) -> Dict[str, Dict[str, Dict[
         'mc_file_plans': {},
     }
 
-    url = _bi_enterprise_console_url(auth, 'subscription/mc_pricing')
+    url = _bi_enterprise_console_url(auth, _BI_CONSOLE_MC_PRICING)
     rq = BI_pb2.SubscriptionMcPricingRequest()
     rs = auth.execute_auth_rest(url, rq, response_type=BI_pb2.SubscriptionMcPricingResponse)
     if not rs:
@@ -203,81 +248,117 @@ def _parse_managed_company_filter(mc: Optional[str]) -> Optional[Union[int, str]
     return s
 
 
-def msp_info(
-    loader: enterprise_types.IEnterpriseLoader,
-    *,
-    restriction: bool = False,
-    pricing: bool = False,
-    managed_company: Optional[str] = None,
-    verbose: bool = False,
-) -> MspInfoReport:
-    "Build MSP information reports."
-    enterprise_data = loader.enterprise_data
-    auth = loader.keeper_auth
+def _first_msp_permits(enterprise_data: enterprise_types.IEnterpriseData) -> Optional[enterprise_types.MspPermits]:
+    for lic in enterprise_data.licenses.get_all_entities():
+        if lic.msp_permits is not None:
+            return lic.msp_permits
+    return None
 
-    if restriction:
-        permits: Optional[enterprise_types.MspPermits] = None
-        for lic in enterprise_data.licenses.get_all_entities():
-            if lic.msp_permits is not None:
-                permits = lic.msp_permits
-                break
-        if not permits:
-            return MspInfoReport(headers=(), rows=(), message='MSP has no restrictions')
-        all_products = {x[1].lower(): x[2] for x in enterprise_constants.MSP_PLANS}
-        all_addons = {x[0].lower(): x[3] for x in enterprise_constants.MSP_ADDONS}
-        all_file_plans = {x[1].lower(): x[2] for x in enterprise_constants.MSP_FILE_PLANS}
-        max_file_plan = permits.max_file_plan_type
-        allowed_products = permits.allowed_mc_products or []
-        allowed_addons = permits.allowed_add_ons or []
-        table = [
-            ('Allow Unlimited Licenses', permits.allow_unlimited_licenses),
-            ('Allowed Products', [x + f' ({all_products.get(x.lower(), "")})' for x in allowed_products]),
-            ('Allowed Add-Ons', [x + f' ({all_addons.get(x.lower(), "")})' for x in allowed_addons]),
-            ('Max File Storage plan', all_file_plans.get(max_file_plan.lower(), max_file_plan)),
-        ]
-        return MspInfoReport(
-            headers=('permit_name', 'value'),
-            rows=tuple((a, b) for a, b in table),
-        )
 
-    if pricing:
-        pricing_data = _fetch_mc_pricing(auth)
-        header = ('category', 'name', 'code', 'price')
-        rows: List[Tuple[Any, ...]] = []
-        if 'mc_base_plans' in pricing_data:
-            plans = pricing_data['mc_base_plans']
-            for plan in enterprise_constants.MSP_PLANS:
-                code = plan[1]
-                if code in plans:
-                    info = plans[code]
-                    rows.append(('Product', plan[2], code, _price_text(info)))
-        if 'mc_addons' in pricing_data:
-            addons = pricing_data['mc_addons']
-            for addon in enterprise_constants.MSP_ADDONS:
-                code = addon[0]
-                if code in addons:
-                    info = addons[code]
-                    rows.append(('Addon', addon[1], code, _price_text(info)))
-        if 'mc_file_plans' in pricing_data:
-            fplans = pricing_data['mc_file_plans']
-            for fp in enterprise_constants.MSP_FILE_PLANS:
-                plan_code = fp[1]
-                if plan_code in fplans:
-                    info = fplans[plan_code]
-                    rows.append(('File Plan', fp[2], plan_code, _price_text(info)))
-        return MspInfoReport(headers=header, rows=tuple(rows))
+def _lookup_msp_product_plan(plan: str) -> Optional[Tuple[Any, ...]]:
+    plan_name = plan.strip().lower()
+    return next((x for x in enterprise_constants.MSP_PLANS if x[1].lower() == plan_name), None)
 
+
+def _lookup_msp_file_plan_row(file_plan: str) -> Optional[Tuple[Any, ...]]:
+    fp_name = file_plan.strip().lower()
+    return next(
+        (
+            x
+            for x in enterprise_constants.MSP_FILE_PLANS
+            if fp_name in (str(y).lower() for y in x if isinstance(y, str))
+        ),
+        None,
+    )
+
+
+def _msp_info_restriction_report(enterprise_data: enterprise_types.IEnterpriseData) -> MspInfoReport:
+    permits = _first_msp_permits(enterprise_data)
+    if not permits:
+        return MspInfoReport(headers=(), rows=(), message=_MSG_NO_MC_RESTRICTIONS)
+    all_products = {x[1].lower(): x[2] for x in enterprise_constants.MSP_PLANS}
+    all_addons = {x[0].lower(): x[3] for x in enterprise_constants.MSP_ADDONS}
+    all_file_plans = {x[1].lower(): x[2] for x in enterprise_constants.MSP_FILE_PLANS}
+    max_file_plan = permits.max_file_plan_type
+    allowed_products = permits.allowed_mc_products or []
+    allowed_addons = permits.allowed_add_ons or []
+    table = [
+        ('Allow Unlimited Licenses', permits.allow_unlimited_licenses),
+        ('Allowed Products', [x + f' ({all_products.get(x.lower(), "")})' for x in allowed_products]),
+        ('Allowed Add-Ons', [x + f' ({all_addons.get(x.lower(), "")})' for x in allowed_addons]),
+        ('Max File Storage plan', all_file_plans.get(max_file_plan.lower(), max_file_plan)),
+    ]
+    return MspInfoReport(headers=('permit_name', 'value'), rows=tuple((a, b) for a, b in table))
+
+
+def _msp_info_pricing_report(auth: keeper_auth.KeeperAuth) -> MspInfoReport:
+    pricing_data = _fetch_mc_pricing(auth)
+    header = ('category', 'name', 'code', 'price')
+    rows: List[Tuple[Any, ...]] = []
+    base_plans = pricing_data.get('mc_base_plans') or {}
+    for plan in enterprise_constants.MSP_PLANS:
+        code = plan[1]
+        if code in base_plans:
+            rows.append(('Product', plan[2], code, _price_text(base_plans[code])))
+    addons = pricing_data.get('mc_addons') or {}
+    for addon in enterprise_constants.MSP_ADDONS:
+        code = addon[0]
+        if code in addons:
+            rows.append(('Addon', addon[1], code, _price_text(addons[code])))
+    fplans = pricing_data.get('mc_file_plans') or {}
+    for fp in enterprise_constants.MSP_FILE_PLANS:
+        plan_code = fp[1]
+        if plan_code in fplans:
+            rows.append(('File Plan', fp[2], plan_code, _price_text(fplans[plan_code])))
+    return MspInfoReport(headers=header, rows=tuple(rows))
+
+
+def _resolve_managed_companies_for_info(
+    enterprise_data: enterprise_types.IEnterpriseData,
+    managed_company: Optional[str],
+) -> List[enterprise_types.ManagedCompany]:
     mcs = list(enterprise_data.managed_companies.get_all_entities())
     flt = _parse_managed_company_filter(managed_company)
-    if flt is not None:
-        mc_one = _find_managed_company(enterprise_data, flt)
-        if mc_one is None:
-            raise errors.KeeperError(f'Managed Company "{managed_company}" not found')
-        mcs = [mc_one]
+    if flt is None:
+        return mcs
+    mc_one = _find_managed_company(enterprise_data, flt)
+    if mc_one is None:
+        raise errors.KeeperError(f'Managed Company "{managed_company}" not found')
+    return [mc_one]
 
-    if len(mcs) == 0:
-        return MspInfoReport(headers=(), rows=(), message='No Managed Companies')
 
+def _addon_display_strings_for_mc_row(
+    mc: enterprise_types.ManagedCompany,
+    *,
+    verbose: bool,
+) -> List[str]:
+    addon_list: List[str] = []
+    if not mc.add_ons:
+        return addon_list
+    for addon_obj in mc.add_ons:
+        addon_name = addon_obj.name
+        if not verbose:
+            addon_list.append(addon_name)
+            continue
+        seats = addon_obj.seats
+        if seats and seats > 0:
+            addon_def = next((x for x in enterprise_constants.MSP_ADDONS if x[0] == addon_name), None)
+            if addon_def and addon_def[2]:
+                display_seats = -1 if seats == _INT32_MAX else seats
+                addon_list.append(f'{addon_name}:{display_seats}')
+            else:
+                addon_list.append(addon_name)
+        else:
+            addon_list.append(addon_name)
+    return addon_list
+
+
+def _msp_info_managed_companies_report(
+    enterprise_data: enterprise_types.IEnterpriseData,
+    mcs: List[enterprise_types.ManagedCompany],
+    *,
+    verbose: bool,
+) -> MspInfoReport:
     sort_dict = {x[0]: i for i, x in enumerate(enterprise_constants.MSP_ADDONS)}
     plan_map = {x[1]: x[2] for x in enterprise_constants.MSP_PLANS}
     file_plan_map = {x[1]: x[2] for x in enterprise_constants.MSP_FILE_PLANS}
@@ -295,61 +376,202 @@ def msp_info(
             node_path = _node_path(enterprise_data, node_id, omit_root=False)
             node_name = None
 
-        file_plan = mc.file_plan_type
-        file_plan = file_plan_map.get(file_plan, file_plan)
-
-        addon_list: List[str] = []
-        if mc.add_ons:
-            for addon_obj in mc.add_ons:
-                addon_name = addon_obj.name
-                if verbose:
-                    seats = addon_obj.seats
-                    if seats and seats > 0:
-                        addon_def = next((x for x in enterprise_constants.MSP_ADDONS if x[0] == addon_name), None)
-                        if addon_def and addon_def[2]:
-                            display_seats = -1 if seats == 2147483647 else seats
-                            addon_list.append(f'{addon_name}:{display_seats}')
-                        else:
-                            addon_list.append(addon_name)
-                    else:
-                        addon_list.append(addon_name)
-                else:
-                    addon_list.append(addon_name)
-
+        file_plan_label = file_plan_map.get(mc.file_plan_type, mc.file_plan_type)
+        addon_list = _addon_display_strings_for_mc_row(mc, verbose=verbose)
         addon_list.sort(key=lambda x: sort_dict.get(x.split(':')[0], -1))
-
-        if not verbose:
-            addons: Any = len(addon_list)
-        else:
-            addons = addon_list
+        addons: Any = addon_list if verbose else len(addon_list)
 
         plan = mc.product_id
         if not verbose:
             plan = plan_map.get(plan, plan)
 
         seats = mc.number_of_seats
-        if seats > 2147483646:
+        if seats > _SEATS_UNLIMITED_THRESHOLD:
             seats = -1
 
         users = mc.number_of_users or 0
         if verbose:
             table_rows.append((
-                mc.mc_enterprise_id, mc.mc_enterprise_name, node_path, node_name, plan, file_plan, addons, seats, users,
+                mc.mc_enterprise_id, mc.mc_enterprise_name, node_path, node_name, plan, file_plan_label, addons, seats, users,
             ))
         else:
             table_rows.append((
-                mc.mc_enterprise_id, mc.mc_enterprise_name, node_path, plan, file_plan, addons, seats, users,
+                mc.mc_enterprise_id, mc.mc_enterprise_name, node_path, plan, file_plan_label, addons, seats, users,
             ))
 
     table_rows.sort(key=lambda x: str(x[1]).lower())
     return MspInfoReport(headers=tuple(header), rows=tuple(table_rows), row_numbers=True)
 
 
-def _first_msp_permits(enterprise_data: enterprise_types.IEnterpriseData) -> Optional[enterprise_types.MspPermits]:
-    for lic in enterprise_data.licenses.get_all_entities():
-        if lic.msp_permits is not None:
-            return lic.msp_permits
-    return None
+def msp_info(
+    loader: enterprise_types.IEnterpriseLoader,
+    *,
+    restriction: bool = False,
+    pricing: bool = False,
+    managed_company: Optional[str] = None,
+    verbose: bool = False,
+) -> MspInfoReport:
+    """Build MSP information reports."""
+    enterprise_data = loader.enterprise_data
+    auth = loader.keeper_auth
+
+    if restriction:
+        return _msp_info_restriction_report(enterprise_data)
+    if pricing:
+        return _msp_info_pricing_report(auth)
+
+    mcs = _resolve_managed_companies_for_info(enterprise_data, managed_company)
+    if len(mcs) == 0:
+        return MspInfoReport(headers=(), rows=(), message=_MSG_NO_MANAGED_COMPANIES)
+    return _msp_info_managed_companies_report(enterprise_data, mcs, verbose=verbose)
+
+
+def _new_mc_encrypted_registration_fields(mc_tree_key: bytes, msp_tree_key: bytes) -> Dict[str, Any]:
+    role_json = json.dumps({_JSON_KEY_DISPLAYNAME: _DISPLAYNAME_KEEPER_ADMIN}).encode()
+    root_json = json.dumps({_JSON_KEY_DISPLAYNAME: _DISPLAYNAME_ROOT}).encode()
+    return {
+        'encrypted_tree_key': utils.base64_url_encode(crypto.encrypt_aes_v2(mc_tree_key, msp_tree_key)),
+        'role_data': utils.base64_url_encode(crypto.encrypt_aes_v1(role_json, mc_tree_key)),
+        'root_node': utils.base64_url_encode(crypto.encrypt_aes_v1(root_json, mc_tree_key)),
+    }
+
+
+def _registration_seat_cap(seats: Optional[int], permits: Optional[enterprise_types.MspPermits]) -> int:
+    seat_val = 0 if seats is None else int(seats)
+    if seat_val < 0:
+        if permits and not permits.allow_unlimited_licenses:
+            raise errors.KeeperError('Managed Company unlimited licences are not allowed')
+        return _INT32_MAX
+    return seat_val
+
+
+def _assert_mc_product_plan_allowed(
+    plan_label: str,
+    plan_name_lower: str,
+    permits: Optional[enterprise_types.MspPermits],
+) -> None:
+    if not permits or permits.allowed_mc_products is None:
+        return
+    allowed_products = permits.allowed_mc_products
+    if len(allowed_products) == 0 or not any(x.lower() == plan_name_lower for x in allowed_products):
+        raise errors.KeeperError(f'Managed Company plan "{plan_label}" is not allowed')
+
+
+def _assert_file_plan_allowed_by_permits(
+    fp_row: Tuple[Any, ...],
+    permits: Optional[enterprise_types.MspPermits],
+) -> None:
+    if not permits or not permits.max_file_plan_type:
+        return
+    allowed_fp = next(
+        (x for x in enterprise_constants.MSP_FILE_PLANS if permits.max_file_plan_type.lower() == x[1].lower()),
+        None,
+    )
+    if allowed_fp and allowed_fp[0] < fp_row[0]:
+        raise errors.KeeperError(f'Managed Company file storage "{fp_row[2]}" is not allowed')
+
+
+def _merge_optional_file_plan_into_registration_rq(
+    rq: Dict[str, Any],
+    file_plan: Optional[str],
+    product_plan: Tuple[Any, ...],
+    permits: Optional[enterprise_types.MspPermits],
+) -> None:
+    if not file_plan:
+        return
+    fp_row = _lookup_msp_file_plan_row(file_plan)
+    if not fp_row:
+        raise errors.KeeperError(f'File plan "{file_plan}" is not found')
+    if product_plan[3] < fp_row[0]:
+        rq['file_plan_type'] = fp_row[1]
+    _assert_file_plan_allowed_by_permits(fp_row, permits)
+
+
+def _addon_seats_from_spec_line(
+    addon_name: str,
+    *,
+    has_seat_token: bool,
+    seat_part: str,
+    spec: Tuple[Any, ...],
+    seat_label_for_errors: str,
+) -> int:
+    if not (has_seat_token and spec[2]):
+        return 0
+    sp = seat_part.strip()
+    if addon_name == _KEPM_ADDON and sp == '-1':
+        return _INT32_MAX
+    try:
+        addon_seats = int(sp)
+    except ValueError:
+        raise errors.KeeperError(
+            f'Addon "{addon_name}". Number of seats "{seat_label_for_errors}" is not integer') from None
+    if addon_name == _KEPM_ADDON:
+        if addon_seats not in _KEPM_VALID_SEATS and addon_seats != _INT32_MAX:
+            valid_values = ', '.join(str(x) for x in sorted(_KEPM_VALID_SEATS)) + ', -1 (for unlimited)'
+            raise errors.KeeperError(
+                f'Addon "{addon_name}". Invalid seat value "{seat_label_for_errors}". Valid values are: {valid_values}')
+    return addon_seats
+
+
+def _registration_addon_lines_to_rq(
+    rq: Dict[str, Any],
+    addon_lines: List[str],
+    permits: Optional[enterprise_types.MspPermits],
+) -> Dict[str, int]:
+    addon_data: Dict[str, int] = {}
+    rq['add_ons'] = []
+    for line in addon_lines:
+        addon_name, sep, seat_part = line.partition(':')
+        addon_name = addon_name.lower().strip()
+        spec = next((x for x in enterprise_constants.MSP_ADDONS if x[0] == addon_name), None)
+        if spec is None:
+            raise errors.KeeperError(f'Addon "{addon_name}" is not found')
+        if permits and permits.allowed_add_ons is not None and len(permits.allowed_add_ons) > 0:
+            if addon_name not in (x.lower() for x in permits.allowed_add_ons):
+                raise errors.KeeperError(f'Managed Company add-on "{addon_name}" is not allowed')
+        addon_seats = _addon_seats_from_spec_line(
+            addon_name,
+            has_seat_token=(sep == ':' and bool(spec[2])),
+            seat_part=seat_part,
+            spec=spec,
+            seat_label_for_errors=seat_part,
+        )
+        rqa: Dict[str, Any] = {'add_on': spec[0]}
+        if addon_seats > 0:
+            rqa['seats'] = addon_seats
+            addon_data[addon_name] = addon_seats
+        else:
+            addon_data[addon_name] = 0
+        rq['add_ons'].append(rqa)
+    return addon_data
+
+
+def _assert_remote_browser_requires_connection_manager_seats(addon_name_to_seats: Dict[str, int]) -> None:
+    if _REMOTE_BROWSER_ISOLATION_ADDON not in addon_name_to_seats:
+        return
+    if _CONNECTION_MANAGER_ADDON not in addon_name_to_seats:
+        raise errors.KeeperError(
+            f'Addon "{_REMOTE_BROWSER_ISOLATION_ADDON}" requires "{_CONNECTION_MANAGER_ADDON}" to be selected')
+    if addon_name_to_seats.get(_CONNECTION_MANAGER_ADDON, 0) == 0:
+        raise errors.KeeperError(
+            f'Addon "{_REMOTE_BROWSER_ISOLATION_ADDON}" requires "{_CONNECTION_MANAGER_ADDON}" '
+            f'to have seats specified (e.g. {_CONNECTION_MANAGER_ADDON}:N)')
+
+
+def _assert_remote_browser_requires_connection_manager_update(addons: Dict[str, Dict[str, Any]]) -> None:
+    addon_keys = {k.lower() for k in addons}
+    if _REMOTE_BROWSER_ISOLATION_ADDON not in addon_keys:
+        return
+    if _CONNECTION_MANAGER_ADDON not in addon_keys:
+        raise errors.KeeperError(
+            f'Addon "{_REMOTE_BROWSER_ISOLATION_ADDON}" requires "{_CONNECTION_MANAGER_ADDON}" to be selected')
+    cm_addon = addons.get(_CONNECTION_MANAGER_ADDON)
+    if cm_addon:
+        cm_seats = int(cm_addon.get('seats', 0) or 0)
+        if cm_seats == 0:
+            raise errors.KeeperError(
+                f'Addon "{_REMOTE_BROWSER_ISOLATION_ADDON}" requires "{_CONNECTION_MANAGER_ADDON}" '
+                f'to have seats specified (e.g. {_CONNECTION_MANAGER_ADDON}:N)')
 
 
 def msp_add_managed_company(
@@ -368,7 +590,7 @@ def msp_add_managed_company(
     :param enterprise_name: Display name for the new managed company.
     :param plan: Product plan code (e.g. ``business``, ``enterprise``); must match :data:`enterprise_constants.MSP_PLANS`.
     :param node_id: Enterprise node id under which the MC is created.
-    :param seats: Seat cap; use ``-1`` or ``None`` with unlimited permits for unlimited (2147483647 server-side).
+    :param seats: Seat cap; use ``-1`` or ``None`` with unlimited permits for unlimited (signed 32-bit max, server-side).
     :param file_plan: Optional storage plan code (e.g. ``STORAGE_100GB``).
     :param addons: Optional ``ADDON`` or ``ADDON:SEATS`` strings.
     :return: New managed company enterprise id.
@@ -382,97 +604,28 @@ def msp_add_managed_company(
             raise errors.KeeperError(f"Managed company '{enterprise_name}' already exists")
 
     permits = _first_msp_permits(enterprise_data)
-
     plan_name = plan.strip().lower()
-    product_plan = next((x for x in enterprise_constants.MSP_PLANS if x[1].lower() == plan_name), None)
+    product_plan = _lookup_msp_product_plan(plan)
     if not product_plan:
         raise errors.KeeperError(f'Managed Company plan "{plan}" is not found')
-    if permits and permits.allowed_mc_products is not None:
-        allowed_products = permits.allowed_mc_products
-        if len(allowed_products) == 0 or not any(x.lower() == plan_name for x in allowed_products):
-            raise errors.KeeperError(f'Managed Company plan "{plan}" is not allowed')
+    _assert_mc_product_plan_allowed(plan, plan_name, permits)
 
-    seat_val = 0 if seats is None else int(seats)
-    if seat_val < 0:
-        if permits and not permits.allow_unlimited_licenses:
-            raise errors.KeeperError('Managed Company unlimited licences are not allowed')
-        seat_val = 2147483647
-
+    seat_val = _registration_seat_cap(seats, permits)
     mc_tree_key = utils.generate_aes_key()
     rq: Dict[str, Any] = {
-        'command': 'enterprise_registration_by_msp',
+        'command': _CMD_ENTERPRISE_REGISTRATION_BY_MSP,
         'node_id': node_id,
         'product_id': product_plan[1],
         'seats': seat_val,
         'enterprise_name': enterprise_name.strip(),
-        'encrypted_tree_key': utils.base64_url_encode(crypto.encrypt_aes_v2(mc_tree_key, msp_tree_key)),
-        'role_data': utils.base64_url_encode(
-            crypto.encrypt_aes_v1(json.dumps({'displayname': 'Keeper Administrator'}).encode(), mc_tree_key)),
-        'root_node': utils.base64_url_encode(
-            crypto.encrypt_aes_v1(json.dumps({'displayname': 'root'}).encode(), mc_tree_key)),
+        **_new_mc_encrypted_registration_fields(mc_tree_key, msp_tree_key),
     }
 
-    if file_plan:
-        fp_name = file_plan.strip().lower()
-        fp_row = next(
-            (x for x in enterprise_constants.MSP_FILE_PLANS if fp_name in (str(y).lower() for y in x if isinstance(y, str))),
-            None,
-        )
-        if not fp_row:
-            raise errors.KeeperError(f'File plan "{file_plan}" is not found')
-        if product_plan[3] < fp_row[0]:
-            rq['file_plan_type'] = fp_row[1]
-        if permits and permits.max_file_plan_type:
-            allowed_fp = next(
-                (x for x in enterprise_constants.MSP_FILE_PLANS if permits.max_file_plan_type.lower() == x[1].lower()),
-                None,
-            )
-            if allowed_fp and allowed_fp[0] < fp_row[0]:
-                raise errors.KeeperError(f'Managed Company file storage "{fp_row[2]}" is not allowed')
+    _merge_optional_file_plan_into_registration_rq(rq, file_plan, product_plan, permits)
 
-    addon_data: Dict[str, int] = {}
     if addons:
-        rq['add_ons'] = []
-        for v in addons:
-            addon_name, sep, seat_part = v.partition(':')
-            addon_name = addon_name.lower().strip()
-            spec = next((x for x in enterprise_constants.MSP_ADDONS if x[0] == addon_name), None)
-            if spec is None:
-                raise errors.KeeperError(f'Addon "{addon_name}" is not found')
-            if permits and permits.allowed_add_ons is not None and len(permits.allowed_add_ons) > 0:
-                if addon_name not in (x.lower() for x in permits.allowed_add_ons):
-                    raise errors.KeeperError(f'Managed Company add-on "{addon_name}" is not allowed')
-            addon_seats = 0
-            if sep == ':' and spec[2]:
-                sp = seat_part.strip()
-                if addon_name == _KEPM_ADDON and sp == '-1':
-                    addon_seats = 2147483647
-                else:
-                    try:
-                        addon_seats = int(sp)
-                    except ValueError:
-                        raise errors.KeeperError(f'Addon "{addon_name}". Number of seats "{seat_part}" is not integer') from None
-                if addon_name == _KEPM_ADDON:
-                    if addon_seats not in _KEPM_VALID_SEATS and addon_seats != 2147483647:
-                        valid_values = ', '.join(str(x) for x in sorted(_KEPM_VALID_SEATS)) + ', -1 (for unlimited)'
-                        raise errors.KeeperError(
-                            f'Addon "{addon_name}". Invalid seat value "{seat_part}". Valid values are: {valid_values}')
-            rqa: Dict[str, Any] = {'add_on': spec[0]}
-            if addon_seats > 0:
-                rqa['seats'] = addon_seats
-                addon_data[addon_name] = addon_seats
-            else:
-                addon_data[addon_name] = 0
-            rq['add_ons'].append(rqa)
-
-        if _REMOTE_BROWSER_ISOLATION_ADDON in addon_data:
-            if _CONNECTION_MANAGER_ADDON not in addon_data:
-                raise errors.KeeperError(
-                    f'Addon "{_REMOTE_BROWSER_ISOLATION_ADDON}" requires "{_CONNECTION_MANAGER_ADDON}" to be selected')
-            if addon_data.get(_CONNECTION_MANAGER_ADDON, 0) == 0:
-                raise errors.KeeperError(
-                    f'Addon "{_REMOTE_BROWSER_ISOLATION_ADDON}" requires "{_CONNECTION_MANAGER_ADDON}" '
-                    f'to have seats specified (e.g. {_CONNECTION_MANAGER_ADDON}:N)')
+        addon_data = _registration_addon_lines_to_rq(rq, addons, permits)
+        _assert_remote_browser_requires_connection_manager_seats(addon_data)
 
     rs = auth.execute_auth_command(rq)
     company_id = int(rs.get('enterprise_id', -1))
@@ -480,6 +633,113 @@ def msp_add_managed_company(
         raise errors.KeeperError('Managed company registration did not return an enterprise id')
     msp_down(loader, reset=False)
     return company_id
+
+
+def _selectable_addons_from_managed_company(
+    current: enterprise_types.ManagedCompany,
+) -> Dict[str, Dict[str, Any]]:
+    addons: Dict[str, Dict[str, Any]] = {}
+    if not current.add_ons:
+        return addons
+    for ao in current.add_ons:
+        if not ao.enabled or ao.included_in_product:
+            continue
+        entry: Dict[str, Any] = {'add_on': ao.name}
+        if ao.seats and ao.seats > 0:
+            entry['seats'] = ao.seats
+        addons[ao.name.lower()] = entry
+    return addons
+
+
+def _apply_update_rq_plan(
+    rq: Dict[str, Any],
+    plan: str,
+    permits: Optional[enterprise_types.MspPermits],
+) -> None:
+    plan_name = plan.strip().lower()
+    product_plan = _lookup_msp_product_plan(plan)
+    if not product_plan:
+        raise errors.KeeperError(f'Managed Company plan "{plan}" is not found')
+    _assert_mc_product_plan_allowed(plan, plan_name, permits)
+    rq['product_id'] = product_plan[1]
+
+
+def _apply_update_rq_seats(
+    rq: Dict[str, Any],
+    seats: int,
+    permits: Optional[enterprise_types.MspPermits],
+) -> None:
+    if seats < 0:
+        if permits and not permits.allow_unlimited_licenses:
+            raise errors.KeeperError('Managed Company unlimited licences are not allowed')
+        rq['seats'] = _INT32_MAX
+    else:
+        rq['seats'] = seats
+
+
+def _apply_file_plan_fields_to_mc_update_rq(
+    rq: Dict[str, Any],
+    file_plan: Optional[str],
+    current: enterprise_types.ManagedCompany,
+    permits: Optional[enterprise_types.MspPermits],
+) -> None:
+    if file_plan is not None:
+        fp_row = _lookup_msp_file_plan_row(file_plan)
+        if not fp_row:
+            raise errors.KeeperError(f'File plan "{file_plan}" is not found')
+        _assert_file_plan_allowed_by_permits(fp_row, permits)
+        product_id = str(rq['product_id']).lower()
+        product_plan = next((x for x in enterprise_constants.MSP_PLANS if product_id == x[1].lower()), None)
+        if product_plan and product_plan[3] < fp_row[0]:
+            rq['file_plan_type'] = fp_row[1]
+        return
+    existing_file_plan = current.file_plan_type
+    if not existing_file_plan:
+        return
+    product_id = str(rq['product_id']).lower()
+    product_plan = next((x for x in enterprise_constants.MSP_PLANS if product_id == x[1].lower()), None)
+    if not product_plan:
+        return
+    fp_existing = next((x for x in enterprise_constants.MSP_FILE_PLANS if x[1] == existing_file_plan), None)
+    if fp_existing and fp_existing[0] != product_plan[3]:
+        rq['file_plan_type'] = existing_file_plan
+
+
+def _apply_update_addon_mutations(
+    addons: Dict[str, Dict[str, Any]],
+    *,
+    add_lines: List[str],
+    remove_lines: List[str],
+    permits: Optional[enterprise_types.MspPermits],
+) -> None:
+    for aon in add_lines:
+        addon_name, sep, seat_str = aon.partition(':')
+        addon_name = addon_name.lower().strip()
+        spec = next((x for x in enterprise_constants.MSP_ADDONS if x[0] == addon_name), None)
+        if spec is None:
+            raise errors.KeeperError(f'Addon "{addon_name}" is not found')
+        addon_seats = _addon_seats_from_spec_line(
+            addon_name,
+            has_seat_token=(sep == ':' and bool(spec[2])),
+            seat_part=seat_str,
+            spec=spec,
+            seat_label_for_errors=seat_str,
+        )
+        if permits and permits.allowed_add_ons is not None and len(permits.allowed_add_ons) > 0:
+            if addon_name not in (x.lower() for x in permits.allowed_add_ons):
+                raise errors.KeeperError(f'Managed Company add-on "{addon_name}" is not allowed')
+        add_entry: Dict[str, Any] = {'add_on': spec[0]}
+        if addon_seats > 0:
+            add_entry['seats'] = addon_seats
+        addons[addon_name] = add_entry
+
+    for aon in remove_lines:
+        addon_name = aon.strip().lower()
+        spec = next((x for x in enterprise_constants.MSP_ADDONS if x[0] == addon_name), None)
+        if spec is None:
+            raise errors.KeeperError(f'Addon "{addon_name}" is not found')
+        if addon_name in addons:
+            del addons[addon_name]
 
 
 def msp_update_managed_company(
@@ -517,7 +777,7 @@ def msp_update_managed_company(
         raise errors.KeeperError(f'Managed Company "{managed_company}" not found')
 
     rq: Dict[str, Any] = {
-        'command': 'enterprise_update_by_msp',
+        'command': _CMD_ENTERPRISE_UPDATE_BY_MSP,
         'enterprise_id': current.mc_enterprise_id,
         'enterprise_name': current.mc_enterprise_name,
         'product_id': current.product_id,
@@ -533,120 +793,18 @@ def msp_update_managed_company(
     permits = _first_msp_permits(enterprise_data)
 
     if plan is not None:
-        plan_name = plan.strip().lower()
-        product_plan = next((x for x in enterprise_constants.MSP_PLANS if x[1].lower() == plan_name), None)
-        if not product_plan:
-            raise errors.KeeperError(f'Managed Company plan "{plan}" is not found')
-        if permits and permits.allowed_mc_products is not None:
-            allowed = permits.allowed_mc_products
-            if len(allowed) == 0 or not any(x.lower() == plan_name for x in allowed):
-                raise errors.KeeperError(f'Managed Company plan "{plan}" is not allowed')
-        rq['product_id'] = product_plan[1]
+        _apply_update_rq_plan(rq, plan, permits)
 
     if isinstance(seats, int):
-        if seats < 0:
-            if permits and not permits.allow_unlimited_licenses:
-                raise errors.KeeperError('Managed Company unlimited licences are not allowed')
-            rq['seats'] = 2147483647
-        else:
-            rq['seats'] = seats
+        _apply_update_rq_seats(rq, seats, permits)
 
-    if file_plan is not None:
-        fp_name = file_plan.strip().lower()
-        fp_row = next(
-            (x for x in enterprise_constants.MSP_FILE_PLANS if fp_name in (str(y).lower() for y in x if isinstance(y, str))),
-            None,
-        )
-        if not fp_row:
-            raise errors.KeeperError(f'File plan "{file_plan}" is not found')
-        if permits and permits.max_file_plan_type:
-            allowed_fp = next(
-                (x for x in enterprise_constants.MSP_FILE_PLANS if permits.max_file_plan_type.lower() == x[1].lower()),
-                None,
-            )
-            if allowed_fp and allowed_fp[0] < fp_row[0]:
-                raise errors.KeeperError(f'Managed Company file storage "{fp_row[2]}" is not allowed')
-        product_id = str(rq['product_id']).lower()
-        product_plan = next((x for x in enterprise_constants.MSP_PLANS if product_id == x[1].lower()), None)
-        if product_plan and product_plan[3] < fp_row[0]:
-            rq['file_plan_type'] = fp_row[1]
-    else:
-        existing_file_plan = current.file_plan_type
-        if existing_file_plan:
-            product_id = str(rq['product_id']).lower()
-            product_plan = next((x for x in enterprise_constants.MSP_PLANS if product_id == x[1].lower()), None)
-            if product_plan:
-                fp_existing = next((x for x in enterprise_constants.MSP_FILE_PLANS if x[1] == existing_file_plan), None)
-                if fp_existing:
-                    if fp_existing[0] != product_plan[3]:
-                        rq['file_plan_type'] = existing_file_plan
+    _apply_file_plan_fields_to_mc_update_rq(rq, file_plan, current, permits)
 
-    addons: Dict[str, Dict[str, Any]] = {}
-    if current.add_ons:
-        for ao in current.add_ons:
-            if not ao.enabled:
-                continue
-            if ao.included_in_product:
-                continue
-            key = ao.name.lower()
-            entry: Dict[str, Any] = {'add_on': ao.name}
-            if ao.seats and ao.seats > 0:
-                entry['seats'] = ao.seats
-            addons[key] = entry
-
-    for action, raw_list in (('add', add_addons or []), ('remove', remove_addons or [])):
-        if not isinstance(raw_list, list):
-            continue
-        for aon in raw_list:
-            if action == 'add':
-                addon_name, sep, seat_str = aon.partition(':')
-                addon_name = addon_name.lower().strip()
-                spec = next((x for x in enterprise_constants.MSP_ADDONS if x[0] == addon_name), None)
-                if spec is None:
-                    raise errors.KeeperError(f'Addon "{addon_name}" is not found')
-                addon_seats = 0
-                if sep == ':' and spec[2]:
-                    sp = seat_str.strip()
-                    if addon_name == _KEPM_ADDON and sp == '-1':
-                        addon_seats = 2147483647
-                    else:
-                        try:
-                            addon_seats = int(sp)
-                        except ValueError:
-                            raise errors.KeeperError(
-                                f'Addon "{addon_name}". Number of seats "{seat_str}" is not integer') from None
-                    if addon_name == _KEPM_ADDON:
-                        if addon_seats not in _KEPM_VALID_SEATS and addon_seats != 2147483647:
-                            valid_values = ', '.join(str(x) for x in sorted(_KEPM_VALID_SEATS)) + ', -1 (for unlimited)'
-                            raise errors.KeeperError(
-                                f'Addon "{addon_name}". Invalid seat value "{seat_str}". Valid values are: {valid_values}')
-                if permits and permits.allowed_add_ons is not None and len(permits.allowed_add_ons) > 0:
-                    if addon_name not in (x.lower() for x in permits.allowed_add_ons):
-                        raise errors.KeeperError(f'Managed Company add-on "{addon_name}" is not allowed')
-                add_entry: Dict[str, Any] = {'add_on': spec[0]}
-                if addon_seats > 0:
-                    add_entry['seats'] = addon_seats
-                addons[addon_name] = add_entry
-            else:
-                addon_name = aon.strip().lower()
-                spec = next((x for x in enterprise_constants.MSP_ADDONS if x[0] == addon_name), None)
-                if spec is None:
-                    raise errors.KeeperError(f'Addon "{addon_name}" is not found')
-                if addon_name in addons:
-                    del addons[addon_name]
-
-    addon_keys = {k.lower() for k in addons}
-    if _REMOTE_BROWSER_ISOLATION_ADDON in addon_keys:
-        if _CONNECTION_MANAGER_ADDON not in addon_keys:
-            raise errors.KeeperError(
-                f'Addon "{_REMOTE_BROWSER_ISOLATION_ADDON}" requires "{_CONNECTION_MANAGER_ADDON}" to be selected')
-        cm_addon = addons.get(_CONNECTION_MANAGER_ADDON)
-        if cm_addon:
-            cm_seats = int(cm_addon.get('seats', 0) or 0)
-            if cm_seats == 0:
-                raise errors.KeeperError(
-                    f'Addon "{_REMOTE_BROWSER_ISOLATION_ADDON}" requires "{_CONNECTION_MANAGER_ADDON}" '
-                    f'to have seats specified (e.g. {_CONNECTION_MANAGER_ADDON}:N)')
+    addons = _selectable_addons_from_managed_company(current)
+    add_list = add_addons if isinstance(add_addons, list) else []
+    remove_list = remove_addons if isinstance(remove_addons, list) else []
+    _apply_update_addon_mutations(addons, add_lines=add_list, remove_lines=remove_list, permits=permits)
+    _assert_remote_browser_requires_connection_manager_update(addons)
 
     rq['add_ons'] = list(addons.values())
     rs = auth.execute_auth_command(rq)
@@ -676,7 +834,7 @@ def msp_remove_managed_company(
         raise errors.KeeperError(f'Managed Company "{managed_company}" not found')
 
     rq: Dict[str, Any] = {
-        'command': 'enterprise_remove_by_msp',
+        'command': _CMD_ENTERPRISE_REMOVE_BY_MSP,
         'enterprise_id': current.mc_enterprise_id,
     }
     auth.execute_auth_command(rq)
@@ -688,40 +846,40 @@ def msp_remove_managed_company(
 def _node_json_bytes_for_reencrypt(node: enterprise_types.Node, msp_tree_key: bytes) -> bytes:
     if node.encrypted_data:
         try:
-            payload = _decrypt_encrypted_data(node.encrypted_data, 'encrypted_by_data_key', msp_tree_key)
+            payload = _decrypt_encrypted_data(node.encrypted_data, _ENCRYPTED_BY_DATA_KEY, msp_tree_key)
         except Exception:
-            payload = {'displayname': node.name or ''}
+            payload = {_JSON_KEY_DISPLAYNAME: node.name or ''}
     else:
-        payload = {'displayname': node.name or ''}
+        payload = {_JSON_KEY_DISPLAYNAME: node.name or ''}
     return json.dumps(payload).encode('utf-8')
 
 
 def _role_json_bytes_for_reencrypt(role: enterprise_types.Role, msp_tree_key: bytes) -> bytes:
-    if role.key_type == 'no_key':
-        return json.dumps({'displayname': role.name or ''}).encode('utf-8')
+    if role.key_type == _KEY_TYPE_NO_KEY:
+        return json.dumps({_JSON_KEY_DISPLAYNAME: role.name or ''}).encode('utf-8')
     if role.encrypted_data:
         try:
             payload = _decrypt_encrypted_data(role.encrypted_data, role.key_type, msp_tree_key)
         except Exception:
-            payload = {'displayname': role.name or ''}
+            payload = {_JSON_KEY_DISPLAYNAME: role.name or ''}
     else:
-        payload = {'displayname': role.name or ''}
+        payload = {_JSON_KEY_DISPLAYNAME: role.name or ''}
     return json.dumps(payload).encode('utf-8')
 
 
 def _user_reencrypt_payload(user: enterprise_types.User, msp_tree_key: bytes) -> Union[str, bytes]:
     """Returns either plaintext display name (no_key) or UTF-8 JSON bytes to encrypt with MC tree key."""
-    if user.key_type == 'no_key':
+    if user.key_type == _KEY_TYPE_NO_KEY:
         if user.encrypted_data:
             return str(user.encrypted_data)
-        return str(user.full_name or '?')
+        return str(user.full_name or _UNKNOWN_USER_LABEL)
     if user.encrypted_data:
         try:
             payload = _decrypt_encrypted_data(user.encrypted_data, user.key_type, msp_tree_key)
         except Exception:
-            payload = {'displayname': user.full_name or ''}
+            payload = {_JSON_KEY_DISPLAYNAME: user.full_name or ''}
     else:
-        payload = {'displayname': user.full_name or ''}
+        payload = {_JSON_KEY_DISPLAYNAME: user.full_name or ''}
     return json.dumps(payload).encode('utf-8')
 
 
@@ -756,7 +914,7 @@ def _validate_msp_convert_node(
     teams_to_move: Set[str],
     users_to_move: Set[int],
 ) -> List[str]:
-    errors: List[str] = []
+    messages: List[str] = []
     role_lookup = {r.role_id: r for r in enterprise_data.roles.get_all_entities()}
     team_lookup = {t.team_uid: t for t in enterprise_data.teams.get_all_entities()}
     user_lookup = {u.enterprise_user_id: u for u in enterprise_data.users.get_all_entities()}
@@ -766,33 +924,33 @@ def _validate_msp_convert_node(
 
     for bridge in enterprise_data.bridges.get_all_entities():
         if bridge.node_id in nodes_to_move:
-            errors.append(
+            messages.append(
                 f'Remove bridge provisioning before conversion from node {node_path(bridge.node_id)}')
     for scim in enterprise_data.scims.get_all_entities():
         if scim.node_id in nodes_to_move:
-            errors.append(
+            messages.append(
                 f'Remove SCIM provisioning before conversion from node {node_path(scim.node_id)}')
     for sso in enterprise_data.sso_services.get_all_entities():
         if sso.node_id in nodes_to_move:
-            errors.append(
+            messages.append(
                 f'Remove SSO provisioning before conversion from node {node_path(sso.node_id)}')
     for email in enterprise_data.email_provision.get_all_entities():
         if email.node_id in nodes_to_move:
-            errors.append(
+            messages.append(
                 f'Remove email provisioning before conversion from node {node_path(email.node_id)}')
     for mc in enterprise_data.managed_companies.get_all_entities():
         if mc.msp_node_id in nodes_to_move:
-            errors.append(
+            messages.append(
                 f'Remove managed company before conversion from node {node_path(mc.msp_node_id)}')
     for qt in enterprise_data.queued_teams.get_all_entities():
         if qt.node_id in nodes_to_move:
-            errors.append(
+            messages.append(
                 f'Remove queued team {qt.name} before conversion from node {node_path(qt.node_id)}')
 
     for uid in users_to_move:
         user = user_lookup.get(uid)
         if user and user.status == 'invited':
-            errors.append(f'Pending user {user.username} must be removed')
+            messages.append(f'Pending user {user.username} must be removed')
 
     for ru in enterprise_data.role_users.get_all_links():
         move_user = ru.enterprise_user_id in users_to_move
@@ -802,7 +960,7 @@ def _validate_msp_convert_node(
             username = (user.username if user else '') or str(ru.enterprise_user_id)
             role = role_lookup.get(ru.role_id)
             rolename = (role.name if role else '') or str(ru.role_id)
-            errors.append(f'Conflicting role membership: User: {username}, Role: {rolename}')
+            messages.append(f'Conflicting role membership: User: {username}, Role: {rolename}')
 
     for rt in enterprise_data.role_teams.get_all_links():
         move_team = rt.team_uid in teams_to_move
@@ -812,7 +970,7 @@ def _validate_msp_convert_node(
             teamname = (team.name if team else rt.team_uid) or rt.team_uid
             role = role_lookup.get(rt.role_id)
             rolename = (role.name if role else '') or str(rt.role_id)
-            errors.append(f'Conflicting role membership: Team: {teamname}, Role: {rolename}')
+            messages.append(f'Conflicting role membership: Team: {teamname}, Role: {rolename}')
 
     for tu in enterprise_data.team_users.get_all_links():
         move_user = tu.enterprise_user_id in users_to_move
@@ -822,7 +980,7 @@ def _validate_msp_convert_node(
             username = (user.username if user else '') or str(tu.enterprise_user_id)
             team = team_lookup.get(tu.team_uid)
             teamname = (team.name if team else '') or tu.team_uid
-            errors.append(f'Conflicting team membership: User: {username}, Team: {teamname}')
+            messages.append(f'Conflicting team membership: User: {username}, Team: {teamname}')
 
     for mn in enterprise_data.managed_nodes.get_all_links():
         move_role = mn.role_id in roles_to_move
@@ -831,9 +989,9 @@ def _validate_msp_convert_node(
             role = role_lookup.get(mn.role_id)
             rolename = (role.name if role else '') or str(mn.role_id)
             nodename = node_path(mn.managed_node_id)
-            errors.append(f'Conflicting admin role management: Node: {nodename}, Role: {rolename}')
+            messages.append(f'Conflicting admin role management: Node: {nodename}, Role: {rolename}')
 
-    return errors
+    return messages
 
 
 def msp_convert_node(
@@ -889,21 +1047,19 @@ def msp_convert_node(
     if seat_val == 0:
         seat_val = 1
 
-    plan_name = (plan or 'business').strip().lower()
-    product_plan = next((x for x in enterprise_constants.MSP_PLANS if x[1].lower() == plan_name), None)
+    plan_label = plan or _DEFAULT_CONVERT_PLAN
+    plan_name = plan_label.strip().lower()
+    product_plan = _lookup_msp_product_plan(plan_label)
     if not product_plan:
         raise errors.KeeperError(f'Managed Company plan "{plan_name}" is not found')
 
     permits = _first_msp_permits(enterprise_data)
-    if permits and permits.allowed_mc_products is not None:
-        allowed_products = permits.allowed_mc_products
-        if len(allowed_products) == 0 or not any(x.lower() == plan_name for x in allowed_products):
-            raise errors.KeeperError(f'Managed Company plan "{plan_name}" is not allowed')
+    _assert_mc_product_plan_allowed(plan_label, plan_name, permits)
 
     if seat_val < 0:
         if permits and not permits.allow_unlimited_licenses:
             raise errors.KeeperError('Managed Company unlimited licences are not allowed')
-        seat_val = 2147483647
+        seat_val = _INT32_MAX
 
     mc_existing = next(
         (x for x in enterprise_data.managed_companies.get_all_entities() if x.mc_enterprise_name == msp_node_name),
@@ -914,16 +1070,12 @@ def msp_convert_node(
     if mc_existing is None:
         new_mc_tree_key = utils.generate_aes_key()
         rq: Dict[str, Any] = {
-            'command': 'enterprise_registration_by_msp',
+            'command': _CMD_ENTERPRISE_REGISTRATION_BY_MSP,
             'node_id': root_id,
             'seats': seat_val,
             'product_id': product_plan[1],
             'enterprise_name': msp_node_name,
-            'encrypted_tree_key': utils.base64_url_encode(crypto.encrypt_aes_v2(new_mc_tree_key, msp_tree_key)),
-            'role_data': utils.base64_url_encode(
-                crypto.encrypt_aes_v1(json.dumps({'displayname': 'Keeper Administrator'}).encode(), new_mc_tree_key)),
-            'root_node': utils.base64_url_encode(
-                crypto.encrypt_aes_v1(json.dumps({'displayname': 'root'}).encode(), new_mc_tree_key)),
+            **_new_mc_encrypted_registration_fields(new_mc_tree_key, msp_tree_key),
         }
         rs = auth.execute_auth_command(rq)
         mc_id = int(rs.get('enterprise_id', -1))
@@ -998,7 +1150,7 @@ def msp_convert_node(
     dk_rq = APIRequest_pb2.UserDataKeyByNodeRequest()
     dk_rq.nodeIds.extend(nodes_to_move)
     dk_rs = auth.execute_auth_rest(
-        'enterprise/get_enterprise_user_data_key_by_node',
+        _REST_USER_DATA_KEY_BY_NODE,
         dk_rq,
         response_type=enterprise_pb2.EnterpriseUserDataKeysByNodeResponse,
     )
@@ -1006,7 +1158,7 @@ def msp_convert_node(
     msp_ec_private = enterprise_data.enterprise_info.ec_private_key
     if dk_rs and len(dk_rs.keys) > 0 and msp_ec_private:
         mc_pk_rs = mc_auth.execute_auth_rest(
-            'enterprise/get_enterprise_public_key',
+            _REST_MC_PUBLIC_KEY,
             None,
             response_type=breachwatch_pb2.EnterprisePublicKeyResponse,
         )
@@ -1014,7 +1166,7 @@ def msp_convert_node(
             mc_public_key = crypto.load_ec_public_key(mc_pk_rs.enterpriseECCPublicKey)
             for dk_node in dk_rs.keys:
                 for dk in dk_node.keys:
-                    if dk.keyTypeId == 4 and dk.enterpriseUserId in users_to_move:
+                    if dk.keyTypeId == _USER_DATA_KEY_TYPE_ID_ECC and dk.enterpriseUserId in users_to_move:
                         encrypted_key = crypto.decrypt_ec(dk.userEncryptedDataKey, msp_ec_private)
                         encrypted_key = crypto.encrypt_ec(encrypted_key, mc_public_key)
                         re_dk = enterprise_pb2.ReEncryptedUserDataKey()
@@ -1022,6 +1174,6 @@ def msp_convert_node(
                         re_dk.userEncryptedDataKey = encrypted_key
                         mc_rq.usersDataKeys.append(re_dk)
 
-    auth.execute_auth_rest('enterprise/node_to_managed_company', mc_rq, response_type=None)
+    auth.execute_auth_rest(_REST_NODE_TO_MANAGED_COMPANY, mc_rq, response_type=None)
     msp_down(loader, reset=False)
     return mc_id
