@@ -127,27 +127,27 @@ class AuditReportCommon:
                 else:
                     raise ValueError(f'Invalid created filter: {self.filter.created}')
         if self.filter.event_type is not None:
-            if isinstance(self.filter.event_type, str):
-                if self.filter.event_type.isnumeric():
-                    report_filter['event_type'] = int(self.filter.event_type)
-                else:
-                    report_filter['event_type'] = self.filter.event_type
-            elif isinstance(self.filter.event_type, int):
-                report_filter['event_type'] = self.filter.event_type
-            elif isinstance(self.filter.event_type, list):
-                report_filter['event_type'] = []
-                for x in self.filter.event_type:
-                    if isinstance(x, str):
-                        if x.isnumeric():
-                            report_filter['event_type'].append(int(x))
-                        else:
-                            report_filter['event_type'].append(x)
-                    elif isinstance(x, int):
-                        report_filter['event_type'].append(x)
-                    else:
-                        raise ValueError(f'Invalid event_type filter: {x}')
+            # API contract: numeric IDs go under 'event_type', symbolic names under 'audit_event_type'.
+            numeric_ids: List[int] = []
+            named_types: List[str] = []
+            if isinstance(self.filter.event_type, list):
+                items: List[Union[str, int]] = list(self.filter.event_type)
             else:
-                raise ValueError(f'Invalid event type filter: {self.filter.event_type}')
+                items = [self.filter.event_type]
+            for x in items:
+                if isinstance(x, int):
+                    numeric_ids.append(x)
+                elif isinstance(x, str):
+                    if x.isnumeric():
+                        numeric_ids.append(int(x))
+                    else:
+                        named_types.append(x)
+                else:
+                    raise ValueError(f'Invalid event_type filter: {x}')
+            if numeric_ids:
+                report_filter['event_type'] = numeric_ids[0] if len(numeric_ids) == 1 else numeric_ids
+            if named_types:
+                report_filter['audit_event_type'] = named_types[0] if len(named_types) == 1 else named_types
         if self.filter.keeper_version:
             if isinstance(self.filter.keeper_version, (str, int)):
                 report_filter['keeper_version'] = self.filter.keeper_version
