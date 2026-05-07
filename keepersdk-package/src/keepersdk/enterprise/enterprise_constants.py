@@ -4,8 +4,8 @@ from typing import List, Dict, Tuple, Sequence
 # MSP Constants
 MSP_FILE_PLANS = [
     (4, 'STORAGE_100GB', '100GB'),
-    (7, 'STORAGE_1000GB', '1TB'),
-    (8, 'STORAGE_10000GB', '10TB'),
+    (7, 'STORAGE_1TB', '1TB'),
+    (8, 'STORAGE_10TB', '10TB'),
 ]
 MSP_PLANS = [
     (1, 'business', 'Business', 4),

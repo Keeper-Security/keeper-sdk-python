@@ -17,6 +17,8 @@ SUPPORTED_USER_COLUMNS = ['name', 'status', 'transfer_status', 'node', 'role_cou
 SUPPORTED_TEAM_COLUMNS = ['restricts', 'node', 'user_count', 'users', 'queued_user_count', 'queued_users', 'role_count', 'roles']
 SUPPORTED_ROLE_COLUMNS = ['visible_below', 'default_role', 'admin', 'node', 'user_count', 'users', 'team_count', 'teams']
 
+# API uses signed 32-bit INT_MAX for unlimited seat counts.
+_INT32_MAX = (1 << 31) - 1
 
 class EnterpriseDownCommand(base.ArgparseCommand):
     def __init__(self):
@@ -759,7 +761,7 @@ class EnterpriseInfoManagedCompanyCommand(base.ArgparseCommand, enterprise_utils
             node_name = enterprise_utils.NodeUtils.get_node_path(enterprise_data, mc.msp_node_id, omit_root=True)
 
             allocated: Optional[int] = mc.number_of_seats
-            if allocated == 2147483647:
+            if allocated == _INT32_MAX:
                 allocated = None
             
             # Get active users
