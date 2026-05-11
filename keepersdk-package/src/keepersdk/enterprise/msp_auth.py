@@ -3,7 +3,7 @@ import datetime
 import json
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 from urllib.parse import urlunparse
 
 from . import enterprise_types
@@ -51,16 +51,17 @@ _KEY_TYPE_NO_KEY = 'no_key'
 _ENCRYPTED_BY_DATA_KEY = 'encrypted_by_data_key'
 _USER_DATA_KEY_TYPE_ID_ECC = 4
 _UNKNOWN_USER_LABEL = '?'
-_LEGACY_DATE_RANGES = (
-    'today',
-    'yesterday',
-    'last_7_days',
-    'last_30_days',
-    'month_to_date',
-    'last_month',
-    'year_to_date',
-    'last_year',
-)
+class LegacyDateRange(str, Enum):
+    """Preset relative date ranges for MSP legacy reports."""
+
+    TODAY = 'today'
+    YESTERDAY = 'yesterday'
+    LAST_7_DAYS = 'last_7_days'
+    LAST_30_DAYS = 'last_30_days'
+    MONTH_TO_DATE = 'month_to_date'
+    LAST_MONTH = 'last_month'
+    YEAR_TO_DATE = 'year_to_date'
+    LAST_YEAR = 'last_year'
 
 
 @dataclass(frozen=True)
@@ -698,14 +699,21 @@ def msp_billing_report(
     return MspBillingReport(headers=tuple(headers), rows=tuple(rows), title=title)
 
 
-def _legacy_date_range_to_dates(range_name: str) -> Tuple[datetime.datetime, datetime.datetime]:
-    if range_name not in _LEGACY_DATE_RANGES:
-        raise errors.KeeperError(
-            f'Given range {range_name} is not supported. Supported ranges: {", ".join(_LEGACY_DATE_RANGES)}')
+def _legacy_date_range_to_dates(
+    range_name: Union[str, LegacyDateRange],
+) -> Tuple[datetime.datetime, datetime.datetime]:
+    if isinstance(range_name, LegacyDateRange):
+        rng = range_name
+    else:
+        try:
+            rng = LegacyDateRange(range_name)
+        except ValueError:
+            supported = ', '.join(m.value for m in LegacyDateRange)
+            raise errors.KeeperError(
+                f'Given range {range_name} is not supported. Supported ranges: {supported}') from None
 
     current_time = datetime.datetime.now()
     today_start_dt = current_time.replace(hour=0, minute=0, second=0, microsecond=0)
-
     today_end_dt = current_time.replace(hour=23, minute=59, second=59, microsecond=0)
 
     def last_day_of_month(dt: datetime.datetime) -> datetime.datetime:
@@ -714,26 +722,29 @@ def _legacy_date_range_to_dates(range_name: str) -> Tuple[datetime.datetime, dat
         ldom = calendar.monthrange(year, month)[1]
         return dt.replace(hour=23, minute=59, second=59, microsecond=0, day=ldom)
 
-    if range_name == 'today':
-        return today_start_dt, today_end_dt
-    if range_name == 'yesterday':
-        return today_start_dt - datetime.timedelta(days=1), today_end_dt - datetime.timedelta(days=1)
-    if range_name == 'last_7_days':
-        return today_start_dt - datetime.timedelta(days=7), today_end_dt
-    if range_name == 'last_30_days':
-        return today_start_dt - datetime.timedelta(days=30), today_end_dt
-    if range_name == 'month_to_date':
-        return today_start_dt.replace(day=1), today_end_dt
-    if range_name == 'last_month':
-        last_month_num = current_time.month - 1 if current_time.month > 1 else 12
-        last_month_dt = current_time.replace(month=last_month_num)
-        return current_time.replace(month=last_month_num, day=1, hour=0, minute=0, second=0, microsecond=0), \
-            last_day_of_month(last_month_dt)
-    if range_name == 'year_to_date':
-        return today_start_dt.replace(day=1, month=1), today_end_dt
+    td = datetime.timedelta
+    last_month_num = current_time.month - 1 if current_time.month > 1 else 12
+    last_month_dt = current_time.replace(month=last_month_num)
+    month_start_last = current_time.replace(
+        month=last_month_num, day=1, hour=0, minute=0, second=0, microsecond=0)
     prev_year = today_start_dt.year - 1
-    return today_start_dt.replace(year=prev_year, day=1, month=1), \
-        today_start_dt.replace(year=prev_year, day=31, month=12, hour=23, minute=59, second=59, microsecond=0)
+
+    handlers: Dict[LegacyDateRange, Callable[[], Tuple[datetime.datetime, datetime.datetime]]] = {
+        LegacyDateRange.TODAY: lambda: (today_start_dt, today_end_dt),
+        LegacyDateRange.YESTERDAY: lambda: (
+            today_start_dt - td(days=1), today_end_dt - td(days=1)),
+        LegacyDateRange.LAST_7_DAYS: lambda: (today_start_dt - td(days=7), today_end_dt),
+        LegacyDateRange.LAST_30_DAYS: lambda: (today_start_dt - td(days=30), today_end_dt),
+        LegacyDateRange.MONTH_TO_DATE: lambda: (today_start_dt.replace(day=1), today_end_dt),
+        LegacyDateRange.LAST_MONTH: lambda: (month_start_last, last_day_of_month(last_month_dt)),
+        LegacyDateRange.YEAR_TO_DATE: lambda: (
+            today_start_dt.replace(day=1, month=1), today_end_dt),
+        LegacyDateRange.LAST_YEAR: lambda: (
+            today_start_dt.replace(year=prev_year, day=1, month=1),
+            today_start_dt.replace(
+                year=prev_year, day=31, month=12, hour=23, minute=59, second=59, microsecond=0)),
+    }
+    return handlers[rng]()
 
 
 def _parse_legacy_date_str(value: str, *, is_end: bool) -> datetime.datetime:
@@ -754,7 +765,7 @@ def _parse_legacy_date_str(value: str, *, is_end: bool) -> datetime.datetime:
 def msp_legacy_report(
     loader: enterprise_types.IEnterpriseLoader,
     *,
-    range_name: str = 'last_30_days',
+    range_name: Union[str, LegacyDateRange] = LegacyDateRange.LAST_30_DAYS,
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
 ) -> MspLegacyReport:
