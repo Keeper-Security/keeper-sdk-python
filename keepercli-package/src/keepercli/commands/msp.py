@@ -9,6 +9,7 @@ from ..helpers import report_utils
 from ..params import KeeperParams
 
 _MSP_PLAN_CHOICES = [x[1] for x in enterprise_constants.MSP_PLANS]
+_MSP_LEGACY_RANGES = ['today', 'yesterday', 'last_7_days', 'last_30_days', 'month_to_date', 'last_month', 'year_to_date', 'last_year']
 
 
 class MspDownCommand(base.ArgparseCommand):
@@ -319,6 +320,177 @@ class MspConvertNodeCommand(base.ArgparseCommand):
         return mc_id
 
 
+class MspCopyRoleCommand(base.ArgparseCommand):
+    def __init__(self):
+        parser = argparse.ArgumentParser(
+            prog='msp-copy-role',
+            description='Copy one or more MSP roles (with enforcements) to managed companies.',
+        )
+        self.add_arguments_to_parser(parser)
+        super().__init__(parser)
+
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
+        parser.add_argument(
+            '-r', '--role', dest='role', action='append',
+            help='Source role name or role ID (can be repeated)',
+        )
+        parser.add_argument(
+            'mc', action='store', nargs='+',
+            help='Managed company identifier(s): name or id',
+        )
+
+    def execute(self, context: KeeperParams, **kwargs):
+        base.require_login(context)
+        base.require_enterprise_admin(context)
+        enterprise_loader = context.enterprise_loader
+
+        role_inputs = kwargs.get('role')
+        mc_inputs = kwargs.get('mc')
+        if not isinstance(role_inputs, list) or len(role_inputs) == 0:
+            raise base.CommandError('Source role parameter is required')
+        if not isinstance(mc_inputs, list) or len(mc_inputs) == 0:
+            raise base.CommandError('Managed company parameter is required')
+
+        try:
+            synced = msp_auth.msp_copy_role(
+                enterprise_loader,
+                roles=[str(x) for x in role_inputs],
+                managed_companies=[str(x) for x in mc_inputs],
+            )
+        except sdk_errors.KeeperError as e:
+            raise base.CommandError(str(e)) from e
+
+        api.get_logger().info('Roles synced to %d managed compan%s', len(synced), 'y' if len(synced) == 1 else 'ies')
+        return sorted(synced)
+
+
+class MspBillingReportCommand(base.ArgparseCommand):
+    def __init__(self):
+        parser = argparse.ArgumentParser(
+            prog='msp-billing-report',
+            parents=[base.report_output_parser],
+            description='Generate MSP billing reports.',
+        )
+        self.add_arguments_to_parser(parser)
+        super().__init__(parser)
+
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
+        parser.add_argument('--month', dest='month', action='store', metavar='YYYY-MM',
+                            help='Month for billing report (e.g. 2022-02)')
+        parser.add_argument('-d', '--show-date', dest='show_date', action='store_true',
+                            help='Breakdown report by date')
+        parser.add_argument('-c', '--show-company', dest='show_company', action='store_true',
+                            help='Breakdown report by managed company')
+
+    def execute(self, context: KeeperParams, **kwargs):
+        base.require_login(context)
+        base.require_enterprise_admin(context)
+        enterprise_loader = context.enterprise_loader
+
+        try:
+            report = msp_auth.msp_billing_report(
+                enterprise_loader,
+                month=kwargs.get('month'),
+                show_date=bool(kwargs.get('show_date')),
+                show_company=bool(kwargs.get('show_company')),
+            )
+        except sdk_errors.KeeperError as e:
+            raise base.CommandError(str(e)) from e
+
+        headers = list(report.headers)
+        fmt = kwargs.get('format')
+        if fmt != 'json':
+            headers = [report_utils.field_to_title(x) for x in headers]
+        return report_utils.dump_report_data(
+            [list(r) for r in report.rows],
+            headers,
+            fmt=fmt,
+            filename=kwargs.get('output'),
+            title=report.title,
+        )
+
+
+class MspLegacyReportCommand(base.ArgparseCommand):
+    def __init__(self):
+        parser = argparse.ArgumentParser(
+            prog='msp-legacy-report',
+            parents=[base.report_output_parser],
+            description='Generate MSP legacy billing report.',
+        )
+        self.add_arguments_to_parser(parser)
+        super().__init__(parser)
+
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
+        predefined = parser.add_argument_group('Pre-defined date ranges')
+        predefined.add_argument(
+            '--range', dest='range', choices=_MSP_LEGACY_RANGES, default='last_30_days',
+            help='Pre-defined date ranges to run the report.',
+        )
+        custom = parser.add_argument_group('Custom date ranges')
+        custom.add_argument(
+            '--from', dest='from_date',
+            help='Run report from this date: YYYY-MM-DD or Unix timestamp.',
+        )
+        custom.add_argument(
+            '--to', dest='to_date',
+            help='Run report until this date: YYYY-MM-DD or Unix timestamp.',
+        )
+
+    def execute(self, context: KeeperParams, **kwargs):
+        base.require_login(context)
+        base.require_enterprise_admin(context)
+        enterprise_loader = context.enterprise_loader
+
+        try:
+            report = msp_auth.msp_legacy_report(
+                enterprise_loader,
+                range_name=str(kwargs.get('range') or 'last_30_days'),
+                from_date=kwargs.get('from_date'),
+                to_date=kwargs.get('to_date'),
+            )
+        except sdk_errors.KeeperError as e:
+            raise base.CommandError(str(e)) from e
+
+        headers = list(report.headers)
+        fmt = kwargs.get('format')
+        if fmt != 'json':
+            headers = [report_utils.field_to_title(x) for x in headers]
+        return report_utils.dump_report_data(
+            [list(r) for r in report.rows],
+            headers,
+            fmt=fmt,
+            filename=kwargs.get('output'),
+            title=report.title,
+        )
+
+
+class SwitchToMspCommand(base.ArgparseCommand):
+    parser = argparse.ArgumentParser(prog='switch-to-msp', description='Switch back to MSP tenant context')
+
+    def __init__(self):
+        super().__init__(SwitchToMspCommand.parser)
+
+    def execute(self, context: KeeperParams, **kwargs):
+        base.require_login(context)
+        base.require_enterprise_admin(context)
+        logger = api.get_logger()
+
+        msp_context = context.environment_variables.get('__msp_context__')
+        if not isinstance(msp_context, KeeperParams):
+            raise base.CommandError('Already MSP')
+
+        try:
+            msp_auth.switch_to_msp(msp_context.enterprise_loader)
+        except sdk_errors.KeeperError as e:
+            raise base.CommandError(str(e)) from e
+
+        logger.info('Switched back to MSP')
+        return msp_context
+
+
 class SwitchToManagedCompanyCommand(base.ArgparseCommand):
     parser = argparse.ArgumentParser(prog='switch-to-mc', description='Switch to a managed company context')
     parser.add_argument('mc_id', type=int, help='Managed company ID')
@@ -343,6 +515,7 @@ class SwitchToManagedCompanyCommand(base.ArgparseCommand):
 
         mc_context = KeeperParams(context.keeper_config)
         mc_context.set_auth(mc_auth, tree_key=tree_key, skip_vault=True)
+        mc_context.environment_variables['__msp_context__'] = context
 
         logger.info('Successfully switched to managed company %s', mc_id)
         logger.info('Use "q" to return to the previous context')
