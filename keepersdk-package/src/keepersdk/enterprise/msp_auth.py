@@ -1,7 +1,9 @@
+import calendar
+import datetime
 import json
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 from urllib.parse import urlunparse
 
 from . import enterprise_types
@@ -23,6 +25,13 @@ _SEATS_UNLIMITED_THRESHOLD = _INT32_MAX - 1
 _CMD_ENTERPRISE_REGISTRATION_BY_MSP = 'enterprise_registration_by_msp'
 _CMD_ENTERPRISE_UPDATE_BY_MSP = 'enterprise_update_by_msp'
 _CMD_ENTERPRISE_REMOVE_BY_MSP = 'enterprise_remove_by_msp'
+_CMD_ENTERPRISE_ALLOCATE_IDS = 'enterprise_allocate_ids'
+_CMD_QUERY_ENTERPRISE = 'query_enterprise'
+_CMD_ROLE_ADD = 'role_add'
+_CMD_ROLE_ENFORCEMENT_ADD = 'role_enforcement_add'
+_CMD_ROLE_ENFORCEMENT_UPDATE = 'role_enforcement_update'
+_CMD_ROLE_ENFORCEMENT_REMOVE = 'role_enforcement_remove'
+_CMD_GET_MC_LICENSE_ADJUSTMENT_LOG = 'get_mc_license_adjustment_log'
 _REST_LOGIN_TO_MC = 'authentication/login_to_mc'
 _REST_NODE_TO_MANAGED_COMPANY = 'enterprise/node_to_managed_company'
 _REST_USER_DATA_KEY_BY_NODE = 'enterprise/get_enterprise_user_data_key_by_node'
@@ -42,6 +51,17 @@ _KEY_TYPE_NO_KEY = 'no_key'
 _ENCRYPTED_BY_DATA_KEY = 'encrypted_by_data_key'
 _USER_DATA_KEY_TYPE_ID_ECC = 4
 _UNKNOWN_USER_LABEL = '?'
+class LegacyDateRange(str, Enum):
+    """Preset relative date ranges for MSP legacy reports."""
+
+    TODAY = 'today'
+    YESTERDAY = 'yesterday'
+    LAST_7_DAYS = 'last_7_days'
+    LAST_30_DAYS = 'last_30_days'
+    MONTH_TO_DATE = 'month_to_date'
+    LAST_MONTH = 'last_month'
+    YEAR_TO_DATE = 'year_to_date'
+    LAST_YEAR = 'last_year'
 
 
 @dataclass(frozen=True)
@@ -51,6 +71,20 @@ class MspInfoReport:
     rows: Tuple[Tuple[Any, ...], ...]
     row_numbers: bool = False
     message: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class MspBillingReport:
+    headers: Tuple[str, ...]
+    rows: Tuple[Tuple[Any, ...], ...]
+    title: str
+
+
+@dataclass(frozen=True)
+class MspLegacyReport:
+    headers: Tuple[str, ...]
+    rows: Tuple[Tuple[Any, ...], ...]
+    title: Optional[str] = None
 
 
 def login_to_managed_company(loader: enterprise_types.IEnterpriseLoader, mc_enterprise_id: int) -> Tuple[keeper_auth.KeeperAuth, bytes]:
@@ -83,6 +117,11 @@ def msp_down(loader: enterprise_types.IEnterpriseLoader, *, reset: bool = False)
     :return: Entity type ids touched during this load.
     """
     return loader.load(reset=reset)
+
+
+def switch_to_msp(loader: enterprise_types.IEnterpriseLoader) -> Set[int]:
+    """Refresh MSP enterprise data when switching back from MC context."""
+    return msp_down(loader, reset=False)
 
 
 def decrypt_managed_company_tree_key(encrypted_tree_key_b64: str, msp_tree_key: bytes) -> Optional[bytes]:
@@ -424,6 +463,348 @@ def msp_info(
     if len(mcs) == 0:
         return MspInfoReport(headers=(), rows=(), message=_MSG_NO_MANAGED_COMPANIES)
     return _msp_info_managed_companies_report(enterprise_data, mcs, verbose=verbose)
+
+
+def _billing_is_plan_id(msp_id: int) -> bool:
+    return 0 < msp_id < 100
+
+
+def _billing_is_storage_plan_id(msp_id: int) -> bool:
+    return 100 < msp_id < 10000
+
+
+def _billing_is_addon_id(msp_id: int) -> bool:
+    return msp_id > 10000
+
+
+def _billing_count_id(msp_id: int) -> int:
+    if _billing_is_plan_id(msp_id):
+        return msp_id
+    if _billing_is_storage_plan_id(msp_id):
+        return msp_id // 100
+    if _billing_is_addon_id(msp_id):
+        return msp_id // 10000
+    return 0
+
+
+def _merge_billing_units(unit_dicts: List[Optional[Dict[int, Any]]]) -> Dict[int, Tuple[int, int]]:
+    merged: Dict[int, Tuple[int, int]] = {}
+    for units in unit_dicts:
+        if not isinstance(units, dict):
+            continue
+        for unit, count in units.items():
+            if not isinstance(unit, int):
+                continue
+            if isinstance(count, int):
+                qty, days = count, 1
+            elif isinstance(count, tuple) and len(count) >= 2:
+                qty, days = int(count[0]), int(count[1])
+            else:
+                continue
+            q0, d0 = merged.get(unit, (0, 0))
+            merged[unit] = (q0 + qty, d0 + days)
+    return merged
+
+
+def _fetch_daily_billing_snapshots(
+    auth: keeper_auth.KeeperAuth,
+    *,
+    year: int,
+    month: int,
+) -> Tuple[Dict[Tuple[int, int], Dict[int, int]], Dict[int, str]]:
+    url = _bi_enterprise_console_url(auth, 'reporting/daily_snapshot')
+    rq = BI_pb2.ReportingDailySnapshotRequest()
+    rq.year = year
+    rq.month = month
+    rs = auth.execute_auth_rest(url, rq, response_type=BI_pb2.ReportingDailySnapshotResponse)
+    if not rs:
+        raise errors.KeeperError('No response received from daily snapshot API')
+
+    company_lookup: Dict[int, str] = {x.id: x.name for x in rs.mcEnterprises}
+    snapshots: Dict[Tuple[int, int], Dict[int, int]] = {}
+    for record in rs.records:
+        units: Dict[int, int] = {}
+        if record.maxLicenseCount > 0:
+            if record.maxBasePlanId > 0:
+                units[record.maxBasePlanId] = record.maxLicenseCount
+            if record.maxFilePlanTypeId > 0:
+                units[record.maxFilePlanTypeId * 100] = record.maxLicenseCount
+            for addon in record.addons:
+                if addon.maxAddonId > 0:
+                    units[addon.maxAddonId * 10000] = addon.units
+        ds = datetime.datetime.fromtimestamp(record.date / 1000.0, tz=datetime.timezone.utc)
+        snapshots[(record.mcEnterpriseId, ds.date().toordinal())] = units
+    return snapshots, company_lookup
+
+
+def _billing_bounding_snapshots(
+    period_snapshots: Dict[Tuple[int, int], Dict[int, int]],
+    mc_id: Optional[int] = None,
+) -> Tuple[Optional[Dict[int, Any]], Optional[Dict[int, Any]]]:
+    by_mc_dates: Dict[int, List[int]] = {}
+    for this_mc, date_no in period_snapshots.keys():
+        if mc_id is not None and this_mc != mc_id:
+            continue
+        by_mc_dates.setdefault(this_mc, []).append(date_no)
+    if not by_mc_dates:
+        return None, None
+
+    if mc_id is not None:
+        dates = by_mc_dates.get(mc_id) or []
+        if not dates:
+            return None, None
+        start_key = (mc_id, min(dates))
+        end_key = (mc_id, max(dates))
+        return period_snapshots.get(start_key), period_snapshots.get(end_key)
+
+    start_list: List[Dict[int, int]] = []
+    end_list: List[Dict[int, int]] = []
+    for company_id, dates in by_mc_dates.items():
+        start_data = period_snapshots.get((company_id, min(dates)))
+        end_data = period_snapshots.get((company_id, max(dates)))
+        if start_data:
+            start_list.append(start_data)
+        if end_data:
+            end_list.append(end_data)
+    return _merge_billing_units(start_list), _merge_billing_units(end_list)
+
+
+def _billing_reported_days(period_snapshots: Dict[Tuple[int, int], Dict[int, int]]) -> int:
+    dates = [x[1] for x in period_snapshots.keys()]
+    return max(dates) - min(dates) + 1 if dates else 30
+
+
+def _billing_max_product_count(
+    period_snapshots: Dict[Tuple[int, int], Dict[int, int]],
+    product: int,
+    mc_id: Optional[int] = None,
+) -> int:
+    daily_totals: Dict[int, int] = {}
+    for (company_id, date_no), counts in period_snapshots.items():
+        if mc_id is not None and company_id != mc_id:
+            continue
+        daily_totals[date_no] = daily_totals.get(date_no, 0) + int(counts.get(product) or 0)
+    return max(daily_totals.values()) if daily_totals else 0
+
+
+def msp_billing_report(
+    loader: enterprise_types.IEnterpriseLoader,
+    *,
+    month: Optional[str] = None,
+    show_date: bool = False,
+    show_company: bool = False,
+) -> MspBillingReport:
+    auth = loader.keeper_auth
+
+    if month:
+        year_part, sep, month_part = month.partition('-')
+        if sep != '-':
+            raise errors.KeeperError(f'Given month "{month}" is not valid. Expected YYYY-MM')
+        try:
+            year = int(year_part)
+            month_no = int(month_part)
+        except Exception:
+            raise errors.KeeperError(f'Given month "{month}" is not valid. Expected YYYY-MM') from None
+    else:
+        now = datetime.datetime.now()
+        year = now.year
+        month_no = now.month - 1
+        if month_no < 1:
+            month_no = 12
+            year -= 1
+    if month_no < 1 or month_no > 12:
+        raise errors.KeeperError(f'Given month "{month}" is not valid. Expected YYYY-MM')
+
+    daily_counts, company_lookup = _fetch_daily_billing_snapshots(auth, year=year, month=month_no)
+    merged_counts: Dict[Tuple[int, int], Dict[int, Tuple[int, int]]] = {}
+    for (mc_id, date_no), units in daily_counts.items():
+        key = (mc_id if show_company else 0, date_no if show_date else 0)
+        merged_counts[key] = _merge_billing_units([merged_counts.get(key), units])
+
+    headers: List[str] = []
+    if show_date:
+        headers.append('date')
+    if show_company:
+        headers.extend(['company', 'company_id'])
+    headers.extend(['product', 'licenses', 'rate'])
+    if not show_date:
+        headers.extend(['avg_per_day', 'initial_licenses', 'final_licenses', 'max_licenses'])
+
+    plan_lookup = {x[0]: x for x in enterprise_constants.MSP_PLANS}
+    storage_lookup = {x[0]: x for x in enterprise_constants.MSP_FILE_PLANS}
+    addon_lookup: Dict[int, Tuple[Any, ...]] = {}
+    addons = {x[0]: x for x in enterprise_constants.MSP_ADDONS}
+    for addon_id, addon_name in _fetch_msp_addon_id_to_name(auth).items():
+        if addon_name in addons:
+            addon_lookup[addon_id] = addons[addon_name]
+    pricing = _fetch_mc_pricing(auth)
+
+    rows: List[Tuple[Any, ...]] = []
+    for (mc_id, date_no), counts in sorted(merged_counts.items(), key=lambda x: (x[0][1], x[0][0])):
+        day_str = str(datetime.date.fromordinal(date_no)) if show_date else ''
+        company_name = company_lookup.get(mc_id, '') if show_company else ''
+        start_snapshot, end_snapshot = (None, None) if show_date else _billing_bounding_snapshots(
+            daily_counts, mc_id=mc_id if show_company else None)
+        for product in sorted(counts.keys()):
+            count_id = _billing_count_id(product)
+            if show_company:
+                count, days = counts[product]
+            else:
+                count = counts[product][0]
+                days = _billing_reported_days(daily_counts)
+
+            product_name = str(product)
+            rate_text = ''
+            if _billing_is_plan_id(product):
+                plan = plan_lookup.get(count_id)
+                if plan:
+                    product_name = plan[2]
+                    rate = pricing.get('mc_base_plans', {}).get(plan[1])
+                    if rate:
+                        rate_text = _price_text_short(rate)
+            elif _billing_is_storage_plan_id(product):
+                storage_plan = storage_lookup.get(count_id)
+                if storage_plan:
+                    product_name = storage_plan[2]
+                    rate = pricing.get('mc_file_plans', {}).get(storage_plan[1])
+                    if rate:
+                        rate_text = _price_text_short(rate)
+            elif _billing_is_addon_id(product):
+                addon = addon_lookup.get(count_id)
+                if addon:
+                    product_name = addon[1]
+                    rate = pricing.get('mc_addons', {}).get(addon[0])
+                    if rate:
+                        rate_text = _price_text_short(rate)
+
+            row: List[Any] = []
+            if show_date:
+                row.append(day_str)
+            if show_company:
+                row.extend([company_name, mc_id])
+            row.extend([product_name, count, rate_text])
+
+            if not show_date:
+                avg_per_day = round(count / days, 2) if days else 0
+                start_raw = 0 if start_snapshot is None else (start_snapshot.get(product) or 0)
+                end_raw = 0 if end_snapshot is None else (end_snapshot.get(product) or 0)
+                start_count = start_raw[0] if isinstance(start_raw, tuple) else start_raw
+                end_count = end_raw[0] if isinstance(end_raw, tuple) else end_raw
+                max_count = _billing_max_product_count(
+                    daily_counts, product, mc_id if show_company else None)
+                row.extend([avg_per_day, start_count, end_count, max_count])
+            rows.append(tuple(row))
+
+    title = f'Consumption Billing Statement: {calendar.month_name[month_no]} {year}'
+    return MspBillingReport(headers=tuple(headers), rows=tuple(rows), title=title)
+
+
+def _legacy_date_range_to_dates(
+    range_name: Union[str, LegacyDateRange],
+) -> Tuple[datetime.datetime, datetime.datetime]:
+    if isinstance(range_name, LegacyDateRange):
+        rng = range_name
+    else:
+        try:
+            rng = LegacyDateRange(range_name)
+        except ValueError:
+            supported = ', '.join(m.value for m in LegacyDateRange)
+            raise errors.KeeperError(
+                f'Given range {range_name} is not supported. Supported ranges: {supported}') from None
+
+    current_time = datetime.datetime.now()
+    today_start_dt = current_time.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_end_dt = current_time.replace(hour=23, minute=59, second=59, microsecond=0)
+
+    def last_day_of_month(dt: datetime.datetime) -> datetime.datetime:
+        year = dt.year
+        month = int(dt.strftime('%m')) % 12 + 1
+        ldom = calendar.monthrange(year, month)[1]
+        return dt.replace(hour=23, minute=59, second=59, microsecond=0, day=ldom)
+
+    td = datetime.timedelta
+    last_month_num = current_time.month - 1 if current_time.month > 1 else 12
+    last_month_dt = current_time.replace(month=last_month_num)
+    month_start_last = current_time.replace(
+        month=last_month_num, day=1, hour=0, minute=0, second=0, microsecond=0)
+    prev_year = today_start_dt.year - 1
+
+    handlers: Dict[LegacyDateRange, Callable[[], Tuple[datetime.datetime, datetime.datetime]]] = {
+        LegacyDateRange.TODAY: lambda: (today_start_dt, today_end_dt),
+        LegacyDateRange.YESTERDAY: lambda: (
+            today_start_dt - td(days=1), today_end_dt - td(days=1)),
+        LegacyDateRange.LAST_7_DAYS: lambda: (today_start_dt - td(days=7), today_end_dt),
+        LegacyDateRange.LAST_30_DAYS: lambda: (today_start_dt - td(days=30), today_end_dt),
+        LegacyDateRange.MONTH_TO_DATE: lambda: (today_start_dt.replace(day=1), today_end_dt),
+        LegacyDateRange.LAST_MONTH: lambda: (month_start_last, last_day_of_month(last_month_dt)),
+        LegacyDateRange.YEAR_TO_DATE: lambda: (
+            today_start_dt.replace(day=1, month=1), today_end_dt),
+        LegacyDateRange.LAST_YEAR: lambda: (
+            today_start_dt.replace(year=prev_year, day=1, month=1),
+            today_start_dt.replace(
+                year=prev_year, day=31, month=12, hour=23, minute=59, second=59, microsecond=0)),
+    }
+    return handlers[rng]()
+
+
+def _parse_legacy_date_str(value: str, *, is_end: bool) -> datetime.datetime:
+    v = (value or '').strip()
+    if not v:
+        raise errors.KeeperError('Date value is empty')
+    try:
+        return datetime.datetime.fromtimestamp(int(v))
+    except Exception:
+        pass
+    suffix = '23:59:59' if is_end else '00:00:00'
+    try:
+        return datetime.datetime.strptime(f'{v} {suffix}', '%Y-%m-%d %H:%M:%S')
+    except Exception:
+        raise errors.KeeperError(f'Date "{value}" is invalid. Expected YYYY-MM-DD or unix timestamp') from None
+
+
+def msp_legacy_report(
+    loader: enterprise_types.IEnterpriseLoader,
+    *,
+    range_name: Union[str, LegacyDateRange] = LegacyDateRange.LAST_30_DAYS,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+) -> MspLegacyReport:
+    """Generate the legacy MSP license adjustment report."""
+    auth = loader.keeper_auth
+
+    if from_date and to_date:
+        from_dt = _parse_legacy_date_str(from_date, is_end=False)
+        to_dt = _parse_legacy_date_str(to_date, is_end=True)
+    else:
+        from_dt, to_dt = _legacy_date_range_to_dates(range_name)
+
+    rq = {
+        'command': _CMD_GET_MC_LICENSE_ADJUSTMENT_LOG,
+        'from': int(from_dt.timestamp() * 1000),
+        'to': int(to_dt.timestamp() * 1000),
+    }
+    rs = auth.execute_auth_command(rq)
+
+    headers = (
+        'id', 'time', 'company_id', 'company_name', 'status',
+        'number_of_allocations', 'plan', 'transaction_notes', 'price_estimate',
+    )
+    rows: List[Tuple[Any, ...]] = []
+    for log in rs.get('log', []) if isinstance(rs, dict) else []:
+        if not isinstance(log, dict):
+            continue
+        rows.append((
+            log.get('id'),
+            log.get('date'),
+            log.get('enterprise_id'),
+            log.get('enterprise_name'),
+            log.get('status'),
+            log.get('new_number_of_seats'),
+            log.get('new_product_type'),
+            log.get('note'),
+            log.get('price'),
+        ))
+    return MspLegacyReport(headers=headers, rows=tuple(rows), title=None)
 
 
 def _new_mc_encrypted_registration_fields(mc_tree_key: bytes, msp_tree_key: bytes) -> Dict[str, Any]:
@@ -1177,3 +1558,215 @@ def msp_convert_node(
     auth.execute_auth_rest(_REST_NODE_TO_MANAGED_COMPANY, mc_rq, response_type=None)
     msp_down(loader, reset=False)
     return mc_id
+
+
+def _find_roles_by_name_or_id(
+    enterprise_data: enterprise_types.IEnterpriseData,
+    name_or_id: str,
+) -> List[enterprise_types.Role]:
+    token = (name_or_id or '').strip()
+    if token.isdigit():
+        role = enterprise_data.roles.get_entity(int(token))
+        return [role] if role is not None else []
+    role_name = token.casefold()
+    return [x for x in enterprise_data.roles.get_all_entities() if x.name.casefold() == role_name]
+
+
+def _to_enforcement_map_for_roles(
+    role_enforcements: List[enterprise_types.RoleEnforcement],
+) -> Dict[int, Dict[str, str]]:
+    result: Dict[int, Dict[str, str]] = {}
+    for enf in role_enforcements:
+        if enf.role_id not in result:
+            result[enf.role_id] = {}
+        result[enf.role_id][enf.enforcement_type.lower()] = enf.value
+    return result
+
+
+def _extract_mc_enterprise_payload(rs: Dict[str, Any]) -> Dict[str, Any]:
+    enterprise = rs.get('enterprise')
+    if isinstance(enterprise, dict):
+        return enterprise
+    return rs
+
+
+def _mc_payload_root_node_id(enterprise_payload: Dict[str, Any]) -> Optional[int]:
+    for node in enterprise_payload.get('nodes', []) or []:
+        if not node.get('parent_id'):
+            node_id = node.get('node_id')
+            if isinstance(node_id, int):
+                return node_id
+    return None
+
+
+def _mc_payload_role_name(role_payload: Dict[str, Any]) -> str:
+    data = role_payload.get('data')
+    if isinstance(data, dict):
+        display_name = data.get(_JSON_KEY_DISPLAYNAME)
+        if isinstance(display_name, str):
+            return display_name
+    return ''
+
+
+def _allocate_enterprise_id(auth: keeper_auth.KeeperAuth) -> int:
+    rs = auth.execute_auth_command({'command': _CMD_ENTERPRISE_ALLOCATE_IDS, 'number_requested': 1})
+    base_id = int(rs.get('base_id', 0))
+    allocated = int(rs.get('number_allocated', 0))
+    if allocated < 1:
+        raise errors.KeeperError('Unable to allocate enterprise id')
+    return base_id + 1
+
+
+def _coerce_msp_copy_enforcement_value(name: str, value: Any) -> Any:
+    enforcement_type = enterprise_constants.ENFORCEMENTS.get(name.lower())
+    if not enforcement_type:
+        return value
+    if enforcement_type == 'long':
+        try:
+            return int(value)
+        except Exception as err:
+            raise errors.KeeperError(f'Enforcement {name}: invalid integer value: {value}') from err
+    if enforcement_type == 'boolean':
+        if isinstance(value, bool):
+            return value
+        return str(value).lower() == 'true'
+    if enforcement_type == 'account_share':
+        return None
+    if enforcement_type in {'record_types', 'json', 'jsonarray'}:
+        if isinstance(value, (dict, list)):
+            return value
+        return json.loads(str(value))
+    return value
+
+
+def msp_copy_role(
+    loader: enterprise_types.IEnterpriseLoader,
+    *,
+    roles: List[str],
+    managed_companies: List[str],
+) -> Set[int]:
+    """Copy role enforcements from MSP to one or more managed companies.
+
+    Roles are matched by id or case-insensitive exact name in the MSP enterprise. For each target MC,
+    role names are matched case-insensitively; missing roles are created. Enforcements are then synchronized:
+    add/update to match source and remove extras from destination role.
+    """
+    enterprise_data = loader.enterprise_data
+    msp_tree_key = enterprise_data.enterprise_info.tree_key
+    logger = utils.get_logger()
+
+    role_inputs = [str(x).strip() for x in (roles or []) if str(x).strip()]
+    if len(role_inputs) == 0:
+        raise errors.KeeperError('Source role parameter is required')
+    mc_inputs = [str(x).strip() for x in (managed_companies or []) if str(x).strip()]
+    if len(mc_inputs) == 0:
+        raise errors.KeeperError('Managed company parameter is required')
+
+    source_roles: Dict[int, enterprise_types.Role] = {}
+    for role_token in role_inputs:
+        matched_roles = _find_roles_by_name_or_id(enterprise_data, role_token)
+        if len(matched_roles) == 1:
+            source_roles[matched_roles[0].role_id] = matched_roles[0]
+        elif len(matched_roles) > 1:
+            raise errors.KeeperError(f'There are more than one roles with name "{role_token}". Use Role ID')
+        else:
+            raise errors.KeeperError(f'Role "{role_token}" not found')
+
+    src_role_enforcements = _to_enforcement_map_for_roles(list(enterprise_data.role_enforcements.get_all_links()))
+    unique_mcs: Dict[int, enterprise_types.ManagedCompany] = {}
+    for mc_input in mc_inputs:
+        mc_filter = _parse_managed_company_filter(mc_input)
+        if mc_filter is None:
+            continue
+        mc = _find_managed_company(enterprise_data, mc_filter)
+        if mc is None:
+            raise errors.KeeperError(f'Managed Company "{mc_input}" not found')
+        unique_mcs[mc.mc_enterprise_id] = mc
+
+    synced_mc_ids: Set[int] = set()
+    for mc in unique_mcs.values():
+        mc_id = mc.mc_enterprise_id
+        mc_auth, mc_tree_key = login_to_managed_company(loader, mc_id)
+        mc_rs = mc_auth.execute_auth_command({'command': _CMD_QUERY_ENTERPRISE})
+        if not isinstance(mc_rs, dict):
+            raise errors.KeeperError(f'MC {mc_id}: query_enterprise response is invalid')
+        mc_payload = _extract_mc_enterprise_payload(mc_rs)
+        root_node_id = _mc_payload_root_node_id(mc_payload)
+        if not isinstance(root_node_id, int):
+            raise errors.KeeperError(f'MC {mc_id}: root node is not found')
+
+        dst_roles = list(mc_payload.get('roles') or [])
+        dst_role_enforcements: Dict[int, Dict[str, Any]] = {}
+        for item in mc_payload.get('role_enforcements') or []:
+            role_id = item.get('role_id')
+            enforcements = item.get('enforcements')
+            if isinstance(role_id, int) and isinstance(enforcements, dict):
+                dst_role_enforcements[role_id] = dict(enforcements)
+
+        mc_rqs: List[Dict[str, Any]] = []
+        for src_role in source_roles.values():
+            src_role_id = src_role.role_id
+            role_name = src_role.name or ''
+            if not role_name:
+                continue
+
+            matches = [r for r in dst_roles if _mc_payload_role_name(r).casefold() == role_name.casefold()]
+            if len(matches) > 1:
+                logger.warning('MC #%s: There are more than one roles with name "%s". Skipping', mc_id, role_name)
+                continue
+            if len(matches) == 1:
+                dst_role_id = int(matches[0].get('role_id') or 0)
+                if dst_role_id <= 0:
+                    logger.warning('MC #%s: Role "%s" has invalid role id. Skipping', mc_id, role_name)
+                    continue
+            else:
+                dst_role_id = _allocate_enterprise_id(mc_auth)
+                role_data = json.dumps({_JSON_KEY_DISPLAYNAME: role_name}).encode('utf-8')
+                mc_rqs.append({
+                    'command': _CMD_ROLE_ADD,
+                    'role_id': dst_role_id,
+                    'node_id': root_node_id,
+                    'encrypted_data': utils.base64_url_encode(crypto.encrypt_aes_v1(role_data, mc_tree_key)),
+                    'visible_below': src_role.visible_below,
+                    'new_user_inherit': src_role.new_user_inherit,
+                })
+                dst_roles.append({'role_id': dst_role_id, 'data': {_JSON_KEY_DISPLAYNAME: role_name}})
+
+            src_enforcements = dict(src_role_enforcements.get(src_role_id) or {})
+            stale_dst_enforcements = dict(dst_role_enforcements.get(dst_role_id) or {})
+            for enforcement_name, src_value in src_enforcements.items():
+                if enforcement_name in stale_dst_enforcements:
+                    dst_value = stale_dst_enforcements.pop(enforcement_name)
+                    if src_value == dst_value:
+                        continue
+                    command = _CMD_ROLE_ENFORCEMENT_UPDATE
+                else:
+                    command = _CMD_ROLE_ENFORCEMENT_ADD
+                try:
+                    value = _coerce_msp_copy_enforcement_value(enforcement_name, src_value)
+                    if value is None:
+                        continue
+                    rq: Dict[str, Any] = {
+                        'command': command,
+                        'role_id': dst_role_id,
+                        'enforcement': enforcement_name,
+                    }
+                    if not isinstance(value, bool):
+                        rq['value'] = value
+                    mc_rqs.append(rq)
+                except Exception as err:
+                    logger.warning('Role %s: Enforcement %s: %s', role_name, enforcement_name, err)
+
+            for enforcement_name in stale_dst_enforcements.keys():
+                mc_rqs.append({
+                    'command': _CMD_ROLE_ENFORCEMENT_REMOVE,
+                    'role_id': dst_role_id,
+                    'enforcement': enforcement_name,
+                })
+
+        if mc_rqs:
+            mc_auth.execute_batch(mc_rqs)
+        logger.info('MC %s: Roles are in sync', mc_id)
+        synced_mc_ids.add(mc_id)
+
+    return synced_mc_ids
