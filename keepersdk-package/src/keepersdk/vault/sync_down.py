@@ -1,7 +1,8 @@
+import dataclasses
 import json
 from typing import List, Optional, Iterable
 
-from . import vault_data, vault_storage
+from . import vault_data, vault_storage, keeperdrive_sync, keeperdrive_data
 from .storage_types import (
     StorageRecord, StorageSharedFolder, StorageRecordKey, StorageTeam, StorageSharedFolderKey, StorageNonSharedData,
     StorageSharedFolderPermission, StorageFolder, StorageFolderRecord, StorageRecordType, StorageKeyType,
@@ -31,12 +32,18 @@ def decrypt_keeper_key(auth_context: keeper_auth.AuthContext, encrypted: bytes, 
         raise ValueError(f'unsupported key type {key_type}')
 
 
+@dataclasses.dataclass
+class SyncDownResult:
+    vault: vault_data.RebuildTask
+    keeper_drive: Optional[keeperdrive_data.KeeperDriveRebuildTask] = None
+
+
 def sync_down_request(auth: keeper_auth.KeeperAuth,
                       storage: vault_storage.IVaultStorage,
                       *,
                       pending_shares: Optional[IPendingSharePlugin]=None,
                       audit_data: Optional[IAuditDataPlugin]=None,
-                      sync_record_types: bool=False) -> vault_data.RebuildTask:
+                      sync_record_types: bool=False) -> SyncDownResult:
     logger = utils.get_logger()
 
     user_settings = storage.user_settings.load()
@@ -45,6 +52,7 @@ def sync_down_request(auth: keeper_auth.KeeperAuth,
 
     token = user_settings.continuation_token
     task: Optional[vault_data.RebuildTask] = None
+    kd_task: Optional[keeperdrive_data.KeeperDriveRebuildTask] = None
     done = False
     rq = SyncDown_pb2.SyncDownRequest()
     while not done:
@@ -56,9 +64,18 @@ def sync_down_request(auth: keeper_auth.KeeperAuth,
         if response.cacheStatus == SyncDown_pb2.CLEAR:
             sync_record_types = True
             storage.clear()
+            kd_task = keeperdrive_data.KeeperDriveRebuildTask(True)
             logger.info('Syncing...')
         if task is None:
             task = vault_data.RebuildTask(response.cacheStatus == SyncDown_pb2.CLEAR)
+
+        kd_storage = storage.keeper_drive
+        if kd_storage is not None:
+            if kd_task is None:
+                kd_task = keeperdrive_data.KeeperDriveRebuildTask(False)
+            if not keeperdrive_sync.try_apply_keeper_drive_from_sync_down_proto(response, kd_storage, kd_task):
+                keeperdrive_sync.try_apply_keeper_drive_from_sync_down_json(
+                    auth, kd_storage, rq.continuationToken, kd_task)
 
         if len(response.removedRecords) > 0:
             record_uids = [utils.base64_url_encode(x) for x in response.removedRecords]
@@ -583,4 +600,4 @@ def sync_down_request(auth: keeper_auth.KeeperAuth,
             old_notifications = old_notifications[:to_delete]
             storage.notifications.delete_uids([x[0] for x in old_notifications])
 
-    return task
+    return SyncDownResult(vault=task, keeper_drive=kd_task)

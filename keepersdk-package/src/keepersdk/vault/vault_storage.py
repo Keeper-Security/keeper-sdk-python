@@ -1,7 +1,7 @@
 import abc
 
 from ..storage.storage_types import IEntityReaderStorage, ILinkReaderStorage, IRecordStorage
-from . import storage_types
+from . import keeperdrive_vault_storage, storage_types
 
 
 class IVaultStorage(abc.ABC):
@@ -83,6 +83,11 @@ class IVaultStorage(abc.ABC):
     @property
     @abc.abstractmethod
     def notifications(self) -> IEntityReaderStorage[storage_types.StorageNotification, str]:
+        pass
+
+    @property
+    @abc.abstractmethod
+    def keeper_drive(self) -> keeperdrive_vault_storage.IKeeperDriveStorage:
         pass
 
     @abc.abstractmethod

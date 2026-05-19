@@ -3,7 +3,7 @@ import threading
 from typing import Optional, Any, Dict
 
 from . import sync_down, vault_plugins
-from . import vault_data, vault_storage
+from . import vault_data, vault_storage, keeperdrive_data, keeperdrive_vault_storage
 from .. import utils
 from ..authentication import keeper_auth
 
@@ -12,6 +12,10 @@ class VaultOnline(vault_plugins.IVaultData, keeper_auth.IKeeperAuth):
     def __init__(self, auth: keeper_auth.KeeperAuth, storage: vault_storage.IVaultStorage) -> None:
         super(VaultOnline, self).__init__()
         self._vault_data = vault_data.VaultData(auth.auth_context.client_key, storage)
+        self._keeper_drive_data: Optional[keeperdrive_data.KeeperDriveData] = None
+        kd_storage = storage.keeper_drive
+        if kd_storage is not None:
+            self._keeper_drive_data = keeperdrive_data.KeeperDriveData(kd_storage)
         self._keeper_auth = auth
         self._auto_sync = False
         self._lock = threading.Lock()
@@ -28,6 +32,14 @@ class VaultOnline(vault_plugins.IVaultData, keeper_auth.IKeeperAuth):
     @property
     def keeper_auth(self) -> keeper_auth.KeeperAuth:
         return self._keeper_auth
+
+    @property
+    def keeper_drive(self) -> keeperdrive_vault_storage.IKeeperDriveStorage:
+        return self._vault_data.storage.keeper_drive
+
+    @property
+    def keeper_drive_data(self) -> Optional[keeperdrive_data.KeeperDriveData]:
+        return self._keeper_drive_data
 
     @property
     def lock(self)-> threading.Lock:
@@ -95,13 +107,15 @@ class VaultOnline(vault_plugins.IVaultData, keeper_auth.IKeeperAuth):
         if force:
             self._vault_data.storage.clear()
 
-        changes = sync_down.sync_down_request(self._keeper_auth, self._vault_data.storage,
-                                              sync_record_types=self._sync_record_types,
-                                              pending_shares=self.pending_share_plugin(),
-                                              audit_data=self.audit_data_plugin())
+        result = sync_down.sync_down_request(self._keeper_auth, self._vault_data.storage,
+                                             sync_record_types=self._sync_record_types,
+                                             pending_shares=self.pending_share_plugin(),
+                                             audit_data=self.audit_data_plugin())
         self.sync_requested = False
         self._sync_record_types = False
-        self._vault_data.rebuild_data(changes)
+        self._vault_data.rebuild_data(result.vault)
+        if self._keeper_drive_data is not None and result.keeper_drive is not None:
+            self._keeper_drive_data.rebuild_data(result.keeper_drive)
 
     def _background_task(self):
         if self._keeper_auth.auth_context.enterprise_ec_public_key:
