@@ -98,7 +98,8 @@ class PAMConnectionEditCommand(base.ArgparseCommand):
 
         encrypted_session_token, encrypted_transmission_key, transmission_key = get_keeper_tokens(vault)
         if record_type in "pamNetworkConfiguration pamAwsConfiguration pamAzureConfiguration".split():
-            tdag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, record_uid, is_config=True)
+            tdag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, record_uid,
+                             is_config=True, transmission_key=transmission_key)
             tdag.edit_tunneling_config(connections=_connections, session_recording=_recording, typescript_recording=_typescript_recording)
             if not kwargs.get("silent", False): tdag.print_tunneling_config(record_uid, None)
         else:
@@ -193,8 +194,10 @@ class PAMConnectionEditCommand(base.ArgparseCommand):
 
             existing_config_uid = get_config_uid(vault, encrypted_session_token, encrypted_transmission_key, record_uid)
 
-            tdag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, config_uid)
-            old_dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, existing_config_uid)
+            tdag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, config_uid,
+                             transmission_key=transmission_key)
+            old_dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, existing_config_uid,
+                                transmission_key=transmission_key)
 
             if config_uid and existing_config_uid != config_uid:
                 old_dag.remove_from_dag(record_uid)

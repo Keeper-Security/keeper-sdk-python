@@ -1166,11 +1166,17 @@ class RecordGetCommand(base.ArgparseCommand):
 
     def _find_record(self, vault: vault_online.VaultOnline, uid_or_title: str):
         """Find a record by UID or title."""
-        return next(
+        record = next(
             (r for r in vault.vault_data.records() 
              if r.record_uid == uid_or_title or r.title == uid_or_title), 
             None
         )
+        if record:
+            return record
+        if record_utils.is_record_uid(uid_or_title):
+            share_management_utils.try_load_record_on_demand(vault, uid_or_title)
+            return vault.vault_data.get_record(uid_or_title)
+        return None
 
     def _find_shared_folder(self, vault: vault_online.VaultOnline, uid_or_title: str):
         """Find a shared folder by UID or name."""

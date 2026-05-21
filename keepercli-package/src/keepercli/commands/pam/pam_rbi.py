@@ -1,19 +1,91 @@
 import os
 import argparse
+from typing import Optional
 
 from keepersdk import utils
+from keepersdk.errors import KeeperApiError
 from keepersdk.helpers.keeper_dag import dag_utils
 from keepersdk.helpers.tunnel.tunnel_graph import TunnelDAG
 from keepersdk.helpers.tunnel.tunnel_utils import get_keeper_tokens, get_config_uid
-from keepersdk.vault import record_management, vault_record
+from keepersdk.vault import record_management, vault_online, vault_record
 
 from .. import base
 from ... import api
+from ...helpers import record_utils
 from ...params import KeeperParams
-
 choices = ['on', 'off', 'default']
 
+_PAM_CONFIG_RECORD_TYPES = (
+    'pamAwsConfiguration', 'pamAzureConfiguration', 'pamGcpConfiguration',
+    'pamDomainConfiguration', 'pamNetworkConfiguration', 'pamOciConfiguration',
+)
+
 logger = api.get_logger()
+
+
+def _bootstrap_rbi_record(record: vault_record.TypedRecord) -> bool:
+    """Ensure trafficEncryptionSeed and pamRemoteBrowserSettings exist on the RBI record."""
+    dirty = False
+    traffic_encryption_key = record.get_typed_field('trafficEncryptionSeed')
+    if not traffic_encryption_key or not traffic_encryption_key.value:
+        seed = os.urandom(32)
+        base64_seed = utils.base64_url_encode(seed)
+        record_seed = vault_record.TypedField.create_field('trafficEncryptionSeed', base64_seed, required=False)
+        if traffic_encryption_key:
+            traffic_encryption_key.value = [base64_seed]
+        else:
+            record.fields.append(record_seed)
+        dirty = True
+
+    rbs_fld = record.get_typed_field('pamRemoteBrowserSettings')
+    if not rbs_fld:
+        rbsettings = {'connection': {'protocol': 'http', 'httpCredentialsUid': ''}}
+        pam_rbsettings = vault_record.TypedField.create_field('pamRemoteBrowserSettings', required=False)
+        pam_rbsettings.value = [rbsettings]
+        record.fields.append(pam_rbsettings)
+        dirty = True
+    elif not rbs_fld.value:
+        rbs_fld.value.append({'connection': {'protocol': 'http'}})  # type: ignore
+        dirty = True
+    return dirty
+
+
+def _save_rbi_record(vault: vault_online.VaultOnline, record: vault_record.TypedRecord) -> None:
+    """Persist RBI record body changes with a fresh revision (sync + retry on out-of-sync)."""
+    vault.sync_down()
+    try:
+        record_management.update_record(vault, record)
+    except KeeperApiError as err:
+        if 'OUT_OF_SYNC' not in str(err):
+            raise
+        vault.sync_down()
+        try:
+            record_management.update_record(vault, record)
+        except KeeperApiError as err2:
+            raise base.CommandError(
+                f'Record "{record.record_uid}" is out of sync with the server. '
+                'Run sync-down --force and retry.'
+            ) from err2
+    vault.sync_down()
+
+
+def _resolve_pam_config_record(
+    vault: vault_online.VaultOnline,
+    context: KeeperParams,
+    config_ref: str,
+) -> Optional[vault_record.TypedRecord]:
+    """Resolve a PAM configuration by UID or title (vault index version 6, not TypedRecord.version)."""
+    if not config_ref:
+        return None
+    info = vault.vault_data.get_record(config_ref)
+    if not info:
+        info = record_utils.try_resolve_single_record(config_ref, context)
+    if not info or info.version != 6 or info.record_type not in _PAM_CONFIG_RECORD_TYPES:
+        return None
+    loaded = vault.vault_data.load_record(info.record_uid)
+    if isinstance(loaded, vault_record.TypedRecord):
+        return loaded
+    return None
 
 
 class PAMRbiEditCommand(base.ArgparseCommand):
@@ -123,7 +195,10 @@ class PAMRbiEditCommand(base.ArgparseCommand):
 
         vault = context.vault
 
-        record = vault.vault_data.load_record(record_name)
+        record_info = record_utils.try_resolve_single_record(record_name, context)
+        if not record_info:
+            raise base.CommandError(f'Record \"{record_name}\" not found.')
+        record = vault.vault_data.load_record(record_info.record_uid)
         if not record:
             raise base.CommandError(f'Record \"{record_name}\" not found.')
         if not isinstance(record, vault_record.TypedRecord):
@@ -136,28 +211,7 @@ class PAMRbiEditCommand(base.ArgparseCommand):
                                "cannot be set up for RBI connections. "
                                f"RBI connection records must be of type: pamRemoteBrowser")
 
-        dirty = False
-        traffic_encryption_key = record.get_typed_field('trafficEncryptionSeed')
-        if not traffic_encryption_key or not traffic_encryption_key.value:
-            seed = os.urandom(32)
-            base64_seed = utils.base64_url_encode(seed)
-            record_seed = vault_record.TypedField.create_field('trafficEncryptionSeed', base64_seed, required=False)
-            if traffic_encryption_key:
-                traffic_encryption_key.value = [base64_seed]
-            else:
-                record.fields.append(record_seed)
-            dirty = True
-
-        rbs_fld = record.get_typed_field('pamRemoteBrowserSettings')
-        if not rbs_fld:
-            rbsettings = {'connection': {'protocol': 'http', 'httpCredentialsUid': ''}}
-            pam_rbsettings = vault_record.TypedField.create_field('pamRemoteBrowserSettings', required=False)
-            pam_rbsettings.value = [rbsettings]
-            record.fields.append(pam_rbsettings)
-            dirty = True
-        elif not rbs_fld.value:
-            rbs_fld.value.append({'connection': {'protocol': 'http'}}) # type: ignore
-            dirty = True
+        dirty = _bootstrap_rbi_record(record)
 
         if autofill:
             af_rec = vault.vault_data.load_record(autofill)
@@ -315,8 +369,7 @@ class PAMRbiEditCommand(base.ArgparseCommand):
             update_connection_int('audioSampleRate', audio_sample_rate)
 
         if dirty:
-            record_management.update_record(vault, record)
-            vault.sync_down()
+            _save_rbi_record(vault, record)
 
             traffic_encryption_key = record.get_typed_field('trafficEncryptionSeed')
             if not traffic_encryption_key:
@@ -337,35 +390,42 @@ class PAMRbiEditCommand(base.ArgparseCommand):
         # config parameter is optional and may be (auto)resolved from RBI record
         cfg_rec = None
         if config_name:
-            cfg_rec = vault.vault_data.load_record(config_name)
-            msg = ("not found" if cfg_rec is None else "not the right type"
-                   if not isinstance(cfg_rec, vault_record.TypedRecord) or cfg_rec.version != 6 else "")
-            if msg:
-                logger.warning(f'PAM Config record "{config_name}" {msg}')
-                cfg_rec = None
+            cfg_rec = _resolve_pam_config_record(vault, context, config_name)
+            if not cfg_rec:
+                logger.warning(
+                    f'PAM Config record "{config_name}" not found or not a valid PAM configuration type'
+                )
         if not cfg_rec:
             logger.debug(f"PAM Config - using config from record {record_uid}")
-            cfg_rec = vault.vault_data.load_record(existing_config_uid)
-            msg = ("not found" if cfg_rec is None else "not the right type"
-                   if not isinstance(cfg_rec, vault_record.TypedRecord) or cfg_rec.version != 6 else "")
-            if msg:
-                logger.warning(f'PAM Config record "{existing_config_uid}" {msg}')
-                cfg_rec = None
+            if existing_config_uid:
+                cfg_rec = _resolve_pam_config_record(vault, context, existing_config_uid)
+                if not cfg_rec:
+                    logger.warning(
+                        f'PAM Config record "{existing_config_uid}" not found or not a valid PAM configuration type'
+                    )
 
         config_uid = cfg_rec.record_uid if cfg_rec else None
         if not config_uid:
             raise base.CommandError(f'PAM Config record not found.')
 
-        tdag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, config_uid)
-        if tdag is None or not tdag.linking_dag.has_graph:
-            raise base.CommandError(f"No valid PAM Configuration UID set. "
-                               "This must be set or supplied for connections to work. "
-                               "The ConfigUID can be found by running "
-                               f"'pam config list'")
+        tdag = TunnelDAG(
+            vault, encrypted_session_token, encrypted_transmission_key, config_uid,
+            is_config=True, transmission_key=transmission_key,
+        )
+        if not tdag.linking_dag.has_graph:
+            raise base.CommandError(
+                f'No PAM Configuration DAG found for {config_uid}. '
+                'Initialize tunnel settings on the config first, e.g.\n'
+                f'  pam config edit {config_uid} --connections on '
+                '--remote-browser-isolation on --connections-recording on'
+            )
 
         if config_uid:
             if existing_config_uid and existing_config_uid != config_uid:
-                old_dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, existing_config_uid)
+                old_dag = TunnelDAG(
+                    vault, encrypted_session_token, encrypted_transmission_key, existing_config_uid,
+                    is_config=True, transmission_key=transmission_key,
+                )
                 old_dag.remove_from_dag(record_uid)
                 logger.debug(f'Updated existing PAM Config UID from: {existing_config_uid} to: {config_uid}')
             tdag.link_resource_to_config(record_uid)

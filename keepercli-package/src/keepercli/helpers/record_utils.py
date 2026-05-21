@@ -12,7 +12,7 @@ from keepersdk import crypto, utils
 from keepersdk.proto.enterprise_pb2 import GetSharingAdminsRequest, GetSharingAdminsResponse
 from keepersdk.proto.router_pb2 import RouterRotationInfo
 from keepersdk.proto.pam_pb2 import PAMGenericUidRequest
-from keepersdk.vault import vault_online, vault_record, vault_types, vault_utils
+from keepersdk.vault import vault_online, vault_record, vault_types, vault_utils, share_management_utils
 
 from ..commands.base import CommandError
 from ..params import KeeperParams
@@ -24,6 +24,21 @@ logger = api.get_logger()
 GET_SHARE_ADMINS = 'enterprise/get_sharing_admins'
 
 
+def is_record_uid(value: str) -> bool:
+    if not value:
+        return False
+    try:
+        return len(utils.base64_url_decode(value)) == 16
+    except Exception:
+        return False
+
+
+def try_load_record_on_demand(context: KeeperParams, record_uid: str) -> bool:
+    if context.vault is None:
+        return False
+    return share_management_utils.try_load_record_on_demand(context.vault, record_uid)
+
+
 def try_resolve_single_record(record_name: Optional[str], context: KeeperParams) -> Optional[vault_record.KeeperRecordInfo]:
     if context.vault is None:
         raise CommandError('Vault is not initialized. Login to initialize the vault.')
@@ -33,6 +48,12 @@ def try_resolve_single_record(record_name: Optional[str], context: KeeperParams)
     record_info = context.vault.vault_data.get_record(record_name)
     if record_info:
         return record_info
+
+    if is_record_uid(record_name):
+        try_load_record_on_demand(context, record_name)
+        record_info = context.vault.vault_data.get_record(record_name)
+        if record_info:
+            return record_info
 
     folder, name = folder_utils.try_resolve_path(context, record_name)
     if name:
@@ -159,11 +180,18 @@ def record_rotation_get(vault: vault_online.VaultOnline, record_uid_bytes: bytes
     return rotation_info_rs
 
 
-def pam_configurations_get_all(vault: vault_online.VaultOnline):
-    all_records = vault.vault_data.records()
-    all_v6_records = [rec for rec in list(all_records) if rec.version == 6]
+PAM_CONFIGURATION_RECORD_TYPES = (
+    'pamAwsConfiguration', 'pamAzureConfiguration', 'pamGcpConfiguration',
+    'pamDomainConfiguration', 'pamNetworkConfiguration', 'pamOciConfiguration',
+)
 
-    return all_v6_records
+
+def pam_configurations_get_all(vault: vault_online.VaultOnline):
+    return list(vault.vault_data.find_records(
+        criteria=None,
+        record_type=PAM_CONFIGURATION_RECORD_TYPES,
+        record_version=6,
+    ))
 
 
 def pam_decrypt_configuration_data(pam_config_v6_record):

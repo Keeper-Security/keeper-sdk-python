@@ -1,12 +1,13 @@
 import datetime
 import itertools
+import json
 import logging
 from re import findall
 from typing import Optional, Dict, List, Any, Generator, Iterable, Set, Tuple, Union
 
 from .. import crypto, utils
 from ..proto import enterprise_pb2, folder_pb2, record_pb2
-from ..vault import vault_online, vault_record, vault_types, vault_utils
+from . import vault_data, storage_types, vault_online, vault_record, vault_types, vault_utils, sync_down
 from ..enterprise import enterprise_data
 
 
@@ -162,7 +163,7 @@ def load_records_in_shared_folder(
     vault: vault_online.VaultOnline, 
     shared_folder_uid: str, 
     record_uids: Optional[Set[str]] = None
-) -> None:
+) -> Set[str]:
     try:
         shared_folder = _find_shared_folder(vault, shared_folder_uid)
         if not shared_folder:
@@ -176,12 +177,94 @@ def load_records_in_shared_folder(
         candidates = record_uids or record_keys.keys()
         record_set = {uid for uid in candidates if uid in record_keys and uid not in record_cache}
 
-        _load_records_in_batches(vault, record_set, record_keys)
+        loaded = _load_records_in_batches(vault, record_set, record_keys, shared_folder_uid)  # SF uid
+        if loaded:
+            changes = vault_data.RebuildTask(is_full_sync=False)
+            changes.add_records(loaded)
+            vault.vault_data.rebuild_data(changes)
+        return loaded
         
     except ShareNotFoundError:
         raise
     except Exception as e:
         raise ShareManagementError(f"Failed to load records in shared folder: {e}") from e
+
+
+def try_load_record_on_demand(vault: vault_online.VaultOnline, record_uid: str) -> bool:
+    """
+    Fetch and persist a record via vault/get_records_details when it is not in the
+    local vault index (shared-folder metadata, personal record keys, or API key).
+    """
+    if not record_uid or vault.vault_data.get_record(record_uid):
+        return vault.vault_data.get_record(record_uid) is not None
+
+    for shared_folder_uid in _shared_folder_uids_for_record(vault, record_uid):
+        try:
+            load_records_in_shared_folder(vault, shared_folder_uid, {record_uid})
+        except ShareManagementError as e:
+            logger.debug('On-demand load for record "%s" in SF "%s": %s', record_uid, shared_folder_uid, e)
+        if vault.vault_data.get_record(record_uid):
+            return True
+
+    plain_key = _get_plaintext_record_key_from_storage(vault, record_uid)
+    record_keys = {record_uid: plain_key} if plain_key else {}
+    encrypter_uid = vault.vault_data.storage.personal_scope_uid
+    loaded = _load_records_in_batches(vault, {record_uid}, record_keys, encrypter_uid)
+    if loaded:
+        changes = vault_data.RebuildTask(is_full_sync=False)
+        changes.add_records(loaded)
+        vault.vault_data.rebuild_data(changes)
+    return vault.vault_data.get_record(record_uid) is not None
+
+
+def _get_plaintext_record_key_from_storage(
+    vault: vault_online.VaultOnline, record_uid: str
+) -> Optional[bytes]:
+    for link in vault.vault_data.storage.record_keys.get_links_by_subject(record_uid):
+        key = vault.vault_data.decrypt_record_key(link)
+        if key:
+            return key
+    return None
+
+
+def _resolve_record_key_for_details(
+    vault: vault_online.VaultOnline,
+    record_data,
+    record_uid: str,
+    record_keys: Dict[str, bytes],
+) -> Optional[bytes]:
+    _process_record_owner_key(record_data, record_uid, record_keys)
+    if record_uid in record_keys and record_keys[record_uid]:
+        return record_keys[record_uid]
+    if not record_data.recordKey:
+        return None
+    try:
+        return sync_down.decrypt_keeper_key(
+            vault.keeper_auth.auth_context,
+            record_data.recordKey,
+            record_data.recordKeyType,
+        )
+    except Exception as e:
+        logger.debug('Cannot resolve record key for "%s" from API: %s', record_uid, e)
+        return None
+
+
+def _shared_folder_uids_for_record(vault: vault_online.VaultOnline, record_uid: str) -> List[str]:
+    sf_uids: List[str] = []
+    seen: Set[str] = set()
+    for link in vault.vault_data.storage.record_keys.get_links_by_subject(record_uid):
+        if (link.key_type == storage_types.StorageKeyType.SharedFolderKey_AES_Any
+                and link.encrypter_uid not in seen):
+            seen.add(link.encrypter_uid)
+            sf_uids.append(link.encrypter_uid)
+    for sf_info in vault.vault_data.shared_folders():
+        if sf_info.shared_folder_uid in seen:
+            continue
+        sf = vault.vault_data.load_shared_folder(shared_folder_uid=sf_info.shared_folder_uid)
+        if sf and any(r.record_uid == record_uid for r in sf.record_permissions):
+            seen.add(sf_info.shared_folder_uid)
+            sf_uids.append(sf_info.shared_folder_uid)
+    return sf_uids
 
 
 def _find_shared_folder(vault: vault_online.VaultOnline, shared_folder_uid: str):
@@ -244,8 +327,14 @@ def _build_record_details_request(record_uids: set) -> record_pb2.GetRecordDataW
     return request
 
 
-def _load_records_in_batches(vault: vault_online.VaultOnline, record_set: set, record_keys: dict):
+def _load_records_in_batches(
+    vault: vault_online.VaultOnline,
+    record_set: set,
+    record_keys: dict,
+    key_encrypter_uid: str,
+) -> Set[str]:
 
+    loaded: Set[str] = set()
     while record_set:
         request = _build_record_details_request(record_set)
         record_set.clear()
@@ -260,7 +349,10 @@ def _load_records_in_batches(vault: vault_online.VaultOnline, record_set: set, r
             logger.warning("No record data received from API")
             break
             
-        _process_record_batch(vault, response, record_keys, record_set)
+        batch_loaded = _process_record_batch(vault, response, record_keys, record_set, key_encrypter_uid)
+        loaded.update(batch_loaded)
+        record_set.difference_update({x.record_uid for x in vault.vault_data.records()})
+    return loaded
 
 
 def _process_record_owner_key(record_data, record_uid: str, record_keys: dict):
@@ -274,28 +366,36 @@ def _process_record_owner_key(record_data, record_uid: str, record_keys: dict):
             )
 
 
-def _process_record_batch(vault: vault_online.VaultOnline, response, record_keys: dict, record_set: set):
+def _process_record_batch(
+    vault: vault_online.VaultOnline,
+    response,
+    record_keys: dict,
+    record_set: set,
+    key_encrypter_uid: str,
+) -> Set[str]:
 
+    batch_records: List[dict] = []
     for record_info in response.recordDataWithAccessInfo:
         record_uid = utils.base64_url_encode(record_info.recordUid)
         record_data = record_info.recordData
         
         try:
-            _process_record_owner_key(record_data, record_uid, record_keys)
-
-            if record_uid not in record_keys:
+            record_key = _resolve_record_key_for_details(vault, record_data, record_uid, record_keys)
+            if not record_key:
                 continue
-
-            record_key = record_keys[record_uid]
+            record_keys[record_uid] = record_key
             version = record_data.version
             record = _create_record_dict(record_uid, record_data, record_key, version)
             
-            _handle_record_versions(vault, record, record_data, version, record_set)
+            _handle_record_versions(record, record_data, version)
             _add_share_permissions(record, record_info)
-            record_set.add(record_uid)
+            record_set.update(_collect_typed_record_ref_uids(record))
+            batch_records.append(record)
             
         except Exception as e:
             logger.debug('Error decrypting record "%s": %s', record_uid, e)
+
+    return _persist_loaded_records(vault, batch_records, key_encrypter_uid)
 
 
 def _create_record_dict(record_uid: str, record_data, record_key: bytes, version: int) -> dict:
@@ -329,13 +429,103 @@ def _process_v2_extra_data(record: dict, record_data, record_key: bytes):
         record['extra_unencrypted'] = crypto.decrypt_aes_v1(extra_decoded, record_key)
 
 
-def _process_v3_record_references(vault: vault_online.VaultOnline, record: dict, record_set: set):
+def _collect_typed_record_ref_uids(record: dict) -> Set[str]:
+    version = record.get('version', 0)
+    if version < V3_VERSION or version == V4_VERSION:
+        return set()
+    data_unencrypted = record.get('data_unencrypted')
+    if not data_unencrypted:
+        return set()
+    try:
+        data_dict = json.loads(data_unencrypted.decode())
+    except Exception:
+        return set()
+    extra_dict = None
+    extra_unencrypted = record.get('extra_unencrypted')
+    if extra_unencrypted:
+        try:
+            extra_dict = json.loads(extra_unencrypted.decode())
+        except Exception:
+            extra_dict = None
+    typed = vault_record.TypedRecord()
+    typed.record_uid = record['record_uid']
+    typed.version = version
+    typed.load_record_data(data_dict, extra_dict)
+    refs: Set[str] = set()
+    for ref in itertools.chain(typed.fields, typed.custom):
+        if ref.type.endswith('Ref') and isinstance(ref.value, list):
+            refs.update(ref.value)
+    return refs
 
-    v3_record = vault.vault_data.load_record(record_uid=record['record_uid'])
-    if isinstance(v3_record, vault_record.TypedRecord):
-        for ref in itertools.chain(v3_record.fields, v3_record.custom):
-            if ref.type.endswith('Ref') and isinstance(ref.value, list):
-                record_set.update(ref.value)
+
+def _encrypted_field_to_bytes(value: Union[str, bytes]) -> bytes:
+    if isinstance(value, bytes):
+        return value
+    if isinstance(value, str):
+        return utils.base64_url_decode(value)
+    return b''
+
+
+def _dict_to_storage_record(record: dict) -> storage_types.StorageRecord:
+    sr = storage_types.StorageRecord()
+    sr.record_uid = record['record_uid']
+    sr.revision = record.get('revision', 0)
+    sr.version = record.get('version', 0)
+    sr.modified_time = record.get('client_modified_time', 0)
+    sr.shared = record.get('shared', False)
+    sr.data = _encrypted_field_to_bytes(record['data'])
+    if record.get('extra'):
+        sr.extra = _encrypted_field_to_bytes(record['extra'])
+    return sr
+
+
+def _ensure_record_key_link(
+    vault: vault_online.VaultOnline,
+    record: dict,
+    key_encrypter_uid: str,
+) -> None:
+    record_uid = record['record_uid']
+    if list(vault.vault_data.storage.record_keys.get_links_by_subject(record_uid)):
+        return
+    record_key = record.get('record_key_unencrypted')
+    if not record_key:
+        return
+    srk = storage_types.StorageRecordKey()
+    srk.record_uid = record_uid
+    srk.encrypter_uid = key_encrypter_uid
+    personal_uid = vault.vault_data.storage.personal_scope_uid
+    if key_encrypter_uid == personal_uid:
+        srk.key_type = storage_types.StorageKeyType.UserClientKey_AES_GCM
+        srk.record_key = crypto.encrypt_aes_v2(
+            record_key, vault.keeper_auth.auth_context.client_key
+        )
+    else:
+        srk.key_type = storage_types.StorageKeyType.SharedFolderKey_AES_Any
+        sf = vault.vault_data._shared_folders.get(key_encrypter_uid)
+        if not sf:
+            return
+        srk.record_key = crypto.encrypt_aes_v2(record_key, sf.shared_folder_key)
+    vault.vault_data.storage.record_keys.put_links([srk])
+
+
+def _persist_loaded_records(
+    vault: vault_online.VaultOnline,
+    records: List[dict],
+    key_encrypter_uid: str,
+) -> Set[str]:
+    if not records:
+        return set()
+    storage_records: List[storage_types.StorageRecord] = []
+    loaded: Set[str] = set()
+    for record in records:
+        if not record.get('data_unencrypted'):
+            continue
+        storage_records.append(_dict_to_storage_record(record))
+        _ensure_record_key_link(vault, record, key_encrypter_uid)
+        loaded.add(record['record_uid'])
+    if storage_records:
+        vault.vault_data.storage.records.put_entities(storage_records)
+    return loaded
 
 
 def _process_v4_record_metadata(record: dict, record_data):
@@ -353,16 +543,13 @@ def _process_record_owner_info(record: dict, record_data):
         record['link_key'] = utils.base64_url_encode(record_data.recordKey)
 
 
-def _handle_record_versions(vault: vault_online.VaultOnline, record: dict, record_data, version: int, record_set: set):
+def _handle_record_versions(record: dict, record_data, version: int) -> None:
 
     record_key = record['record_key_unencrypted']
     record['data_unencrypted'] = _decrypt_record_data(record_data, record_key, version)
 
     if version <= MAX_V2_VERSION:
         _process_v2_extra_data(record, record_data, record_key)
-    
-    if version == V3_VERSION:
-        _process_v3_record_references(vault, record, record_set)
     elif version == V4_VERSION:
         _process_v4_record_metadata(record, record_data)
     

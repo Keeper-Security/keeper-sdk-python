@@ -61,7 +61,8 @@ def ensure_resource_meta_v1(content):
 
 
 class TunnelDAG:
-    def __init__(self, vault: vault_online.VaultOnline, encrypted_session_token, encrypted_transmission_key, record_uid: str, is_config=False):
+    def __init__(self, vault: vault_online.VaultOnline, encrypted_session_token, encrypted_transmission_key,
+                 record_uid: str, is_config=False, transmission_key=None):
         config_uid = None
         if not is_config:
             config_uid = tunnel_utils.get_config_uid(vault, encrypted_session_token, encrypted_transmission_key, record_uid)
@@ -74,6 +75,7 @@ class TunnelDAG:
         self.encrypted_transmission_key = encrypted_transmission_key
         self.conn = Connection(vault=vault, encrypted_transmission_key=self.encrypted_transmission_key,
                                encrypted_session_token=self.encrypted_session_token,
+                               transmission_key=transmission_key,
                                use_write_protobuf=True
                                )
         self.linking_dag = DAG(conn=self.conn, record=self.record, graph_id=0, write_endpoint=PamEndpoints.PAM)
