@@ -33,10 +33,10 @@ def is_record_uid(value: str) -> bool:
         return False
 
 
-def try_load_record_on_demand(context: KeeperParams, record_uid: str) -> bool:
-    if context.vault is None:
+def try_load_record_on_demand(vault: Optional[vault_online.VaultOnline], record_uid: str) -> bool:
+    if vault is None:
         return False
-    return share_management_utils.try_load_record_on_demand(context.vault, record_uid)
+    return share_management_utils.try_load_record_on_demand(vault, record_uid)
 
 
 def try_resolve_single_record(record_name: Optional[str], context: KeeperParams) -> Optional[vault_record.KeeperRecordInfo]:
@@ -50,7 +50,7 @@ def try_resolve_single_record(record_name: Optional[str], context: KeeperParams)
         return record_info
 
     if is_record_uid(record_name):
-        try_load_record_on_demand(context, record_name)
+        try_load_record_on_demand(context.vault, record_name)
         record_info = context.vault.vault_data.get_record(record_name)
         if record_info:
             return record_info

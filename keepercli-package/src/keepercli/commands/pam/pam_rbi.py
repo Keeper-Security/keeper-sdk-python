@@ -70,13 +70,13 @@ def _save_rbi_record(vault: vault_online.VaultOnline, record: vault_record.Typed
 
 
 def _resolve_pam_config_record(
-    vault: vault_online.VaultOnline,
     context: KeeperParams,
     config_ref: str,
 ) -> Optional[vault_record.TypedRecord]:
     """Resolve a PAM configuration by UID or title (vault index version 6, not TypedRecord.version)."""
-    if not config_ref:
+    if not config_ref or context.vault is None:
         return None
+    vault = context.vault
     info = vault.vault_data.get_record(config_ref)
     if not info:
         info = record_utils.try_resolve_single_record(config_ref, context)
@@ -390,7 +390,7 @@ class PAMRbiEditCommand(base.ArgparseCommand):
         # config parameter is optional and may be (auto)resolved from RBI record
         cfg_rec = None
         if config_name:
-            cfg_rec = _resolve_pam_config_record(vault, context, config_name)
+            cfg_rec = _resolve_pam_config_record(context, config_name)
             if not cfg_rec:
                 logger.warning(
                     f'PAM Config record "{config_name}" not found or not a valid PAM configuration type'
@@ -398,7 +398,7 @@ class PAMRbiEditCommand(base.ArgparseCommand):
         if not cfg_rec:
             logger.debug(f"PAM Config - using config from record {record_uid}")
             if existing_config_uid:
-                cfg_rec = _resolve_pam_config_record(vault, context, existing_config_uid)
+                cfg_rec = _resolve_pam_config_record(context, existing_config_uid)
                 if not cfg_rec:
                     logger.warning(
                         f'PAM Config record "{existing_config_uid}" not found or not a valid PAM configuration type'
