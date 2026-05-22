@@ -15,8 +15,11 @@ from ..proto.APIRequest_pb2 import (
     GetAppInfoResponse, RemoveAppClientsRequest, Device, AddAppClientRequest, 
     AppShareAdd, AddAppSharesRequest, RemoveAppSharesRequest
 )
+from ..errors import KeeperApiError
 from ..proto.enterprise_pb2 import GENERAL
-from ..proto.record_pb2 import ApplicationAddRequest
+from ..proto import record_pb2
+from ..proto.record_pb2 import ApplicationAddRequest, RecordUpdate, RecordsUpdateRequest
+from . import vault_extensions
 
 URL_GET_SUMMARY_API = 'vault/get_applications_summary'
 URL_GET_APP_INFO_API = 'vault/get_app_info'
@@ -27,6 +30,7 @@ CLIENT_REMOVE_URL = 'vault/app_client_remove'
 
 SHARE_ADD_URL = 'vault/app_share_add'
 SHARE_REMOVE_URL = 'vault/app_share_remove'
+RECORDS_UPDATE_URL = 'vault/records_update'
 
 CLIENT_SHORT_ID_LENGTH = 8
 
@@ -113,6 +117,74 @@ def get_secrets_manager_app(vault: vault_online.VaultOnline, uid_or_name: str) -
     )
 
 
+def _find_ksm_app_record(vault: vault_online.VaultOnline, uid_or_name: str) -> vault_record.KeeperRecordInfo:
+    record = next(
+        (r for r in vault.vault_data.records()
+         if r.record_uid == uid_or_name or r.title == uid_or_name),
+        None)
+    if not record:
+        raise ValueError(f'No application found with UID/Name: {uid_or_name}')
+    info = vault.vault_data.get_record(record.record_uid)
+    if not info or info.version != 5:
+        raise ValueError(f'Record "{uid_or_name}" is not a Secrets Manager application')
+    return info
+
+
+def update_secrets_manager_app(vault: vault_online.VaultOnline, uid_or_name: str, new_name: str) -> Tuple[str, str, str]:
+    """Rename a KSM application (v5 app record title). Returns (app_uid, old_name, new_name)."""
+    if not new_name or not new_name.strip():
+        raise ValueError('New application name is required')
+
+    new_name = new_name.strip()
+    app_info = _find_ksm_app_record(vault, uid_or_name)
+    app_uid = app_info.record_uid
+
+    duplicate = next(
+        (r for r in vault.vault_data.records()
+         if r.title == new_name and r.record_uid != app_uid),
+        None)
+    if duplicate:
+        raise ValueError(f'Application with the name "{new_name}" already exists')
+
+    loaded = vault.vault_data.load_record(app_uid)
+    if not isinstance(loaded, vault_record.ApplicationRecord):
+        raise ValueError(f'Record "{uid_or_name}" is not a Secrets Manager application')
+
+    old_name = loaded.title
+    record_key = vault.vault_data.get_record_key(app_uid)
+    if not record_key:
+        raise ValueError(f'Could not resolve record key for application {app_uid}')
+
+    data_dict = {
+        'title': new_name,
+        'type': loaded.app_type or 'app',
+    }
+
+    record_uid_bytes = utils.base64_url_decode(app_uid)
+    update = RecordUpdate()
+    update.record_uid = record_uid_bytes
+    update.client_modified_time = utils.current_milli_time()
+    update.revision = app_info.revision
+    update.data = crypto.encrypt_aes_v2(vault_extensions.get_padded_json_bytes(data_dict), record_key)
+
+    request = RecordsUpdateRequest()
+    request.client_time = utils.current_milli_time()
+    request.records.append(update)
+
+    response = vault.keeper_auth.execute_auth_rest(
+        RECORDS_UPDATE_URL, request, response_type=record_pb2.RecordsModifyResponse)
+    if response is None:
+        raise KeeperApiError('unknown', 'vault/records_update returned no response')
+
+    status = next((x for x in response.records if record_uid_bytes == x.record_uid), None)
+    if status and status.status != record_pb2.RecordModifyResult.RS_SUCCESS:
+        code = record_pb2.RecordModifyResult.Name(status.status)
+        raise KeeperApiError(code, status.message)
+
+    vault.sync_down()
+    return app_uid, old_name, new_name
+
+
 def create_secrets_manager_app(vault: vault_online.VaultOnline, name: str, force_add: Optional[bool] = False):
     
     existing_app = next((r for r in vault.vault_data.records() if r.title == name), None)
@@ -146,6 +218,14 @@ def create_secrets_manager_app(vault: vault_online.VaultOnline, name: str, force
     
     app_uid_str = utils.base64_url_encode(ra.app_uid)
     return app_uid_str
+
+
+def update_secrets_manager_app_shares(vault: vault_online.VaultOnline, uid_or_name: str,
+                                      secret_uids: List[str], is_editable: bool) -> List[str]:
+    """Update editable permissions on record/SF shares already in a KSM app."""
+    app_info = _find_ksm_app_record(vault, uid_or_name)
+    return KSMShareManagement.update_secrets_in_ksm_app(
+        vault, app_info.record_uid, secret_uids, is_editable)
 
 
 def remove_secrets_manager_app(vault: vault_online.VaultOnline, uid_or_name: str, force: Optional[bool] = False):
@@ -881,3 +961,56 @@ class KSMShareManagement:
         request.appRecordUid = utils.base64_url_decode(app_uid)
         request.shares.extend(utils.base64_url_decode(uid) for uid in secret_uids)
         vault.keeper_auth.execute_auth_rest(rest_endpoint=SHARE_REMOVE_URL, request=request)
+
+    @staticmethod
+    def update_secrets_in_ksm_app(vault: vault_online.VaultOnline, app_uid: str, secret_uids: List[str],
+                                  is_editable: bool) -> List[str]:
+        """Update editable vs read-only on secrets already shared with the app (remove + re-add)."""
+        if not secret_uids:
+            raise ValueError('At least one secret UID is required')
+
+        master_key = vault.vault_data.get_record_key(app_uid)
+        if not master_key:
+            raise ValueError(f'Could not resolve record key for application {app_uid}')
+
+        app_infos = get_app_info(vault=vault, app_uid=app_uid)
+        if not app_infos:
+            raise ValueError(f'Could not retrieve application info for UID: {app_uid}')
+
+        existing_shares = {
+            utils.base64_url_encode(share.secretUid): share
+            for share in getattr(app_infos[0], 'shares', [])
+        }
+
+        uids_to_update = []
+        for uid in secret_uids:
+            if uid not in existing_shares:
+                logging.warning(
+                    'Secret "%s" is not currently shared with this application. '
+                    'Use share add first.', uid)
+                continue
+            current_share = existing_shares[uid]
+            if current_share.editable == is_editable:
+                perm = 'editable' if is_editable else 'read-only'
+                logging.info('Secret "%s" is already %s. No change needed.', uid, perm)
+                continue
+            uids_to_update.append(uid)
+
+        if not uids_to_update:
+            logging.warning('No share permissions to update.')
+            return []
+
+        KSMShareManagement.remove_secrets_from_ksm_app(vault, app_uid, uids_to_update)
+
+        app_shares = []
+        for uid in uids_to_update:
+            share_info = KSMShareManagement._process_secret(vault, uid, master_key, is_editable)
+            if share_info:
+                app_shares.append(share_info['app_share'])
+
+        if not app_shares:
+            raise ValueError('No valid secrets found to update. Run sync-down and try again.')
+
+        KSMShareManagement._send_share_request(vault, app_uid, app_shares)
+        vault.sync_down()
+        return uids_to_update
