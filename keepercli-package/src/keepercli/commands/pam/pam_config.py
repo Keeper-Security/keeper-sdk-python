@@ -14,19 +14,17 @@ from keepersdk.proto import pam_pb2, record_pb2
 from keepersdk.helpers import config_utils
 from keepersdk.vault import vault_online, vault_utils, vault_record, record_management
 from keepersdk.helpers.pam_config_facade import PamConfigurationRecordFacade
-from keepersdk.helpers.tunnel.tunnel_graph import TunnelDAG, tunnel_utils
+from keepersdk.helpers.tunnel.tunnel_graph import TunnelDAG, TriStateSetting, tunnel_utils
 from keepersdk.helpers.keeper_dag import dag_utils
+from keepersdk.helpers.keeper_dag.constants import PamConfigurationRecordType, PAM_CONFIGURATIONS
 from .. import record_edit
 
 
 logger = api.get_logger()
 
 
-# PAM Configuration record types
-PAM_CONFIG_RECORD_TYPES = (
-    'pamAwsConfiguration', 'pamAzureConfiguration', 'pamGcpConfiguration',
-    'pamDomainConfiguration', 'pamNetworkConfiguration', 'pamOciConfiguration'
-)
+# PAM Configuration record types (vault record type name strings)
+PAM_CONFIG_RECORD_TYPES = PAM_CONFIGURATIONS
 
 
 class PAMConfigListCommand(base.ArgparseCommand):
@@ -488,17 +486,17 @@ class PamConfigurationEditMixin(record_edit.RecordEditMixin):
         """Parses properties specific to each configuration type."""
         record_type = record.record_type
         
-        if record_type == 'pamNetworkConfiguration':
+        if record_type == PamConfigurationRecordType.NETWORK:
             self._parse_network_properties(extra_properties, kwargs)
-        elif record_type == 'pamAwsConfiguration':
+        elif record_type == PamConfigurationRecordType.AWS:
             self._parse_aws_properties(extra_properties, kwargs)
-        elif record_type == 'pamGcpConfiguration':
+        elif record_type == PamConfigurationRecordType.GCP:
             self._parse_gcp_properties(extra_properties, kwargs)
-        elif record_type == 'pamAzureConfiguration':
+        elif record_type == PamConfigurationRecordType.AZURE:
             self._parse_azure_properties(extra_properties, kwargs)
-        elif record_type == 'pamDomainConfiguration':
+        elif record_type == PamConfigurationRecordType.DOMAIN:
             self._parse_domain_properties(vault, record, extra_properties, kwargs)
-        elif record_type == 'pamOciConfiguration':
+        elif record_type == PamConfigurationRecordType.OCI:
             self._parse_oci_properties(extra_properties, kwargs)
 
     def _parse_network_properties(self, extra_properties: list, kwargs: dict):
@@ -696,20 +694,20 @@ class PamConfigurationEditMixin(record_edit.RecordEditMixin):
         )
 
         if admin_cred_ref:
-            tmp_dag.link_user_to_config_with_options(admin_cred_ref, is_admin='on')
+            tmp_dag.link_user_to_config_with_options(admin_cred_ref, is_admin=TriStateSetting.ON)
 
         tmp_dag.print_tunneling_config(record.record_uid, None)
 
 
 # Configuration type mapping
 CONFIG_TYPE_TO_RECORD_TYPE = {
-    'aws': 'pamAwsConfiguration',
-    'azure': 'pamAzureConfiguration',
-    'local': 'pamNetworkConfiguration',
-    'network': 'pamNetworkConfiguration',
-    'gcp': 'pamGcpConfiguration',
-    'domain': 'pamDomainConfiguration',
-    'oci': 'pamOciConfiguration'
+    'aws': PamConfigurationRecordType.AWS,
+    'azure': PamConfigurationRecordType.AZURE,
+    'local': PamConfigurationRecordType.NETWORK,
+    'network': PamConfigurationRecordType.NETWORK,
+    'gcp': PamConfigurationRecordType.GCP,
+    'domain': PamConfigurationRecordType.DOMAIN,
+    'oci': PamConfigurationRecordType.OCI,
 }
 
 common_parser = argparse.ArgumentParser(add_help=False)
@@ -887,7 +885,7 @@ class PAMConfigNewCommand(base.ArgparseCommand, PamConfigurationEditMixin):
         shared_folder_uid = value.get('folderUid')
         admin_cred_ref = None
         
-        if record.record_type == 'pamDomainConfiguration' and not kwargs.get('force_domain_admin', False):
+        if record.record_type == PamConfigurationRecordType.DOMAIN and not kwargs.get('force_domain_admin', False):
             admin_cred_ref = value.get('adminCredentialRef')
         
         return gateway_uid, shared_folder_uid, admin_cred_ref
@@ -974,10 +972,13 @@ class PAMConfigEditCommand(base.ArgparseCommand, PamConfigurationEditMixin):
         record_management.update_record(vault, configuration)
         self._update_controller_and_folder_if_changed(vault, configuration, orig_gateway_uid, orig_shared_folder_uid)
 
-        if any(kwargs.get(k) is not None for k in (
-                'connections', 'tunneling', 'rotation', 'recording', 'typescriptrecording', 'remotebrowserisolation')):
+        target_keys = {
+            'connections', 'tunneling', 'rotation', 'recording', 
+            'typescriptrecording', 'remotebrowserisolation'
+        }
+        if all(kwargs.get(k) is None for k in target_keys):
             admin_cred_ref = None
-            if configuration.record_type == 'pamDomainConfiguration' and not kwargs.get('force_domain_admin'):
+            if configuration.record_type == PamConfigurationRecordType.DOMAIN and not kwargs.get('force_domain_admin'):
                 pam_field = configuration.get_typed_field('pamResources')
                 if pam_field:
                     value = pam_field.get_default_value(dict)

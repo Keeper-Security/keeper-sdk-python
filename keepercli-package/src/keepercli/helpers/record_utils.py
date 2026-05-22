@@ -9,6 +9,7 @@ from typing import Iterator, List, Optional
 from urllib import parse
 
 from keepersdk import crypto, utils
+from keepersdk.helpers.keeper_dag.constants import PAM_CONFIGURATIONS
 from keepersdk.proto.enterprise_pb2 import GetSharingAdminsRequest, GetSharingAdminsResponse
 from keepersdk.proto.router_pb2 import RouterRotationInfo
 from keepersdk.proto.pam_pb2 import PAMGenericUidRequest
@@ -180,10 +181,7 @@ def record_rotation_get(vault: vault_online.VaultOnline, record_uid_bytes: bytes
     return rotation_info_rs
 
 
-PAM_CONFIGURATION_RECORD_TYPES = (
-    'pamAwsConfiguration', 'pamAzureConfiguration', 'pamGcpConfiguration',
-    'pamDomainConfiguration', 'pamNetworkConfiguration', 'pamOciConfiguration',
-)
+PAM_CONFIGURATION_RECORD_TYPES = PAM_CONFIGURATIONS
 
 
 def pam_configurations_get_all(vault: vault_online.VaultOnline):
