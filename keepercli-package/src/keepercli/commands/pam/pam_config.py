@@ -179,9 +179,7 @@ class PAMConfigListCommand(base.ArgparseCommand):
         """Normalize TypedField.get_external_value() to display strings."""
         raw = field.get_external_value()
         if raw is None:
-            raw = field.value if isinstance(field.value, list) else None
-        if raw is None:
-            return []
+            raw = field.value if isinstance(field.value, list) else []
         items = raw if isinstance(raw, list) else [raw]
         values = []
         for item in items:
