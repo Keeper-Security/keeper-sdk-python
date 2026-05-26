@@ -20,6 +20,13 @@ API_PATH_GET_CONTROLLERS = "get_controllers"
 VERIFY_SSL = bool(os.environ.get("VERIFY_SSL", "TRUE") == "TRUE")
 
 
+def _router_base_url(keeper_endpoint) -> str:
+    """Full router base URL (scheme + host), matching keepersdk execute_router_rest."""
+    if 'ROUTER_URL' in os.environ:
+        return os.environ['ROUTER_URL'].rstrip('/')
+    return f'https://{keeper_endpoint.get_router_server()}'
+
+
 def router_get_connected_gateways(vault: vault_online.VaultOnline) -> Optional[pam_pb2.PAMOnlineControllers]:
     """Get connected gateways from the router."""
     rs = vault.keeper_auth.keeper_endpoint.execute_router_rest(
@@ -44,14 +51,14 @@ def router_send_action_to_gateway(context: KeeperParams, gateway_action: Gateway
                                   destination_gateway_uid_str=None, gateway_timeout=15000, transmission_key=None,
                                   encrypted_transmission_key=None, encrypted_session_token=None):
 
-    krouter_host = context.auth.keeper_endpoint.get_router_server()
+    krouter_url = _router_base_url(context.auth.keeper_endpoint)
 
     try:
         router_enterprise_controllers_connected = \
             [x.controllerUid for x in router_get_connected_gateways(context.vault).controllers]
 
     except requests.exceptions.ConnectionError as errc:
-        logging.info(f"Looks like router is down. Router URL [{krouter_host}]")
+        logging.info(f"Looks like router is down. Router URL [{krouter_url}]")
         return
     except Exception as e:
         raise e
@@ -148,7 +155,7 @@ def router_send_action_to_gateway(context: KeeperParams, gateway_action: Gateway
 def router_send_message_to_gateway(context: KeeperParams, transmission_key, rq_proto,
                                    encrypted_transmission_key=None, encrypted_session_token=None):
 
-    krouter_host = context.auth.keeper_endpoint.get_router_server()
+    krouter_url = _router_base_url(context.auth.keeper_endpoint)
 
     if not encrypted_transmission_key:
         server_public_key = endpoint.SERVER_PUBLIC_KEYS[context.auth.keeper_endpoint.server_key_id]
@@ -166,7 +173,7 @@ def router_send_message_to_gateway(context: KeeperParams, transmission_key, rq_p
         encrypted_session_token = crypto.encrypt_aes_v2(context.auth.auth_context.session_token, transmission_key)
 
     rs = requests.post(
-        krouter_host+"/api/user/send_controller_message",
+        krouter_url + "/api/user/send_controller_message",
         verify=VERIFY_SSL,
 
         headers={
@@ -388,7 +395,7 @@ def router_get_rotation_schedules(vault: vault_online, proto_request):
 def _post_request_to_router(vault: vault_online.VaultOnline, path, rq_proto=None, rs_type=None, method='post',
                             raw_without_status_check_response=False, query_params=None, transmission_key=None,
                             encrypted_transmission_key=None, encrypted_session_token=None):
-    krouter_host = vault.keeper_auth.keeper_endpoint.get_router_server()
+    krouter_url = _router_base_url(vault.keeper_auth.keeper_endpoint)
     path = '/api/user/' + path
 
     if not transmission_key:
@@ -414,7 +421,7 @@ def _post_request_to_router(vault: vault_online.VaultOnline, path, rq_proto=None
 
     try:
         rs = requests.request(method,
-                              krouter_host + path,
+                              krouter_url + path,
                               params=query_params,
                               verify=VERIFY_SSL,
                               headers={
@@ -424,7 +431,7 @@ def _post_request_to_router(vault: vault_online.VaultOnline, path, rq_proto=None
                               data=encrypted_payload if rq_proto else None
         )
     except ConnectionError as e:
-        raise KeeperApiError('-1', f"KRouter is not reachable on '{krouter_host}'. Error: ${e}")
+        raise KeeperApiError('-1', f"KRouter is not reachable on '{krouter_url}'. Error: ${e}")
     except Exception as ex:
         raise ex
 
