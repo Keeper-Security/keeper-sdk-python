@@ -1,4 +1,6 @@
 import logging
+from enum import Enum
+from typing import Optional, Union
 
 from . import tunnel_utils
 
@@ -11,6 +13,33 @@ from ..keeper_dag.dag_crypto import generate_random_bytes
 from ...vault import vault_online, vault_record
 
 logger = logging.getLogger(__name__)
+
+
+class TriStateSetting(str, Enum):
+    """Tri-state CLI values for ACL/tunnel options (maps to on/off/default)."""
+
+    ON = 'on'
+    OFF = 'off'
+    DEFAULT = 'default'
+
+
+AclOptionValue = Optional[Union[bool, TriStateSetting]]
+
+
+def _acl_edge_option_value(value: AclOptionValue) -> Optional[Union[bool, str]]:
+    """Resolve bool (explicit flag) or TriStateSetting to ACL edge content values."""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, TriStateSetting):
+        return {
+            TriStateSetting.ON: True,
+            TriStateSetting.OFF: False,
+            TriStateSetting.DEFAULT: '',
+        }[value]
+    raise TypeError(f'Invalid ACL option value: {value!r}')
+
 
 def get_vertex_content(vertex):
     return_content = None
@@ -61,7 +90,8 @@ def ensure_resource_meta_v1(content):
 
 
 class TunnelDAG:
-    def __init__(self, vault: vault_online.VaultOnline, encrypted_session_token, encrypted_transmission_key, record_uid: str, is_config=False):
+    def __init__(self, vault: vault_online.VaultOnline, encrypted_session_token, encrypted_transmission_key,
+                 record_uid: str, is_config=False, transmission_key=None):
         config_uid = None
         if not is_config:
             config_uid = tunnel_utils.get_config_uid(vault, encrypted_session_token, encrypted_transmission_key, record_uid)
@@ -74,6 +104,7 @@ class TunnelDAG:
         self.encrypted_transmission_key = encrypted_transmission_key
         self.conn = Connection(vault=vault, encrypted_transmission_key=self.encrypted_transmission_key,
                                encrypted_session_token=self.encrypted_session_token,
+                               transmission_key=transmission_key,
                                use_write_protobuf=True
                                )
         self.linking_dag = DAG(conn=self.conn, record=self.record, graph_id=0, write_endpoint=PamEndpoints.PAM)
@@ -264,25 +295,26 @@ class TunnelDAG:
             config_vertex = self.linking_dag.add_vertex(uid=self.record.record_uid)
         self.link_user(user_uid, config_vertex, belongs_to=True, is_iam_user=True)
 
-    def link_user_to_config_with_options(self, user_uid, is_admin=None, belongs_to=None, is_iam_user=None):
+    def link_user_to_config_with_options(
+        self,
+        user_uid: str,
+        is_admin: AclOptionValue = None,
+        belongs_to: AclOptionValue = None,
+        is_iam_user: AclOptionValue = None,
+    ):
         config_vertex = self.linking_dag.get_vertex(self.record.record_uid)
         if config_vertex is None:
             config_vertex = self.linking_dag.add_vertex(uid=self.record.record_uid)
 
-        # self.link_user(user_uid, config_vertex, is_admin, belongs_to, is_iam_user)
         source_vertex = config_vertex
         user_vertex = self.linking_dag.get_vertex(user_uid)
         if user_vertex is None:
             user_vertex = self.linking_dag.add_vertex(uid=user_uid, vertex_type=RefType.PAM_USER)
 
-        # switching to 3-state on/off/default: on/true, off/false,
-        # None = Keep existing, 'default' = Reset to default (remove from dict)
-        states = {'on': True, 'off': False, 'default': '', 'none': None}
-
         content = {
-            "belongs_to": states.get(str(belongs_to).lower()),
-            "is_admin": states.get(str(is_admin).lower()),
-            "is_iam_user": states.get(str(is_iam_user).lower())
+            "belongs_to": _acl_edge_option_value(belongs_to),
+            "is_admin": _acl_edge_option_value(is_admin),
+            "is_iam_user": _acl_edge_option_value(is_iam_user),
         }
         if user_vertex.vertex_type != RefType.PAM_USER:
             user_vertex.vertex_type = RefType.PAM_USER

@@ -1,3 +1,5 @@
+from enum import StrEnum
+
 # This should the relationship between Keeper Vault record
 RECORD_LINK_GRAPH_ID = 0
 
@@ -25,25 +27,35 @@ PAM_RESOURCES = [
     PAM_MACHINE
 ]
 
-PAM_DOMAIN_CONFIGURATION = "pamDomainConfiguration"
-PAM_AZURE_CONFIGURATION = "pamAzureConfiguration"
-PAM_AWS_CONFIGURATION = "pamAwsConfiguration"
-PAM_NETWORK_CONFIGURATION = "pamNetworkConfiguration"
-PAM_GCP_CONFIGURATION = "pamGcpConfiguration"
-
-PAM_CONFIGURATIONS = [
-    PAM_DOMAIN_CONFIGURATION,
-    PAM_AZURE_CONFIGURATION,
-    PAM_AWS_CONFIGURATION,
-    PAM_NETWORK_CONFIGURATION,
-    PAM_GCP_CONFIGURATION
-]
+class PamConfigurationRecordType(StrEnum):
+    AWS = "pamAwsConfiguration"
+    AZURE = "pamAzureConfiguration"
+    GCP = "pamGcpConfiguration"
+    DOMAIN = "pamDomainConfiguration"
+    NETWORK = "pamNetworkConfiguration"
+    OCI = "pamOciConfiguration"
 
 
-DOMAIN_USER_CONFIGS = [
-    PAM_DOMAIN_CONFIGURATION,
-    PAM_AZURE_CONFIGURATION
-]
+PAM_AWS_CONFIGURATION = PamConfigurationRecordType.AWS
+PAM_AZURE_CONFIGURATION = PamConfigurationRecordType.AZURE
+PAM_GCP_CONFIGURATION = PamConfigurationRecordType.GCP
+PAM_DOMAIN_CONFIGURATION = PamConfigurationRecordType.DOMAIN
+PAM_NETWORK_CONFIGURATION = PamConfigurationRecordType.NETWORK
+PAM_OCI_CONFIGURATION = PamConfigurationRecordType.OCI
+
+PAM_CONFIGURATIONS = (
+    PamConfigurationRecordType.AWS,
+    PamConfigurationRecordType.AZURE,
+    PamConfigurationRecordType.GCP,
+    PamConfigurationRecordType.DOMAIN,
+    PamConfigurationRecordType.NETWORK,
+    PamConfigurationRecordType.OCI,
+)
+
+DOMAIN_USER_CONFIGS = (
+    PamConfigurationRecordType.DOMAIN,
+    PamConfigurationRecordType.AZURE,
+)
 
 VERTICES_SORT_MAP = {
     PAM_USER: {"order": 1, "sort": "sort_infra_name", "item": "DiscoveryUser", "key": "user"},
