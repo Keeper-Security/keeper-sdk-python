@@ -33,6 +33,11 @@ class PAMListRecordRotationCommand(base.ArgparseCommand):
                         help='Verbose output')
         super().__init__(parser)
 
+    def _validate_vault_and_permissions(self, context: KeeperParams):
+        if not context.vault:
+            raise ValueError("Vault is not initialized, login to initialize the vault.")
+        base.require_enterprise_admin(context)
+
     def execute(self, context: KeeperParams, **kwargs):
         self._validate_vault_and_permissions(context)
         vault = context.vault
@@ -48,8 +53,11 @@ class PAMListRecordRotationCommand(base.ArgparseCommand):
 
         enterprise_all_controllers = list(gateway_utils.get_all_gateways(vault))
         enterprise_controllers_connected_resp = router_utils.router_get_connected_gateways(vault)
-        enterprise_controllers_connected_uids_bytes = \
-            [x.controllerUid for x in enterprise_controllers_connected_resp.controllers]
+        if enterprise_controllers_connected_resp:
+            enterprise_controllers_connected_uids_bytes = [
+                x.controllerUid for x in enterprise_controllers_connected_resp.controllers]
+        else:
+            enterprise_controllers_connected_uids_bytes = []
 
         all_pam_config_records = record_utils.pam_configurations_get_all(vault)
         table = []
@@ -77,8 +85,10 @@ class PAMListRecordRotationCommand(base.ArgparseCommand):
                 (ctr for ctr in enterprise_all_controllers if ctr.controllerUid == controller_uid), None)
             configuration_uid = s.configurationUid
             configuration_uid_str = utils.base64_url_encode(configuration_uid)
-            pam_configuration = next((pam_config for pam_config in all_pam_config_records if
-                                      pam_config.get('record_uid') == configuration_uid_str), None)
+            pam_configuration = next(
+                (pam_config for pam_config in all_pam_config_records
+                 if pam_config.record_uid == configuration_uid_str),
+                None)
 
             is_controller_online = any(
                 (poc for poc in enterprise_controllers_connected_uids_bytes if poc == controller_uid))
@@ -135,10 +145,7 @@ class PAMListRecordRotationCommand(base.ArgparseCommand):
                         f"[No config found. Looks like configuration {configuration_uid_str} was removed but rotation schedule was not modified]")
 
             else:
-                pam_data_decrypted = record_utils.pam_decrypt_configuration_data(pam_configuration)
-                pam_config_name = pam_data_decrypted.get('title')
-                pam_config_type = pam_data_decrypted.get('type')
-                row.append(f"{pam_config_name} ({pam_config_type})")
+                row.append(f"{pam_configuration.title} ({pam_configuration.record_type})")
 
             if is_verbose:
                 row.append(f'{utils.base64_url_encode(configuration_uid)}')

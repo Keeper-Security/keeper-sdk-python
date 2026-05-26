@@ -192,7 +192,8 @@ def update_record(vault: vault_online.VaultOnline, record: Union[PasswordRecord,
         ur = record_pb2.RecordUpdate()
         ur.record_uid = record_uid_bytes
         ur.client_modified_time = utils.current_milli_time()
-        ur.revision = record_info.revision
+        storage_rec = vault.vault_data.storage.records.get_entity(record.record_uid)
+        ur.revision = storage_rec.revision if storage_rec else record_info.revision
 
         data = vault_extensions.extract_typed_record_data(record, vault.vault_data.get_record_type_by_name(record.record_type))
         ur.data = crypto.encrypt_aes_v2(vault_extensions.get_padded_json_bytes(data), record_key)
