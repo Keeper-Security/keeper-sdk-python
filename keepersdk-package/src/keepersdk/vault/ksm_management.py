@@ -177,7 +177,9 @@ def update_secrets_manager_app(vault: vault_online.VaultOnline, uid_or_name: str
         raise KeeperApiError('unknown', 'vault/records_update returned no response')
 
     status = next((x for x in response.records if record_uid_bytes == x.record_uid), None)
-    if status and status.status != record_pb2.RecordModifyResult.RS_SUCCESS:
+    if status is None:
+        raise KeeperApiError('unknown', f'No status returned for record {app_uid}')
+    if status.status != record_pb2.RecordModifyResult.RS_SUCCESS:
         code = record_pb2.RecordModifyResult.Name(status.status)
         raise KeeperApiError(code, status.message)
 
