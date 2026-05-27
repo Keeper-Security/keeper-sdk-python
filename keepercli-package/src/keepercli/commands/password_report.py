@@ -112,14 +112,17 @@ class PasswordReportCommand(base.ArgparseCommand):
         def add_records(folder: vault_types.Folder) -> None:
             record_uids.update(folder.records)
 
+        folder = context.vault.vault_data.root_folder
         if folder_uid:
             folder = context.vault.vault_data.get_folder(folder_uid)
             if not folder:
                 raise base.CommandError(f'Folder {folder_uid} not found')
-            vault_utils.traverse_folder_tree(context.vault.vault_data, folder, add_records)
-        else:
-            vault_utils.traverse_folder_tree(
-                context.vault.vault_data, context.vault.vault_data.root_folder, add_records)
+
+        vault_utils.traverse_folder_tree(
+            context.vault.vault_data,
+            folder,
+            add_records
+        )
 
         return record_uids
 
