@@ -1,27 +1,8 @@
-#!/usr/bin/env python3
-#  _  __
-# | |/ /___ ___ _ __  ___ _ _ ®
-# | ' </ -_) -_) '_ \/ -_) '_|
-# |_|\_\___\___| .__/\___|_|
-#              |_|
-#
-# Keeper SDK for Python
-# Copyright 2025 Keeper Security Inc.
-# Contact: commander@keepersecurity.com
-#
-# Example: update share permissions on secrets in a Secrets Manager application.
-# Equivalent to:
-#   secrets-manager-share --command update --app <id> --secret <uids> --editable
-#   secrets-manager-share --command update --app <id> --secret <uids> --readonly
-#
-# Uses: keepersdk.vault.ksm_management.update_secrets_manager_app_shares
-#
-
 import getpass
 import sqlite3
 import json
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 import fido2
 import webbrowser
@@ -514,46 +495,47 @@ def login():
     return keeper_auth_context, keeper_endpoint
 
 
-# Set before running
-APP_UID_OR_NAME = 'RlO6y-idGBqu1Ax2yUYXKw'
-SECRET_UIDS = ['YJAAssUpHCf-2Xfjnlw5cw']
-# True = editable; False = read-only
-IS_EDITABLE = True
-
-
-def update_secrets_manager_share_permissions(
-    keeper_auth_context: keeper_auth.KeeperAuth,
-    app_uid_or_name: str,
-    secret_uids: List[str],
-    is_editable: bool = False,
-) -> None:
+def update_secrets_manager_share_permissions(keeper_auth_context: keeper_auth.KeeperAuth):
     """Update share permissions on secrets in a Secrets Manager application."""
     conn = sqlite3.Connection('file::memory:', uri=True)
     vault_storage = sqlite_storage.SqliteVaultStorage(
         lambda: conn,
-        vault_owner=bytes(keeper_auth_context.auth_context.username, 'utf-8'),
+        vault_owner=bytes(keeper_auth_context.auth_context.username, 'utf-8')
     )
     vault = vault_online.VaultOnline(keeper_auth_context, vault_storage)
     vault.sync_down()
 
     try:
-        perm = 'editable' if is_editable else 'read-only'
-        print(f'Updating {len(secret_uids)} share(s) to {perm} on app "{app_uid_or_name}"...')
+        app_uid_or_name = input('Enter application name or UID: ').strip()
 
-        updated = ksm_management.update_secrets_manager_app_shares(
-            vault=vault,
-            uid_or_name=app_uid_or_name,
-            secret_uids=secret_uids,
-            is_editable=is_editable,
-        )
-        vault.sync_down()
-
-        if updated:
-            print(f'Successfully updated share permissions to {perm}:')
-            for uid in updated:
-                print(f'  {uid}')
+        if not app_uid_or_name:
+            print("Application identifier cannot be empty")
         else:
-            print('No shares were updated (secrets may not be shared with the app yet).')
+            secret_uids_input = input('Enter secret UIDs (comma-separated): ').strip()
+            secret_uids = [uid.strip() for uid in secret_uids_input.split(',') if uid.strip()]
+
+            if not secret_uids:
+                print("At least one secret UID is required")
+            else:
+                is_editable = input('Make shares editable? (y/n): ').strip().lower() == 'y'
+                perm = 'editable' if is_editable else 'read-only'
+                print(f'\nUpdating {len(secret_uids)} share(s) to {perm} on app "{app_uid_or_name}"...')
+
+                updated = ksm_management.update_secrets_manager_app_shares(
+                    vault=vault,
+                    uid_or_name=app_uid_or_name,
+                    secret_uids=secret_uids,
+                    is_editable=is_editable,
+                )
+                vault.sync_down()
+
+                if updated:
+                    print(f'Successfully updated share permissions to {perm}:')
+                    for uid in updated:
+                        print(f'  {uid}')
+                else:
+                    print('No shares were updated (secrets may not be shared with the app yet).')
+
     except Exception as e:
         print(f'Error updating Secrets Manager share permissions: {e}')
 
@@ -565,12 +547,7 @@ def main():
     """Main function to orchestrate login and update Secrets Manager share permissions."""
     keeper_auth_context, _ = login()
     if keeper_auth_context:
-        update_secrets_manager_share_permissions(
-            keeper_auth_context,
-            APP_UID_OR_NAME,
-            SECRET_UIDS,
-            is_editable=IS_EDITABLE,
-        )
+        update_secrets_manager_share_permissions(keeper_auth_context)
 
 
 if __name__ == '__main__':

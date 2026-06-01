@@ -1,20 +1,3 @@
-#!/usr/bin/env python3
-#  _  __
-# | |/ /___ ___ _ __  ___ _ _ ®
-# | ' </ -_) -_) '_ \/ -_) '_|
-# |_|\_\___\___| .__/\___|_|
-#              |_|
-#
-# Keeper SDK for Python
-# Copyright 2025 Keeper Security Inc.
-# Contact: commander@keepersecurity.com
-#
-# Example: rename a Secrets Manager application using the Keeper SDK.
-# Equivalent to: secrets-manager-app --command update --app <uid_or_name> --name <new_name>
-#
-# Uses: keepersdk.vault.ksm_management.update_secrets_manager_app
-#
-
 import getpass
 import sqlite3
 import json
@@ -512,34 +495,37 @@ def login():
     return keeper_auth_context, keeper_endpoint
 
 
-# Set before running
-APP_UID_OR_NAME = 'RlO6y-idGBqu1Ax2yUYXKw'
-NEW_APP_NAME = 'Secrets Manager App Renamed'
-
-
-def update_secrets_manager_application(
-    keeper_auth_context: keeper_auth.KeeperAuth,
-    app_uid_or_name: str,
-    new_name: str,
-) -> None:
+def update_secrets_manager_application(keeper_auth_context: keeper_auth.KeeperAuth):
     """Rename a Secrets Manager application."""
     conn = sqlite3.Connection('file::memory:', uri=True)
     vault_storage = sqlite_storage.SqliteVaultStorage(
         lambda: conn,
-        vault_owner=bytes(keeper_auth_context.auth_context.username, 'utf-8'),
+        vault_owner=bytes(keeper_auth_context.auth_context.username, 'utf-8')
     )
     vault = vault_online.VaultOnline(keeper_auth_context, vault_storage)
     vault.sync_down()
 
     try:
-        print(f"Updating app '{app_uid_or_name}' to name '{new_name}'...")
-        app_uid, old_name, updated_name = ksm_management.update_secrets_manager_app(
-            vault=vault,
-            uid_or_name=app_uid_or_name,
-            new_name=new_name,
-        )
-        vault.sync_down()
-        print(f'Application "{old_name}" renamed to "{updated_name}" (UID: {app_uid})')
+        app_uid_or_name = input('Enter application name or UID: ').strip()
+
+        if not app_uid_or_name:
+            print("Application identifier cannot be empty")
+        else:
+            new_name = input('Enter new application name: ').strip()
+
+            if not new_name:
+                print("New application name cannot be empty")
+            else:
+                print(f"\nUpdating app '{app_uid_or_name}' to name '{new_name}'...")
+
+                app_uid, old_name, updated_name = ksm_management.update_secrets_manager_app(
+                    vault=vault,
+                    uid_or_name=app_uid_or_name,
+                    new_name=new_name,
+                )
+                vault.sync_down()
+                print(f'Application "{old_name}" renamed to "{updated_name}" (UID: {app_uid})')
+
     except Exception as e:
         print(f'Error updating Secrets Manager application: {e}')
 
@@ -551,7 +537,7 @@ def main():
     """Main function to orchestrate login and update a Secrets Manager application."""
     keeper_auth_context, _ = login()
     if keeper_auth_context:
-        update_secrets_manager_application(keeper_auth_context, APP_UID_OR_NAME, NEW_APP_NAME)
+        update_secrets_manager_application(keeper_auth_context)
 
 
 if __name__ == '__main__':
