@@ -505,27 +505,19 @@ def create_secrets_manager_application(keeper_auth_context: keeper_auth.KeeperAu
     vault = vault_online.VaultOnline(keeper_auth_context, vault_storage)
     
     try:
-        app_name = input('Enter name for new Secrets Manager application: ').strip()
-        
-        if not app_name:
-            print("Application name cannot be empty")
-        else:
-            force_add = input('Allow duplicate names? (y/n): ').strip().lower() == 'y'
+        app_name = "<app_name>"
+        force_add = False
+        print(f"\nCreating Secrets Manager application: {app_name}")
+        app_uid = ksm_management.create_secrets_manager_app(vault, app_name, force_add=force_add)
             
-            print(f"\nCreating Secrets Manager application: {app_name}")
-            
-            app_uid = ksm_management.create_secrets_manager_app(vault, app_name, force_add=force_add)
-            
-            print(f"\n✓ Secrets Manager application created successfully!")
-            print(f"Application Name: {app_name}")
-            print(f"Application UID: {app_uid}")
-            print("\nNext steps:")
-            print("  1. Share records or folders with this application")
-            print("  2. Generate client devices for access")
-            print("  3. Use the application in your integrations")
-            
-            vault.sync_down()
-        
+        print(f"\n✓ Secrets Manager application created successfully!")
+        print(f"Application Name: {app_name}")
+        print(f"Application UID: {app_uid}")
+        print("\nNext steps:")
+        print("  1. Share records or folders with this application")
+        print("  2. Generate client devices for access")
+        print("  3. Use the application in your integrations")
+                
     except ValueError as e:
         print(f"Error: {e}")
     except Exception as e:
