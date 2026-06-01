@@ -494,30 +494,46 @@ def login():
     keeper_endpoint = flow.endpoint if keeper_auth_context else None
     return keeper_auth_context, keeper_endpoint
 
-def main():
-    """Refresh MSP enterprise data using msp_auth.msp_down."""
-    keeper_auth_context, _ = login()
-    if not keeper_auth_context:
-        return
+def open_msp_enterprise_loader(keeper_auth_context: keeper_auth.KeeperAuth):
+    """Open in-memory enterprise storage for MSP operations (enterprise admin required)."""
     if not keeper_auth_context.auth_context.is_enterprise_admin:
         print('ERROR: MSP examples require an enterprise administrator account.')
         keeper_auth_context.close()
-        return
-
+        return None
     conn = sqlite3.Connection('file::memory:', uri=True)
     enterprise_id = keeper_auth_context.auth_context.enterprise_id or 0
     storage = sqlite_enterprise_storage.SqliteEnterpriseStorage(lambda: conn, enterprise_id)
-    loader = enterprise_loader.EnterpriseLoader(keeper_auth_context, storage)
+    return enterprise_loader.EnterpriseLoader(keeper_auth_context, storage)
+
+
+def close_msp_session(loader, keeper_auth_context: keeper_auth.KeeperAuth) -> None:
+    if loader is not None:
+        loader.close()
+    keeper_auth_context.close()
+
+def sync_msp_enterprise_data(loader, reset: bool = False):
+    """Refresh MSP enterprise data using msp_auth.msp_down."""
+    touched = msp_auth.msp_down(loader, reset=reset)
+    print(f'MSP data synced ({len(touched)} entity type(s) updated).')
+
+
+def main():
+    """Main function to orchestrate login and sync MSP enterprise data."""
+    keeper_auth_context, _ = login()
+    if not keeper_auth_context:
+        return
 
     # Fill in your values here.
     reset = False
 
+    loader = open_msp_enterprise_loader(keeper_auth_context)
+    if not loader:
+        return
+
     try:
-        touched = msp_auth.msp_down(loader, reset=reset)
-        print(f'MSP data synced ({len(touched)} entity type(s) updated).')
+        sync_msp_enterprise_data(loader, reset=reset)
     finally:
-        loader.close()
-        keeper_auth_context.close()
+        close_msp_session(loader, keeper_auth_context)
 
 
 if __name__ == '__main__':

@@ -520,38 +520,59 @@ def print_msp_legacy_report(report):
     _print_table(list(report.headers), report.rows)
 
 
-def main():
-    """Legacy MSP billing report using msp_auth.msp_legacy_report."""
-    keeper_auth_context, _ = login()
-    if not keeper_auth_context:
-        return
+def open_msp_enterprise_loader(keeper_auth_context: keeper_auth.KeeperAuth):
+    """Open in-memory enterprise storage for MSP operations (enterprise admin required)."""
     if not keeper_auth_context.auth_context.is_enterprise_admin:
         print('ERROR: MSP examples require an enterprise administrator account.')
         keeper_auth_context.close()
-        return
-
+        return None
     conn = sqlite3.Connection('file::memory:', uri=True)
     enterprise_id = keeper_auth_context.auth_context.enterprise_id or 0
     storage = sqlite_enterprise_storage.SqliteEnterpriseStorage(lambda: conn, enterprise_id)
-    loader = enterprise_loader.EnterpriseLoader(keeper_auth_context, storage)
+    return enterprise_loader.EnterpriseLoader(keeper_auth_context, storage)
+
+
+def close_msp_session(loader, keeper_auth_context: keeper_auth.KeeperAuth) -> None:
+    if loader is not None:
+        loader.close()
+    keeper_auth_context.close()
+
+def run_msp_legacy_report(loader, range_name='last_30_days', from_date=None, to_date=None):
+    """Legacy MSP billing report using msp_auth.msp_legacy_report."""
+    msp_auth.msp_down(loader, reset=False)
+    report = msp_auth.msp_legacy_report(
+        loader,
+        range_name=range_name,
+        from_date=from_date,
+        to_date=to_date,
+    )
+    print_msp_legacy_report(report)
+
+
+def main():
+    """Main function to orchestrate login and run MSP legacy billing report."""
+    keeper_auth_context, _ = login()
+    if not keeper_auth_context:
+        return
 
     # Fill in your values here.
     range_name = 'last_30_days'
     from_date = None
     to_date = None
 
+    loader = open_msp_enterprise_loader(keeper_auth_context)
+    if not loader:
+        return
+
     try:
-        msp_auth.msp_down(loader, reset=False)
-        report = msp_auth.msp_legacy_report(
+        run_msp_legacy_report(
             loader,
             range_name=range_name,
             from_date=from_date,
             to_date=to_date,
         )
-        print_msp_legacy_report(report)
     finally:
-        loader.close()
-        keeper_auth_context.close()
+        close_msp_session(loader, keeper_auth_context)
 
 
 if __name__ == '__main__':

@@ -495,20 +495,51 @@ def login():
     return keeper_auth_context, keeper_endpoint
 
 
-def main():
-    """Register a new managed company using msp_auth.msp_add_managed_company."""
-    keeper_auth_context, _ = login()
-    if not keeper_auth_context:
-        return
+def open_msp_enterprise_loader(keeper_auth_context: keeper_auth.KeeperAuth):
+    """Open in-memory enterprise storage for MSP operations (enterprise admin required)."""
     if not keeper_auth_context.auth_context.is_enterprise_admin:
         print('ERROR: MSP examples require an enterprise administrator account.')
         keeper_auth_context.close()
-        return
-
+        return None
     conn = sqlite3.Connection('file::memory:', uri=True)
     enterprise_id = keeper_auth_context.auth_context.enterprise_id or 0
     storage = sqlite_enterprise_storage.SqliteEnterpriseStorage(lambda: conn, enterprise_id)
-    loader = enterprise_loader.EnterpriseLoader(keeper_auth_context, storage)
+    return enterprise_loader.EnterpriseLoader(keeper_auth_context, storage)
+
+
+def close_msp_session(loader, keeper_auth_context: keeper_auth.KeeperAuth) -> None:
+    if loader is not None:
+        loader.close()
+    keeper_auth_context.close()
+
+def add_msp_managed_company(
+    loader,
+    mc_name: str,
+    plan: str,
+    seats=None,
+    file_plan=None,
+    addons=None,
+):
+    """Register a new managed company using msp_auth.msp_add_managed_company."""
+    msp_auth.msp_down(loader, reset=False)
+    root_node_id = loader.enterprise_data.root_node.node_id
+    mc_id = msp_auth.msp_add_managed_company(
+        loader,
+        enterprise_name=mc_name,
+        plan=plan,
+        node_id=root_node_id,
+        seats=seats,
+        file_plan=file_plan,
+        addons=addons,
+    )
+    print(f'Created managed company "{mc_name}" (enterprise id={mc_id}).')
+
+
+def main():
+    """Main function to orchestrate login and add an MSP managed company."""
+    keeper_auth_context, _ = login()
+    if not keeper_auth_context:
+        return
 
     # Fill in your values here.
     mc_name = '<managed_company_name>'
@@ -517,22 +548,21 @@ def main():
     file_plan = None
     addons = None
 
+    loader = open_msp_enterprise_loader(keeper_auth_context)
+    if not loader:
+        return
+
     try:
-        msp_auth.msp_down(loader, reset=False)
-        root_node_id = loader.enterprise_data.root_node.node_id
-        mc_id = msp_auth.msp_add_managed_company(
+        add_msp_managed_company(
             loader,
-            enterprise_name=mc_name,
+            mc_name=mc_name,
             plan=plan,
-            node_id=root_node_id,
             seats=seats,
             file_plan=file_plan,
             addons=addons,
         )
-        print(f'Created managed company "{mc_name}" (enterprise id={mc_id}).')
     finally:
-        loader.close()
-        keeper_auth_context.close()
+        close_msp_session(loader, keeper_auth_context)
 
 
 if __name__ == '__main__':

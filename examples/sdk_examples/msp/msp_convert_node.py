@@ -512,39 +512,65 @@ def _resolve_node_id(loader, node_arg):
     raise ValueError(f'Node "{node_arg}" not found')
 
 
-def main():
-    """Convert an enterprise subtree to a managed company using msp_auth.msp_convert_node."""
-    keeper_auth_context, _ = login()
-    if not keeper_auth_context:
-        return
+def open_msp_enterprise_loader(keeper_auth_context: keeper_auth.KeeperAuth):
+    """Open in-memory enterprise storage for MSP operations (enterprise admin required)."""
     if not keeper_auth_context.auth_context.is_enterprise_admin:
         print('ERROR: MSP examples require an enterprise administrator account.')
         keeper_auth_context.close()
-        return
-
+        return None
     conn = sqlite3.Connection('file::memory:', uri=True)
     enterprise_id = keeper_auth_context.auth_context.enterprise_id or 0
     storage = sqlite_enterprise_storage.SqliteEnterpriseStorage(lambda: conn, enterprise_id)
-    loader = enterprise_loader.EnterpriseLoader(keeper_auth_context, storage)
+    return enterprise_loader.EnterpriseLoader(keeper_auth_context, storage)
+
+
+def close_msp_session(loader, keeper_auth_context: keeper_auth.KeeperAuth) -> None:
+    if loader is not None:
+        loader.close()
+    keeper_auth_context.close()
+
+def convert_enterprise_node_to_managed_company(
+    loader,
+    node_name_or_id: str,
+    seats=None,
+    plan=None,
+):
+    """Convert an enterprise subtree to a managed company using msp_auth.msp_convert_node."""
+    msp_auth.msp_down(loader, reset=False)
+    node_id = _resolve_node_id(loader, node_name_or_id)
+    mc_id = msp_auth.msp_convert_node(
+        loader,
+        node_id=node_id,
+        seats=seats,
+        plan=plan,
+    )
+    print(f'Converted node {node_name_or_id} to managed company id={mc_id}.')
+
+
+def main():
+    """Main function to orchestrate login and convert a node to a managed company."""
+    keeper_auth_context, _ = login()
+    if not keeper_auth_context:
+        return
 
     # Fill in your values here.
     node_name_or_id = 'root'
     seats = None
     plan = None
 
+    loader = open_msp_enterprise_loader(keeper_auth_context)
+    if not loader:
+        return
+
     try:
-        msp_auth.msp_down(loader, reset=False)
-        node_id = _resolve_node_id(loader, node_name_or_id)
-        mc_id = msp_auth.msp_convert_node(
+        convert_enterprise_node_to_managed_company(
             loader,
-            node_id=node_id,
+            node_name_or_id=node_name_or_id,
             seats=seats,
             plan=plan,
         )
-        print(f'Converted node {node_name_or_id} to managed company id={mc_id}.')
     finally:
-        loader.close()
-        keeper_auth_context.close()
+        close_msp_session(loader, keeper_auth_context)
 
 
 if __name__ == '__main__':

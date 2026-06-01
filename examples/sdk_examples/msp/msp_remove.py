@@ -494,31 +494,47 @@ def login():
     keeper_endpoint = flow.endpoint if keeper_auth_context else None
     return keeper_auth_context, keeper_endpoint
 
-def main():
-    """Remove a managed company using msp_auth.msp_remove_managed_company."""
-    keeper_auth_context, _ = login()
-    if not keeper_auth_context:
-        return
+def open_msp_enterprise_loader(keeper_auth_context: keeper_auth.KeeperAuth):
+    """Open in-memory enterprise storage for MSP operations (enterprise admin required)."""
     if not keeper_auth_context.auth_context.is_enterprise_admin:
         print('ERROR: MSP examples require an enterprise administrator account.')
         keeper_auth_context.close()
-        return
-
+        return None
     conn = sqlite3.Connection('file::memory:', uri=True)
     enterprise_id = keeper_auth_context.auth_context.enterprise_id or 0
     storage = sqlite_enterprise_storage.SqliteEnterpriseStorage(lambda: conn, enterprise_id)
-    loader = enterprise_loader.EnterpriseLoader(keeper_auth_context, storage)
+    return enterprise_loader.EnterpriseLoader(keeper_auth_context, storage)
+
+
+def close_msp_session(loader, keeper_auth_context: keeper_auth.KeeperAuth) -> None:
+    if loader is not None:
+        loader.close()
+    keeper_auth_context.close()
+
+def remove_msp_managed_company(loader, managed_company: str):
+    """Remove a managed company using msp_auth.msp_remove_managed_company."""
+    msp_auth.msp_down(loader, reset=False)
+    eid = msp_auth.msp_remove_managed_company(loader, managed_company=managed_company)
+    print(f'Removed managed company id={eid}.')
+
+
+def main():
+    """Main function to orchestrate login and remove an MSP managed company."""
+    keeper_auth_context, _ = login()
+    if not keeper_auth_context:
+        return
 
     # Fill in your values here.
     managed_company = '<managed_company_name_or_id>'
 
+    loader = open_msp_enterprise_loader(keeper_auth_context)
+    if not loader:
+        return
+
     try:
-        msp_auth.msp_down(loader, reset=False)
-        eid = msp_auth.msp_remove_managed_company(loader, managed_company=managed_company)
-        print(f'Removed managed company id={eid}.')
+        remove_msp_managed_company(loader, managed_company)
     finally:
-        loader.close()
-        keeper_auth_context.close()
+        close_msp_session(loader, keeper_auth_context)
 
 
 if __name__ == '__main__':

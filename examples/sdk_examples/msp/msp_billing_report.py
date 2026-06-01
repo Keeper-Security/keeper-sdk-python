@@ -519,38 +519,59 @@ def print_msp_billing_report(report):
     _print_table(list(report.headers), report.rows)
 
 
-def main():
-    """MSP billing report using msp_auth.msp_billing_report."""
-    keeper_auth_context, _ = login()
-    if not keeper_auth_context:
-        return
+def open_msp_enterprise_loader(keeper_auth_context: keeper_auth.KeeperAuth):
+    """Open in-memory enterprise storage for MSP operations (enterprise admin required)."""
     if not keeper_auth_context.auth_context.is_enterprise_admin:
         print('ERROR: MSP examples require an enterprise administrator account.')
         keeper_auth_context.close()
-        return
-
+        return None
     conn = sqlite3.Connection('file::memory:', uri=True)
     enterprise_id = keeper_auth_context.auth_context.enterprise_id or 0
     storage = sqlite_enterprise_storage.SqliteEnterpriseStorage(lambda: conn, enterprise_id)
-    loader = enterprise_loader.EnterpriseLoader(keeper_auth_context, storage)
+    return enterprise_loader.EnterpriseLoader(keeper_auth_context, storage)
+
+
+def close_msp_session(loader, keeper_auth_context: keeper_auth.KeeperAuth) -> None:
+    if loader is not None:
+        loader.close()
+    keeper_auth_context.close()
+
+def run_msp_billing_report(loader, month=None, show_date=False, show_company=False):
+    """MSP billing report using msp_auth.msp_billing_report."""
+    msp_auth.msp_down(loader, reset=False)
+    report = msp_auth.msp_billing_report(
+        loader,
+        month=month,
+        show_date=show_date,
+        show_company=show_company,
+    )
+    print_msp_billing_report(report)
+
+
+def main():
+    """Main function to orchestrate login and run MSP billing report."""
+    keeper_auth_context, _ = login()
+    if not keeper_auth_context:
+        return
 
     # Fill in your values here.
     month = None
     show_date = False
     show_company = False
 
+    loader = open_msp_enterprise_loader(keeper_auth_context)
+    if not loader:
+        return
+
     try:
-        msp_auth.msp_down(loader, reset=False)
-        report = msp_auth.msp_billing_report(
+        run_msp_billing_report(
             loader,
             month=month,
             show_date=show_date,
             show_company=show_company,
         )
-        print_msp_billing_report(report)
     finally:
-        loader.close()
-        keeper_auth_context.close()
+        close_msp_session(loader, keeper_auth_context)
 
 
 if __name__ == '__main__':

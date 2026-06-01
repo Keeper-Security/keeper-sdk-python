@@ -494,36 +494,52 @@ def login():
     keeper_endpoint = flow.endpoint if keeper_auth_context else None
     return keeper_auth_context, keeper_endpoint
 
-def main():
-    """Copy MSP roles to managed companies using msp_auth.msp_copy_role."""
-    keeper_auth_context, _ = login()
-    if not keeper_auth_context:
-        return
+def open_msp_enterprise_loader(keeper_auth_context: keeper_auth.KeeperAuth):
+    """Open in-memory enterprise storage for MSP operations (enterprise admin required)."""
     if not keeper_auth_context.auth_context.is_enterprise_admin:
         print('ERROR: MSP examples require an enterprise administrator account.')
         keeper_auth_context.close()
-        return
-
+        return None
     conn = sqlite3.Connection('file::memory:', uri=True)
     enterprise_id = keeper_auth_context.auth_context.enterprise_id or 0
     storage = sqlite_enterprise_storage.SqliteEnterpriseStorage(lambda: conn, enterprise_id)
-    loader = enterprise_loader.EnterpriseLoader(keeper_auth_context, storage)
+    return enterprise_loader.EnterpriseLoader(keeper_auth_context, storage)
+
+
+def close_msp_session(loader, keeper_auth_context: keeper_auth.KeeperAuth) -> None:
+    if loader is not None:
+        loader.close()
+    keeper_auth_context.close()
+
+def copy_msp_roles_to_managed_companies(loader, roles, managed_companies):
+    """Copy MSP roles to managed companies using msp_auth.msp_copy_role."""
+    msp_auth.msp_down(loader, reset=False)
+    synced = msp_auth.msp_copy_role(
+        loader,
+        roles=roles,
+        managed_companies=managed_companies,
+    )
+    print(f'Roles synced to managed company id(s): {sorted(synced)}')
+
+
+def main():
+    """Main function to orchestrate login and copy MSP roles."""
+    keeper_auth_context, _ = login()
+    if not keeper_auth_context:
+        return
 
     # Fill in your values here.
     roles = ['<role_name>']
     managed_companies = ['<managed_company_name_or_id>']
 
+    loader = open_msp_enterprise_loader(keeper_auth_context)
+    if not loader:
+        return
+
     try:
-        msp_auth.msp_down(loader, reset=False)
-        synced = msp_auth.msp_copy_role(
-            loader,
-            roles=roles,
-            managed_companies=managed_companies,
-        )
-        print(f'Roles synced to managed company id(s): {sorted(synced)}')
+        copy_msp_roles_to_managed_companies(loader, roles, managed_companies)
     finally:
-        loader.close()
-        keeper_auth_context.close()
+        close_msp_session(loader, keeper_auth_context)
 
 
 if __name__ == '__main__':
