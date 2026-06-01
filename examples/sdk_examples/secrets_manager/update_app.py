@@ -506,25 +506,16 @@ def update_secrets_manager_application(keeper_auth_context: keeper_auth.KeeperAu
     vault.sync_down()
 
     try:
-        app_uid_or_name = input('Enter application name or UID: ').strip()
+        app_uid_or_name = "<app_uid_or_name>"
+        new_name = "<new_name>"
+        print(f"\nUpdating app '{app_uid_or_name}' to name '{new_name}'...")
 
-        if not app_uid_or_name:
-            print("Application identifier cannot be empty")
-        else:
-            new_name = input('Enter new application name: ').strip()
-
-            if not new_name:
-                print("New application name cannot be empty")
-            else:
-                print(f"\nUpdating app '{app_uid_or_name}' to name '{new_name}'...")
-
-                app_uid, old_name, updated_name = ksm_management.update_secrets_manager_app(
-                    vault=vault,
-                    uid_or_name=app_uid_or_name,
-                    new_name=new_name,
-                )
-                vault.sync_down()
-                print(f'Application "{old_name}" renamed to "{updated_name}" (UID: {app_uid})')
+        app_uid, old_name, updated_name = ksm_management.update_secrets_manager_app(
+            vault=vault,
+            uid_or_name=app_uid_or_name,
+            new_name=new_name,
+        )
+        print(f'Application "{old_name}" renamed to "{updated_name}" (UID: {app_uid})')
 
     except Exception as e:
         print(f'Error updating Secrets Manager application: {e}')

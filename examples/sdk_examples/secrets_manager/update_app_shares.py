@@ -506,35 +506,25 @@ def update_secrets_manager_share_permissions(keeper_auth_context: keeper_auth.Ke
     vault.sync_down()
 
     try:
-        app_uid_or_name = input('Enter application name or UID: ').strip()
+        app_uid_or_name = "<app_uid_or_name>"
+        secret_uids = ["<secret_uid1>", "<secret_uid2>"]
+        is_editable = True # True for editable, False for read-only
+        perm = 'editable' if is_editable else 'read-only'
+        print(f'\nUpdating {len(secret_uids)} share(s) to {perm} on app "{app_uid_or_name}"...')
 
-        if not app_uid_or_name:
-            print("Application identifier cannot be empty")
+        updated = ksm_management.update_secrets_manager_app_shares(
+            vault=vault,
+            uid_or_name=app_uid_or_name,
+            secret_uids=secret_uids,
+            is_editable=is_editable,
+        )
+
+        if updated:
+            print(f'Successfully updated share permissions to {perm}:')
+            for uid in updated:
+                print(f'  {uid}')
         else:
-            secret_uids_input = input('Enter secret UIDs (comma-separated): ').strip()
-            secret_uids = [uid.strip() for uid in secret_uids_input.split(',') if uid.strip()]
-
-            if not secret_uids:
-                print("At least one secret UID is required")
-            else:
-                is_editable = input('Make shares editable? (y/n): ').strip().lower() == 'y'
-                perm = 'editable' if is_editable else 'read-only'
-                print(f'\nUpdating {len(secret_uids)} share(s) to {perm} on app "{app_uid_or_name}"...')
-
-                updated = ksm_management.update_secrets_manager_app_shares(
-                    vault=vault,
-                    uid_or_name=app_uid_or_name,
-                    secret_uids=secret_uids,
-                    is_editable=is_editable,
-                )
-                vault.sync_down()
-
-                if updated:
-                    print(f'Successfully updated share permissions to {perm}:')
-                    for uid in updated:
-                        print(f'  {uid}')
-                else:
-                    print('No shares were updated (secrets may not be shared with the app yet).')
+            print('No shares were updated (secrets may not be shared with the app yet).')
 
     except Exception as e:
         print(f'Error updating Secrets Manager share permissions: {e}')
