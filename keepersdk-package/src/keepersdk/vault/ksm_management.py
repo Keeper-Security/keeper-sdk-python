@@ -117,47 +117,34 @@ def get_secrets_manager_app(vault: vault_online.VaultOnline, uid_or_name: str) -
     )
 
 
-def _find_ksm_app_record(vault: vault_online.VaultOnline, uid_or_name: str) -> vault_record.KeeperRecordInfo:
-    record = next(
-        (r for r in vault.vault_data.records()
-         if r.record_uid == uid_or_name or r.title == uid_or_name),
-        None)
-    if not record:
-        raise ValueError(f'No application found with UID/Name: {uid_or_name}')
-    info = vault.vault_data.get_record(record.record_uid)
-    if not info or info.version != 5:
-        raise ValueError(f'Record "{uid_or_name}" is not a Secrets Manager application')
-    return info
-
-
 def update_secrets_manager_app(vault: vault_online.VaultOnline, uid_or_name: str, new_name: str) -> Tuple[str, str, str]:
     """Rename a KSM application (v5 app record title). Returns (app_uid, old_name, new_name)."""
     if not new_name or not new_name.strip():
         raise ValueError('New application name is required')
 
     new_name = new_name.strip()
-    app_info = _find_ksm_app_record(vault, uid_or_name)
+    record = vault.vault_data.get_record(uid_or_name)
+    if not record:
+        records = list(vault.vault_data.find_records(criteria=uid_or_name, record_type=None, record_version=5))
+        if len(records) > 1:
+            raise ValueError(f'Multiple applications found with the name: {uid_or_name}, use UID to identify the application')
+        if not records:
+            raise ValueError(f'Application with the name {uid_or_name} not found')
+        app_info = records[0]
+    else:
+        app_info = record
+    if app_info.version != 5:
+        raise ValueError(f'Record "{uid_or_name}" is not a Secrets Manager application')
     app_uid = app_info.record_uid
 
-    duplicate = next(
-        (r for r in vault.vault_data.records()
-         if r.title == new_name and r.record_uid != app_uid),
-        None)
-    if duplicate:
-        raise ValueError(f'Application with the name "{new_name}" already exists')
-
-    loaded = vault.vault_data.load_record(app_uid)
-    if not isinstance(loaded, vault_record.ApplicationRecord):
-        raise ValueError(f'Record "{uid_or_name}" is not a Secrets Manager application')
-
-    old_name = loaded.title
+    old_name = app_info.title
     record_key = vault.vault_data.get_record_key(app_uid)
     if not record_key:
         raise ValueError(f'Could not resolve record key for application {app_uid}')
 
     data_dict = {
         'title': new_name,
-        'type': loaded.app_type or 'app',
+        'type': app_info.record_type or 'app',
     }
 
     record_uid_bytes = utils.base64_url_decode(app_uid)
@@ -225,7 +212,20 @@ def create_secrets_manager_app(vault: vault_online.VaultOnline, name: str, force
 def update_secrets_manager_app_shares(vault: vault_online.VaultOnline, uid_or_name: str,
                                       secret_uids: List[str], is_editable: bool) -> List[str]:
     """Update editable permissions on record/SF shares already in a KSM app."""
-    app_info = _find_ksm_app_record(vault, uid_or_name)
+    
+    record = vault.vault_data.get_record(uid_or_name)
+    if not record:
+        records = list(vault.vault_data.find_records(criteria=uid_or_name, record_type=None, record_version=5))
+        if len(records) > 1:
+            raise ValueError(f'Multiple applications found with the name: {uid_or_name}, use UID to identify the application')
+        if not records:
+            raise ValueError(f'Application with the name {uid_or_name} not found')
+        app_info = records[0]
+    else:
+        app_info = record
+    if app_info.version != 5:
+        raise ValueError(f'Record "{uid_or_name}" is not a Secrets Manager application')
+        
     return KSMShareManagement.update_secrets_in_ksm_app(
         vault, app_info.record_uid, secret_uids, is_editable)
 

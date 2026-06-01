@@ -140,7 +140,6 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
         if not new_name:
             raise ValueError('New application name is required. Use --name="New App Name"')
         self.update_app(vault=vault, uid_or_name=uid_or_name, new_name=new_name)
-        context.vault_down()
 
     def _handle_share_app(self, context: KeeperParams, uid_or_name: str, email: Optional[str], 
                           is_admin: bool, unshare: bool) -> None:
