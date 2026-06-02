@@ -47,6 +47,20 @@ def _extract_devices(rs: DeviceManagement_pb2.DeviceUserResponse) -> List[Device
     return devices
 
 
+def _fetch_user_devices(context: KeeperParams) -> List[DeviceManagement_pb2.Device]:
+    """Load and sort devices for the current user (newest last access first)."""
+    devices_rs = context.auth.execute_auth_rest(
+        rest_endpoint='dm/device_user_list',
+        request=None,
+        response_type=DeviceManagement_pb2.DeviceUserResponse,
+    )
+    if not devices_rs:
+        return []
+    devices = _extract_devices(devices_rs)
+    devices.sort(key=lambda d: d.lastModifiedTime or 0, reverse=True)
+    return devices
+
+
 def _resolve_device_identifier(
     devices: List[DeviceManagement_pb2.Device], identifier: str
 ) -> Optional[Tuple[bytes, DeviceManagement_pb2.Device]]:
@@ -75,6 +89,73 @@ def _resolve_device_identifier(
     return None
 
 
+def _resolve_device_identifiers(
+    devices: List[DeviceManagement_pb2.Device], identifiers: List[str]
+) -> List[Tuple[bytes, DeviceManagement_pb2.Device]]:
+    resolved: List[Tuple[bytes, DeviceManagement_pb2.Device]] = []
+    for identifier in identifiers:
+        match = _resolve_device_identifier(devices, identifier)
+        if not match:
+            raise base.CommandError(
+                f'No matching device found for "{identifier}" (or ambiguous device name)'
+            )
+        resolved.append(match)
+    return resolved
+
+
+def _execute_device_user_action(
+    context: KeeperParams,
+    device_identifiers: List[str],
+    action_type: int,
+    action_past_tense: str,
+) -> None:
+    """Perform logout or remove on one or more devices via dm/device_user_action."""
+    if not device_identifiers:
+        raise base.CommandError('At least one device identifier is required')
+
+    for identifier in device_identifiers:
+        if not identifier or not identifier.strip():
+            raise base.CommandError('Device identifier cannot be empty')
+        if re.search(r'[<>"\'\x00-\x1f\x7f-\x9f]', identifier):
+            raise base.CommandError(f'Invalid device identifier: {identifier}')
+
+    devices = _fetch_user_devices(context)
+    if not devices:
+        raise base.CommandError('No devices found')
+
+    resolved = _resolve_device_identifiers(devices, device_identifiers)
+    token_to_device = {token: device for token, device in resolved}
+
+    rq = DeviceManagement_pb2.DeviceActionRequest()
+    device_action = rq.deviceAction.add()
+    device_action.deviceActionType = action_type
+    device_action.encryptedDeviceToken.extend(list(token_to_device.keys()))
+
+    rs = context.auth.execute_auth_rest(
+        rest_endpoint='dm/device_user_action',
+        request=rq,
+        response_type=DeviceManagement_pb2.DeviceActionResponse,
+    )
+    if not rs or not rs.deviceActionResult:
+        raise base.CommandError('No response returned from device action')
+
+    for result in rs.deviceActionResult:
+        for token in result.encryptedDeviceToken:
+            device = token_to_device.get(token)
+            device_name = (device.deviceName if device else None) or 'Unknown Device'
+            if result.deviceActionStatus == DeviceManagement_pb2.SUCCESS:
+                logger.info("Device '%s' successfully %s", device_name, action_past_tense)
+            else:
+                status_name = DeviceManagement_pb2.DeviceActionStatus.Name(
+                    result.deviceActionStatus
+                )
+                if result.deviceActionStatus == DeviceManagement_pb2.NOT_ALLOWED:
+                    msg = 'Operation not allowed'
+                else:
+                    msg = f'Action failed ({status_name})'
+                raise base.CommandError(f"Device '{device_name}': {msg}")
+
+
 class DeviceListCommand(base.ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(
@@ -88,22 +169,10 @@ class DeviceListCommand(base.ArgparseCommand):
 
     def execute(self, context: KeeperParams, **kwargs):
         base.require_login(context)
-        rs = context.auth.execute_auth_rest(
-            rest_endpoint='dm/device_user_list',
-            request=None,
-            response_type=DeviceManagement_pb2.DeviceUserResponse
-        )
-        if not rs:
-            logger.info('No devices found.')
-            return
-
-        devices = _extract_devices(rs)
+        devices = _fetch_user_devices(context)
         if not devices:
             logger.info('No devices found.')
             return
-
-        # stable sort by last access desc (match Commander UX)
-        devices.sort(key=lambda d: d.lastModifiedTime or 0, reverse=True)
 
         fmt = kwargs.get('format') or 'table'
         output = kwargs.get('output')
@@ -152,16 +221,9 @@ class DeviceRenameCommand(base.ArgparseCommand):
         if not sanitized_name:
             raise base.CommandError('Device name contains only invalid characters')
 
-        devices_rs = context.auth.execute_auth_rest(
-            rest_endpoint='dm/device_user_list',
-            request=None,
-            response_type=DeviceManagement_pb2.DeviceUserResponse
-        )
-        if not devices_rs:
+        devices = _fetch_user_devices(context)
+        if not devices:
             raise base.CommandError('No devices found')
-
-        devices = _extract_devices(devices_rs)
-        devices.sort(key=lambda d: d.lastModifiedTime or 0, reverse=True)
 
         resolved = _resolve_device_identifier(devices, device_identifier)
         if not resolved:
@@ -189,4 +251,56 @@ class DeviceRenameCommand(base.ArgparseCommand):
             else:
                 status_name = DeviceManagement_pb2.DeviceActionStatus.Name(r.deviceActionStatus)
                 raise base.CommandError(f'Device rename failed: {status_name}')
+
+
+class DeviceRemoveCommand(base.ArgparseCommand):
+    def __init__(self):
+        parser = argparse.ArgumentParser(
+            prog='device-remove',
+            description='Logout and remove the current user from one or more devices',
+        )
+        parser.add_argument(
+            'devices',
+            nargs='+',
+            help='Device ID (from device-list) or device name substring',
+        )
+        parser.error = base.ArgparseCommand.raise_parse_exception
+        parser.exit = base.ArgparseCommand.suppress_exit
+        super().__init__(parser)
+
+    def execute(self, context: KeeperParams, **kwargs):
+        base.require_login(context)
+        device_identifiers = kwargs.get('devices') or []
+        _execute_device_user_action(
+            context,
+            device_identifiers,
+            DeviceManagement_pb2.DA_REMOVE,
+            'removed',
+        )
+
+
+class DeviceLogoutCommand(base.ArgparseCommand):
+    def __init__(self):
+        parser = argparse.ArgumentParser(
+            prog='device-logout',
+            description='Logout the current user from one or more devices',
+        )
+        parser.add_argument(
+            'devices',
+            nargs='+',
+            help='Device ID (from device-list) or device name substring',
+        )
+        parser.error = base.ArgparseCommand.raise_parse_exception
+        parser.exit = base.ArgparseCommand.suppress_exit
+        super().__init__(parser)
+
+    def execute(self, context: KeeperParams, **kwargs):
+        base.require_login(context)
+        device_identifiers = kwargs.get('devices') or []
+        _execute_device_user_action(
+            context,
+            device_identifiers,
+            DeviceManagement_pb2.DA_LOGOUT,
+            'logged out',
+        )
 

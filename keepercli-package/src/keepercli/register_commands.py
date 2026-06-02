@@ -25,6 +25,8 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('this-device', account_commands.ThisDeviceCommand(), base.CommandScope.Account)
         commands.register_command('device-list', device_management.DeviceListCommand(), base.CommandScope.Account)
         commands.register_command('device-rename', device_management.DeviceRenameCommand(), base.CommandScope.Account)
+        commands.register_command('device-remove', device_management.DeviceRemoveCommand(), base.CommandScope.Account)
+        commands.register_command('device-logout', device_management.DeviceLogoutCommand(), base.CommandScope.Account)
         commands.register_command('whoami', account_commands.WhoamiCommand(), base.CommandScope.Account)
         commands.register_command('reset-password', account_commands.ResetPasswordCommand(), base.CommandScope.Account)
         commands.register_command('2fa', two_fa.TwoFaCommand(), base.CommandScope.Account)
