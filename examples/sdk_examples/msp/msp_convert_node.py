@@ -554,7 +554,7 @@ def main():
         return
 
     # Fill in your values here.
-    node_name_or_id = 'root'
+    node_name_or_id = 'root' # Node name or node ID (subtree root)
     seats = None
     plan = None
 

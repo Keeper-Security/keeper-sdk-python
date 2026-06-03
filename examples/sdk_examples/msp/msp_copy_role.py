@@ -529,8 +529,8 @@ def main():
         return
 
     # Fill in your values here.
-    roles = ['<role_name>']
-    managed_companies = ['<managed_company_name_or_id>']
+    roles = ['<role_name>'] # Role name or role ID (can be repeated)
+    managed_companies = ['<managed_company_name_or_id>'] # Managed company identifier(s): name or id (can be repeated)
 
     loader = open_msp_enterprise_loader(keeper_auth_context)
     if not loader:

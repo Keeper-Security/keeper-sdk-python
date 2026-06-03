@@ -570,7 +570,7 @@ def main():
         return
 
     # Fill in your values here.
-    managed_company = None
+    managed_company = None # Managed company identifier: name or id
     show_pricing = False
     show_restriction = False
     verbose = False

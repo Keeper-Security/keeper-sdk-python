@@ -555,9 +555,9 @@ def main():
         return
 
     # Fill in your values here.
-    month = None
-    show_date = False
-    show_company = False
+    month = None # YYYY-MM
+    show_date = False # Breakdown report by date
+    show_company = False # Breakdown report by managed company
 
     loader = open_msp_enterprise_loader(keeper_auth_context)
     if not loader:

@@ -521,12 +521,14 @@ def update_msp_managed_company(
     file_plan=None,
     add_addons=None,
     remove_addons=None,
+    node_id: Optional[int] = None,
 ):
     """Update a managed company using msp_auth.msp_update_managed_company."""
     msp_auth.msp_down(loader, reset=False)
     eid = msp_auth.msp_update_managed_company(
         loader,
         managed_company=managed_company,
+        node_id=node_id or None,
         new_name=new_name,
         plan=plan,
         seats=seats,
@@ -545,6 +547,7 @@ def main():
 
     # Fill in your values here.
     managed_company = '<managed_company_name_or_id>'
+    node_id = None # Node ID: name or id
     new_name = None
     plan = None
     seats = None
@@ -560,6 +563,7 @@ def main():
         update_msp_managed_company(
             loader,
             managed_company=managed_company,
+            node_id=node_id,
             new_name=new_name,
             plan=plan,
             seats=seats,

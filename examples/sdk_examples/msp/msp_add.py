@@ -519,6 +519,7 @@ def add_msp_managed_company(
     seats=None,
     file_plan=None,
     addons=None,
+    node_id=None,
 ):
     """Register a new managed company using msp_auth.msp_add_managed_company."""
     msp_auth.msp_down(loader, reset=False)
@@ -527,7 +528,7 @@ def add_msp_managed_company(
         loader,
         enterprise_name=mc_name,
         plan=plan,
-        node_id=root_node_id,
+        node_id=node_id or root_node_id,
         seats=seats,
         file_plan=file_plan,
         addons=addons,
@@ -543,8 +544,8 @@ def main():
 
     # Fill in your values here.
     mc_name = '<managed_company_name>'
-    plan = 'business'
-    seats = 10
+    plan = 'business' # example plans: 'business', 'business-plus', 'enterprise', 'enterprise-plus'
+    seats = 10 # number of seats to allocate to the managed company (-1 for unlimited)
     file_plan = None
     addons = None
 
@@ -560,6 +561,7 @@ def main():
             seats=seats,
             file_plan=file_plan,
             addons=addons,
+            node_id=None,  # None to create under root node, or specify a node_id to create under that node
         )
     finally:
         close_msp_session(loader, keeper_auth_context)

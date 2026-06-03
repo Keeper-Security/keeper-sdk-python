@@ -556,9 +556,9 @@ def main():
         return
 
     # Fill in your values here.
-    range_name = 'last_30_days'
-    from_date = None
-    to_date = None
+    range_name = 'last_30_days' # Range name: last_30_days, last_60_days, last_90_days, last_180_days, last_365_days
+    from_date = None # From date: YYYY-MM-DD
+    to_date = None # To date: YYYY-MM-DD
 
     loader = open_msp_enterprise_loader(keeper_auth_context)
     if not loader:
