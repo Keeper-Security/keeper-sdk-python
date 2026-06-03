@@ -19,6 +19,7 @@ from keepersdk.authentication.yubikey import (
     yubikey_authenticate,
 )
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
+from keepersdk.vault import sqlite_storage, vault_online, ksm_management
 
 try:
     import pyperclip
@@ -493,53 +494,10 @@ def login():
     keeper_endpoint = flow.endpoint if keeper_auth_context else None
     return keeper_auth_context, keeper_endpoint
 
-from datetime import datetime
-from typing import List, Optional, Tuple
-
-from keepersdk.proto import APIRequest_pb2, DeviceManagement_pb2
-
-def _format_timestamp(timestamp: Optional[int]) -> str:
-    if not timestamp:
-        return 'N/A'
-    try:
-        if timestamp > 10000000000:
-            timestamp = int(timestamp / 1000)
-        return datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
-    except Exception:
-        return f'Invalid timestamp: {timestamp}'
+from keepersdk.authentication import device_management
 
 
-def _login_state_name(login_state: int) -> str:
-    try:
-        return APIRequest_pb2.LoginState.Name(login_state)
-    except Exception:
-        return f'UNKNOWN_STATE_{login_state}'
-
-
-def _client_type_name(client_type: int) -> str:
-    try:
-        return DeviceManagement_pb2.ClientType.Name(client_type)
-    except Exception:
-        return f'UNKNOWN_{client_type}'
-
-
-def fetch_user_devices(keeper_auth_context: keeper_auth.KeeperAuth) -> List[DeviceManagement_pb2.Device]:
-    """Call dm/device_user_list and return a flat list of devices."""
-    rs = keeper_auth_context.execute_auth_rest(
-        rest_endpoint='dm/device_user_list',
-        request=None,
-        response_type=DeviceManagement_pb2.DeviceUserResponse,
-    )
-    if not rs:
-        return []
-    devices: List[DeviceManagement_pb2.Device] = []
-    for group in rs.deviceGroups:
-        devices.extend(list(group.devices))
-    devices.sort(key=lambda d: d.lastModifiedTime or 0, reverse=True)
-    return devices
-
-
-def print_devices_table(devices: List[DeviceManagement_pb2.Device]) -> None:
+def print_devices_table(devices):
     if not devices:
         print('\nNo devices found.')
         return
@@ -547,51 +505,29 @@ def print_devices_table(devices: List[DeviceManagement_pb2.Device]) -> None:
     print('=' * 100)
     print(f"{'ID':<4} {'Name':<24} {'Client Type':<14} {'Login Status':<14} {'Last Accessed':<20}")
     print('-' * 100)
-    for i, d in enumerate(devices, start=1):
+    for d in devices:
+        last = d.last_accessed.strftime('%Y-%m-%d %H:%M:%S') if d.last_accessed else 'N/A'
         print(
-            f"{i:<4} {(d.deviceName or 'N/A')[:23]:<24} "
-            f"{_client_type_name(d.clientType)[:13]:<14} "
-            f"{_login_state_name(d.loginState)[:13]:<14} "
-            f"{_format_timestamp(d.lastModifiedTime):<20}"
+            f"{d.list_index:<4} {d.name[:23]:<24} "
+            f"{d.client_type[:13]:<14} {d.login_status[:13]:<14} {last:<20}"
         )
     print('-' * 100)
 
 
-def resolve_device(
-    devices: List[DeviceManagement_pb2.Device], identifier: str
-) -> Optional[Tuple[bytes, DeviceManagement_pb2.Device]]:
-    ident = (identifier or '').strip()
-    if not ident:
-        return None
-    if ident.isdigit():
-        idx = int(ident)
-        if 1 <= idx <= len(devices):
-            d = devices[idx - 1]
-            return d.encryptedDeviceToken, d
-        return None
-    ident_l = ident.lower()
-    matches = [d for d in devices if (d.deviceName or '').lower().find(ident_l) >= 0]
-    if len(matches) == 1:
-        d = matches[0]
-        return d.encryptedDeviceToken, d
-    return None
-
-def list_user_devices(keeper_auth_context: keeper_auth.KeeperAuth):
+def list_user_devices_example(keeper_auth_context):
     """List active devices for the logged-in user."""
     try:
-        devices = fetch_user_devices(keeper_auth_context)
+        devices = device_management.list_user_devices(keeper_auth_context)
         print_devices_table(devices)
     except Exception as e:
         print(f'Error listing devices: {e}')
-
     keeper_auth_context.close()
 
 
 def main():
-    """Main function to orchestrate login and list user devices."""
     keeper_auth_context, _ = login()
     if keeper_auth_context:
-        list_user_devices(keeper_auth_context)
+        list_user_devices_example(keeper_auth_context)
 
 
 if __name__ == '__main__':

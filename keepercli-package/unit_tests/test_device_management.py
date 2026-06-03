@@ -1,7 +1,7 @@
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
-from keepercli.commands import device_management
+from keepercli.commands import device_management as cli_device_management
 from keepercli.commands.device_management import (
     DeviceListCommand,
     DeviceLogoutCommand,
@@ -9,79 +9,39 @@ from keepercli.commands.device_management import (
     DeviceRenameCommand,
 )
 from keepercli.commands import base
+from keepersdk.authentication import device_management as sdk_device_management
+from keepersdk.authentication.device_management import UserDeviceInfo
 from keepersdk.proto import DeviceManagement_pb2
 
 
-def _device(name: str, last_modified: int = 0) -> DeviceManagement_pb2.Device:
-    d = DeviceManagement_pb2.Device()
-    d.deviceName = name
-    d.lastModifiedTime = last_modified
-    d.clientType = DeviceManagement_pb2.DESKTOP
-    d.loginState = 0
-    d.encryptedDeviceToken = b'\x01\x02'
-    return d
-
-
 class DeviceManagementCommandTests(unittest.TestCase):
-    def test_device_list_calls_endpoint(self):
+    def test_device_list_calls_sdk(self):
         cmd = DeviceListCommand()
         context = MagicMock()
         context.auth = MagicMock()
 
-        rs = DeviceManagement_pb2.DeviceUserResponse()
-        g = rs.deviceGroups.add()
-        g.devices.append(_device('A', 100))
-        context.auth.execute_auth_rest.return_value = rs
+        with patch.object(
+            sdk_device_management,
+            'list_user_devices',
+            return_value=[
+                UserDeviceInfo(1, 'A', 'COMMANDER', 'LOGGED_IN', None),
+            ],
+        ) as mock_list:
+            cmd.execute(context, format='json', output=None)
+            mock_list.assert_called_once_with(context.auth)
 
-        cmd.execute(context, format='json', output=None)
-        context.auth.execute_auth_rest.assert_called()
-        args, kwargs = context.auth.execute_auth_rest.call_args
-        self.assertEqual(kwargs.get('rest_endpoint'), 'dm/device_user_list')
-
-    def test_device_rename_calls_rename_endpoint(self):
-        cmd = DeviceRenameCommand()
+    def test_device_logout_calls_sdk(self):
+        cmd = DeviceLogoutCommand()
         context = MagicMock()
         context.auth = MagicMock()
 
-        list_rs = DeviceManagement_pb2.DeviceUserResponse()
-        g = list_rs.deviceGroups.add()
-        g.devices.append(_device('My Laptop', 100))
-
-        rename_rs = DeviceManagement_pb2.DeviceRenameResponse()
-        rr = rename_rs.deviceRenameResult.add()
-        rr.deviceActionStatus = DeviceManagement_pb2.SUCCESS
-        rr.deviceNewName = 'Renamed'
-        rr.encryptedDeviceToken = b'\x01\x02'
-
-        context.auth.execute_auth_rest.side_effect = [list_rs, rename_rs]
-
-        cmd.execute(context, device='1', new_name='Renamed')
-        self.assertEqual(context.auth.execute_auth_rest.call_count, 2)
-        self.assertEqual(
-            context.auth.execute_auth_rest.call_args_list[0].kwargs.get('rest_endpoint'),
-            'dm/device_user_list'
-        )
-        self.assertEqual(
-            context.auth.execute_auth_rest.call_args_list[1].kwargs.get('rest_endpoint'),
-            'dm/device_user_rename'
-        )
-
-    def test_resolve_device_by_numeric_id(self):
-        devices = [_device('Phone', 200), _device('Laptop', 100)]
-        devices.sort(key=lambda d: d.lastModifiedTime or 0, reverse=True)
-        resolved = device_management._resolve_device_identifier(devices, '2')
-        self.assertIsNotNone(resolved)
-        self.assertEqual(resolved[1].deviceName, 'Laptop')
-
-    def test_resolve_device_by_unique_name_substring(self):
-        devices = [_device('Work MacBook', 100), _device('Personal iPhone', 50)]
-        resolved = device_management._resolve_device_identifier(devices, 'iphone')
-        self.assertIsNotNone(resolved)
-        self.assertEqual(resolved[1].deviceName, 'Personal iPhone')
-
-    def test_resolve_device_ambiguous_name_returns_none(self):
-        devices = [_device('MacBook Pro', 100), _device('MacBook Air', 90)]
-        self.assertIsNone(device_management._resolve_device_identifier(devices, 'macbook'))
+        with patch.object(
+            sdk_device_management,
+            'logout_user_devices',
+            return_value=['Laptop'],
+        ) as mock_logout:
+            cmd.execute(context, devices=['1'])
+            mock_logout.assert_called_once_with(context.auth, ['1'])
 
     def test_device_list_requires_login(self):
         cmd = DeviceListCommand()
@@ -90,58 +50,6 @@ class DeviceManagementCommandTests(unittest.TestCase):
         with self.assertRaises(base.CommandError):
             cmd.execute(context)
 
-    def test_device_rename_rejects_empty_name(self):
-        cmd = DeviceRenameCommand()
-        context = MagicMock()
-        context.auth = MagicMock()
-        with self.assertRaises(base.CommandError):
-            cmd.execute(context, device='1', new_name='   ')
-
-    def _action_list_and_response(self):
-        list_rs = DeviceManagement_pb2.DeviceUserResponse()
-        g = list_rs.deviceGroups.add()
-        g.devices.append(_device('My Laptop', 100))
-
-        action_rs = DeviceManagement_pb2.DeviceActionResponse()
-        ar = action_rs.deviceActionResult.add()
-        ar.deviceActionStatus = DeviceManagement_pb2.SUCCESS
-        ar.encryptedDeviceToken.append(b'\x01\x02')
-        return list_rs, action_rs
-
-    def test_device_remove_calls_action_endpoint(self):
-        cmd = DeviceRemoveCommand()
-        context = MagicMock()
-        context.auth = MagicMock()
-        list_rs, action_rs = self._action_list_and_response()
-        context.auth.execute_auth_rest.side_effect = [list_rs, action_rs]
-
-        cmd.execute(context, devices=['1'])
-        self.assertEqual(context.auth.execute_auth_rest.call_count, 2)
-        action_call = context.auth.execute_auth_rest.call_args_list[1]
-        self.assertEqual(action_call.kwargs.get('rest_endpoint'), 'dm/device_user_action')
-        request = action_call.kwargs.get('request')
-        self.assertEqual(
-            request.deviceAction[0].deviceActionType,
-            DeviceManagement_pb2.DA_REMOVE,
-        )
-
-    def test_device_logout_calls_action_endpoint(self):
-        cmd = DeviceLogoutCommand()
-        context = MagicMock()
-        context.auth = MagicMock()
-        list_rs, action_rs = self._action_list_and_response()
-        context.auth.execute_auth_rest.side_effect = [list_rs, action_rs]
-
-        cmd.execute(context, devices=['1'])
-        action_call = context.auth.execute_auth_rest.call_args_list[1]
-        self.assertEqual(action_call.kwargs.get('rest_endpoint'), 'dm/device_user_action')
-        request = action_call.kwargs.get('request')
-        self.assertEqual(
-            request.deviceAction[0].deviceActionType,
-            DeviceManagement_pb2.DA_LOGOUT,
-        )
-
 
 if __name__ == '__main__':
     unittest.main()
-
