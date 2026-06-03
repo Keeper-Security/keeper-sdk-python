@@ -15,7 +15,7 @@ from .. import base
 from ... import api, prompt_utils
 from ...params import KeeperParams
 from ...helpers import gateway_utils, router_utils, report_utils, folder_utils, record_utils
-from .pam_config import PAM_CONFIG_RECORD_TYPES
+from keepersdk.helpers.keeper_dag.constants import PAM_CONFIGURATIONS
 
 
 logger = api.get_logger()
@@ -896,7 +896,7 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
 
         pam_configurations = {}
         for x in vault.vault_data.find_records(
-                criteria=None, record_type=PAM_CONFIG_RECORD_TYPES, record_version=6):
+                criteria=None, record_type=PAM_CONFIGURATIONS, record_version=6):
             loaded = vault.vault_data.load_record(x.record_uid)
             if loaded and isinstance(loaded, vault_record.TypedRecord):
                 pam_configurations[x.record_uid] = loaded
