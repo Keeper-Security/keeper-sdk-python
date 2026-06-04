@@ -8,6 +8,7 @@ from ..helpers import folder_utils, report_utils
 from ..params import KeeperParams
 
 from keepersdk import utils
+from keepersdk.proto import client_pb2
 from keepersdk.vault import vault_record, vault_extensions, vault_types, vault_utils
 
 
@@ -178,53 +179,29 @@ class PasswordReportCommand(base.ArgparseCommand):
         return text
 
     def _build_password_count_map(self, context: KeeperParams) -> Dict[str, int]:
-        """Build a map of password usage counts from breach watch records.
-        
-        Args:
-            context: Keeper parameters
-            
-        Returns:
-            dict: Password to count mapping
-        """
-        password_count = {}
-        for record_uid, bw_record in context.vault.vault_data._breach_watch_records:
-            if record_uid in context.vault.vault_data._records:
-                if isinstance(bw_record, dict):
-                    data = bw_record.get('data_unencrypted')
-                    if isinstance(data, dict):
-                        passwords = data.get('passwords')
-                        if isinstance(passwords, list):
-                            for pwd in passwords:
-                                password = pwd.get('value')
-                                if password:
-                                    password_count[password] = password_count.get(password, 0) + 1
+        """Count how many vault records use each password (for reuse column in verbose mode)."""
+        password_count: Dict[str, int] = {}
+        for record_uid in context.vault.vault_data._records:
+            info = context.vault.vault_data.get_record(record_uid)
+            if not info or info.version not in SUPPORTED_RECORD_VERSIONS:
+                continue
+            record = context.vault.vault_data.load_record(record_uid)
+            if not record:
+                continue
+            password = self._extract_password_from_record(record)
+            if password:
+                password_count[password] = password_count.get(password, 0) + 1
         return password_count
 
     def _get_breach_watch_status(self, context: KeeperParams, record_uid: str, password: str) -> Tuple[str, Optional[int]]:
-        """Get breach watch status and reuse count for a password.
-        
-        Args:
-            context: Keeper parameters
-            record_uid: Record UID
-            password: Password to check
-            
-        Returns:
-            tuple: (status, reuse_count)
-        """
-        status = ''
-        reused = None
-        
-        bw_record = context.vault.vault_data.get_breach_watch_record(record_uid)
-        if isinstance(bw_record, dict):
-            data = bw_record.get('data_unencrypted')
-            if isinstance(data, dict):
-                passwords = data.get('passwords')
-                if isinstance(passwords, list):
-                    password_status = next((x for x in passwords if x.get('value') == password), None)
-                    if isinstance(password_status, dict):
-                        status = password_status.get('status', '')
-        
-        return status, reused
+        """Get BreachWatch status label for a record (reuse count is computed separately)."""
+        bw_info = context.vault.vault_data.get_breach_watch_record(record_uid)
+        if not bw_info or bw_info.total <= 0:
+            return '', None
+        try:
+            return client_pb2.BWStatus.Name(bw_info.status), None
+        except ValueError:
+            return str(bw_info.status), None
 
     def _display_policy_summary(self, p_length: int, p_lower: int, p_upper: int, p_digits: int, p_special: int):
         """Display password policy requirements summary.
@@ -271,8 +248,11 @@ class PasswordReportCommand(base.ArgparseCommand):
 
         output_format = kwargs.get('format')
         for record_uid in record_uids:
+            info = context.vault.vault_data.get_record(record_uid)
+            if not info or info.version not in SUPPORTED_RECORD_VERSIONS:
+                continue
             record = context.vault.vault_data.load_record(record_uid)
-            if not record or record.version not in SUPPORTED_RECORD_VERSIONS:
+            if not record:
                 continue
                 
             password = self._extract_password_from_record(record)
