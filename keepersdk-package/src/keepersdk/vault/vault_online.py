@@ -15,7 +15,8 @@ class VaultOnline(vault_plugins.IVaultData, keeper_auth.IKeeperAuth):
         self._keeper_drive_data: Optional[keeperdrive_data.KeeperDriveData] = None
         kd_storage = storage.keeper_drive
         if kd_storage is not None:
-            self._keeper_drive_data = keeperdrive_data.KeeperDriveData(kd_storage)
+            self._keeper_drive_data = keeperdrive_data.KeeperDriveData(
+                kd_storage, auth.auth_context)
         self._keeper_auth = auth
         self._auto_sync = False
         self._lock = threading.Lock()
@@ -114,8 +115,8 @@ class VaultOnline(vault_plugins.IVaultData, keeper_auth.IKeeperAuth):
         self.sync_requested = False
         self._sync_record_types = False
         self._vault_data.rebuild_data(result.vault)
-        if self._keeper_drive_data is not None and result.keeper_drive is not None:
-            self._keeper_drive_data.rebuild_data(result.keeper_drive)
+        if self._keeper_drive_data is not None:
+            self._keeper_drive_data.rebuild_keeper_drive(self._keeper_auth.auth_context)
 
     def _background_task(self):
         if self._keeper_auth.auth_context.enterprise_ec_public_key:

@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Dict, Iterable, Optional, Set
+from dataclasses import dataclass, field
+from typing import Dict, Iterable, List, Optional, Set
 
-from . import keeperdrive_storage_types as kd
+from ..authentication import keeper_auth
+from . import keeperdrive_crypto, keeperdrive_storage_types as kd
 from .keeperdrive_vault_storage import IKeeperDriveStorage
 
 
 class KeeperDriveRebuildTask:
+    """Tracks UIDs touched during incremental sync-down."""
+
     def __init__(self, is_full_sync: bool) -> None:
         self.is_full_sync = is_full_sync
         self.folder_uids: Set[str] = set()
@@ -34,48 +37,57 @@ class KeeperDriveRebuildTask:
         self.record_uids.update((x for x in record_uids if x))
 
 
-@dataclass(frozen=True)
-class KeeperDriveFolderInfo:
+@dataclass
+class KeeperDriveFolderNode:
     folder_uid: str
-    parent_uid: str
-    folder_type: int
-    owner_username: str
-    date_created: int
-    last_modified: int
+    parent_uid: Optional[str] = None
+    name: Optional[str] = None
+    folder_key: Optional[bytes] = None
+    subfolder_uids: List[str] = field(default_factory=list)
+    record_uids: List[str] = field(default_factory=list)
 
 
-@dataclass(frozen=True)
-class KeeperDriveRecordInfo:
+@dataclass
+class KeeperDriveRecordEntry:
     record_uid: str
-    revision: int
-    version: int
-    shared: bool
-    client_modified_time: int
-    file_size: int
-    thumbnail_size: int
+    revision: int = 0
+    version: int = 0
+    shared: bool = False
+    client_modified_time: int = 0
+    file_size: int = 0
+    thumbnail_size: int = 0
+    record_key: Optional[bytes] = None
+    decrypted_data: Optional[str] = None
 
 
 class KeeperDriveData:
-    def __init__(self, storage: IKeeperDriveStorage) -> None:
+    """In-memory decrypted Keeper Drive view, rebuilt from encrypted storage after sync-down."""
+
+    def __init__(
+            self,
+            storage: IKeeperDriveStorage,
+            auth_context: Optional[keeper_auth.AuthContext] = None) -> None:
         self._storage = storage
-        self._folders: Dict[str, KeeperDriveFolderInfo] = {}
-        self._records: Dict[str, KeeperDriveRecordInfo] = {}
-        self.rebuild_data(KeeperDriveRebuildTask(True))
+        self._auth_context = auth_context
+        self._folders: Dict[str, KeeperDriveFolderNode] = {}
+        self._records: Dict[str, KeeperDriveRecordEntry] = {}
+        if auth_context is not None:
+            self.rebuild_keeper_drive(auth_context)
 
     @property
     def storage(self) -> IKeeperDriveStorage:
         return self._storage
 
-    def folders(self) -> Iterable[KeeperDriveFolderInfo]:
+    def folders(self) -> Iterable[KeeperDriveFolderNode]:
         return self._folders.values()
 
-    def records(self) -> Iterable[KeeperDriveRecordInfo]:
+    def records(self) -> Iterable[KeeperDriveRecordEntry]:
         return self._records.values()
 
-    def get_folder(self, folder_uid: str) -> Optional[KeeperDriveFolderInfo]:
+    def get_folder(self, folder_uid: str) -> Optional[KeeperDriveFolderNode]:
         return self._folders.get(folder_uid)
 
-    def get_record(self, record_uid: str) -> Optional[KeeperDriveRecordInfo]:
+    def get_record(self, record_uid: str) -> Optional[KeeperDriveRecordEntry]:
         return self._records.get(record_uid)
 
     @property
@@ -86,55 +98,66 @@ class KeeperDriveData:
     def record_count(self) -> int:
         return len(self._records)
 
-    def rebuild_data(self, changes: KeeperDriveRebuildTask) -> None:
-        if changes.is_full_sync:
-            self._folders.clear()
-            self._records.clear()
-            self._load_all_folders()
-            self._load_all_records()
+    def rebuild_data(self, changes: Optional[KeeperDriveRebuildTask] = None) -> None:
+        """Rebuild in-memory views (always full decrypt rebuild."""
+        del changes
+        self.rebuild_keeper_drive(self._auth_context)
+
+    def rebuild_keeper_drive(self, auth_context: Optional[keeper_auth.AuthContext]) -> None:
+        self._folders.clear()
+        self._records.clear()
+        if auth_context is None:
             return
 
-        for folder_uid in changes.folder_uids:
-            if folder_uid in self._folders:
-                del self._folders[folder_uid]
-            row = self._storage.folders.get_entity(folder_uid)
-            if row:
-                self._folders[folder_uid] = self._folder_info(row)
+        decrypted_folder_keys = keeperdrive_crypto.decrypt_folder_keys(self._storage, auth_context)
+        decrypted_record_keys = keeperdrive_crypto.decrypt_record_keys(
+            self._storage, decrypted_folder_keys, auth_context)
 
-        for record_uid in changes.record_uids:
-            if record_uid in self._records:
-                del self._records[record_uid]
-            row = self._storage.record_summaries.get_entity(record_uid)
-            if row:
-                self._records[record_uid] = self._record_info(row)
-
-    def _load_all_folders(self) -> None:
         for row in self._storage.folders.get_all_entities():
-            self._folders[row.folder_uid] = self._folder_info(row)
+            folder_key = decrypted_folder_keys.get(row.folder_uid)
+            name = None
+            if folder_key is not None:
+                name = keeperdrive_crypto.decrypt_folder_name(row.data, folder_key)
+            node = KeeperDriveFolderNode(
+                folder_uid=row.folder_uid,
+                parent_uid=row.parent_uid or None,
+                name=name or '(Keeper Drive Folder)',
+                folder_key=folder_key,
+            )
+            self._folders[row.folder_uid] = node
 
-    def _load_all_records(self) -> None:
-        for row in self._storage.record_summaries.get_all_entities():
-            self._records[row.record_uid] = self._record_info(row)
+        for node in self._folders.values():
+            if node.parent_uid and node.parent_uid in self._folders:
+                self._folders[node.parent_uid].subfolder_uids.append(node.folder_uid)
 
-    @staticmethod
-    def _folder_info(row: kd.KDFolder) -> KeeperDriveFolderInfo:
-        return KeeperDriveFolderInfo(
-            folder_uid=row.folder_uid,
-            parent_uid=row.parent_uid,
-            folder_type=row.folder_type,
-            owner_username=row.owner_username,
-            date_created=row.date_created,
-            last_modified=row.last_modified,
-        )
+        for link in self._storage.folder_records.get_all_links():
+            folder = self._folders.get(link.folder_uid)
+            if folder is not None:
+                folder.record_uids.append(link.record_uid)
 
-    @staticmethod
-    def _record_info(row: kd.KDRecordSummary) -> KeeperDriveRecordInfo:
-        return KeeperDriveRecordInfo(
-            record_uid=row.record_uid,
-            revision=row.revision,
-            version=row.version,
-            shared=row.shared,
-            client_modified_time=row.client_modified_time,
-            file_size=row.file_size,
-            thumbnail_size=row.thumbnail_size,
-        )
+        for row in self._storage.records.get_all_entities():
+            record_key = decrypted_record_keys.get(row.record_uid)
+            if record_key is None:
+                continue
+            decrypted = keeperdrive_crypto.decrypt_record_data(row.data, record_key)
+            self._records[row.record_uid] = KeeperDriveRecordEntry(
+                record_uid=row.record_uid,
+                revision=row.revision,
+                version=row.version,
+                shared=row.shared,
+                client_modified_time=row.client_modified_time,
+                file_size=row.file_size,
+                thumbnail_size=row.thumbnail_size,
+                record_key=record_key,
+                decrypted_data=decrypted,
+            )
+
+        self._purge_orphaned_records()
+
+    def _purge_orphaned_records(self) -> None:
+        linked: Set[str] = set()
+        for fr in self._storage.folder_records.get_all_links():
+            linked.add(fr.record_uid)
+        for uid in list(self._records):
+            if uid not in linked:
+                del self._records[uid]

@@ -25,17 +25,17 @@ class IKeeperDriveStorage(abc.ABC):
 
     @property
     @abc.abstractmethod
+    def records(self) -> IEntityReaderStorage[kd.KDRecord, str]:
+        pass
+
+    @property
+    @abc.abstractmethod
+    def record_keys(self) -> ILinkReaderStorage[kd.KDRecordKey, str, str]:
+        pass
+
+    @property
+    @abc.abstractmethod
     def folder_accesses(self) -> ILinkReaderStorage[kd.KDFolderAccess, str, str]:
-        pass
-
-    @property
-    @abc.abstractmethod
-    def record_data(self) -> IEntityReaderStorage[kd.KDRecordData, str]:
-        pass
-
-    @property
-    @abc.abstractmethod
-    def non_shared_data(self) -> IEntityReaderStorage[kd.KDNonSharedData, str]:
         pass
 
     @property
@@ -46,6 +46,26 @@ class IKeeperDriveStorage(abc.ABC):
     @property
     @abc.abstractmethod
     def record_links(self) -> ILinkReaderStorage[kd.KDRecordLink, str, str]:
+        pass
+
+    @property
+    @abc.abstractmethod
+    def folder_records(self) -> ILinkReaderStorage[kd.KDFolderRecord, str, str]:
+        pass
+
+    @property
+    @abc.abstractmethod
+    def folder_sharing_states(self) -> IEntityReaderStorage[kd.KDFolderSharingState, str]:
+        pass
+
+    @property
+    @abc.abstractmethod
+    def record_sharing_states(self) -> IEntityReaderStorage[kd.KDRecordSharingState, str]:
+        pass
+
+    @property
+    @abc.abstractmethod
+    def non_shared_data(self) -> IEntityReaderStorage[kd.KDNonSharedData, str]:
         pass
 
     @property
@@ -61,16 +81,6 @@ class IKeeperDriveStorage(abc.ABC):
     @property
     @abc.abstractmethod
     def breach_watch_security_data(self) -> IEntityReaderStorage[kd.KDBreachWatchSecurityData, str]:
-        pass
-
-    @property
-    @abc.abstractmethod
-    def folder_records(self) -> ILinkReaderStorage[kd.KDFolderRecord, str, str]:
-        pass
-
-    @property
-    @abc.abstractmethod
-    def record_summaries(self) -> IEntityReaderStorage[kd.KDRecordSummary, str]:
         pass
 
     @property

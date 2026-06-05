@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import dataclasses
 import json
-from typing import Any, Dict, List, Mapping, Optional, TYPE_CHECKING, Union
+from typing import Any, Dict, List, Mapping, Optional, TYPE_CHECKING, Tuple, Union
 
 from .. import utils
 from . import keeperdrive_storage_types as kd
@@ -11,9 +12,7 @@ from ..proto import SyncDown_pb2, folder_pb2, breachwatch_pb2, record_pb2
 if TYPE_CHECKING:
     from .keeperdrive_data import KeeperDriveRebuildTask
 
-CHUNK_RECORD_SHARING_STATES = 'recordSharingStates'
 CHUNK_RECORD_ROTATION = 'recordRotationData'
-CHUNK_FOLDER_SHARING_STATE = 'folderSharingState'
 CHUNK_RAW_DAG = 'rawDagData'
 
 _PROTO_ENUM_TYPES = (
@@ -86,8 +85,10 @@ def _folder_uid(item: Union[str, Mapping[str, Any]]) -> str:
     return str(item.get('folderUid') or item.get('folder_uid') or '')
 
 
-def _record_uid(item: Mapping[str, Any]) -> str:
-    return str(item.get('recordUid') or item.get('record_uid') or '')
+def _access_uid(x: Mapping[str, Any], *, proto_actor: bool = False) -> str:
+    if proto_actor:
+        return str(x.get('actorUid') or x.get('accessTypeUid') or '')
+    return str(x.get('actorUid') or x.get('accessTypeUid') or '')
 
 
 def extract_keeper_drive_data(sync_payload: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
@@ -144,147 +145,320 @@ def apply_keeper_drive_proto_message(
         kd_msg: SyncDown_pb2.KeeperDriveData,
         drive_storage: IKeeperDriveStorage,
         task: Optional['KeeperDriveRebuildTask'] = None) -> None:
-    for x in kd_msg.removedRecordLinks:
-        parent_uid, child_uid = _uid_b64(x.parentRecordUid), _uid_b64(x.childRecordUid)
-        drive_storage.record_links.delete_links([(parent_uid, child_uid)])
-        if task:
-            task.add_record(child_uid)
-
-    removed_folders = [_uid_b64(x.folder_uid) for x in kd_msg.removedFolders if x.folder_uid]
-    if removed_folders:
-        for fu in removed_folders:
-            drive_storage.folder_keys.delete_links_by_subjects([fu])
-            drive_storage.folder_accesses.delete_links_by_subjects([fu])
-            drive_storage.folder_records.delete_links_by_subjects([fu])
-        drive_storage.folders.delete_uids(removed_folders)
-        if task:
-            task.add_folders(removed_folders)
-
-    for x in kd_msg.removedFolderRecords:
-        fu, ru = _uid_b64(x.folderUid), _uid_b64(x.recordUid)
-        if fu and ru:
-            drive_storage.folder_records.delete_links([(fu, ru)])
-            if task:
-                task.add_record(ru)
-
-    for x in kd_msg.revokedFolderAccesses:
-        fu, au = _uid_b64(x.folderUid), _uid_b64(x.actorUid)
-        drive_storage.folder_accesses.delete_links([(fu, au)])
-        if task and fu:
-            task.add_folder(fu)
-
-    for x in kd_msg.revokedRecordAccesses:
-        ru, au = _uid_b64(x.recordUid), _uid_b64(x.actorUid)
-        drive_storage.record_accesses.delete_links([(ru, au)])
-        if task and ru:
-            task.add_record(ru)
-
-    folders = [_proto_folder(x) for x in kd_msg.folders]
-    if folders:
-        drive_storage.folders.put_entities(folders)
-        if task:
-            task.add_folders((f.folder_uid for f in folders))
-
-    fkeys = [_proto_folder_key(x) for x in kd_msg.folderKeys]
-    if fkeys:
-        drive_storage.folder_keys.put_links(fkeys)
-
-    facc = [_proto_folder_access(x) for x in kd_msg.folderAccesses]
-    if facc:
-        drive_storage.folder_accesses.put_links(facc)
-
-    rdata = [_proto_record_data(x) for x in kd_msg.recordData]
-    if rdata:
-        drive_storage.record_data.put_entities(rdata)
-        if task:
-            task.add_records((r.record_uid for r in rdata))
-
-    nsd = [_proto_non_shared(x) for x in kd_msg.nonSharedData]
-    if nsd:
-        drive_storage.non_shared_data.put_entities(nsd)
-        if task:
-            task.add_records((r.record_uid for r in nsd))
-
-    racc = [_proto_record_access(x) for x in kd_msg.recordAccesses]
-    if racc:
-        drive_storage.record_accesses.put_links(racc)
-        if task:
-            task.add_records((r.record_uid for r in racc))
-
-    rlinks = [_proto_record_link(x) for x in kd_msg.recordLinks]
-    if rlinks:
-        drive_storage.record_links.put_links(rlinks)
-        if task:
-            task.add_records((r.child_record_uid for r in rlinks))
-
-    bw = [_proto_bw_record(x) for x in kd_msg.breachWatchRecords]
-    if bw:
-        drive_storage.breach_watch_records.put_entities(bw)
-        if task:
-            task.add_records((r.record_uid for r in bw))
-
-    ss = [_proto_security_score(x) for x in kd_msg.securityScoreData]
-    if ss:
-        drive_storage.security_score_data.put_entities(ss)
-        if task:
-            task.add_records((r.record_uid for r in ss))
-
-    bws = [_proto_bw_security(x) for x in kd_msg.breachWatchSecurityData]
-    if bws:
-        drive_storage.breach_watch_security_data.put_entities(bws)
-        if task:
-            task.add_records((r.record_uid for r in bws))
-
-    fr = [_proto_folder_record(x) for x in kd_msg.folderRecords]
-    if fr:
-        drive_storage.folder_records.put_links(fr)
-        if task:
-            task.add_records((r.record_uid for r in fr))
-
-    summ = [_proto_record_summary(x) for x in kd_msg.records]
-    if summ:
-        drive_storage.record_summaries.put_entities(summ)
-        if task:
-            task.add_records((r.record_uid for r in summ))
-
-    chunk_payload: Dict[str, Any] = {
-        'recordSharingStates': list(kd_msg.recordSharingStates),
-        'recordRotationData': list(kd_msg.recordRotationData),
-        'folderSharingState': list(kd_msg.folderSharingState),
-        'rawDagData': list(kd_msg.rawDagData),
-    }
-    _replace_json_lists(drive_storage, chunk_payload)
+    _process_removed_folders_proto(kd_msg, drive_storage, task)
+    _process_removed_folder_records_proto(kd_msg, drive_storage, task)
+    _process_removed_record_links_proto(kd_msg, drive_storage, task)
+    _store_folders_proto(kd_msg, drive_storage, task)
+    _store_folder_keys_proto(kd_msg, drive_storage)
+    _store_record_data_proto(kd_msg, drive_storage, task)
+    _store_folder_records_proto(kd_msg, drive_storage, task)
+    _store_records_proto(kd_msg, drive_storage, task)
+    _process_revoked_folder_accesses_proto(kd_msg, drive_storage, task)
+    _store_folder_accesses_proto(kd_msg, drive_storage)
+    _process_revoked_record_accesses_proto(kd_msg, drive_storage, task)
+    _store_record_accesses_proto(kd_msg, drive_storage, task)
+    _store_record_links_proto(kd_msg, drive_storage, task)
+    _store_folder_sharing_states_proto(kd_msg, drive_storage)
+    _store_record_sharing_states_proto(kd_msg, drive_storage)
+    _store_optional_extras_proto(kd_msg, drive_storage, task)
 
 
 def apply_keeper_drive_data_dict(
         drive_storage: IKeeperDriveStorage,
         keeper_drive_data: Mapping[str, Any],
         task: Optional['KeeperDriveRebuildTask'] = None) -> None:
-    _apply_revocations_and_removals(drive_storage, keeper_drive_data, task)
-    _apply_upserts(drive_storage, keeper_drive_data, task)
-    _replace_json_lists(drive_storage, keeper_drive_data)
+    _process_removed_folders_dict(keeper_drive_data, drive_storage, task)
+    _process_removed_folder_records_dict(keeper_drive_data, drive_storage, task)
+    _process_removed_record_links_dict(keeper_drive_data, drive_storage, task)
+    _store_folders_dict(keeper_drive_data, drive_storage, task)
+    _store_folder_keys_dict(keeper_drive_data, drive_storage)
+    _store_record_data_dict(keeper_drive_data, drive_storage, task)
+    _store_folder_records_dict(keeper_drive_data, drive_storage, task)
+    _store_records_dict(keeper_drive_data, drive_storage, task)
+    _process_revoked_folder_accesses_dict(keeper_drive_data, drive_storage, task)
+    _store_folder_accesses_dict(keeper_drive_data, drive_storage)
+    _process_revoked_record_accesses_dict(keeper_drive_data, drive_storage, task)
+    _store_record_accesses_dict(keeper_drive_data, drive_storage, task)
+    _store_record_links_dict(keeper_drive_data, drive_storage, task)
+    _store_folder_sharing_states_dict(keeper_drive_data, drive_storage)
+    _store_record_sharing_states_dict(keeper_drive_data, drive_storage)
+    _store_optional_extras_dict(keeper_drive_data, drive_storage, task)
 
 
-def _apply_revocations_and_removals(
+def _process_removed_folders_proto(
+        kd_msg: SyncDown_pb2.KeeperDriveData,
         storage: IKeeperDriveStorage,
+        task: Optional['KeeperDriveRebuildTask']) -> None:
+    removed = [_uid_b64(x.folder_uid) for x in kd_msg.removedFolders if x.folder_uid]
+    if not removed:
+        return
+    storage.folder_keys.delete_links_by_subjects(removed)
+    storage.folder_records.delete_links_by_subjects(removed)
+    storage.folders.delete_uids(removed)
+    if task:
+        task.add_folders(removed)
+
+
+def _process_removed_folder_records_proto(
+        kd_msg: SyncDown_pb2.KeeperDriveData,
+        storage: IKeeperDriveStorage,
+        task: Optional['KeeperDriveRebuildTask']) -> None:
+    links: List[Tuple[str, str]] = []
+    key_links: List[Tuple[str, str]] = []
+    for x in kd_msg.removedFolderRecords:
+        fu, ru = _uid_b64(x.folderUid), _uid_b64(x.recordUid)
+        if fu and ru:
+            links.append((fu, ru))
+            key_links.append((ru, fu))
+    if links:
+        storage.folder_records.delete_links(links)
+    if key_links:
+        storage.record_keys.delete_links(key_links)
+    if task and links:
+        task.add_records((ru for _, ru in links))
+
+
+def _process_removed_record_links_proto(
+        kd_msg: SyncDown_pb2.KeeperDriveData,
+        storage: IKeeperDriveStorage,
+        task: Optional['KeeperDriveRebuildTask']) -> None:
+    for x in kd_msg.removedRecordLinks:
+        parent_uid, child_uid = _uid_b64(x.parentRecordUid), _uid_b64(x.childRecordUid)
+        storage.record_links.delete_links([(parent_uid, child_uid)])
+        if task and child_uid:
+            task.add_record(child_uid)
+
+
+def _process_revoked_folder_accesses_proto(
+        kd_msg: SyncDown_pb2.KeeperDriveData,
+        storage: IKeeperDriveStorage,
+        task: Optional['KeeperDriveRebuildTask']) -> None:
+    links = [(_uid_b64(x.folderUid), _uid_b64(x.actorUid)) for x in kd_msg.revokedFolderAccesses]
+    if links:
+        storage.folder_accesses.delete_links(links)
+        if task:
+            task.add_folders((fu for fu, _ in links if fu))
+
+
+def _process_revoked_record_accesses_proto(
+        kd_msg: SyncDown_pb2.KeeperDriveData,
+        storage: IKeeperDriveStorage,
+        task: Optional['KeeperDriveRebuildTask']) -> None:
+    links = [(_uid_b64(x.recordUid), _uid_b64(x.actorUid)) for x in kd_msg.revokedRecordAccesses]
+    if links:
+        storage.record_accesses.delete_links(links)
+        if task:
+            task.add_records((ru for ru, _ in links if ru))
+
+
+def _store_folders_proto(
+        kd_msg: SyncDown_pb2.KeeperDriveData,
+        storage: IKeeperDriveStorage,
+        task: Optional['KeeperDriveRebuildTask']) -> None:
+    folders = [_proto_folder(x) for x in kd_msg.folders]
+    if folders:
+        storage.folders.put_entities(folders)
+        if task:
+            task.add_folders((f.folder_uid for f in folders))
+
+
+def _store_folder_keys_proto(kd_msg: SyncDown_pb2.KeeperDriveData, storage: IKeeperDriveStorage) -> None:
+    keys = [_proto_folder_key(x) for x in kd_msg.folderKeys]
+    if keys:
+        storage.folder_keys.put_links(keys)
+
+
+def _store_record_data_proto(
+        kd_msg: SyncDown_pb2.KeeperDriveData,
+        storage: IKeeperDriveStorage,
+        task: Optional['KeeperDriveRebuildTask']) -> None:
+    updated: List[kd.KDRecord] = []
+    for rd in kd_msg.recordData:
+        record_uid = _uid_b64(rd.recordUid)
+        existing = storage.records.get_entity(record_uid)
+        if existing is None:
+            continue
+        row = dataclasses.replace(existing, data=_wire_b64(rd.data))
+        updated.append(row)
+        if task:
+            task.add_record(record_uid)
+    if updated:
+        storage.records.put_entities(updated)
+
+
+def _store_folder_records_proto(
+        kd_msg: SyncDown_pb2.KeeperDriveData,
+        storage: IKeeperDriveStorage,
+        task: Optional['KeeperDriveRebuildTask']) -> None:
+    folder_records: List[kd.KDFolderRecord] = []
+    record_keys: List[kd.KDRecordKey] = []
+    for fr in kd_msg.folderRecords:
+        folder_uid = _uid_b64(fr.folderUid)
+        md = fr.recordMetadata
+        if md is None or not list(md.ListFields()):
+            continue
+        record_uid = _uid_b64(md.recordUid)
+        folder_records.append(kd.KDFolderRecord(folder_uid=folder_uid, record_uid=record_uid))
+        if md.encryptedRecordKey:
+            record_keys.append(kd.KDRecordKey(
+                record_uid=record_uid,
+                folder_uid=folder_uid,
+                record_key=_wire_b64(md.encryptedRecordKey),
+                record_key_type=int(md.encryptedRecordKeyType),
+                folder_key_encryption_type=int(fr.folderKeyEncryptionType),
+            ))
+    if folder_records:
+        storage.folder_records.put_links(folder_records)
+        if task:
+            task.add_records((r.record_uid for r in folder_records))
+    if record_keys:
+        storage.record_keys.put_links(record_keys)
+
+
+def _store_records_proto(
+        kd_msg: SyncDown_pb2.KeeperDriveData,
+        storage: IKeeperDriveStorage,
+        task: Optional['KeeperDriveRebuildTask']) -> None:
+    rows: List[kd.KDRecord] = []
+    for dr in kd_msg.records:
+        record_uid = _uid_b64(dr.recordUid)
+        existing = storage.records.get_entity(record_uid)
+        rows.append(kd.KDRecord(
+            record_uid=record_uid,
+            revision=dr.revision,
+            version=dr.version,
+            shared=dr.shared,
+            client_modified_time=dr.clientModifiedTime,
+            file_size=dr.fileSize,
+            thumbnail_size=dr.thumbnailSize,
+            data=existing.data if existing else '',
+        ))
+    if rows:
+        storage.records.put_entities(rows)
+        if task:
+            task.add_records((r.record_uid for r in rows))
+
+
+def _store_folder_accesses_proto(kd_msg: SyncDown_pb2.KeeperDriveData, storage: IKeeperDriveStorage) -> None:
+    rows = [_proto_folder_access(x) for x in kd_msg.folderAccesses]
+    if rows:
+        storage.folder_accesses.put_links(rows)
+
+
+def _store_record_accesses_proto(
+        kd_msg: SyncDown_pb2.KeeperDriveData,
+        storage: IKeeperDriveStorage,
+        task: Optional['KeeperDriveRebuildTask']) -> None:
+    rows = [_proto_record_access(x) for x in kd_msg.recordAccesses]
+    if rows:
+        storage.record_accesses.put_links(rows)
+        if task:
+            task.add_records((r.record_uid for r in rows))
+
+
+def _store_record_links_proto(
+        kd_msg: SyncDown_pb2.KeeperDriveData,
+        storage: IKeeperDriveStorage,
+        task: Optional['KeeperDriveRebuildTask']) -> None:
+    rows = [_proto_record_link(x) for x in kd_msg.recordLinks]
+    if rows:
+        storage.record_links.put_links(rows)
+        if task:
+            task.add_records((r.child_record_uid for r in rows))
+
+
+def _store_folder_sharing_states_proto(kd_msg: SyncDown_pb2.KeeperDriveData, storage: IKeeperDriveStorage) -> None:
+    rows = [kd.KDFolderSharingState(
+        folder_uid=_uid_b64(x.folderUid),
+        shared=x.shared,
+        count=x.count,
+    ) for x in kd_msg.folderSharingState]
+    if rows:
+        storage.folder_sharing_states.put_entities(rows)
+
+
+def _store_record_sharing_states_proto(kd_msg: SyncDown_pb2.KeeperDriveData, storage: IKeeperDriveStorage) -> None:
+    rows = [kd.KDRecordSharingState(
+        record_uid=_uid_b64(x.recordUid),
+        is_directly_shared=x.isDirectlyShared,
+        is_indirectly_shared=x.isIndirectlyShared,
+        is_shared=x.isShared,
+    ) for x in kd_msg.recordSharingStates]
+    if rows:
+        storage.record_sharing_states.put_entities(rows)
+
+
+def _store_optional_extras_proto(
+        kd_msg: SyncDown_pb2.KeeperDriveData,
+        storage: IKeeperDriveStorage,
+        task: Optional['KeeperDriveRebuildTask']) -> None:
+    nsd = [_proto_non_shared(x) for x in kd_msg.nonSharedData]
+    if nsd:
+        storage.non_shared_data.put_entities(nsd)
+        if task:
+            task.add_records((r.record_uid for r in nsd))
+    bw = [_proto_bw_record(x) for x in kd_msg.breachWatchRecords]
+    if bw:
+        storage.breach_watch_records.put_entities(bw)
+        if task:
+            task.add_records((r.record_uid for r in bw))
+    ss = [_proto_security_score(x) for x in kd_msg.securityScoreData]
+    if ss:
+        storage.security_score_data.put_entities(ss)
+        if task:
+            task.add_records((r.record_uid for r in ss))
+    bws = [_proto_bw_security(x) for x in kd_msg.breachWatchSecurityData]
+    if bws:
+        storage.breach_watch_security_data.put_entities(bws)
+        if task:
+            task.add_records((r.record_uid for r in bws))
+    chunk_payload: Dict[str, Any] = {
+        CHUNK_RECORD_ROTATION: list(kd_msg.recordRotationData),
+        CHUNK_RAW_DAG: list(kd_msg.rawDagData),
+    }
+    _replace_json_lists(storage, chunk_payload)
+
+
+def _process_removed_folders_dict(
         d: Mapping[str, Any],
-        task: Optional['KeeperDriveRebuildTask'] = None) -> None:
-    for x in d.get('revokedFolderAccesses') or []:
+        storage: IKeeperDriveStorage,
+        task: Optional['KeeperDriveRebuildTask']) -> None:
+    removed = [_folder_uid(y) for y in (d.get('removedFolders') or []) if _folder_uid(y)]
+    if not removed:
+        return
+    storage.folder_keys.delete_links_by_subjects(removed)
+    storage.folder_records.delete_links_by_subjects(removed)
+    storage.folders.delete_uids(removed)
+    if task:
+        task.add_folders(removed)
+
+
+def _process_removed_folder_records_dict(
+        d: Mapping[str, Any],
+        storage: IKeeperDriveStorage,
+        task: Optional['KeeperDriveRebuildTask']) -> None:
+    links: List[Tuple[str, str]] = []
+    key_links: List[Tuple[str, str]] = []
+    for x in d.get('removedFolderRecords') or []:
         if not isinstance(x, dict):
             continue
-        fu, au = str(x.get('folderUid', '')), str(x.get('accessTypeUid', ''))
-        storage.folder_accesses.delete_links([(fu, au)])
-        if task and fu:
-            task.add_folder(fu)
+        fu = str(x.get('folderUid', ''))
+        ru = str(x.get('recordUid', ''))
+        if fu and ru:
+            links.append((fu, ru))
+            key_links.append((ru, fu))
+    if links:
+        storage.folder_records.delete_links(links)
+    if key_links:
+        storage.record_keys.delete_links(key_links)
+    if task and links:
+        task.add_records((ru for _, ru in links))
 
-    for x in d.get('revokedRecordAccesses') or []:
-        if not isinstance(x, dict):
-            continue
-        ru, au = str(x.get('recordUid', '')), str(x.get('accessTypeUid', ''))
-        storage.record_accesses.delete_links([(ru, au)])
-        if task and ru:
-            task.add_record(ru)
 
+def _process_removed_record_links_dict(
+        d: Mapping[str, Any],
+        storage: IKeeperDriveStorage,
+        task: Optional['KeeperDriveRebuildTask']) -> None:
     for x in d.get('removedRecordLinks') or []:
         if not isinstance(x, dict):
             continue
@@ -296,104 +470,223 @@ def _apply_revocations_and_removals(
         if task and child_uid:
             task.add_record(child_uid)
 
-    removed_folders = [_folder_uid(y) for y in (d.get('removedFolders') or []) if _folder_uid(y)]
-    if removed_folders:
-        for fu in removed_folders:
-            storage.folder_keys.delete_links_by_subjects([fu])
-            storage.folder_accesses.delete_links_by_subjects([fu])
-            storage.folder_records.delete_links_by_subjects([fu])
-        storage.folders.delete_uids(removed_folders)
-        if task:
-            task.add_folders(removed_folders)
 
-    for x in d.get('removedFolderRecords') or []:
+def _process_revoked_folder_accesses_dict(
+        d: Mapping[str, Any],
+        storage: IKeeperDriveStorage,
+        task: Optional['KeeperDriveRebuildTask']) -> None:
+    links: List[Tuple[str, str]] = []
+    for x in d.get('revokedFolderAccesses') or []:
         if not isinstance(x, dict):
             continue
-        fu, ru = str(x.get('folderUid', '')), str(x.get('recordUid', ''))
-        if fu and ru:
-            storage.folder_records.delete_links([(fu, ru)])
-            if task:
-                task.add_record(ru)
+        fu = str(x.get('folderUid', ''))
+        au = _access_uid(x)
+        if fu and au:
+            links.append((fu, au))
+    if links:
+        storage.folder_accesses.delete_links(links)
+        if task:
+            task.add_folders((fu for fu, _ in links))
 
 
-def _apply_upserts(
-        storage: IKeeperDriveStorage,
+def _process_revoked_record_accesses_dict(
         d: Mapping[str, Any],
-        task: Optional['KeeperDriveRebuildTask'] = None) -> None:
+        storage: IKeeperDriveStorage,
+        task: Optional['KeeperDriveRebuildTask']) -> None:
+    links: List[Tuple[str, str]] = []
+    for x in d.get('revokedRecordAccesses') or []:
+        if not isinstance(x, dict):
+            continue
+        ru = str(x.get('recordUid', ''))
+        au = _access_uid(x)
+        if ru and au:
+            links.append((ru, au))
+    if links:
+        storage.record_accesses.delete_links(links)
+        if task:
+            task.add_records((ru for ru, _ in links))
+
+
+def _store_folders_dict(
+        d: Mapping[str, Any],
+        storage: IKeeperDriveStorage,
+        task: Optional['KeeperDriveRebuildTask']) -> None:
     folders = [_dict_to_folder(x) for x in d.get('folders') or [] if isinstance(x, dict)]
     if folders:
         storage.folders.put_entities(folders)
         if task:
             task.add_folders((f.folder_uid for f in folders))
 
-    fkeys = [_dict_to_folder_key(x) for x in d.get('folderKeys') or [] if isinstance(x, dict)]
-    if fkeys:
-        storage.folder_keys.put_links(fkeys)
 
-    facc = [_dict_to_folder_access(x) for x in d.get('folderAccesses') or [] if isinstance(x, dict)]
-    if facc:
-        storage.folder_accesses.put_links(facc)
+def _store_folder_keys_dict(d: Mapping[str, Any], storage: IKeeperDriveStorage) -> None:
+    keys = [_dict_to_folder_key(x) for x in d.get('folderKeys') or [] if isinstance(x, dict)]
+    if keys:
+        storage.folder_keys.put_links(keys)
 
-    rdata = [_dict_to_record_data(x) for x in d.get('recordData') or [] if isinstance(x, dict)]
-    if rdata:
-        storage.record_data.put_entities(rdata)
+
+def _store_record_data_dict(
+        d: Mapping[str, Any],
+        storage: IKeeperDriveStorage,
+        task: Optional['KeeperDriveRebuildTask']) -> None:
+    updated: List[kd.KDRecord] = []
+    for x in d.get('recordData') or []:
+        if not isinstance(x, dict):
+            continue
+        record_uid = str(x.get('recordUid', ''))
+        existing = storage.records.get_entity(record_uid)
+        if existing is None:
+            continue
+        updated.append(dataclasses.replace(existing, data=str(x.get('data', ''))))
         if task:
-            task.add_records((r.record_uid for r in rdata))
+            task.add_record(record_uid)
+    if updated:
+        storage.records.put_entities(updated)
 
+
+def _store_folder_records_dict(
+        d: Mapping[str, Any],
+        storage: IKeeperDriveStorage,
+        task: Optional['KeeperDriveRebuildTask']) -> None:
+    folder_records: List[kd.KDFolderRecord] = []
+    record_keys: List[kd.KDRecordKey] = []
+    for x in d.get('folderRecords') or []:
+        if not isinstance(x, dict):
+            continue
+        folder_uid = str(x.get('folderUid', ''))
+        md = x.get('recordMetadata') or {}
+        record_uid = str(md.get('recordUid', ''))
+        if not folder_uid or not record_uid:
+            continue
+        folder_records.append(kd.KDFolderRecord(folder_uid=folder_uid, record_uid=record_uid))
+        enc_key = str(md.get('encryptedRecordKey', ''))
+        if enc_key:
+            record_keys.append(kd.KDRecordKey(
+                record_uid=record_uid,
+                folder_uid=folder_uid,
+                record_key=enc_key,
+                record_key_type=_coerce_int(md.get('encryptedRecordKeyType'), 0),
+                folder_key_encryption_type=_coerce_int(x.get('folderKeyEncryptionType'), 0),
+            ))
+    if folder_records:
+        storage.folder_records.put_links(folder_records)
+        if task:
+            task.add_records((r.record_uid for r in folder_records))
+    if record_keys:
+        storage.record_keys.put_links(record_keys)
+
+
+def _store_records_dict(
+        d: Mapping[str, Any],
+        storage: IKeeperDriveStorage,
+        task: Optional['KeeperDriveRebuildTask']) -> None:
+    rows: List[kd.KDRecord] = []
+    for x in d.get('records') or []:
+        if not isinstance(x, dict):
+            continue
+        record_uid = str(x.get('recordUid', ''))
+        existing = storage.records.get_entity(record_uid)
+        rows.append(kd.KDRecord(
+            record_uid=record_uid,
+            revision=_coerce_int(x.get('revision'), 0),
+            version=_coerce_int(x.get('version'), 0),
+            shared=bool(x.get('shared')),
+            client_modified_time=_coerce_int(x.get('clientModifiedTime'), 0),
+            file_size=_coerce_int(x.get('fileSize'), 0),
+            thumbnail_size=_coerce_int(x.get('thumbnailSize'), 0),
+            data=existing.data if existing else '',
+        ))
+    if rows:
+        storage.records.put_entities(rows)
+        if task:
+            task.add_records((r.record_uid for r in rows))
+
+
+def _store_folder_accesses_dict(d: Mapping[str, Any], storage: IKeeperDriveStorage) -> None:
+    rows = [_dict_to_folder_access(x) for x in d.get('folderAccesses') or [] if isinstance(x, dict)]
+    if rows:
+        storage.folder_accesses.put_links(rows)
+
+
+def _store_record_accesses_dict(d: Mapping[str, Any], storage: IKeeperDriveStorage) -> None:
+    rows = [_dict_to_record_access(x) for x in d.get('recordAccesses') or [] if isinstance(x, dict)]
+    if rows:
+        storage.record_accesses.put_links(rows)
+
+
+def _store_record_links_dict(
+        d: Mapping[str, Any],
+        storage: IKeeperDriveStorage,
+        task: Optional['KeeperDriveRebuildTask']) -> None:
+    rows = [_dict_to_record_link(x) for x in d.get('recordLinks') or [] if isinstance(x, dict)]
+    if rows:
+        storage.record_links.put_links(rows)
+        if task:
+            task.add_records((r.child_record_uid for r in rows))
+
+
+def _store_folder_sharing_states_dict(d: Mapping[str, Any], storage: IKeeperDriveStorage) -> None:
+    rows: List[kd.KDFolderSharingState] = []
+    for x in d.get('folderSharingState') or []:
+        if not isinstance(x, dict):
+            continue
+        rows.append(kd.KDFolderSharingState(
+            folder_uid=str(x.get('folderUid', '')),
+            shared=bool(x.get('shared')),
+            count=_coerce_int(x.get('count'), 0),
+        ))
+    if rows:
+        storage.folder_sharing_states.put_entities(rows)
+
+
+def _store_record_sharing_states_dict(d: Mapping[str, Any], storage: IKeeperDriveStorage) -> None:
+    rows: List[kd.KDRecordSharingState] = []
+    for x in d.get('recordSharingStates') or []:
+        if not isinstance(x, dict):
+            continue
+        rows.append(kd.KDRecordSharingState(
+            record_uid=str(x.get('recordUid', '')),
+            is_directly_shared=bool(x.get('isDirectlyShared')),
+            is_indirectly_shared=bool(x.get('isIndirectlyShared')),
+            is_shared=bool(x.get('isShared')),
+        ))
+    if rows:
+        storage.record_sharing_states.put_entities(rows)
+
+
+def _store_optional_extras_dict(
+        d: Mapping[str, Any],
+        storage: IKeeperDriveStorage,
+        task: Optional['KeeperDriveRebuildTask']) -> None:
     nsd = [_dict_to_non_shared(x) for x in d.get('nonSharedData') or [] if isinstance(x, dict)]
     if nsd:
         storage.non_shared_data.put_entities(nsd)
         if task:
             task.add_records((r.record_uid for r in nsd))
-
-    racc = [_dict_to_record_access(x) for x in d.get('recordAccesses') or [] if isinstance(x, dict)]
-    if racc:
-        storage.record_accesses.put_links(racc)
-        if task:
-            task.add_records((r.record_uid for r in racc))
-
-    rlinks = [_dict_to_record_link(x) for x in d.get('recordLinks') or [] if isinstance(x, dict)]
-    if rlinks:
-        storage.record_links.put_links(rlinks)
-        if task:
-            task.add_records((r.child_record_uid for r in rlinks))
-
     bw = [_dict_to_bw_record(x) for x in d.get('breachWatchRecords') or [] if isinstance(x, dict)]
     if bw:
         storage.breach_watch_records.put_entities(bw)
         if task:
             task.add_records((r.record_uid for r in bw))
-
     ss = [_dict_to_security_score(x) for x in d.get('securityScoreData') or [] if isinstance(x, dict)]
     if ss:
         storage.security_score_data.put_entities(ss)
         if task:
             task.add_records((r.record_uid for r in ss))
-
     bws = [_dict_to_bw_security(x) for x in d.get('breachWatchSecurityData') or [] if isinstance(x, dict)]
     if bws:
         storage.breach_watch_security_data.put_entities(bws)
         if task:
             task.add_records((r.record_uid for r in bws))
-
-    fr = [_dict_to_folder_record(x) for x in d.get('folderRecords') or [] if isinstance(x, dict)]
-    if fr:
-        storage.folder_records.put_links(fr)
-        if task:
-            task.add_records((r.record_uid for r in fr))
-
-    summ = [_dict_to_record_summary(x) for x in d.get('records') or [] if isinstance(x, dict)]
-    if summ:
-        storage.record_summaries.put_entities(summ)
-        if task:
-            task.add_records((r.record_uid for r in summ))
+    chunk_payload: Dict[str, Any] = {
+        CHUNK_RECORD_ROTATION: d.get('recordRotationData'),
+        CHUNK_RAW_DAG: d.get('rawDagData'),
+    }
+    _replace_json_lists(storage, chunk_payload)
 
 
 def _replace_json_lists(storage: IKeeperDriveStorage, d: Mapping[str, Any]) -> None:
-    _replace_chunk_group(storage, CHUNK_RECORD_SHARING_STATES, d.get('recordSharingStates'))
-    _replace_chunk_group(storage, CHUNK_RECORD_ROTATION, d.get('recordRotationData'))
-    _replace_chunk_group(storage, CHUNK_FOLDER_SHARING_STATE, d.get('folderSharingState'))
-    _replace_chunk_group(storage, CHUNK_RAW_DAG, d.get('rawDagData'))
+    _replace_chunk_group(storage, CHUNK_RECORD_ROTATION, d.get(CHUNK_RECORD_ROTATION))
+    _replace_chunk_group(storage, CHUNK_RAW_DAG, d.get(CHUNK_RAW_DAG))
 
 
 def _replace_chunk_group(storage: IKeeperDriveStorage, group: str, items: Any) -> None:
@@ -451,16 +744,6 @@ def _proto_folder_access(fa: folder_pb2.FolderAccessData) -> kd.KDFolderAccess:
         tla_properties_json='',
         date_created=fa.dateCreated,
         last_modified=fa.lastModified,
-    )
-
-
-def _proto_record_data(rd: folder_pb2.RecordData) -> kd.KDRecordData:
-    u = rd.user
-    return kd.KDRecordData(
-        record_uid=_uid_b64(rd.recordUid),
-        account_uid=_uid_b64(u.accountUid) if u else '',
-        username=u.username if u else '',
-        data=_wire_b64(rd.data),
     )
 
 
@@ -532,30 +815,6 @@ def _proto_bw_security(bws: SyncDown_pb2.BreachWatchSecurityData) -> kd.KDBreach
     )
 
 
-def _proto_folder_record(fr: folder_pb2.FolderRecord) -> kd.KDFolderRecord:
-    md = fr.recordMetadata
-    return kd.KDFolderRecord(
-        folder_uid=_uid_b64(fr.folderUid),
-        record_uid=_uid_b64(md.recordUid) if md else '',
-        encrypted_record_key=_wire_b64(md.encryptedRecordKey) if md else '',
-        encrypted_record_key_type=int(md.encryptedRecordKeyType) if md else 0,
-        folder_key_encryption_type=int(fr.folderKeyEncryptionType),
-        tla_properties_json='',
-    )
-
-
-def _proto_record_summary(rec: SyncDown_pb2.DriveRecord) -> kd.KDRecordSummary:
-    return kd.KDRecordSummary(
-        record_uid=_uid_b64(rec.recordUid),
-        revision=rec.revision,
-        version=rec.version,
-        shared=rec.shared,
-        client_modified_time=rec.clientModifiedTime,
-        file_size=rec.fileSize,
-        thumbnail_size=rec.thumbnailSize,
-    )
-
-
 def _dict_to_folder(x: Dict[str, Any]) -> kd.KDFolder:
     oi = x.get('ownerInfo') or {}
     return kd.KDFolder(
@@ -603,16 +862,6 @@ def _dict_to_folder_access(x: Dict[str, Any]) -> kd.KDFolderAccess:
         tla_properties_json=_j(x.get('tlaProperties')),
         date_created=_coerce_int(x.get('dateCreated'), 0),
         last_modified=_coerce_int(x.get('lastModified'), 0),
-    )
-
-
-def _dict_to_record_data(x: Dict[str, Any]) -> kd.KDRecordData:
-    u = x.get('user') or {}
-    return kd.KDRecordData(
-        record_uid=str(x.get('recordUid', '')),
-        account_uid=str(u.get('accountUid', '')),
-        username=str(u.get('username', '')),
-        data=str(x.get('data', '')),
     )
 
 
@@ -684,32 +933,8 @@ def _dict_to_bw_security(x: Dict[str, Any]) -> kd.KDBreachWatchSecurityData:
     )
 
 
-def _dict_to_folder_record(x: Dict[str, Any]) -> kd.KDFolderRecord:
-    md = x.get('recordMetadata') or {}
-    return kd.KDFolderRecord(
-        folder_uid=str(x.get('folderUid', '')),
-        record_uid=str(md.get('recordUid', '')),
-        encrypted_record_key=str(md.get('encryptedRecordKey', '')),
-        encrypted_record_key_type=_coerce_int(md.get('encryptedRecordKeyType'), 0),
-        folder_key_encryption_type=_coerce_int(x.get('folderKeyEncryptionType'), 0),
-        tla_properties_json=_j(md.get('tlaProperties')),
-    )
-
-
-def _dict_to_record_summary(x: Dict[str, Any]) -> kd.KDRecordSummary:
-    return kd.KDRecordSummary(
-        record_uid=str(x.get('recordUid', '')),
-        revision=_coerce_int(x.get('revision'), 0),
-        version=_coerce_int(x.get('version'), 0),
-        shared=bool(x.get('shared')),
-        client_modified_time=_coerce_int(x.get('clientModifiedTime'), 0),
-        file_size=_coerce_int(x.get('fileSize'), 0),
-        thumbnail_size=_coerce_int(x.get('thumbnailSize'), 0),
-    )
-
-
 def load_list_chunks(storage: IKeeperDriveStorage, group: str) -> List[Any]:
-    """Decode ``KDListChunk`` rows for ``group`` back into Python values (JSON objects or scalars)."""
+    """Decode ``KDListChunk`` rows for ``group`` back into Python values."""
     out: List[Any] = []
     for link in storage.list_chunks.get_links_by_subject(group):
         if not isinstance(link, kd.KDListChunk) or not link.payload_json:

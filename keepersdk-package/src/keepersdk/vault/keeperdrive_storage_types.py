@@ -42,6 +42,36 @@ class KDFolderKey(IUidLink[str, str]):
 
 
 @dataclass
+class KDRecord(IUid):
+    record_uid: str = ''
+    revision: int = 0
+    version: int = 0
+    shared: bool = False
+    client_modified_time: int = 0
+    file_size: int = 0
+    thumbnail_size: int = 0
+    data: str = ''
+
+    def uid(self) -> str:
+        return self.record_uid
+
+
+@dataclass
+class KDRecordKey(IUidLink[str, str]):
+    record_uid: str = ''
+    folder_uid: str = ''
+    record_key: str = ''
+    record_key_type: int = 0
+    folder_key_encryption_type: int = 0
+
+    def subject_uid(self) -> str:
+        return self.record_uid
+
+    def object_uid(self) -> str:
+        return self.folder_uid
+
+
+@dataclass
 class KDFolderAccess(IUidLink[str, str]):
     folder_uid: str = ''
     access_type_uid: str = ''
@@ -62,26 +92,6 @@ class KDFolderAccess(IUidLink[str, str]):
 
     def object_uid(self) -> str:
         return self.access_type_uid
-
-
-@dataclass
-class KDRecordData(IUid):
-    record_uid: str = ''
-    account_uid: str = ''
-    username: str = ''
-    data: str = ''
-
-    def uid(self) -> str:
-        return self.record_uid
-
-
-@dataclass
-class KDNonSharedData(IUid):
-    record_uid: str = ''
-    data: str = ''
-
-    def uid(self) -> str:
-        return self.record_uid
 
 
 @dataclass
@@ -129,6 +139,48 @@ class KDRecordLink(IUidLink[str, str]):
 
 
 @dataclass
+class KDFolderRecord(IUidLink[str, str]):
+    folder_uid: str = ''
+    record_uid: str = ''
+
+    def subject_uid(self) -> str:
+        return self.folder_uid
+
+    def object_uid(self) -> str:
+        return self.record_uid
+
+
+@dataclass
+class KDFolderSharingState(IUid):
+    folder_uid: str = ''
+    shared: bool = False
+    count: int = 0
+
+    def uid(self) -> str:
+        return self.folder_uid
+
+
+@dataclass
+class KDRecordSharingState(IUid):
+    record_uid: str = ''
+    is_directly_shared: bool = False
+    is_indirectly_shared: bool = False
+    is_shared: bool = False
+
+    def uid(self) -> str:
+        return self.record_uid
+
+
+@dataclass
+class KDNonSharedData(IUid):
+    record_uid: str = ''
+    data: str = ''
+
+    def uid(self) -> str:
+        return self.record_uid
+
+
+@dataclass
 class KDBreachWatchRecord(IUid):
     record_uid: str = ''
     data: str = ''
@@ -156,36 +208,6 @@ class KDBreachWatchSecurityData(IUid):
     record_uid: str = ''
     revision: int = 0
     removed: bool = False
-
-    def uid(self) -> str:
-        return self.record_uid
-
-
-@dataclass
-class KDFolderRecord(IUidLink[str, str]):
-    folder_uid: str = ''
-    record_uid: str = ''
-    encrypted_record_key: str = ''
-    encrypted_record_key_type: int = 0
-    folder_key_encryption_type: int = 0
-    tla_properties_json: str = ''
-
-    def subject_uid(self) -> str:
-        return self.folder_uid
-
-    def object_uid(self) -> str:
-        return self.record_uid
-
-
-@dataclass
-class KDRecordSummary(IUid):
-    record_uid: str = ''
-    revision: int = 0
-    version: int = 0
-    shared: bool = False
-    client_modified_time: int = 0
-    file_size: int = 0
-    thumbnail_size: int = 0
 
     def uid(self) -> str:
         return self.record_uid

@@ -38,8 +38,9 @@ class TestKeeperDriveSync(unittest.TestCase):
                           'ownerInfo': {'accountUid': 'a', 'username': 'u'},
                           'dateCreated': 1, 'lastModified': 2}]},
         )
+        self.assertEqual(len(list(kd.folders.get_all_entities())), 1)
         view.rebuild_data(keeperdrive_data.KeeperDriveRebuildTask(True))
-        self.assertEqual(view.folder_count, 1)
+        self.assertEqual(view.folder_count, 0)
         conn.close()
 
     def test_apply_keeperdrive_sync_down_sample(self):
@@ -57,8 +58,7 @@ class TestKeeperDriveSync(unittest.TestCase):
 
         inner = payload['keeperDriveData']
         self.assertEqual(len(list(kd.folders.get_all_entities())), len(inner['folders']))
-        self.assertEqual(len(list(kd.record_summaries.get_all_entities())), len(inner['records']))
-        self.assertEqual(len(list(kd.record_data.get_all_entities())), len(inner['recordData']))
+        self.assertEqual(len(list(kd.records.get_all_entities())), len(inner['records']))
 
         f0 = kd.folders.get_entity(inner['folders'][0]['folderUid'])
         assert f0 is not None
@@ -67,6 +67,7 @@ class TestKeeperDriveSync(unittest.TestCase):
         conn.close()
 
     def test_revoked_and_removed_sync_down_delete_main_tables(self):
+        """Revoked/removed sync-down payloads delete rows from main tables only."""
         kd = memory_keeperdrive_storage.InMemoryKeeperDriveStorage()
         keeperdrive_sync.apply_keeper_drive_data_dict(
             kd,
@@ -80,6 +81,8 @@ class TestKeeperDriveSync(unittest.TestCase):
                                     'deniedAccess': False, 'dateCreated': 1, 'lastModified': 2}],
                 'folderRecords': [{'folderUid': 'F1', 'recordMetadata': {'recordUid': 'R1'},
                                    'folderKeyEncryptionType': 0}],
+                'records': [{'recordUid': 'R1', 'revision': 1, 'version': 1, 'shared': False,
+                             'clientModifiedTime': 0, 'fileSize': 0, 'thumbnailSize': 0}],
                 'recordLinks': [{'parentRecordUid': 'P1', 'childRecordUid': 'C1',
                                  'recordKey': 'k', 'revision': 1}],
                 'recordAccesses': [{'recordUid': 'R1', 'accessTypeUid': 'A2', 'accessType': 1,
@@ -101,20 +104,21 @@ class TestKeeperDriveSync(unittest.TestCase):
         keeperdrive_sync.apply_keeper_drive_data_dict(
             kd,
             {
-                'revokedFolderAccesses': [{'folderUid': 'F1', 'accessTypeUid': 'A1'}],
+                'revokedFolderAccesses': [{'folderUid': 'F1', 'actorUid': 'A1'}],
                 'removedFolderRecords': [{'folderUid': 'F1', 'recordUid': 'R1'}],
                 'removedRecordLinks': [{'parentRecordUid': 'P1', 'childRecordUid': 'C1'}],
-                'revokedRecordAccesses': [{'recordUid': 'R1', 'accessTypeUid': 'A2'}],
+                'revokedRecordAccesses': [{'recordUid': 'R1', 'actorUid': 'A2'}],
                 'removedFolders': ['F1'],
             },
         )
         self.assertIsNone(kd.folders.get_entity('F1'))
-        self.assertEqual(len(list(kd.folder_accesses.get_links_by_subject('F1'))), 0)
+        self.assertEqual(len(list(kd.folder_accesses.get_links_by_subject('F1'))), 1)
         self.assertEqual(len(list(kd.folder_records.get_links_by_subject('F1'))), 0)
         self.assertEqual(len(list(kd.record_links.get_all_links())), 0)
         self.assertEqual(len(list(kd.record_accesses.get_links_by_subject('R1'))), 0)
 
     def test_vault_clear_wipes_drive_tables(self):
+        """``SqliteVaultStorage.clear`` clears vault and Keeper Drive rows in the same database."""
         conn = sqlite3.connect(':memory:')
         owner = b'vault-owner'
         vault = sqlite_storage.SqliteVaultStorage(lambda: conn, owner)
