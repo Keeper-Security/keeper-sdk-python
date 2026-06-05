@@ -540,7 +540,7 @@ class EnterpriseUserEditCommand(base.ArgparseCommand, enterprise_management.IEnt
         if not emails:
             raise base.CommandError('No email(s) provided')
 
-        parent_id: Optional[int]
+        parent_id: Optional[int] = None
         if kwargs.get('parent'):
             parent_node = enterprise_utils.NodeUtils.resolve_single_node(context.enterprise_data, kwargs.get('parent'))
             parent_id = parent_node.node_id
