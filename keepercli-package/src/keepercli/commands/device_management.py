@@ -1,5 +1,6 @@
 import argparse
 from datetime import datetime
+from tkinter.constants import S
 from typing import List, Optional
 
 from keepersdk.authentication import device_management
@@ -29,10 +30,14 @@ class DeviceListCommand(base.ArgparseCommand):
             prog='device-list',
             description='List all active devices for the current user',
             parents=[base.json_output_parser]
-        )
+            )
+        DeviceListCommand.add_arguments_to_parser(parser)
+        super().__init__(parser)
+    
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
         parser.error = base.ArgparseCommand.raise_parse_exception
         parser.exit = base.ArgparseCommand.suppress_exit
-        super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs):
         base.require_login(context)
@@ -70,11 +75,15 @@ class DeviceRenameCommand(base.ArgparseCommand):
             prog='device-rename',
             description='Rename a device for the current user',
         )
+        DeviceRenameCommand.add_arguments_to_parser(parser)
+        super().__init__(parser)
+    
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
         parser.add_argument('device', help='Device ID (from device-list) or device name substring')
         parser.add_argument('new_name', help='New name for the device')
         parser.error = base.ArgparseCommand.raise_parse_exception
         parser.exit = base.ArgparseCommand.suppress_exit
-        super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs):
         base.require_login(context)
@@ -96,14 +105,14 @@ class DeviceRemoveCommand(base.ArgparseCommand):
             prog='device-remove',
             description='Logout and remove the current user from one or more devices',
         )
-        parser.add_argument(
-            'devices',
-            nargs='+',
-            help='Device ID (from device-list) or device name substring',
-        )
+        DeviceRemoveCommand.add_arguments_to_parser(parser)
+        super().__init__(parser)
+    
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
+        parser.add_argument('devices', nargs='+', help='Device ID (from device-list) or device name substring')
         parser.error = base.ArgparseCommand.raise_parse_exception
         parser.exit = base.ArgparseCommand.suppress_exit
-        super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs):
         base.require_login(context)
@@ -121,14 +130,14 @@ class DeviceLogoutCommand(base.ArgparseCommand):
             prog='device-logout',
             description='Logout the current user from one or more devices',
         )
-        parser.add_argument(
-            'devices',
-            nargs='+',
-            help='Device ID (from device-list) or device name substring',
-        )
+        DeviceLogoutCommand.add_arguments_to_parser(parser)
+        super().__init__(parser)
+    
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
+        parser.add_argument('devices', nargs='+', help='Device ID (from device-list) or device name substring')
         parser.error = base.ArgparseCommand.raise_parse_exception
         parser.exit = base.ArgparseCommand.suppress_exit
-        super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs):
         base.require_login(context)
