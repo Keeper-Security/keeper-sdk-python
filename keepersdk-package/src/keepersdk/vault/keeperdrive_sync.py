@@ -206,7 +206,7 @@ def _process_removed_folder_records_proto(
     links: List[Tuple[str, str]] = []
     key_links: List[Tuple[str, str]] = []
     for x in kd_msg.removedFolderRecords:
-        fu, ru = _uid_b64(x.folderUid), _uid_b64(x.recordUid)
+        fu, ru = _uid_b64(x.folder_uid), _uid_b64(x.record_uid)
         if fu and ru:
             links.append((fu, ru))
             key_links.append((ru, fu))
@@ -442,8 +442,8 @@ def _process_removed_folder_records_dict(
     for x in d.get('removedFolderRecords') or []:
         if not isinstance(x, dict):
             continue
-        fu = str(x.get('folderUid', ''))
-        ru = str(x.get('recordUid', ''))
+        fu = _folder_uid(x)
+        ru = str(x.get('recordUid') or x.get('record_uid') or '')
         if fu and ru:
             links.append((fu, ru))
             key_links.append((ru, fu))

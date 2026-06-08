@@ -3,8 +3,9 @@ import os
 import sqlite3
 import unittest
 
-from keepersdk.proto import folder_pb2
-from keepersdk.vault import keeperdrive_data, keeperdrive_sync, memory_keeperdrive_storage, sqlite_storage, storage_types
+from keepersdk import utils
+from keepersdk.proto import SyncDown_pb2, folder_pb2, record_pb2
+from keepersdk.vault import keeperdrive_data, keeperdrive_sync, keeperdrive_storage_types as kd, memory_keeperdrive_storage, sqlite_storage, storage_types
 
 
 class TestKeeperDriveSync(unittest.TestCase):
@@ -116,6 +117,24 @@ class TestKeeperDriveSync(unittest.TestCase):
         self.assertEqual(len(list(kd.folder_records.get_links_by_subject('F1'))), 0)
         self.assertEqual(len(list(kd.record_links.get_all_links())), 0)
         self.assertEqual(len(list(kd.record_accesses.get_links_by_subject('R1'))), 0)
+
+    def test_removed_folder_records_proto_uses_folder_record_key_fields(self):
+        """Proto removedFolderRecords are FolderRecordKey (snake_case fields)."""
+        storage = memory_keeperdrive_storage.InMemoryKeeperDriveStorage()
+        folder_uid = utils.generate_uid()
+        record_uid = utils.generate_uid()
+        storage.folder_records.put_links([
+            kd.KDFolderRecord(folder_uid=folder_uid, record_uid=record_uid),
+        ])
+        self.assertEqual(len(list(storage.folder_records.get_links_by_subject(folder_uid))), 1)
+
+        kd_msg = SyncDown_pb2.KeeperDriveData()
+        removed = kd_msg.removedFolderRecords.add()
+        removed.folder_uid = utils.base64_url_decode(folder_uid)
+        removed.record_uid = utils.base64_url_decode(record_uid)
+        keeperdrive_sync.apply_keeper_drive_proto_message(kd_msg, storage, None)
+
+        self.assertEqual(len(list(storage.folder_records.get_links_by_subject(folder_uid))), 0)
 
     def test_vault_clear_wipes_drive_tables(self):
         """``SqliteVaultStorage.clear`` clears vault and Keeper Drive rows in the same database."""
