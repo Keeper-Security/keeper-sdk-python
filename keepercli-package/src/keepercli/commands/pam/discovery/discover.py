@@ -14,7 +14,7 @@ from .... import api
 from .__init__ import GatewayContext, MultiConfigurationException, multi_conf_msg, PAMGatewayActionDiscoverCommandBase
 from ..pam_dto import GatewayAction, GatewayActionDiscoverJobStartInputs, GatewayActionDiscoverJobStart, GatewayActionDiscoverJobRemoveInputs, GatewayActionDiscoverJobRemove
 from .rule_commands import PAMGatewayActionDiscoverRuleAddCommand, PAMGatewayActionDiscoverRuleListCommand, PAMGatewayActionDiscoverRuleRemoveCommand, PAMGatewayActionDiscoverRuleUpdateCommand
-from ..pam_config import PAM_CONFIG_RECORD_TYPES
+from keepersdk.helpers.keeper_dag.constants import PAM_CONFIGURATIONS
 
 from keepersdk.helpers.pam_user_record_facade import PamUserRecordFacade
 from keepersdk.helpers.keeper_dag.jobs import Jobs
@@ -278,7 +278,7 @@ class PAMGatewayActionDiscoverJobStatusCommand(PAMGatewayActionDiscoverCommandBa
             # We are going to query the gateway for any updated status.
 
             configuration_records = list(vault.vault_data.find_records(
-                criteria=None, record_type=PAM_CONFIG_RECORD_TYPES, record_version=6))
+                criteria=None, record_type=PAM_CONFIGURATIONS, record_version=6))
             for configuration_record in configuration_records:
 
                 gateway_context = GatewayContext.from_configuration_uid(

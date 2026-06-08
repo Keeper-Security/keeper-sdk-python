@@ -10,7 +10,7 @@ from .... import api
 from ....commands import base
 from ....helpers import router_utils
 from ....helpers.gateway_utils import get_all_gateways
-from ..pam_config import PAM_CONFIG_RECORD_TYPES
+from keepersdk.helpers.keeper_dag.constants import PAM_CONFIGURATIONS
 
 from keepersdk.vault import ksm_management, vault_record, vault_online
 from keepersdk.helpers.pam_config_facade import PamConfigurationRecordFacade
@@ -72,7 +72,7 @@ class GatewayContext:
             gateways = GatewayContext.all_gateways(vault)
 
         configuration_records = list(vault.vault_data.find_records(
-                criteria=None, record_type=PAM_CONFIG_RECORD_TYPES, record_version=6))
+                criteria=None, record_type=PAM_CONFIGURATIONS, record_version=6))
         for configuration_record in configuration_records:
             payload = find_func(
                 configuration_record=configuration_record
@@ -135,7 +135,7 @@ class GatewayContext:
         If there is only one gateway, then that gateway is used.
         """
         configuration_records = list(vault.vault_data.find_records(
-            criteria=None, record_type=PAM_CONFIG_RECORD_TYPES, record_version=6))
+            criteria=None, record_type=PAM_CONFIGURATIONS, record_version=6))
 
         if configuration_uid:
             logger.debug(f"find the gateway with configuration record {configuration_uid}")
