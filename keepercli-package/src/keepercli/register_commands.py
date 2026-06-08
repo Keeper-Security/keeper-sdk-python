@@ -13,6 +13,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
 
     if not scopes or bool(scopes & base.CommandScope.Account):
         from .commands import account_commands
+        from .commands import device_management
         from .biometric import BiometricCommand
         from .commands import account_commands, two_fa
         commands.register_command('server',
@@ -22,6 +23,10 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('biometric', BiometricCommand(), base.CommandScope.Account)
         commands.register_command('logout', account_commands.LogoutCommand(), base.CommandScope.Account)
         commands.register_command('this-device', account_commands.ThisDeviceCommand(), base.CommandScope.Account)
+        commands.register_command('device-list', device_management.DeviceListCommand(), base.CommandScope.Account)
+        commands.register_command('device-rename', device_management.DeviceRenameCommand(), base.CommandScope.Account)
+        commands.register_command('device-remove', device_management.DeviceRemoveCommand(), base.CommandScope.Account)
+        commands.register_command('device-logout', device_management.DeviceLogoutCommand(), base.CommandScope.Account)
         commands.register_command('whoami', account_commands.WhoamiCommand(), base.CommandScope.Account)
         commands.register_command('reset-password', account_commands.ResetPasswordCommand(), base.CommandScope.Account)
         commands.register_command('2fa', two_fa.TwoFaCommand(), base.CommandScope.Account)
