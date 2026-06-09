@@ -194,11 +194,19 @@ def decrypt_folder_name(encrypted_data_b64: str, folder_key: bytes) -> Optional[
     return None
 
 
-def decrypt_record_data(encrypted_data_b64: str, record_key: bytes) -> Optional[str]:
+def decrypt_record_data(
+        encrypted_data_b64: str,
+        record_key: bytes,
+        *,
+        version: int = 3) -> Optional[str]:
     if not encrypted_data_b64:
         return None
     try:
-        data_bytes = crypto.decrypt_aes_v2(utils.base64_url_decode(encrypted_data_b64), record_key)
+        encrypted = utils.base64_url_decode(encrypted_data_b64)
+        if version <= 2:
+            data_bytes = crypto.decrypt_aes_v1(encrypted, record_key)
+        else:
+            data_bytes = crypto.decrypt_aes_v2(encrypted, record_key)
         return data_bytes.decode('utf-8')
     except Exception:
         return None

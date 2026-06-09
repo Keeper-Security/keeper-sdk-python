@@ -92,7 +92,7 @@ def _access_uid(x: Mapping[str, Any], *, proto_actor: bool = False) -> str:
 
 
 def extract_nsf_data(sync_payload: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
-    raw = sync_payload.get('nsfData')
+    raw = sync_payload.get('keeperDriveData')
     if isinstance(raw, dict):
         return raw
     return None
@@ -102,9 +102,9 @@ def try_apply_nsf_from_sync_down_proto(
         response: SyncDown_pb2.SyncDownResponse,
         nsf_storage: INSFStorage,
         task: Optional['NSFRebuildTask'] = None) -> bool:
-    if not response.HasField('nsfData'):
+    if not response.HasField('keeperDriveData'):
         return False
-    nsf_msg = response.nsfData
+    nsf_msg = response.keeperDriveData
     if not list(nsf_msg.ListFields()):
         return False
     apply_nsf_proto_message(nsf_msg, nsf_storage, task)
@@ -150,9 +150,9 @@ def apply_nsf_proto_message(
     _process_removed_record_links_proto(nsf_msg, nsf_storage, task)
     _store_folders_proto(nsf_msg, nsf_storage, task)
     _store_folder_keys_proto(nsf_msg, nsf_storage)
+    _store_records_proto(nsf_msg, nsf_storage, task)
     _store_record_data_proto(nsf_msg, nsf_storage, task)
     _store_folder_records_proto(nsf_msg, nsf_storage, task)
-    _store_records_proto(nsf_msg, nsf_storage, task)
     _process_revoked_folder_accesses_proto(nsf_msg, nsf_storage, task)
     _store_folder_accesses_proto(nsf_msg, nsf_storage)
     _process_revoked_record_accesses_proto(nsf_msg, nsf_storage, task)
@@ -172,9 +172,9 @@ def apply_nsf_data_dict(
     _process_removed_record_links_dict(nsf_data, nsf_storage, task)
     _store_folders_dict(nsf_data, nsf_storage, task)
     _store_folder_keys_dict(nsf_data, nsf_storage)
+    _store_records_dict(nsf_data, nsf_storage, task)
     _store_record_data_dict(nsf_data, nsf_storage, task)
     _store_folder_records_dict(nsf_data, nsf_storage, task)
-    _store_records_dict(nsf_data, nsf_storage, task)
     _process_revoked_folder_accesses_dict(nsf_data, nsf_storage, task)
     _store_folder_accesses_dict(nsf_data, nsf_storage)
     _process_revoked_record_accesses_dict(nsf_data, nsf_storage, task)
@@ -275,9 +275,11 @@ def _store_record_data_proto(
     updated: List[nsf.NSFRecord] = []
     for rd in nsf_msg.recordData:
         record_uid = _uid_b64(rd.recordUid)
+        if not record_uid:
+            continue
         existing = storage.records.get_entity(record_uid)
         if existing is None:
-            continue
+            existing = nsf.NSFRecord(record_uid=record_uid)
         row = dataclasses.replace(existing, data=_wire_b64(rd.data))
         updated.append(row)
         if task:
@@ -533,9 +535,11 @@ def _store_record_data_dict(
         if not isinstance(x, dict):
             continue
         record_uid = str(x.get('recordUid', ''))
+        if not record_uid:
+            continue
         existing = storage.records.get_entity(record_uid)
         if existing is None:
-            continue
+            existing = nsf.NSFRecord(record_uid=record_uid)
         updated.append(dataclasses.replace(existing, data=str(x.get('data', ''))))
         if task:
             task.add_record(record_uid)
@@ -607,10 +611,15 @@ def _store_folder_accesses_dict(d: Mapping[str, Any], storage: INSFStorage) -> N
         storage.folder_accesses.put_links(rows)
 
 
-def _store_record_accesses_dict(d: Mapping[str, Any], storage: INSFStorage) -> None:
+def _store_record_accesses_dict(
+        d: Mapping[str, Any],
+        storage: INSFStorage,
+        task: Optional['NSFRebuildTask'] = None) -> None:
     rows = [_dict_to_record_access(x) for x in d.get('recordAccesses') or [] if isinstance(x, dict)]
     if rows:
         storage.record_accesses.put_links(rows)
+        if task:
+            task.add_records((r.record_uid for r in rows))
 
 
 def _store_record_links_dict(

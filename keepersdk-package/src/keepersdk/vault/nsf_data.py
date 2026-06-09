@@ -139,7 +139,8 @@ class NSFData:
             record_key = decrypted_record_keys.get(row.record_uid)
             if record_key is None:
                 continue
-            decrypted = nsf_crypto.decrypt_record_data(row.data, record_key)
+            decrypted = nsf_crypto.decrypt_record_data(
+                row.data, record_key, version=row.version)
             self._records[row.record_uid] = NSFRecordEntry(
                 record_uid=row.record_uid,
                 revision=row.revision,

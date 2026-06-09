@@ -8,7 +8,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional
 from .. import crypto, utils
 from ..errors import KeeperApiError
 from ..proto import folder_pb2, record_pb2, remove_pb2
-from . import nsf_data, vault_extensions
+from . import nsf_crypto, nsf_data, sync_down, vault_extensions
 from .vault_online import VaultOnline
 
 ROOT_FOLDER_UID = 'AAAAAAAAAAAAAAAAAPmtNA'
@@ -156,6 +156,68 @@ def _parse_record_payload(decrypted: Optional[str]) -> Dict[str, Any]:
         return {}
 
 
+_RECORD_DETAILS_URL = 'vault/get_records_details'
+_RECORD_DETAILS_CHUNK = 500
+_MAX_V2_RECORD_VERSION = 2
+
+
+def _record_payload_from_entry(
+        view: nsf_data.NSFData,
+        entry: nsf_data.NSFRecordEntry) -> Dict[str, Any]:
+    """Parse decrypted cache payload, falling back to decrypting stored record data."""
+    payload = _parse_record_payload(entry.decrypted_data)
+    if payload.get('title') or not entry.record_key:
+        return payload
+    row = view.storage.records.get_entity(entry.record_uid)
+    if not row or not row.data:
+        return payload
+    decrypted = nsf_crypto.decrypt_record_data(
+        row.data, entry.record_key, version=entry.version or row.version)
+    return _parse_record_payload(decrypted)
+
+
+def _decrypt_record_details_payload(
+        record_data: record_pb2.RecordData,
+        record_key: bytes) -> Optional[bytes]:
+    if not record_data.encryptedRecordData:
+        return None
+    try:
+        data_decoded = utils.base64_url_decode(record_data.encryptedRecordData)
+    except Exception:
+        return None
+    try:
+        if record_data.version <= _MAX_V2_RECORD_VERSION:
+            return crypto.decrypt_aes_v1(data_decoded, record_key)
+        return crypto.decrypt_aes_v2(data_decoded, record_key)
+    except Exception:
+        return None
+
+
+def _resolve_record_key_for_details(
+        vault: VaultOnline,
+        record_data: record_pb2.RecordData,
+        record_uid: str,
+        record_keys: Dict[str, bytes]) -> Optional[bytes]:
+    if record_uid in record_keys and record_keys[record_uid]:
+        return record_keys[record_uid]
+    if record_data.recordUid and record_data.recordKey:
+        owner_uid = utils.base64_url_encode(record_data.recordUid)
+        owner_key = record_keys.get(owner_uid)
+        if owner_key:
+            try:
+                return crypto.decrypt_aes_v2(record_data.recordKey, owner_key)
+            except Exception:
+                pass
+    try:
+        return sync_down.decrypt_keeper_key(
+            vault.keeper_auth.auth_context,
+            record_data.recordKey or b'',
+            record_data.recordKeyType,
+        )
+    except Exception:
+        return None
+
+
 def find_nsf_folders_for_record(vault: VaultOnline, record_uid: str) -> List[str]:
     folders: List[str] = []
     for folder in _nsf_view(vault).folders():
@@ -187,9 +249,16 @@ def list_nsf_items(
 
     if include_records:
         folder_names = {f.folder_uid: f.name or f.folder_uid for f in view.folders()}
-        for entry in view.records():
-            payload = _parse_record_payload(entry.decrypted_data)
-            title = str(payload.get('title') or entry.record_uid)
+        entries = list(view.records())
+        title_by_uid: Dict[str, str] = {}
+        rows_by_uid: Dict[str, NsfListRow] = {}
+        missing_title_uids: List[str] = []
+
+        for entry in entries:
+            payload = _record_payload_from_entry(view, entry)
+            title = str(payload.get('title') or '')
+            if not title:
+                missing_title_uids.append(entry.record_uid)
             rec_type = str(payload.get('type') or '')
             description = ''
             for fld in payload.get('fields') or []:
@@ -202,14 +271,44 @@ def list_nsf_items(
             for fuid in find_nsf_folders_for_record(vault, entry.record_uid):
                 location = 'root' if fuid == ROOT_FOLDER_UID else folder_names.get(fuid, fuid)
                 break
-            rows.append(NsfListRow(
+            rows_by_uid[entry.record_uid] = NsfListRow(
                 item_type='Record',
                 uid=entry.record_uid,
-                title=title,
+                title=title or entry.record_uid,
                 record_type=rec_type,
                 description=description,
                 parent_or_folder=location or 'root',
-            ))
+            )
+
+        type_by_uid: Dict[str, str] = {}
+        if missing_title_uids:
+            try:
+                details = get_nsf_record_details(vault, missing_title_uids)
+                for item in details.get('data') or []:
+                    record_uid = str(item.get('record_uid', ''))
+                    api_title = str(item.get('title') or '')
+                    if record_uid and api_title and api_title != 'Unknown':
+                        title_by_uid[record_uid] = api_title
+                        api_type = str(item.get('type') or '')
+                        if api_type and api_type != 'Unknown':
+                            type_by_uid[record_uid] = api_type
+            except Exception:
+                pass
+
+        for entry in entries:
+            row = rows_by_uid[entry.record_uid]
+            api_title = title_by_uid.get(entry.record_uid)
+            if api_title:
+                rows.append(NsfListRow(
+                    item_type=row.item_type,
+                    uid=row.uid,
+                    title=api_title,
+                    record_type=type_by_uid.get(entry.record_uid) or row.record_type,
+                    description=row.description,
+                    parent_or_folder=row.parent_or_folder,
+                ))
+            else:
+                rows.append(row)
 
     rows.sort(key=lambda r: (r.item_type, r.title.casefold()))
     return rows
@@ -217,11 +316,12 @@ def list_nsf_items(
 
 def load_nsf_record_metadata(vault: VaultOnline, record_uid: str) -> Dict[str, Any]:
     """Load title, fields, notes from cache; optional API fallback for title/type only."""
-    entry = _nsf_view(vault).get_record(record_uid)
+    view = _nsf_view(vault)
+    entry = view.get_record(record_uid)
     if entry is None:
         raise NsfError(f'NSF record not found: {record_uid}')
 
-    payload = _parse_record_payload(entry.decrypted_data)
+    payload = _record_payload_from_entry(view, entry)
     folder_location = ''
     for fuid in find_nsf_folders_for_record(vault, record_uid):
         if fuid == ROOT_FOLDER_UID:
@@ -524,32 +624,61 @@ def update_nsf_record(
 def get_nsf_record_details(
         vault: VaultOnline,
         record_uids: Iterable[str]) -> Dict[str, Any]:
-    """``vault/records/v3/details/data`` — title/type when cache lacks decrypted payload."""
+    """``vault/get_records_details`` — title/type when cache lacks decrypted payload."""
     uids = [resolve_nsf_record_uid(vault, u) or u for u in record_uids]
     uids = [u for u in uids if u]
     if not uids:
         raise NsfError('At least one record UID is required')
 
-    payload = {
-        'clientTime': utils.current_milli_time(),
-        'recordUids': uids,
+    view = _nsf_view(vault)
+    record_keys = {
+        entry.record_uid: entry.record_key
+        for entry in view.records()
+        if entry.record_key
     }
-    rs = vault.keeper_auth.execute_router_json('vault/records/v3/details/data', payload)
-    if not isinstance(rs, dict):
-        return {'data': [], 'forbidden_records': []}
 
     out_data: List[Dict[str, Any]] = []
-    for item in rs.get('data') or []:
-        if not isinstance(item, dict):
+    forbidden: List[str] = []
+    for i in range(0, len(uids), _RECORD_DETAILS_CHUNK):
+        chunk = uids[i:i + _RECORD_DETAILS_CHUNK]
+        rq = record_pb2.GetRecordDataWithAccessInfoRequest()
+        rq.clientTime = utils.current_milli_time()
+        rq.recordDetailsInclude = record_pb2.DATA_PLUS_SHARE
+        for uid in chunk:
+            try:
+                rq.recordUid.append(utils.base64_url_decode(uid))
+            except Exception:
+                pass
+        if not rq.recordUid:
             continue
-        out_data.append({
-            'record_uid': str(item.get('recordUid', '')),
-            'title': str(item.get('title', 'Unknown')),
-            'type': str(item.get('type', 'Unknown')),
-            'revision': int(item.get('revision') or 0),
-            'version': int(item.get('version') or 0),
-        })
-    forbidden = [str(x) for x in (rs.get('forbiddenRecords') or [])]
+        rs = vault.keeper_auth.execute_auth_rest(
+            _RECORD_DETAILS_URL,
+            rq,
+            response_type=record_pb2.GetRecordDataWithAccessInfoResponse)
+        if rs is None:
+            continue
+        for nop in rs.noPermissionRecordUid:
+            forbidden.append(utils.base64_url_encode(nop))
+        for item in rs.recordDataWithAccessInfo:
+            record_uid = utils.base64_url_encode(item.recordUid) if item.recordUid else ''
+            record_data = item.recordData
+            if not record_uid or record_data is None:
+                continue
+            record_key = _resolve_record_key_for_details(
+                vault, record_data, record_uid, record_keys)
+            if not record_key:
+                continue
+            plain = _decrypt_record_details_payload(record_data, record_key)
+            if not plain:
+                continue
+            payload = _parse_record_payload(plain.decode('utf-8'))
+            out_data.append({
+                'record_uid': record_uid,
+                'title': str(payload.get('title') or 'Unknown'),
+                'type': str(payload.get('type') or 'Unknown'),
+                'revision': int(record_data.revision or 0),
+                'version': int(record_data.version or 0),
+            })
     return {'data': out_data, 'forbidden_records': forbidden}
 
 

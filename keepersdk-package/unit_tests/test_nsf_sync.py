@@ -136,6 +136,44 @@ class TestNSFSync(unittest.TestCase):
 
         self.assertEqual(len(list(storage.folder_records.get_links_by_subject(folder_uid))), 0)
 
+    def test_store_record_data_before_records_row_creates_stub(self):
+        """recordData may arrive in an earlier sync chunk than records metadata."""
+        nsf = memory_nsf_storage.InMemoryNSFStorage()
+        nsf_sync.apply_nsf_data_dict(
+            nsf,
+            {'recordData': [{'recordUid': 'R1', 'data': 'payload-data'}]},
+        )
+        row = nsf.records.get_entity('R1')
+        self.assertIsNotNone(row)
+        assert row is not None
+        self.assertEqual(row.data, 'payload-data')
+
+        nsf_sync.apply_nsf_data_dict(
+            nsf,
+            {'records': [{'recordUid': 'R1', 'revision': 2, 'version': 3, 'shared': False,
+                          'clientModifiedTime': 0, 'fileSize': 0, 'thumbnailSize': 0}]},
+        )
+        row = nsf.records.get_entity('R1')
+        assert row is not None
+        self.assertEqual(row.data, 'payload-data')
+        self.assertEqual(row.revision, 2)
+
+    def test_store_records_before_record_data_preserves_payload(self):
+        """recordData must apply after records exist in storage."""
+        nsf = memory_nsf_storage.InMemoryNSFStorage()
+        nsf_sync.apply_nsf_data_dict(
+            nsf,
+            {
+                'records': [{'recordUid': 'R1', 'revision': 1, 'version': 1, 'shared': False,
+                             'clientModifiedTime': 0, 'fileSize': 0, 'thumbnailSize': 0}],
+                'recordData': [{'recordUid': 'R1', 'data': 'payload-data'}],
+            },
+        )
+        row = nsf.records.get_entity('R1')
+        self.assertIsNotNone(row)
+        assert row is not None
+        self.assertEqual(row.data, 'payload-data')
+
     def test_vault_clear_wipes_nsf_tables(self):
         """``SqliteVaultStorage.clear`` clears vault and NSF rows in the same database."""
         conn = sqlite3.connect(':memory:')
