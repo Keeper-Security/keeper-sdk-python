@@ -1,7 +1,7 @@
 import abc
 
 from ..storage.storage_types import IEntityReaderStorage, ILinkReaderStorage, IRecordStorage
-from . import keeperdrive_vault_storage, storage_types
+from . import nsf_vault_storage, storage_types
 
 
 class IVaultStorage(abc.ABC):
@@ -87,7 +87,7 @@ class IVaultStorage(abc.ABC):
 
     @property
     @abc.abstractmethod
-    def keeper_drive(self) -> keeperdrive_vault_storage.IKeeperDriveStorage:
+    def nsf(self) -> nsf_vault_storage.INSFStorage:
         pass
 
     @abc.abstractmethod

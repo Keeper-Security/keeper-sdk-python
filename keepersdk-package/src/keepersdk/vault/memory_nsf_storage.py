@@ -1,28 +1,28 @@
 from __future__ import annotations
 
-from . import keeperdrive_storage_types as kd
-from .keeperdrive_vault_storage import IKeeperDriveStorage
+from . import nsf_storage_types as nsf
+from .nsf_vault_storage import INSFStorage
 from ..storage.in_memory import InMemoryEntityStorage, InMemoryLinkStorage, InMemoryRecordStorage
 
 
-class InMemoryKeeperDriveStorage(IKeeperDriveStorage):
+class InMemoryNSFStorage(INSFStorage):
     def __init__(self) -> None:
-        self._settings = InMemoryRecordStorage[kd.KeeperDriveSettings]()
-        self._folders = InMemoryEntityStorage[kd.KDFolder, str]()
-        self._folder_keys = InMemoryLinkStorage[kd.KDFolderKey, str, str]()
-        self._records = InMemoryEntityStorage[kd.KDRecord, str]()
-        self._record_keys = InMemoryLinkStorage[kd.KDRecordKey, str, str]()
-        self._folder_accesses = InMemoryLinkStorage[kd.KDFolderAccess, str, str]()
-        self._record_accesses = InMemoryLinkStorage[kd.KDRecordAccess, str, str]()
-        self._record_links = InMemoryLinkStorage[kd.KDRecordLink, str, str]()
-        self._folder_records = InMemoryLinkStorage[kd.KDFolderRecord, str, str]()
-        self._folder_sharing_states = InMemoryEntityStorage[kd.KDFolderSharingState, str]()
-        self._record_sharing_states = InMemoryEntityStorage[kd.KDRecordSharingState, str]()
-        self._non_shared_data = InMemoryEntityStorage[kd.KDNonSharedData, str]()
-        self._breach_watch_records = InMemoryEntityStorage[kd.KDBreachWatchRecord, str]()
-        self._security_score_data = InMemoryEntityStorage[kd.KDSecurityScoreData, str]()
-        self._breach_watch_security_data = InMemoryEntityStorage[kd.KDBreachWatchSecurityData, str]()
-        self._list_chunks = InMemoryLinkStorage[kd.KDListChunk, str, str]()
+        self._settings = InMemoryRecordStorage[nsf.NSFSettings]()
+        self._folders = InMemoryEntityStorage[nsf.NSFFolder, str]()
+        self._folder_keys = InMemoryLinkStorage[nsf.NSFFolderKey, str, str]()
+        self._records = InMemoryEntityStorage[nsf.NSFRecord, str]()
+        self._record_keys = InMemoryLinkStorage[nsf.NSFRecordKey, str, str]()
+        self._folder_accesses = InMemoryLinkStorage[nsf.NSFFolderAccess, str, str]()
+        self._record_accesses = InMemoryLinkStorage[nsf.NSFRecordAccess, str, str]()
+        self._record_links = InMemoryLinkStorage[nsf.NSFRecordLink, str, str]()
+        self._folder_records = InMemoryLinkStorage[nsf.NSFFolderRecord, str, str]()
+        self._folder_sharing_states = InMemoryEntityStorage[nsf.NSFFolderSharingState, str]()
+        self._record_sharing_states = InMemoryEntityStorage[nsf.NSFRecordSharingState, str]()
+        self._non_shared_data = InMemoryEntityStorage[nsf.NSFNonSharedData, str]()
+        self._breach_watch_records = InMemoryEntityStorage[nsf.NSFBreachWatchRecord, str]()
+        self._security_score_data = InMemoryEntityStorage[nsf.NSFSecurityScoreData, str]()
+        self._breach_watch_security_data = InMemoryEntityStorage[nsf.NSFBreachWatchSecurityData, str]()
+        self._list_chunks = InMemoryLinkStorage[nsf.NSFListChunk, str, str]()
 
     @property
     def settings(self):

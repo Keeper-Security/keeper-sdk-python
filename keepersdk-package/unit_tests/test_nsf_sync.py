@@ -4,17 +4,17 @@ import sqlite3
 import unittest
 
 from keepersdk import utils
-from keepersdk.proto import SyncDown_pb2, folder_pb2, record_pb2
-from keepersdk.vault import keeperdrive_data, keeperdrive_sync, keeperdrive_storage_types as kd, memory_keeperdrive_storage, sqlite_storage, storage_types
+from keepersdk.proto import SyncDown_pb2, folder_pb2
+from keepersdk.vault import nsf_data, nsf_sync, nsf_storage_types as nsf, memory_nsf_storage, sqlite_storage, storage_types
 
 
-class TestKeeperDriveSync(unittest.TestCase):
+class TestNSFSync(unittest.TestCase):
     def test_coerce_int_folder_usage_type_enum_name(self):
-        self.assertEqual(keeperdrive_sync._coerce_int('UT_NORMAL'), int(folder_pb2.UT_NORMAL))
-        self.assertEqual(keeperdrive_sync._coerce_int(1), 1)
+        self.assertEqual(nsf_sync._coerce_int('UT_NORMAL'), int(folder_pb2.UT_NORMAL))
+        self.assertEqual(nsf_sync._coerce_int(1), 1)
 
     def test_dict_to_folder_accepts_enum_name(self):
-        folder = keeperdrive_sync._dict_to_folder({
+        folder = nsf_sync._dict_to_folder({
             'folderUid': 'F1',
             'parentUid': 'P',
             'data': 'd',
@@ -27,41 +27,41 @@ class TestKeeperDriveSync(unittest.TestCase):
         })
         self.assertEqual(folder.folder_type, int(folder_pb2.UT_NORMAL))
 
-    def test_keeper_drive_data_rebuild_after_sync(self):
+    def test_nsf_data_rebuild_after_sync(self):
         conn = sqlite3.connect(':memory:')
         vault = sqlite_storage.SqliteVaultStorage(lambda: conn, b'owner')
-        kd = vault.keeper_drive
-        view = keeperdrive_data.KeeperDriveData(kd)
-        keeperdrive_sync.apply_keeper_drive_data_dict(
-            kd,
+        nsf = vault.nsf
+        view = nsf_data.NSFData(nsf)
+        nsf_sync.apply_nsf_data_dict(
+            nsf,
             {'folders': [{'folderUid': 'F1', 'parentUid': 'P', 'data': 'd', 'type': 1,
                           'inheritUserPermissions': 0, 'folderKey': 'k',
                           'ownerInfo': {'accountUid': 'a', 'username': 'u'},
                           'dateCreated': 1, 'lastModified': 2}]},
         )
-        self.assertEqual(len(list(kd.folders.get_all_entities())), 1)
-        view.rebuild_data(keeperdrive_data.KeeperDriveRebuildTask(True))
+        self.assertEqual(len(list(nsf.folders.get_all_entities())), 1)
+        view.rebuild_data(nsf_data.NSFRebuildTask(True))
         self.assertEqual(view.folder_count, 0)
         conn.close()
 
-    def test_apply_keeperdrive_sync_down_sample(self):
+    def test_apply_nsf_sync_down_sample(self):
         root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-        path = os.path.join(root, 'keeperdrive_sync_down.txt')
+        path = os.path.join(root, 'nsf_sync_down.txt')
         with open(path, 'r', encoding='utf-8') as f:
             payload = json.load(f)
 
         conn = sqlite3.connect(':memory:')
         owner = b'owner-test'
         vault = sqlite_storage.SqliteVaultStorage(lambda: conn, owner)
-        kd = vault.keeper_drive
-        assert kd is not None
-        keeperdrive_sync.apply_keeper_drive_from_full_sync_json(kd, payload)
+        nsf = vault.nsf
+        assert nsf is not None
+        nsf_sync.apply_nsf_from_full_sync_json(nsf, payload)
 
-        inner = payload['keeperDriveData']
-        self.assertEqual(len(list(kd.folders.get_all_entities())), len(inner['folders']))
-        self.assertEqual(len(list(kd.records.get_all_entities())), len(inner['records']))
+        inner = payload['nsfData']
+        self.assertEqual(len(list(nsf.folders.get_all_entities())), len(inner['folders']))
+        self.assertEqual(len(list(nsf.records.get_all_entities())), len(inner['records']))
 
-        f0 = kd.folders.get_entity(inner['folders'][0]['folderUid'])
+        f0 = nsf.folders.get_entity(inner['folders'][0]['folderUid'])
         assert f0 is not None
         self.assertEqual(f0.owner_username, inner['folders'][0]['ownerInfo']['username'])
 
@@ -69,9 +69,9 @@ class TestKeeperDriveSync(unittest.TestCase):
 
     def test_revoked_and_removed_sync_down_delete_main_tables(self):
         """Revoked/removed sync-down payloads delete rows from main tables only."""
-        kd = memory_keeperdrive_storage.InMemoryKeeperDriveStorage()
-        keeperdrive_sync.apply_keeper_drive_data_dict(
-            kd,
+        nsf = memory_nsf_storage.InMemoryNSFStorage()
+        nsf_sync.apply_nsf_data_dict(
+            nsf,
             {
                 'folders': [{'folderUid': 'F1', 'parentUid': '', 'data': 'd', 'type': 1,
                              'inheritUserPermissions': 0, 'folderKey': 'k',
@@ -96,14 +96,14 @@ class TestKeeperDriveSync(unittest.TestCase):
                                     'dateCreated': 1, 'lastModified': 2}],
             },
         )
-        self.assertIsNotNone(kd.folders.get_entity('F1'))
-        self.assertEqual(len(list(kd.folder_accesses.get_links_by_subject('F1'))), 1)
-        self.assertEqual(len(list(kd.folder_records.get_links_by_subject('F1'))), 1)
-        self.assertEqual(len(list(kd.record_links.get_all_links())), 1)
-        self.assertEqual(len(list(kd.record_accesses.get_links_by_subject('R1'))), 1)
+        self.assertIsNotNone(nsf.folders.get_entity('F1'))
+        self.assertEqual(len(list(nsf.folder_accesses.get_links_by_subject('F1'))), 1)
+        self.assertEqual(len(list(nsf.folder_records.get_links_by_subject('F1'))), 1)
+        self.assertEqual(len(list(nsf.record_links.get_all_links())), 1)
+        self.assertEqual(len(list(nsf.record_accesses.get_links_by_subject('R1'))), 1)
 
-        keeperdrive_sync.apply_keeper_drive_data_dict(
-            kd,
+        nsf_sync.apply_nsf_data_dict(
+            nsf,
             {
                 'revokedFolderAccesses': [{'folderUid': 'F1', 'actorUid': 'A1'}],
                 'removedFolderRecords': [{'folderUid': 'F1', 'recordUid': 'R1'}],
@@ -112,50 +112,50 @@ class TestKeeperDriveSync(unittest.TestCase):
                 'removedFolders': ['F1'],
             },
         )
-        self.assertIsNone(kd.folders.get_entity('F1'))
-        self.assertEqual(len(list(kd.folder_accesses.get_links_by_subject('F1'))), 1)
-        self.assertEqual(len(list(kd.folder_records.get_links_by_subject('F1'))), 0)
-        self.assertEqual(len(list(kd.record_links.get_all_links())), 0)
-        self.assertEqual(len(list(kd.record_accesses.get_links_by_subject('R1'))), 0)
+        self.assertIsNone(nsf.folders.get_entity('F1'))
+        self.assertEqual(len(list(nsf.folder_accesses.get_links_by_subject('F1'))), 1)
+        self.assertEqual(len(list(nsf.folder_records.get_links_by_subject('F1'))), 0)
+        self.assertEqual(len(list(nsf.record_links.get_all_links())), 0)
+        self.assertEqual(len(list(nsf.record_accesses.get_links_by_subject('R1'))), 0)
 
     def test_removed_folder_records_proto_uses_folder_record_key_fields(self):
         """Proto removedFolderRecords are FolderRecordKey (snake_case fields)."""
-        storage = memory_keeperdrive_storage.InMemoryKeeperDriveStorage()
+        storage = memory_nsf_storage.InMemoryNSFStorage()
         folder_uid = utils.generate_uid()
         record_uid = utils.generate_uid()
         storage.folder_records.put_links([
-            kd.KDFolderRecord(folder_uid=folder_uid, record_uid=record_uid),
+            nsf.NSFFolderRecord(folder_uid=folder_uid, record_uid=record_uid),
         ])
         self.assertEqual(len(list(storage.folder_records.get_links_by_subject(folder_uid))), 1)
 
-        kd_msg = SyncDown_pb2.KeeperDriveData()
-        removed = kd_msg.removedFolderRecords.add()
+        nsf_msg = SyncDown_pb2.KeeperDriveData()
+        removed = nsf_msg.removedFolderRecords.add()
         removed.folder_uid = utils.base64_url_decode(folder_uid)
         removed.record_uid = utils.base64_url_decode(record_uid)
-        keeperdrive_sync.apply_keeper_drive_proto_message(kd_msg, storage, None)
+        nsf_sync.apply_nsf_proto_message(nsf_msg, storage, None)
 
         self.assertEqual(len(list(storage.folder_records.get_links_by_subject(folder_uid))), 0)
 
-    def test_vault_clear_wipes_drive_tables(self):
-        """``SqliteVaultStorage.clear`` clears vault and Keeper Drive rows in the same database."""
+    def test_vault_clear_wipes_nsf_tables(self):
+        """``SqliteVaultStorage.clear`` clears vault and NSF rows in the same database."""
         conn = sqlite3.connect(':memory:')
         owner = b'vault-owner'
         vault = sqlite_storage.SqliteVaultStorage(lambda: conn, owner)
-        kd = vault.keeper_drive
+        nsf = vault.nsf
 
         vault.user_settings.store(storage_types.UserSettings(continuation_token=b'x'))
-        keeperdrive_sync.apply_keeper_drive_data_dict(
-            kd,
+        nsf_sync.apply_nsf_data_dict(
+            nsf,
             {'folders': [{'folderUid': 'F1', 'parentUid': 'P', 'data': 'd', 'type': 1,
                           'inheritUserPermissions': 0, 'folderKey': 'k',
                           'ownerInfo': {'accountUid': 'a', 'username': 'u'},
                           'dateCreated': 1, 'lastModified': 2}]},
         )
-        self.assertIsNotNone(kd.folders.get_entity('F1'))
+        self.assertIsNotNone(nsf.folders.get_entity('F1'))
 
         vault.clear()
         self.assertIsNone(vault.user_settings.load())
-        self.assertIsNone(kd.folders.get_entity('F1'))
+        self.assertIsNone(nsf.folders.get_entity('F1'))
 
         conn.close()
 

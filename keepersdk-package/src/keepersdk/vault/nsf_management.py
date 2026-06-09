@@ -8,11 +8,11 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional
 from .. import crypto, utils
 from ..errors import KeeperApiError
 from ..proto import folder_pb2, record_pb2, remove_pb2
-from . import keeperdrive_data, vault_extensions
+from . import nsf_data, vault_extensions
 from .vault_online import VaultOnline
 
 ROOT_FOLDER_UID = 'AAAAAAAAAAAAAAAAAPmtNA'
-"""Sentinel UID the server uses for the KeeperDrive root folder."""
+"""Sentinel UID the server uses for the NSF root folder."""
 
 
 class NsfError(ValueError):
@@ -74,10 +74,10 @@ _FOLDER_REMOVE_OPS = {
 }
 
 
-def _nsf_view(vault: VaultOnline) -> keeperdrive_data.KeeperDriveData:
-    view = vault.keeper_drive_data
+def _nsf_view(vault: VaultOnline) -> nsf_data.NSFData:
+    view = vault.nsf_data
     if view is None:
-        raise NsfError('Keeper Drive / NSF storage is not available on this vault')
+        raise NsfError('NSF storage is not available on this vault')
     return view
 
 
@@ -132,7 +132,7 @@ def resolve_nsf_record_uid(vault: VaultOnline, identifier: str) -> Optional[str]
     return None
 
 
-def _record_title_from_decrypted(entry: keeperdrive_data.KeeperDriveRecordEntry) -> str:
+def _record_title_from_decrypted(entry: nsf_data.NSFRecordEntry) -> str:
     if not entry.decrypted_data:
         return entry.record_uid
     try:

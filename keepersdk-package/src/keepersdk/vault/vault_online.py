@@ -3,7 +3,7 @@ import threading
 from typing import Optional, Any, Dict
 
 from . import sync_down, vault_plugins
-from . import vault_data, vault_storage, keeperdrive_data, keeperdrive_vault_storage
+from . import vault_data, vault_storage, nsf_data, nsf_vault_storage
 from .. import utils
 from ..authentication import keeper_auth
 
@@ -12,11 +12,11 @@ class VaultOnline(vault_plugins.IVaultData, keeper_auth.IKeeperAuth):
     def __init__(self, auth: keeper_auth.KeeperAuth, storage: vault_storage.IVaultStorage) -> None:
         super(VaultOnline, self).__init__()
         self._vault_data = vault_data.VaultData(auth.auth_context.client_key, storage)
-        self._keeper_drive_data: Optional[keeperdrive_data.KeeperDriveData] = None
-        kd_storage = storage.keeper_drive
-        if kd_storage is not None:
-            self._keeper_drive_data = keeperdrive_data.KeeperDriveData(
-                kd_storage, auth.auth_context)
+        self._nsf_data: Optional[nsf_data.NSFData] = None
+        nsf_storage = storage.nsf
+        if nsf_storage is not None:
+            self._nsf_data = nsf_data.NSFData(
+                nsf_storage, auth.auth_context)
         self._keeper_auth = auth
         self._auto_sync = False
         self._lock = threading.Lock()
@@ -35,12 +35,12 @@ class VaultOnline(vault_plugins.IVaultData, keeper_auth.IKeeperAuth):
         return self._keeper_auth
 
     @property
-    def keeper_drive(self) -> keeperdrive_vault_storage.IKeeperDriveStorage:
-        return self._vault_data.storage.keeper_drive
+    def nsf(self) -> nsf_vault_storage.INSFStorage:
+        return self._vault_data.storage.nsf
 
     @property
-    def keeper_drive_data(self) -> Optional[keeperdrive_data.KeeperDriveData]:
-        return self._keeper_drive_data
+    def nsf_data(self) -> Optional[nsf_data.NSFData]:
+        return self._nsf_data
 
     @property
     def lock(self)-> threading.Lock:
@@ -115,8 +115,8 @@ class VaultOnline(vault_plugins.IVaultData, keeper_auth.IKeeperAuth):
         self.sync_requested = False
         self._sync_record_types = False
         self._vault_data.rebuild_data(result.vault)
-        if self._keeper_drive_data is not None:
-            self._keeper_drive_data.rebuild_keeper_drive(self._keeper_auth.auth_context)
+        if self._nsf_data is not None:
+            self._nsf_data.rebuild_nsf(self._keeper_auth.auth_context)
 
     def _background_task(self):
         if self._keeper_auth.auth_context.enterprise_ec_public_key:

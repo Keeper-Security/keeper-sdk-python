@@ -3,53 +3,53 @@ from __future__ import annotations
 import sqlite3
 from typing import Callable, Tuple, Type
 
-from . import keeperdrive_storage_types as kd
-from .keeperdrive_vault_storage import IKeeperDriveStorage
+from . import nsf_storage_types as nsf
+from .nsf_vault_storage import INSFStorage
 from .. import sqlite_dao, utils
 from ..storage import sqlite
 
 
-def keeper_drive_table_schemas(owner_column: str, owner_type: Type[sqlite_dao.KeyTypes]
+def nsf_table_schemas(owner_column: str, owner_type: Type[sqlite_dao.KeyTypes]
                                ) -> Tuple[sqlite_dao.TableSchema, ...]:
 
     settings_schema = sqlite_dao.TableSchema.load_schema(
-        kd.KeeperDriveSettings, [], owner_column=owner_column, owner_type=owner_type)
+        nsf.NSFSettings, [], owner_column=owner_column, owner_type=owner_type)
     folder_schema = sqlite_dao.TableSchema.load_schema(
-        kd.KDFolder, 'folder_uid', owner_column=owner_column, owner_type=owner_type)
+        nsf.NSFFolder, 'folder_uid', owner_column=owner_column, owner_type=owner_type)
     folder_key_schema = sqlite_dao.TableSchema.load_schema(
-        kd.KDFolderKey, ['folder_uid', 'parent_uid'],
+        nsf.NSFFolderKey, ['folder_uid', 'parent_uid'],
         indexes={'ParentUid': ['parent_uid']}, owner_column=owner_column, owner_type=owner_type)
     record_schema = sqlite_dao.TableSchema.load_schema(
-        kd.KDRecord, 'record_uid', owner_column=owner_column, owner_type=owner_type)
+        nsf.NSFRecord, 'record_uid', owner_column=owner_column, owner_type=owner_type)
     record_key_schema = sqlite_dao.TableSchema.load_schema(
-        kd.KDRecordKey, ['record_uid', 'folder_uid'],
+        nsf.NSFRecordKey, ['record_uid', 'folder_uid'],
         indexes={'FolderUid': ['folder_uid']}, owner_column=owner_column, owner_type=owner_type)
     folder_access_schema = sqlite_dao.TableSchema.load_schema(
-        kd.KDFolderAccess, ['folder_uid', 'access_type_uid'],
+        nsf.NSFFolderAccess, ['folder_uid', 'access_type_uid'],
         indexes={'AccessTypeUid': ['access_type_uid']}, owner_column=owner_column, owner_type=owner_type)
     record_access_schema = sqlite_dao.TableSchema.load_schema(
-        kd.KDRecordAccess, ['record_uid', 'access_type_uid'],
+        nsf.NSFRecordAccess, ['record_uid', 'access_type_uid'],
         indexes={'AccessTypeUid': ['access_type_uid']}, owner_column=owner_column, owner_type=owner_type)
     record_link_schema = sqlite_dao.TableSchema.load_schema(
-        kd.KDRecordLink, ['parent_record_uid', 'child_record_uid'],
+        nsf.NSFRecordLink, ['parent_record_uid', 'child_record_uid'],
         indexes={'ChildRecordUid': ['child_record_uid']}, owner_column=owner_column, owner_type=owner_type)
     folder_record_schema = sqlite_dao.TableSchema.load_schema(
-        kd.KDFolderRecord, ['folder_uid', 'record_uid'],
+        nsf.NSFFolderRecord, ['folder_uid', 'record_uid'],
         indexes={'RecordUid': ['record_uid']}, owner_column=owner_column, owner_type=owner_type)
     folder_sharing_schema = sqlite_dao.TableSchema.load_schema(
-        kd.KDFolderSharingState, 'folder_uid', owner_column=owner_column, owner_type=owner_type)
+        nsf.NSFFolderSharingState, 'folder_uid', owner_column=owner_column, owner_type=owner_type)
     record_sharing_schema = sqlite_dao.TableSchema.load_schema(
-        kd.KDRecordSharingState, 'record_uid', owner_column=owner_column, owner_type=owner_type)
+        nsf.NSFRecordSharingState, 'record_uid', owner_column=owner_column, owner_type=owner_type)
     non_shared_schema = sqlite_dao.TableSchema.load_schema(
-        kd.KDNonSharedData, 'record_uid', owner_column=owner_column, owner_type=owner_type)
+        nsf.NSFNonSharedData, 'record_uid', owner_column=owner_column, owner_type=owner_type)
     bw_record_schema = sqlite_dao.TableSchema.load_schema(
-        kd.KDBreachWatchRecord, 'record_uid', owner_column=owner_column, owner_type=owner_type)
+        nsf.NSFBreachWatchRecord, 'record_uid', owner_column=owner_column, owner_type=owner_type)
     security_score_schema = sqlite_dao.TableSchema.load_schema(
-        kd.KDSecurityScoreData, 'record_uid', owner_column=owner_column, owner_type=owner_type)
+        nsf.NSFSecurityScoreData, 'record_uid', owner_column=owner_column, owner_type=owner_type)
     bw_sec_schema = sqlite_dao.TableSchema.load_schema(
-        kd.KDBreachWatchSecurityData, 'record_uid', owner_column=owner_column, owner_type=owner_type)
+        nsf.NSFBreachWatchSecurityData, 'record_uid', owner_column=owner_column, owner_type=owner_type)
     list_chunk_schema = sqlite_dao.TableSchema.load_schema(
-        kd.KDListChunk, ['chunk_group', 'chunk_key'],
+        nsf.NSFListChunk, ['chunk_group', 'chunk_key'],
         indexes={'ChunkKey': ['chunk_key']}, owner_column=owner_column, owner_type=owner_type)
     return (settings_schema, folder_schema, folder_key_schema, record_schema, record_key_schema,
             folder_access_schema, record_access_schema, record_link_schema, folder_record_schema,
@@ -57,14 +57,14 @@ def keeper_drive_table_schemas(owner_column: str, owner_type: Type[sqlite_dao.Ke
             security_score_schema, bw_sec_schema, list_chunk_schema)
 
 
-class SqliteKeeperDriveStorage(IKeeperDriveStorage):
+class SqliteNSFStorage(INSFStorage):
     def __init__(self, get_connection: Callable[[], sqlite3.Connection], vault_owner: bytes, *,
                  verify: bool = True) -> None:
         self.get_connection = get_connection
         self.vault_owner = vault_owner
         self.owner_column = 'owner_uid'
 
-        schemas = keeper_drive_table_schemas(self.owner_column, bytes)
+        schemas = nsf_table_schemas(self.owner_column, bytes)
         if verify:
             sqlite_dao.verify_database(self.get_connection(), schemas)
 

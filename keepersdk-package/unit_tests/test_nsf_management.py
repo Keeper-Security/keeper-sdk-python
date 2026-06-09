@@ -1,10 +1,10 @@
 import unittest
 
-from keepersdk.vault import keeperdrive_sync, memory_keeperdrive_storage, nsf_management
-from keepersdk.vault.keeperdrive_data import KeeperDriveData
+from keepersdk.vault import nsf_sync, memory_nsf_storage, nsf_management
+from keepersdk.vault.nsf_data import NSFData
 class _FakeVault:
-    def __init__(self, view: KeeperDriveData) -> None:
-        self.keeper_drive_data = view
+    def __init__(self, view: NSFData) -> None:
+        self.nsf_data = view
         self.sync_requested = False
 
     def run_pending_jobs(self) -> None:
@@ -13,9 +13,9 @@ class _FakeVault:
 
 class TestNsfManagement(unittest.TestCase):
     def test_list_and_resolve_from_cache(self):
-        kd = memory_keeperdrive_storage.InMemoryKeeperDriveStorage()
-        keeperdrive_sync.apply_keeper_drive_data_dict(
-            kd,
+        nsf = memory_nsf_storage.InMemoryNSFStorage()
+        nsf_sync.apply_nsf_data_dict(
+            nsf,
             {
                 'folders': [{'folderUid': 'F1', 'parentUid': '', 'data': '', 'type': 1,
                              'inheritUserPermissions': 0, 'folderKey': '',
@@ -29,7 +29,7 @@ class TestNsfManagement(unittest.TestCase):
                                 'data': ''}],
             },
         )
-        view = KeeperDriveData(kd)
+        view = NSFData(nsf)
         vault = _FakeVault(view)
 
         rows = nsf_management.list_nsf_items(vault)
@@ -38,9 +38,9 @@ class TestNsfManagement(unittest.TestCase):
         self.assertIsNone(nsf_management.resolve_nsf_record_uid(vault, 'missing'))
 
     def test_find_child_folder_and_build_removals(self):
-        kd = memory_keeperdrive_storage.InMemoryKeeperDriveStorage()
-        keeperdrive_sync.apply_keeper_drive_data_dict(
-            kd,
+        nsf = memory_nsf_storage.InMemoryNSFStorage()
+        nsf_sync.apply_nsf_data_dict(
+            nsf,
             {
                 'folders': [
                     {'folderUid': 'P1', 'parentUid': '', 'data': '', 'type': 1,
@@ -60,7 +60,7 @@ class TestNsfManagement(unittest.TestCase):
                                    'folderKeyEncryptionType': 0}],
             },
         )
-        view = KeeperDriveData(kd)
+        view = NSFData(nsf)
         vault = _FakeVault(view)
         removals = nsf_management.build_nsf_record_removals(
             vault, ['R1'], operation_type='owner-trash')

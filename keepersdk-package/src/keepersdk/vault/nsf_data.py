@@ -4,11 +4,11 @@ from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional, Set
 
 from ..authentication import keeper_auth
-from . import keeperdrive_crypto, keeperdrive_storage_types as kd
-from .keeperdrive_vault_storage import IKeeperDriveStorage
+from . import nsf_crypto, nsf_storage_types as nsf
+from .nsf_vault_storage import INSFStorage
 
 
-class KeeperDriveRebuildTask:
+class NSFRebuildTask:
     """Tracks UIDs touched during incremental sync-down."""
 
     def __init__(self, is_full_sync: bool) -> None:
@@ -38,7 +38,7 @@ class KeeperDriveRebuildTask:
 
 
 @dataclass
-class KeeperDriveFolderNode:
+class NSFFolderNode:
     folder_uid: str
     parent_uid: Optional[str] = None
     name: Optional[str] = None
@@ -48,7 +48,7 @@ class KeeperDriveFolderNode:
 
 
 @dataclass
-class KeeperDriveRecordEntry:
+class NSFRecordEntry:
     record_uid: str
     revision: int = 0
     version: int = 0
@@ -60,34 +60,34 @@ class KeeperDriveRecordEntry:
     decrypted_data: Optional[str] = None
 
 
-class KeeperDriveData:
-    """In-memory decrypted Keeper Drive view, rebuilt from encrypted storage after sync-down."""
+class NSFData:
+    """In-memory decrypted NSF view, rebuilt from encrypted storage after sync-down."""
 
     def __init__(
             self,
-            storage: IKeeperDriveStorage,
+            storage: INSFStorage,
             auth_context: Optional[keeper_auth.AuthContext] = None) -> None:
         self._storage = storage
         self._auth_context = auth_context
-        self._folders: Dict[str, KeeperDriveFolderNode] = {}
-        self._records: Dict[str, KeeperDriveRecordEntry] = {}
+        self._folders: Dict[str, NSFFolderNode] = {}
+        self._records: Dict[str, NSFRecordEntry] = {}
         if auth_context is not None:
-            self.rebuild_keeper_drive(auth_context)
+            self.rebuild_nsf(auth_context)
 
     @property
-    def storage(self) -> IKeeperDriveStorage:
+    def storage(self) -> INSFStorage:
         return self._storage
 
-    def folders(self) -> Iterable[KeeperDriveFolderNode]:
+    def folders(self) -> Iterable[NSFFolderNode]:
         return self._folders.values()
 
-    def records(self) -> Iterable[KeeperDriveRecordEntry]:
+    def records(self) -> Iterable[NSFRecordEntry]:
         return self._records.values()
 
-    def get_folder(self, folder_uid: str) -> Optional[KeeperDriveFolderNode]:
+    def get_folder(self, folder_uid: str) -> Optional[NSFFolderNode]:
         return self._folders.get(folder_uid)
 
-    def get_record(self, record_uid: str) -> Optional[KeeperDriveRecordEntry]:
+    def get_record(self, record_uid: str) -> Optional[NSFRecordEntry]:
         return self._records.get(record_uid)
 
     @property
@@ -98,30 +98,30 @@ class KeeperDriveData:
     def record_count(self) -> int:
         return len(self._records)
 
-    def rebuild_data(self, changes: Optional[KeeperDriveRebuildTask] = None) -> None:
+    def rebuild_data(self, changes: Optional[NSFRebuildTask] = None) -> None:
         """Rebuild in-memory views (always full decrypt rebuild."""
         del changes
-        self.rebuild_keeper_drive(self._auth_context)
+        self.rebuild_nsf(self._auth_context)
 
-    def rebuild_keeper_drive(self, auth_context: Optional[keeper_auth.AuthContext]) -> None:
+    def rebuild_nsf(self, auth_context: Optional[keeper_auth.AuthContext]) -> None:
         self._folders.clear()
         self._records.clear()
         if auth_context is None:
             return
 
-        decrypted_folder_keys = keeperdrive_crypto.decrypt_folder_keys(self._storage, auth_context)
-        decrypted_record_keys = keeperdrive_crypto.decrypt_record_keys(
+        decrypted_folder_keys = nsf_crypto.decrypt_folder_keys(self._storage, auth_context)
+        decrypted_record_keys = nsf_crypto.decrypt_record_keys(
             self._storage, decrypted_folder_keys, auth_context)
 
         for row in self._storage.folders.get_all_entities():
             folder_key = decrypted_folder_keys.get(row.folder_uid)
             name = None
             if folder_key is not None:
-                name = keeperdrive_crypto.decrypt_folder_name(row.data, folder_key)
-            node = KeeperDriveFolderNode(
+                name = nsf_crypto.decrypt_folder_name(row.data, folder_key)
+            node = NSFFolderNode(
                 folder_uid=row.folder_uid,
                 parent_uid=row.parent_uid or None,
-                name=name or '(Keeper Drive Folder)',
+                name=name or '(NSF Folder)',
                 folder_key=folder_key,
             )
             self._folders[row.folder_uid] = node
@@ -139,8 +139,8 @@ class KeeperDriveData:
             record_key = decrypted_record_keys.get(row.record_uid)
             if record_key is None:
                 continue
-            decrypted = keeperdrive_crypto.decrypt_record_data(row.data, record_key)
-            self._records[row.record_uid] = KeeperDriveRecordEntry(
+            decrypted = nsf_crypto.decrypt_record_data(row.data, record_key)
+            self._records[row.record_uid] = NSFRecordEntry(
                 record_uid=row.record_uid,
                 revision=row.revision,
                 version=row.version,

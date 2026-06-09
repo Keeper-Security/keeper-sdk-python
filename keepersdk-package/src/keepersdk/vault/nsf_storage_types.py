@@ -6,12 +6,12 @@ from ..storage.storage_types import IUid, IUidLink
 
 
 @dataclass
-class KeeperDriveSettings:
+class NSFSettings:
     continuation_token: bytes = b''
 
 
 @dataclass
-class KDFolder(IUid):
+class NSFFolder(IUid):
     folder_uid: str = ''
     parent_uid: str = ''
     data: str = ''
@@ -28,7 +28,7 @@ class KDFolder(IUid):
 
 
 @dataclass
-class KDFolderKey(IUidLink[str, str]):
+class NSFFolderKey(IUidLink[str, str]):
     folder_uid: str = ''
     parent_uid: str = ''
     folder_key: str = ''
@@ -42,7 +42,7 @@ class KDFolderKey(IUidLink[str, str]):
 
 
 @dataclass
-class KDRecord(IUid):
+class NSFRecord(IUid):
     record_uid: str = ''
     revision: int = 0
     version: int = 0
@@ -57,7 +57,7 @@ class KDRecord(IUid):
 
 
 @dataclass
-class KDRecordKey(IUidLink[str, str]):
+class NSFRecordKey(IUidLink[str, str]):
     record_uid: str = ''
     folder_uid: str = ''
     record_key: str = ''
@@ -72,7 +72,7 @@ class KDRecordKey(IUidLink[str, str]):
 
 
 @dataclass
-class KDFolderAccess(IUidLink[str, str]):
+class NSFFolderAccess(IUidLink[str, str]):
     folder_uid: str = ''
     access_type_uid: str = ''
     access_type: int = 0
@@ -95,7 +95,7 @@ class KDFolderAccess(IUidLink[str, str]):
 
 
 @dataclass
-class KDRecordAccess(IUidLink[str, str]):
+class NSFRecordAccess(IUidLink[str, str]):
     record_uid: str = ''
     access_type_uid: str = ''
     access_type: int = 0
@@ -125,7 +125,7 @@ class KDRecordAccess(IUidLink[str, str]):
 
 
 @dataclass
-class KDRecordLink(IUidLink[str, str]):
+class NSFRecordLink(IUidLink[str, str]):
     parent_record_uid: str = ''
     child_record_uid: str = ''
     record_key: str = ''
@@ -139,7 +139,7 @@ class KDRecordLink(IUidLink[str, str]):
 
 
 @dataclass
-class KDFolderRecord(IUidLink[str, str]):
+class NSFFolderRecord(IUidLink[str, str]):
     folder_uid: str = ''
     record_uid: str = ''
 
@@ -151,7 +151,7 @@ class KDFolderRecord(IUidLink[str, str]):
 
 
 @dataclass
-class KDFolderSharingState(IUid):
+class NSFFolderSharingState(IUid):
     folder_uid: str = ''
     shared: bool = False
     count: int = 0
@@ -161,7 +161,7 @@ class KDFolderSharingState(IUid):
 
 
 @dataclass
-class KDRecordSharingState(IUid):
+class NSFRecordSharingState(IUid):
     record_uid: str = ''
     is_directly_shared: bool = False
     is_indirectly_shared: bool = False
@@ -172,7 +172,7 @@ class KDRecordSharingState(IUid):
 
 
 @dataclass
-class KDNonSharedData(IUid):
+class NSFNonSharedData(IUid):
     record_uid: str = ''
     data: str = ''
 
@@ -181,7 +181,7 @@ class KDNonSharedData(IUid):
 
 
 @dataclass
-class KDBreachWatchRecord(IUid):
+class NSFBreachWatchRecord(IUid):
     record_uid: str = ''
     data: str = ''
     type: int = 0
@@ -194,7 +194,7 @@ class KDBreachWatchRecord(IUid):
 
 
 @dataclass
-class KDSecurityScoreData(IUid):
+class NSFSecurityScoreData(IUid):
     record_uid: str = ''
     data: str = ''
     revision: int = 0
@@ -204,7 +204,7 @@ class KDSecurityScoreData(IUid):
 
 
 @dataclass
-class KDBreachWatchSecurityData(IUid):
+class NSFBreachWatchSecurityData(IUid):
     record_uid: str = ''
     revision: int = 0
     removed: bool = False
@@ -214,7 +214,7 @@ class KDBreachWatchSecurityData(IUid):
 
 
 @dataclass
-class KDListChunk(IUidLink[str, str]):
+class NSFListChunk(IUidLink[str, str]):
     chunk_group: str = ''
     chunk_key: str = ''
     payload_json: str = ''

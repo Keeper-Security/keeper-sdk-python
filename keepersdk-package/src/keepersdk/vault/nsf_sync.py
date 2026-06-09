@@ -5,12 +5,12 @@ import json
 from typing import Any, Dict, List, Mapping, Optional, TYPE_CHECKING, Tuple, Union
 
 from .. import utils
-from . import keeperdrive_storage_types as kd
-from .keeperdrive_vault_storage import IKeeperDriveStorage
+from . import nsf_storage_types as nsf
+from .nsf_vault_storage import INSFStorage
 from ..proto import SyncDown_pb2, folder_pb2, breachwatch_pb2, record_pb2
 
 if TYPE_CHECKING:
-    from .keeperdrive_data import KeeperDriveRebuildTask
+    from .nsf_data import NSFRebuildTask
 
 CHUNK_RECORD_ROTATION = 'recordRotationData'
 CHUNK_RAW_DAG = 'rawDagData'
@@ -91,105 +91,105 @@ def _access_uid(x: Mapping[str, Any], *, proto_actor: bool = False) -> str:
     return str(x.get('actorUid') or x.get('accessTypeUid') or '')
 
 
-def extract_keeper_drive_data(sync_payload: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
-    raw = sync_payload.get('keeperDriveData')
+def extract_nsf_data(sync_payload: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+    raw = sync_payload.get('nsfData')
     if isinstance(raw, dict):
         return raw
     return None
 
 
-def try_apply_keeper_drive_from_sync_down_proto(
+def try_apply_nsf_from_sync_down_proto(
         response: SyncDown_pb2.SyncDownResponse,
-        drive_storage: IKeeperDriveStorage,
-        task: Optional['KeeperDriveRebuildTask'] = None) -> bool:
-    if not response.HasField('keeperDriveData'):
+        nsf_storage: INSFStorage,
+        task: Optional['NSFRebuildTask'] = None) -> bool:
+    if not response.HasField('nsfData'):
         return False
-    kd_msg = response.keeperDriveData
-    if not list(kd_msg.ListFields()):
+    nsf_msg = response.nsfData
+    if not list(nsf_msg.ListFields()):
         return False
-    apply_keeper_drive_proto_message(kd_msg, drive_storage, task)
+    apply_nsf_proto_message(nsf_msg, nsf_storage, task)
     return True
 
 
-def try_apply_keeper_drive_from_sync_down_json(
+def try_apply_nsf_from_sync_down_json(
         auth: Any,
-        drive_storage: IKeeperDriveStorage,
+        nsf_storage: INSFStorage,
         continuation_token: bytes,
-        task: Optional['KeeperDriveRebuildTask'] = None) -> bool:
+        task: Optional['NSFRebuildTask'] = None) -> bool:
     logger = utils.get_logger()
     try:
         rq: Dict[str, Any] = {'continuationToken': utils.base64_url_encode(continuation_token)}
         rs = auth.execute_router_json('vault/sync_down', rq)
     except Exception as e:
-        logger.debug('Keeper Drive JSON sync_down skipped: %s', e)
+        logger.debug('NSF JSON sync_down skipped: %s', e)
         return False
     if not isinstance(rs, dict):
         return False
-    inner = extract_keeper_drive_data(rs)
+    inner = extract_nsf_data(rs)
     if inner is None:
         return False
-    apply_keeper_drive_data_dict(drive_storage, inner, task)
+    apply_nsf_data_dict(nsf_storage, inner, task)
     return True
 
 
-def apply_keeper_drive_from_full_sync_json(
-        drive_storage: IKeeperDriveStorage,
+def apply_nsf_from_full_sync_json(
+        nsf_storage: INSFStorage,
         sync_payload: Mapping[str, Any],
-        task: Optional['KeeperDriveRebuildTask'] = None) -> None:
-    inner = extract_keeper_drive_data(sync_payload)
+        task: Optional['NSFRebuildTask'] = None) -> None:
+    inner = extract_nsf_data(sync_payload)
     if inner is not None:
-        apply_keeper_drive_data_dict(drive_storage, inner, task)
+        apply_nsf_data_dict(nsf_storage, inner, task)
 
 
-def apply_keeper_drive_proto_message(
-        kd_msg: SyncDown_pb2.KeeperDriveData,
-        drive_storage: IKeeperDriveStorage,
-        task: Optional['KeeperDriveRebuildTask'] = None) -> None:
-    _process_removed_folders_proto(kd_msg, drive_storage, task)
-    _process_removed_folder_records_proto(kd_msg, drive_storage, task)
-    _process_removed_record_links_proto(kd_msg, drive_storage, task)
-    _store_folders_proto(kd_msg, drive_storage, task)
-    _store_folder_keys_proto(kd_msg, drive_storage)
-    _store_record_data_proto(kd_msg, drive_storage, task)
-    _store_folder_records_proto(kd_msg, drive_storage, task)
-    _store_records_proto(kd_msg, drive_storage, task)
-    _process_revoked_folder_accesses_proto(kd_msg, drive_storage, task)
-    _store_folder_accesses_proto(kd_msg, drive_storage)
-    _process_revoked_record_accesses_proto(kd_msg, drive_storage, task)
-    _store_record_accesses_proto(kd_msg, drive_storage, task)
-    _store_record_links_proto(kd_msg, drive_storage, task)
-    _store_folder_sharing_states_proto(kd_msg, drive_storage)
-    _store_record_sharing_states_proto(kd_msg, drive_storage)
-    _store_optional_extras_proto(kd_msg, drive_storage, task)
+def apply_nsf_proto_message(
+        nsf_msg: SyncDown_pb2.KeeperDriveData,
+        nsf_storage: INSFStorage,
+        task: Optional['NSFRebuildTask'] = None) -> None:
+    _process_removed_folders_proto(nsf_msg, nsf_storage, task)
+    _process_removed_folder_records_proto(nsf_msg, nsf_storage, task)
+    _process_removed_record_links_proto(nsf_msg, nsf_storage, task)
+    _store_folders_proto(nsf_msg, nsf_storage, task)
+    _store_folder_keys_proto(nsf_msg, nsf_storage)
+    _store_record_data_proto(nsf_msg, nsf_storage, task)
+    _store_folder_records_proto(nsf_msg, nsf_storage, task)
+    _store_records_proto(nsf_msg, nsf_storage, task)
+    _process_revoked_folder_accesses_proto(nsf_msg, nsf_storage, task)
+    _store_folder_accesses_proto(nsf_msg, nsf_storage)
+    _process_revoked_record_accesses_proto(nsf_msg, nsf_storage, task)
+    _store_record_accesses_proto(nsf_msg, nsf_storage, task)
+    _store_record_links_proto(nsf_msg, nsf_storage, task)
+    _store_folder_sharing_states_proto(nsf_msg, nsf_storage)
+    _store_record_sharing_states_proto(nsf_msg, nsf_storage)
+    _store_optional_extras_proto(nsf_msg, nsf_storage, task)
 
 
-def apply_keeper_drive_data_dict(
-        drive_storage: IKeeperDriveStorage,
-        keeper_drive_data: Mapping[str, Any],
-        task: Optional['KeeperDriveRebuildTask'] = None) -> None:
-    _process_removed_folders_dict(keeper_drive_data, drive_storage, task)
-    _process_removed_folder_records_dict(keeper_drive_data, drive_storage, task)
-    _process_removed_record_links_dict(keeper_drive_data, drive_storage, task)
-    _store_folders_dict(keeper_drive_data, drive_storage, task)
-    _store_folder_keys_dict(keeper_drive_data, drive_storage)
-    _store_record_data_dict(keeper_drive_data, drive_storage, task)
-    _store_folder_records_dict(keeper_drive_data, drive_storage, task)
-    _store_records_dict(keeper_drive_data, drive_storage, task)
-    _process_revoked_folder_accesses_dict(keeper_drive_data, drive_storage, task)
-    _store_folder_accesses_dict(keeper_drive_data, drive_storage)
-    _process_revoked_record_accesses_dict(keeper_drive_data, drive_storage, task)
-    _store_record_accesses_dict(keeper_drive_data, drive_storage, task)
-    _store_record_links_dict(keeper_drive_data, drive_storage, task)
-    _store_folder_sharing_states_dict(keeper_drive_data, drive_storage)
-    _store_record_sharing_states_dict(keeper_drive_data, drive_storage)
-    _store_optional_extras_dict(keeper_drive_data, drive_storage, task)
+def apply_nsf_data_dict(
+        nsf_storage: INSFStorage,
+        nsf_data: Mapping[str, Any],
+        task: Optional['NSFRebuildTask'] = None) -> None:
+    _process_removed_folders_dict(nsf_data, nsf_storage, task)
+    _process_removed_folder_records_dict(nsf_data, nsf_storage, task)
+    _process_removed_record_links_dict(nsf_data, nsf_storage, task)
+    _store_folders_dict(nsf_data, nsf_storage, task)
+    _store_folder_keys_dict(nsf_data, nsf_storage)
+    _store_record_data_dict(nsf_data, nsf_storage, task)
+    _store_folder_records_dict(nsf_data, nsf_storage, task)
+    _store_records_dict(nsf_data, nsf_storage, task)
+    _process_revoked_folder_accesses_dict(nsf_data, nsf_storage, task)
+    _store_folder_accesses_dict(nsf_data, nsf_storage)
+    _process_revoked_record_accesses_dict(nsf_data, nsf_storage, task)
+    _store_record_accesses_dict(nsf_data, nsf_storage, task)
+    _store_record_links_dict(nsf_data, nsf_storage, task)
+    _store_folder_sharing_states_dict(nsf_data, nsf_storage)
+    _store_record_sharing_states_dict(nsf_data, nsf_storage)
+    _store_optional_extras_dict(nsf_data, nsf_storage, task)
 
 
 def _process_removed_folders_proto(
-        kd_msg: SyncDown_pb2.KeeperDriveData,
-        storage: IKeeperDriveStorage,
-        task: Optional['KeeperDriveRebuildTask']) -> None:
-    removed = [_uid_b64(x.folder_uid) for x in kd_msg.removedFolders if x.folder_uid]
+        nsf_msg: SyncDown_pb2.KeeperDriveData,
+        storage: INSFStorage,
+        task: Optional['NSFRebuildTask']) -> None:
+    removed = [_uid_b64(x.folder_uid) for x in nsf_msg.removedFolders if x.folder_uid]
     if not removed:
         return
     storage.folder_keys.delete_links_by_subjects(removed)
@@ -200,12 +200,12 @@ def _process_removed_folders_proto(
 
 
 def _process_removed_folder_records_proto(
-        kd_msg: SyncDown_pb2.KeeperDriveData,
-        storage: IKeeperDriveStorage,
-        task: Optional['KeeperDriveRebuildTask']) -> None:
+        nsf_msg: SyncDown_pb2.KeeperDriveData,
+        storage: INSFStorage,
+        task: Optional['NSFRebuildTask']) -> None:
     links: List[Tuple[str, str]] = []
     key_links: List[Tuple[str, str]] = []
-    for x in kd_msg.removedFolderRecords:
+    for x in nsf_msg.removedFolderRecords:
         fu, ru = _uid_b64(x.folder_uid), _uid_b64(x.record_uid)
         if fu and ru:
             links.append((fu, ru))
@@ -219,10 +219,10 @@ def _process_removed_folder_records_proto(
 
 
 def _process_removed_record_links_proto(
-        kd_msg: SyncDown_pb2.KeeperDriveData,
-        storage: IKeeperDriveStorage,
-        task: Optional['KeeperDriveRebuildTask']) -> None:
-    for x in kd_msg.removedRecordLinks:
+        nsf_msg: SyncDown_pb2.KeeperDriveData,
+        storage: INSFStorage,
+        task: Optional['NSFRebuildTask']) -> None:
+    for x in nsf_msg.removedRecordLinks:
         parent_uid, child_uid = _uid_b64(x.parentRecordUid), _uid_b64(x.childRecordUid)
         storage.record_links.delete_links([(parent_uid, child_uid)])
         if task and child_uid:
@@ -230,10 +230,10 @@ def _process_removed_record_links_proto(
 
 
 def _process_revoked_folder_accesses_proto(
-        kd_msg: SyncDown_pb2.KeeperDriveData,
-        storage: IKeeperDriveStorage,
-        task: Optional['KeeperDriveRebuildTask']) -> None:
-    links = [(_uid_b64(x.folderUid), _uid_b64(x.actorUid)) for x in kd_msg.revokedFolderAccesses]
+        nsf_msg: SyncDown_pb2.KeeperDriveData,
+        storage: INSFStorage,
+        task: Optional['NSFRebuildTask']) -> None:
+    links = [(_uid_b64(x.folderUid), _uid_b64(x.actorUid)) for x in nsf_msg.revokedFolderAccesses]
     if links:
         storage.folder_accesses.delete_links(links)
         if task:
@@ -241,10 +241,10 @@ def _process_revoked_folder_accesses_proto(
 
 
 def _process_revoked_record_accesses_proto(
-        kd_msg: SyncDown_pb2.KeeperDriveData,
-        storage: IKeeperDriveStorage,
-        task: Optional['KeeperDriveRebuildTask']) -> None:
-    links = [(_uid_b64(x.recordUid), _uid_b64(x.actorUid)) for x in kd_msg.revokedRecordAccesses]
+        nsf_msg: SyncDown_pb2.KeeperDriveData,
+        storage: INSFStorage,
+        task: Optional['NSFRebuildTask']) -> None:
+    links = [(_uid_b64(x.recordUid), _uid_b64(x.actorUid)) for x in nsf_msg.revokedRecordAccesses]
     if links:
         storage.record_accesses.delete_links(links)
         if task:
@@ -252,28 +252,28 @@ def _process_revoked_record_accesses_proto(
 
 
 def _store_folders_proto(
-        kd_msg: SyncDown_pb2.KeeperDriveData,
-        storage: IKeeperDriveStorage,
-        task: Optional['KeeperDriveRebuildTask']) -> None:
-    folders = [_proto_folder(x) for x in kd_msg.folders]
+        nsf_msg: SyncDown_pb2.KeeperDriveData,
+        storage: INSFStorage,
+        task: Optional['NSFRebuildTask']) -> None:
+    folders = [_proto_folder(x) for x in nsf_msg.folders]
     if folders:
         storage.folders.put_entities(folders)
         if task:
             task.add_folders((f.folder_uid for f in folders))
 
 
-def _store_folder_keys_proto(kd_msg: SyncDown_pb2.KeeperDriveData, storage: IKeeperDriveStorage) -> None:
-    keys = [_proto_folder_key(x) for x in kd_msg.folderKeys]
+def _store_folder_keys_proto(nsf_msg: SyncDown_pb2.KeeperDriveData, storage: INSFStorage) -> None:
+    keys = [_proto_folder_key(x) for x in nsf_msg.folderKeys]
     if keys:
         storage.folder_keys.put_links(keys)
 
 
 def _store_record_data_proto(
-        kd_msg: SyncDown_pb2.KeeperDriveData,
-        storage: IKeeperDriveStorage,
-        task: Optional['KeeperDriveRebuildTask']) -> None:
-    updated: List[kd.KDRecord] = []
-    for rd in kd_msg.recordData:
+        nsf_msg: SyncDown_pb2.KeeperDriveData,
+        storage: INSFStorage,
+        task: Optional['NSFRebuildTask']) -> None:
+    updated: List[nsf.NSFRecord] = []
+    for rd in nsf_msg.recordData:
         record_uid = _uid_b64(rd.recordUid)
         existing = storage.records.get_entity(record_uid)
         if existing is None:
@@ -287,20 +287,20 @@ def _store_record_data_proto(
 
 
 def _store_folder_records_proto(
-        kd_msg: SyncDown_pb2.KeeperDriveData,
-        storage: IKeeperDriveStorage,
-        task: Optional['KeeperDriveRebuildTask']) -> None:
-    folder_records: List[kd.KDFolderRecord] = []
-    record_keys: List[kd.KDRecordKey] = []
-    for fr in kd_msg.folderRecords:
+        nsf_msg: SyncDown_pb2.KeeperDriveData,
+        storage: INSFStorage,
+        task: Optional['NSFRebuildTask']) -> None:
+    folder_records: List[nsf.NSFFolderRecord] = []
+    record_keys: List[nsf.NSFRecordKey] = []
+    for fr in nsf_msg.folderRecords:
         folder_uid = _uid_b64(fr.folderUid)
         md = fr.recordMetadata
         if md is None or not list(md.ListFields()):
             continue
         record_uid = _uid_b64(md.recordUid)
-        folder_records.append(kd.KDFolderRecord(folder_uid=folder_uid, record_uid=record_uid))
+        folder_records.append(nsf.NSFFolderRecord(folder_uid=folder_uid, record_uid=record_uid))
         if md.encryptedRecordKey:
-            record_keys.append(kd.KDRecordKey(
+            record_keys.append(nsf.NSFRecordKey(
                 record_uid=record_uid,
                 folder_uid=folder_uid,
                 record_key=_wire_b64(md.encryptedRecordKey),
@@ -316,14 +316,14 @@ def _store_folder_records_proto(
 
 
 def _store_records_proto(
-        kd_msg: SyncDown_pb2.KeeperDriveData,
-        storage: IKeeperDriveStorage,
-        task: Optional['KeeperDriveRebuildTask']) -> None:
-    rows: List[kd.KDRecord] = []
-    for dr in kd_msg.records:
+        nsf_msg: SyncDown_pb2.KeeperDriveData,
+        storage: INSFStorage,
+        task: Optional['NSFRebuildTask']) -> None:
+    rows: List[nsf.NSFRecord] = []
+    for dr in nsf_msg.records:
         record_uid = _uid_b64(dr.recordUid)
         existing = storage.records.get_entity(record_uid)
-        rows.append(kd.KDRecord(
+        rows.append(nsf.NSFRecord(
             record_uid=record_uid,
             revision=dr.revision,
             version=dr.version,
@@ -339,17 +339,17 @@ def _store_records_proto(
             task.add_records((r.record_uid for r in rows))
 
 
-def _store_folder_accesses_proto(kd_msg: SyncDown_pb2.KeeperDriveData, storage: IKeeperDriveStorage) -> None:
-    rows = [_proto_folder_access(x) for x in kd_msg.folderAccesses]
+def _store_folder_accesses_proto(nsf_msg: SyncDown_pb2.KeeperDriveData, storage: INSFStorage) -> None:
+    rows = [_proto_folder_access(x) for x in nsf_msg.folderAccesses]
     if rows:
         storage.folder_accesses.put_links(rows)
 
 
 def _store_record_accesses_proto(
-        kd_msg: SyncDown_pb2.KeeperDriveData,
-        storage: IKeeperDriveStorage,
-        task: Optional['KeeperDriveRebuildTask']) -> None:
-    rows = [_proto_record_access(x) for x in kd_msg.recordAccesses]
+        nsf_msg: SyncDown_pb2.KeeperDriveData,
+        storage: INSFStorage,
+        task: Optional['NSFRebuildTask']) -> None:
+    rows = [_proto_record_access(x) for x in nsf_msg.recordAccesses]
     if rows:
         storage.record_accesses.put_links(rows)
         if task:
@@ -357,72 +357,72 @@ def _store_record_accesses_proto(
 
 
 def _store_record_links_proto(
-        kd_msg: SyncDown_pb2.KeeperDriveData,
-        storage: IKeeperDriveStorage,
-        task: Optional['KeeperDriveRebuildTask']) -> None:
-    rows = [_proto_record_link(x) for x in kd_msg.recordLinks]
+        nsf_msg: SyncDown_pb2.KeeperDriveData,
+        storage: INSFStorage,
+        task: Optional['NSFRebuildTask']) -> None:
+    rows = [_proto_record_link(x) for x in nsf_msg.recordLinks]
     if rows:
         storage.record_links.put_links(rows)
         if task:
             task.add_records((r.child_record_uid for r in rows))
 
 
-def _store_folder_sharing_states_proto(kd_msg: SyncDown_pb2.KeeperDriveData, storage: IKeeperDriveStorage) -> None:
-    rows = [kd.KDFolderSharingState(
+def _store_folder_sharing_states_proto(nsf_msg: SyncDown_pb2.KeeperDriveData, storage: INSFStorage) -> None:
+    rows = [nsf.NSFFolderSharingState(
         folder_uid=_uid_b64(x.folderUid),
         shared=x.shared,
         count=x.count,
-    ) for x in kd_msg.folderSharingState]
+    ) for x in nsf_msg.folderSharingState]
     if rows:
         storage.folder_sharing_states.put_entities(rows)
 
 
-def _store_record_sharing_states_proto(kd_msg: SyncDown_pb2.KeeperDriveData, storage: IKeeperDriveStorage) -> None:
-    rows = [kd.KDRecordSharingState(
+def _store_record_sharing_states_proto(nsf_msg: SyncDown_pb2.KeeperDriveData, storage: INSFStorage) -> None:
+    rows = [nsf.NSFRecordSharingState(
         record_uid=_uid_b64(x.recordUid),
         is_directly_shared=x.isDirectlyShared,
         is_indirectly_shared=x.isIndirectlyShared,
         is_shared=x.isShared,
-    ) for x in kd_msg.recordSharingStates]
+    ) for x in nsf_msg.recordSharingStates]
     if rows:
         storage.record_sharing_states.put_entities(rows)
 
 
 def _store_optional_extras_proto(
-        kd_msg: SyncDown_pb2.KeeperDriveData,
-        storage: IKeeperDriveStorage,
-        task: Optional['KeeperDriveRebuildTask']) -> None:
-    nsd = [_proto_non_shared(x) for x in kd_msg.nonSharedData]
+        nsf_msg: SyncDown_pb2.KeeperDriveData,
+        storage: INSFStorage,
+        task: Optional['NSFRebuildTask']) -> None:
+    nsd = [_proto_non_shared(x) for x in nsf_msg.nonSharedData]
     if nsd:
         storage.non_shared_data.put_entities(nsd)
         if task:
             task.add_records((r.record_uid for r in nsd))
-    bw = [_proto_bw_record(x) for x in kd_msg.breachWatchRecords]
+    bw = [_proto_bw_record(x) for x in nsf_msg.breachWatchRecords]
     if bw:
         storage.breach_watch_records.put_entities(bw)
         if task:
             task.add_records((r.record_uid for r in bw))
-    ss = [_proto_security_score(x) for x in kd_msg.securityScoreData]
+    ss = [_proto_security_score(x) for x in nsf_msg.securityScoreData]
     if ss:
         storage.security_score_data.put_entities(ss)
         if task:
             task.add_records((r.record_uid for r in ss))
-    bws = [_proto_bw_security(x) for x in kd_msg.breachWatchSecurityData]
+    bws = [_proto_bw_security(x) for x in nsf_msg.breachWatchSecurityData]
     if bws:
         storage.breach_watch_security_data.put_entities(bws)
         if task:
             task.add_records((r.record_uid for r in bws))
     chunk_payload: Dict[str, Any] = {
-        CHUNK_RECORD_ROTATION: list(kd_msg.recordRotationData),
-        CHUNK_RAW_DAG: list(kd_msg.rawDagData),
+        CHUNK_RECORD_ROTATION: list(nsf_msg.recordRotationData),
+        CHUNK_RAW_DAG: list(nsf_msg.rawDagData),
     }
     _replace_json_lists(storage, chunk_payload)
 
 
 def _process_removed_folders_dict(
         d: Mapping[str, Any],
-        storage: IKeeperDriveStorage,
-        task: Optional['KeeperDriveRebuildTask']) -> None:
+        storage: INSFStorage,
+        task: Optional['NSFRebuildTask']) -> None:
     removed = [_folder_uid(y) for y in (d.get('removedFolders') or []) if _folder_uid(y)]
     if not removed:
         return
@@ -435,8 +435,8 @@ def _process_removed_folders_dict(
 
 def _process_removed_folder_records_dict(
         d: Mapping[str, Any],
-        storage: IKeeperDriveStorage,
-        task: Optional['KeeperDriveRebuildTask']) -> None:
+        storage: INSFStorage,
+        task: Optional['NSFRebuildTask']) -> None:
     links: List[Tuple[str, str]] = []
     key_links: List[Tuple[str, str]] = []
     for x in d.get('removedFolderRecords') or []:
@@ -457,8 +457,8 @@ def _process_removed_folder_records_dict(
 
 def _process_removed_record_links_dict(
         d: Mapping[str, Any],
-        storage: IKeeperDriveStorage,
-        task: Optional['KeeperDriveRebuildTask']) -> None:
+        storage: INSFStorage,
+        task: Optional['NSFRebuildTask']) -> None:
     for x in d.get('removedRecordLinks') or []:
         if not isinstance(x, dict):
             continue
@@ -473,8 +473,8 @@ def _process_removed_record_links_dict(
 
 def _process_revoked_folder_accesses_dict(
         d: Mapping[str, Any],
-        storage: IKeeperDriveStorage,
-        task: Optional['KeeperDriveRebuildTask']) -> None:
+        storage: INSFStorage,
+        task: Optional['NSFRebuildTask']) -> None:
     links: List[Tuple[str, str]] = []
     for x in d.get('revokedFolderAccesses') or []:
         if not isinstance(x, dict):
@@ -491,8 +491,8 @@ def _process_revoked_folder_accesses_dict(
 
 def _process_revoked_record_accesses_dict(
         d: Mapping[str, Any],
-        storage: IKeeperDriveStorage,
-        task: Optional['KeeperDriveRebuildTask']) -> None:
+        storage: INSFStorage,
+        task: Optional['NSFRebuildTask']) -> None:
     links: List[Tuple[str, str]] = []
     for x in d.get('revokedRecordAccesses') or []:
         if not isinstance(x, dict):
@@ -509,8 +509,8 @@ def _process_revoked_record_accesses_dict(
 
 def _store_folders_dict(
         d: Mapping[str, Any],
-        storage: IKeeperDriveStorage,
-        task: Optional['KeeperDriveRebuildTask']) -> None:
+        storage: INSFStorage,
+        task: Optional['NSFRebuildTask']) -> None:
     folders = [_dict_to_folder(x) for x in d.get('folders') or [] if isinstance(x, dict)]
     if folders:
         storage.folders.put_entities(folders)
@@ -518,7 +518,7 @@ def _store_folders_dict(
             task.add_folders((f.folder_uid for f in folders))
 
 
-def _store_folder_keys_dict(d: Mapping[str, Any], storage: IKeeperDriveStorage) -> None:
+def _store_folder_keys_dict(d: Mapping[str, Any], storage: INSFStorage) -> None:
     keys = [_dict_to_folder_key(x) for x in d.get('folderKeys') or [] if isinstance(x, dict)]
     if keys:
         storage.folder_keys.put_links(keys)
@@ -526,9 +526,9 @@ def _store_folder_keys_dict(d: Mapping[str, Any], storage: IKeeperDriveStorage) 
 
 def _store_record_data_dict(
         d: Mapping[str, Any],
-        storage: IKeeperDriveStorage,
-        task: Optional['KeeperDriveRebuildTask']) -> None:
-    updated: List[kd.KDRecord] = []
+        storage: INSFStorage,
+        task: Optional['NSFRebuildTask']) -> None:
+    updated: List[nsf.NSFRecord] = []
     for x in d.get('recordData') or []:
         if not isinstance(x, dict):
             continue
@@ -545,10 +545,10 @@ def _store_record_data_dict(
 
 def _store_folder_records_dict(
         d: Mapping[str, Any],
-        storage: IKeeperDriveStorage,
-        task: Optional['KeeperDriveRebuildTask']) -> None:
-    folder_records: List[kd.KDFolderRecord] = []
-    record_keys: List[kd.KDRecordKey] = []
+        storage: INSFStorage,
+        task: Optional['NSFRebuildTask']) -> None:
+    folder_records: List[nsf.NSFFolderRecord] = []
+    record_keys: List[nsf.NSFRecordKey] = []
     for x in d.get('folderRecords') or []:
         if not isinstance(x, dict):
             continue
@@ -557,10 +557,10 @@ def _store_folder_records_dict(
         record_uid = str(md.get('recordUid', ''))
         if not folder_uid or not record_uid:
             continue
-        folder_records.append(kd.KDFolderRecord(folder_uid=folder_uid, record_uid=record_uid))
+        folder_records.append(nsf.NSFFolderRecord(folder_uid=folder_uid, record_uid=record_uid))
         enc_key = str(md.get('encryptedRecordKey', ''))
         if enc_key:
-            record_keys.append(kd.KDRecordKey(
+            record_keys.append(nsf.NSFRecordKey(
                 record_uid=record_uid,
                 folder_uid=folder_uid,
                 record_key=enc_key,
@@ -577,15 +577,15 @@ def _store_folder_records_dict(
 
 def _store_records_dict(
         d: Mapping[str, Any],
-        storage: IKeeperDriveStorage,
-        task: Optional['KeeperDriveRebuildTask']) -> None:
-    rows: List[kd.KDRecord] = []
+        storage: INSFStorage,
+        task: Optional['NSFRebuildTask']) -> None:
+    rows: List[nsf.NSFRecord] = []
     for x in d.get('records') or []:
         if not isinstance(x, dict):
             continue
         record_uid = str(x.get('recordUid', ''))
         existing = storage.records.get_entity(record_uid)
-        rows.append(kd.KDRecord(
+        rows.append(nsf.NSFRecord(
             record_uid=record_uid,
             revision=_coerce_int(x.get('revision'), 0),
             version=_coerce_int(x.get('version'), 0),
@@ -601,13 +601,13 @@ def _store_records_dict(
             task.add_records((r.record_uid for r in rows))
 
 
-def _store_folder_accesses_dict(d: Mapping[str, Any], storage: IKeeperDriveStorage) -> None:
+def _store_folder_accesses_dict(d: Mapping[str, Any], storage: INSFStorage) -> None:
     rows = [_dict_to_folder_access(x) for x in d.get('folderAccesses') or [] if isinstance(x, dict)]
     if rows:
         storage.folder_accesses.put_links(rows)
 
 
-def _store_record_accesses_dict(d: Mapping[str, Any], storage: IKeeperDriveStorage) -> None:
+def _store_record_accesses_dict(d: Mapping[str, Any], storage: INSFStorage) -> None:
     rows = [_dict_to_record_access(x) for x in d.get('recordAccesses') or [] if isinstance(x, dict)]
     if rows:
         storage.record_accesses.put_links(rows)
@@ -615,8 +615,8 @@ def _store_record_accesses_dict(d: Mapping[str, Any], storage: IKeeperDriveStora
 
 def _store_record_links_dict(
         d: Mapping[str, Any],
-        storage: IKeeperDriveStorage,
-        task: Optional['KeeperDriveRebuildTask']) -> None:
+        storage: INSFStorage,
+        task: Optional['NSFRebuildTask']) -> None:
     rows = [_dict_to_record_link(x) for x in d.get('recordLinks') or [] if isinstance(x, dict)]
     if rows:
         storage.record_links.put_links(rows)
@@ -624,12 +624,12 @@ def _store_record_links_dict(
             task.add_records((r.child_record_uid for r in rows))
 
 
-def _store_folder_sharing_states_dict(d: Mapping[str, Any], storage: IKeeperDriveStorage) -> None:
-    rows: List[kd.KDFolderSharingState] = []
+def _store_folder_sharing_states_dict(d: Mapping[str, Any], storage: INSFStorage) -> None:
+    rows: List[nsf.NSFFolderSharingState] = []
     for x in d.get('folderSharingState') or []:
         if not isinstance(x, dict):
             continue
-        rows.append(kd.KDFolderSharingState(
+        rows.append(nsf.NSFFolderSharingState(
             folder_uid=str(x.get('folderUid', '')),
             shared=bool(x.get('shared')),
             count=_coerce_int(x.get('count'), 0),
@@ -638,12 +638,12 @@ def _store_folder_sharing_states_dict(d: Mapping[str, Any], storage: IKeeperDriv
         storage.folder_sharing_states.put_entities(rows)
 
 
-def _store_record_sharing_states_dict(d: Mapping[str, Any], storage: IKeeperDriveStorage) -> None:
-    rows: List[kd.KDRecordSharingState] = []
+def _store_record_sharing_states_dict(d: Mapping[str, Any], storage: INSFStorage) -> None:
+    rows: List[nsf.NSFRecordSharingState] = []
     for x in d.get('recordSharingStates') or []:
         if not isinstance(x, dict):
             continue
-        rows.append(kd.KDRecordSharingState(
+        rows.append(nsf.NSFRecordSharingState(
             record_uid=str(x.get('recordUid', '')),
             is_directly_shared=bool(x.get('isDirectlyShared')),
             is_indirectly_shared=bool(x.get('isIndirectlyShared')),
@@ -655,8 +655,8 @@ def _store_record_sharing_states_dict(d: Mapping[str, Any], storage: IKeeperDriv
 
 def _store_optional_extras_dict(
         d: Mapping[str, Any],
-        storage: IKeeperDriveStorage,
-        task: Optional['KeeperDriveRebuildTask']) -> None:
+        storage: INSFStorage,
+        task: Optional['NSFRebuildTask']) -> None:
     nsd = [_dict_to_non_shared(x) for x in d.get('nonSharedData') or [] if isinstance(x, dict)]
     if nsd:
         storage.non_shared_data.put_entities(nsd)
@@ -684,24 +684,24 @@ def _store_optional_extras_dict(
     _replace_json_lists(storage, chunk_payload)
 
 
-def _replace_json_lists(storage: IKeeperDriveStorage, d: Mapping[str, Any]) -> None:
+def _replace_json_lists(storage: INSFStorage, d: Mapping[str, Any]) -> None:
     _replace_chunk_group(storage, CHUNK_RECORD_ROTATION, d.get(CHUNK_RECORD_ROTATION))
     _replace_chunk_group(storage, CHUNK_RAW_DAG, d.get(CHUNK_RAW_DAG))
 
 
-def _replace_chunk_group(storage: IKeeperDriveStorage, group: str, items: Any) -> None:
+def _replace_chunk_group(storage: INSFStorage, group: str, items: Any) -> None:
     storage.list_chunks.delete_links_by_subjects([group])
     if not isinstance(items, list) or not items:
         return
-    links: List[kd.KDListChunk] = []
+    links: List[nsf.NSFListChunk] = []
     for i, it in enumerate(items):
-        links.append(kd.KDListChunk(chunk_group=group, chunk_key=f'{i:010d}', payload_json=_j(it)))
+        links.append(nsf.NSFListChunk(chunk_group=group, chunk_key=f'{i:010d}', payload_json=_j(it)))
     storage.list_chunks.put_links(links)
 
 
-def _proto_folder(fd: folder_pb2.FolderData) -> kd.KDFolder:
+def _proto_folder(fd: folder_pb2.FolderData) -> nsf.NSFFolder:
     oi = fd.ownerInfo
-    return kd.KDFolder(
+    return nsf.NSFFolder(
         folder_uid=_uid_b64(fd.folderUid),
         parent_uid=_uid_b64(fd.parentUid),
         data=_wire_b64(fd.data),
@@ -715,8 +715,8 @@ def _proto_folder(fd: folder_pb2.FolderData) -> kd.KDFolder:
     )
 
 
-def _proto_folder_key(fk: folder_pb2.FolderKey) -> kd.KDFolderKey:
-    return kd.KDFolderKey(
+def _proto_folder_key(fk: folder_pb2.FolderKey) -> nsf.NSFFolderKey:
+    return nsf.NSFFolderKey(
         folder_uid=_uid_b64(fk.folderUid),
         parent_uid=_uid_b64(fk.parentUid),
         folder_key=_wire_b64(fk.folderKey),
@@ -724,13 +724,13 @@ def _proto_folder_key(fk: folder_pb2.FolderKey) -> kd.KDFolderKey:
     )
 
 
-def _proto_folder_access(fa: folder_pb2.FolderAccessData) -> kd.KDFolderAccess:
+def _proto_folder_access(fa: folder_pb2.FolderAccessData) -> nsf.NSFFolderAccess:
     enc, kt = '', 0
     fk = fa.folderKey
     if _proto_submessage_set(fk):
         enc = _wire_b64(fk.encryptedKey)
         kt = int(fk.encryptedKeyType)
-    return kd.KDFolderAccess(
+    return nsf.NSFFolderAccess(
         folder_uid=_uid_b64(fa.folderUid),
         access_type_uid=_uid_b64(fa.accessTypeUid),
         access_type=int(fa.accessType),
@@ -747,15 +747,15 @@ def _proto_folder_access(fa: folder_pb2.FolderAccessData) -> kd.KDFolderAccess:
     )
 
 
-def _proto_non_shared(nsd: SyncDown_pb2.NonSharedData) -> kd.KDNonSharedData:
-    return kd.KDNonSharedData(
+def _proto_non_shared(nsd: SyncDown_pb2.NonSharedData) -> nsf.NSFNonSharedData:
+    return nsf.NSFNonSharedData(
         record_uid=_uid_b64(nsd.recordUid),
         data=_wire_b64(nsd.data),
     )
 
 
-def _proto_record_access(ra: folder_pb2.RecordAccessData) -> kd.KDRecordAccess:
-    return kd.KDRecordAccess(
+def _proto_record_access(ra: folder_pb2.RecordAccessData) -> nsf.NSFRecordAccess:
+    return nsf.NSFRecordAccess(
         record_uid=_uid_b64(ra.recordUid),
         access_type_uid=_uid_b64(ra.accessTypeUid),
         access_type=int(ra.accessType),
@@ -779,8 +779,8 @@ def _proto_record_access(ra: folder_pb2.RecordAccessData) -> kd.KDRecordAccess:
     )
 
 
-def _proto_record_link(rl: SyncDown_pb2.RecordLink) -> kd.KDRecordLink:
-    return kd.KDRecordLink(
+def _proto_record_link(rl: SyncDown_pb2.RecordLink) -> nsf.NSFRecordLink:
+    return nsf.NSFRecordLink(
         parent_record_uid=_uid_b64(rl.parentRecordUid),
         child_record_uid=_uid_b64(rl.childRecordUid),
         record_key=_wire_b64(rl.recordKey),
@@ -788,8 +788,8 @@ def _proto_record_link(rl: SyncDown_pb2.RecordLink) -> kd.KDRecordLink:
     )
 
 
-def _proto_bw_record(bwr: SyncDown_pb2.BreachWatchRecord) -> kd.KDBreachWatchRecord:
-    return kd.KDBreachWatchRecord(
+def _proto_bw_record(bwr: SyncDown_pb2.BreachWatchRecord) -> nsf.NSFBreachWatchRecord:
+    return nsf.NSFBreachWatchRecord(
         record_uid=_uid_b64(bwr.recordUid),
         data=_wire_b64(bwr.data),
         type=int(bwr.type),
@@ -799,25 +799,25 @@ def _proto_bw_record(bwr: SyncDown_pb2.BreachWatchRecord) -> kd.KDBreachWatchRec
     )
 
 
-def _proto_security_score(ss: SyncDown_pb2.SecurityScoreData) -> kd.KDSecurityScoreData:
-    return kd.KDSecurityScoreData(
+def _proto_security_score(ss: SyncDown_pb2.SecurityScoreData) -> nsf.NSFSecurityScoreData:
+    return nsf.NSFSecurityScoreData(
         record_uid=_uid_b64(ss.recordUid),
         data=_wire_b64(ss.data),
         revision=ss.revision,
     )
 
 
-def _proto_bw_security(bws: SyncDown_pb2.BreachWatchSecurityData) -> kd.KDBreachWatchSecurityData:
-    return kd.KDBreachWatchSecurityData(
+def _proto_bw_security(bws: SyncDown_pb2.BreachWatchSecurityData) -> nsf.NSFBreachWatchSecurityData:
+    return nsf.NSFBreachWatchSecurityData(
         record_uid=_uid_b64(bws.recordUid),
         revision=bws.revision,
         removed=bws.removed,
     )
 
 
-def _dict_to_folder(x: Dict[str, Any]) -> kd.KDFolder:
+def _dict_to_folder(x: Dict[str, Any]) -> nsf.NSFFolder:
     oi = x.get('ownerInfo') or {}
-    return kd.KDFolder(
+    return nsf.NSFFolder(
         folder_uid=str(x.get('folderUid', '')),
         parent_uid=str(x.get('parentUid', '')),
         data=str(x.get('data', '')),
@@ -831,8 +831,8 @@ def _dict_to_folder(x: Dict[str, Any]) -> kd.KDFolder:
     )
 
 
-def _dict_to_folder_key(x: Dict[str, Any]) -> kd.KDFolderKey:
-    return kd.KDFolderKey(
+def _dict_to_folder_key(x: Dict[str, Any]) -> nsf.NSFFolderKey:
+    return nsf.NSFFolderKey(
         folder_uid=str(x.get('folderUid', '')),
         parent_uid=str(x.get('parentUid', '')),
         folder_key=str(x.get('folderKey', '')),
@@ -840,7 +840,7 @@ def _dict_to_folder_key(x: Dict[str, Any]) -> kd.KDFolderKey:
     )
 
 
-def _dict_to_folder_access(x: Dict[str, Any]) -> kd.KDFolderAccess:
+def _dict_to_folder_access(x: Dict[str, Any]) -> nsf.NSFFolderAccess:
     fk = x.get('folderKey')
     enc, kt = '', 0
     if isinstance(fk, dict):
@@ -848,7 +848,7 @@ def _dict_to_folder_access(x: Dict[str, Any]) -> kd.KDFolderAccess:
         kt = _coerce_int(fk.get('encryptedKeyType'), 0)
     elif fk is not None and fk != '':
         enc = str(fk)
-    return kd.KDFolderAccess(
+    return nsf.NSFFolderAccess(
         folder_uid=str(x.get('folderUid', '')),
         access_type_uid=str(x.get('accessTypeUid', '')),
         access_type=_coerce_int(x.get('accessType'), 0),
@@ -865,15 +865,15 @@ def _dict_to_folder_access(x: Dict[str, Any]) -> kd.KDFolderAccess:
     )
 
 
-def _dict_to_non_shared(x: Dict[str, Any]) -> kd.KDNonSharedData:
-    return kd.KDNonSharedData(
+def _dict_to_non_shared(x: Dict[str, Any]) -> nsf.NSFNonSharedData:
+    return nsf.NSFNonSharedData(
         record_uid=str(x.get('recordUid', '')),
         data=str(x.get('data', '')),
     )
 
 
-def _dict_to_record_access(x: Dict[str, Any]) -> kd.KDRecordAccess:
-    return kd.KDRecordAccess(
+def _dict_to_record_access(x: Dict[str, Any]) -> nsf.NSFRecordAccess:
+    return nsf.NSFRecordAccess(
         record_uid=str(x.get('recordUid', '')),
         access_type_uid=str(x.get('accessTypeUid', '')),
         access_type=_coerce_int(x.get('accessType'), 0),
@@ -897,8 +897,8 @@ def _dict_to_record_access(x: Dict[str, Any]) -> kd.KDRecordAccess:
     )
 
 
-def _dict_to_record_link(x: Dict[str, Any]) -> kd.KDRecordLink:
-    return kd.KDRecordLink(
+def _dict_to_record_link(x: Dict[str, Any]) -> nsf.NSFRecordLink:
+    return nsf.NSFRecordLink(
         parent_record_uid=str(x.get('parentRecordUid', '')),
         child_record_uid=str(x.get('childRecordUid', '')),
         record_key=str(x.get('recordKey', '')),
@@ -906,8 +906,8 @@ def _dict_to_record_link(x: Dict[str, Any]) -> kd.KDRecordLink:
     )
 
 
-def _dict_to_bw_record(x: Dict[str, Any]) -> kd.KDBreachWatchRecord:
-    return kd.KDBreachWatchRecord(
+def _dict_to_bw_record(x: Dict[str, Any]) -> nsf.NSFBreachWatchRecord:
+    return nsf.NSFBreachWatchRecord(
         record_uid=str(x.get('recordUid', '')),
         data=str(x.get('data', '')),
         type=_coerce_int(x.get('type'), 0),
@@ -917,27 +917,27 @@ def _dict_to_bw_record(x: Dict[str, Any]) -> kd.KDBreachWatchRecord:
     )
 
 
-def _dict_to_security_score(x: Dict[str, Any]) -> kd.KDSecurityScoreData:
-    return kd.KDSecurityScoreData(
+def _dict_to_security_score(x: Dict[str, Any]) -> nsf.NSFSecurityScoreData:
+    return nsf.NSFSecurityScoreData(
         record_uid=str(x.get('recordUid', '')),
         data=str(x.get('data', '')),
         revision=_coerce_int(x.get('revision'), 0),
     )
 
 
-def _dict_to_bw_security(x: Dict[str, Any]) -> kd.KDBreachWatchSecurityData:
-    return kd.KDBreachWatchSecurityData(
+def _dict_to_bw_security(x: Dict[str, Any]) -> nsf.NSFBreachWatchSecurityData:
+    return nsf.NSFBreachWatchSecurityData(
         record_uid=str(x.get('recordUid', '')),
         revision=_coerce_int(x.get('revision'), 0),
         removed=bool(x.get('removed')),
     )
 
 
-def load_list_chunks(storage: IKeeperDriveStorage, group: str) -> List[Any]:
-    """Decode ``KDListChunk`` rows for ``group`` back into Python values."""
+def load_list_chunks(storage: INSFStorage, group: str) -> List[Any]:
+    """Decode ``NSFListChunk`` rows for ``group`` back into Python values."""
     out: List[Any] = []
     for link in storage.list_chunks.get_links_by_subject(group):
-        if not isinstance(link, kd.KDListChunk) or not link.payload_json:
+        if not isinstance(link, nsf.NSFListChunk) or not link.payload_json:
             continue
         try:
             out.append(json.loads(link.payload_json))

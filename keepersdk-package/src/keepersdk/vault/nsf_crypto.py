@@ -6,8 +6,8 @@ from typing import Dict, List, Optional
 from .. import crypto, utils
 from ..authentication import keeper_auth
 from ..proto import folder_pb2
-from . import keeperdrive_storage_types as kd
-from .keeperdrive_vault_storage import IKeeperDriveStorage
+from . import nsf_storage_types as nsf
+from .nsf_vault_storage import INSFStorage
 
 _FOLDER_KEY_ENCRYPTION = folder_pb2.FolderKeyEncryptionType
 _ENCRYPTED_KEY_TYPE = folder_pb2.EncryptedKeyType
@@ -44,7 +44,7 @@ def try_decrypt_with_user_keys(encrypted_key: bytes, auth_context: keeper_auth.A
 
 def try_decrypt_from_folder_access(
         folder_uid: str,
-        storage: IKeeperDriveStorage,
+        storage: INSFStorage,
         auth_context: keeper_auth.AuthContext) -> Optional[bytes]:
     for fa in storage.folder_accesses.get_links_by_subject(folder_uid):
         if not fa.folder_key_encrypted:
@@ -72,7 +72,7 @@ def try_decrypt_from_folder_access(
 
 
 def try_decrypt_folder_key(
-        fk: kd.KDFolderKey,
+        fk: nsf.NSFFolderKey,
         auth_context: keeper_auth.AuthContext,
         decrypted_folder_keys: Dict[str, bytes]) -> Optional[bytes]:
     if not fk.folder_key:
@@ -95,10 +95,10 @@ def try_decrypt_folder_key(
 
 
 def decrypt_folder_keys(
-        storage: IKeeperDriveStorage,
+        storage: INSFStorage,
         auth_context: keeper_auth.AuthContext) -> Dict[str, bytes]:
     decrypted_keys: Dict[str, bytes] = {}
-    keys_by_folder: Dict[str, List[kd.KDFolderKey]] = {}
+    keys_by_folder: Dict[str, List[nsf.NSFFolderKey]] = {}
     for fk in storage.folder_keys.get_all_links():
         keys_by_folder.setdefault(fk.folder_uid, []).append(fk)
 
@@ -131,7 +131,7 @@ def decrypt_folder_keys(
 
 
 def decrypt_record_keys(
-        storage: IKeeperDriveStorage,
+        storage: INSFStorage,
         decrypted_folder_keys: Dict[str, bytes],
         auth_context: keeper_auth.AuthContext) -> Dict[str, bytes]:
     decrypted_keys: Dict[str, bytes] = {}

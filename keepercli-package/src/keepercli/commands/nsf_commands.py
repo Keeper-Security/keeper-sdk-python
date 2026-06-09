@@ -2,7 +2,7 @@ import argparse
 import json
 from typing import Any, Dict, List, Optional
 
-from keepersdk.vault import nsf_folder_records, nsf_management, nsf_sharing, vault_record
+from keepersdk.vault import nsf_folder_records, nsf_management, nsf_sharing, vault_record, nsf_common
 from keepersdk.vault.share_management_utils import get_share_expiration
 from keepersdk.vault.nsf_management import (
     NsfError,
@@ -10,6 +10,7 @@ from keepersdk.vault.nsf_management import (
     NsfRemovePreviewItem,
     NsfRemoveResult,
 )
+from keepersdk.vault import share_management_utils
 
 from . import base
 from .record_edit import RecordEditMixin, record_fields_description, ParsedFieldValue
@@ -20,6 +21,31 @@ from ..params import KeeperParams
 logger = api.get_logger()
 
 _MASKED_TYPES = frozenset({'password', 'secret', 'pinCode', 'pin_code'})
+
+
+def _mask_sensitive_fields(fields: List[Any], *, unmask: bool) -> List[Any]:
+    """Return a copy of record fields with sensitive values replaced unless ``unmask``."""
+    if unmask or not fields:
+        return list(fields)
+    masked_fields: List[Any] = []
+    for f in fields:
+        if not isinstance(f, dict):
+            masked_fields.append(f)
+            continue
+        ftype = str(f.get('type', ''))
+        if ftype not in _MASKED_TYPES:
+            masked_fields.append(f)
+            continue
+        entry = dict(f)
+        values = entry.get('value', [])
+        if not isinstance(values, list):
+            values = [values]
+        entry['value'] = [
+            '********' if (val or val == 0) else val
+            for val in values
+        ]
+        masked_fields.append(entry)
+    return masked_fields
 
 
 def _require_vault(context: KeeperParams):
@@ -135,7 +161,7 @@ class NsfListCommand(base.ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(
             prog='nsf-list',
-            description='List NSF (Keeper Drive) folders and records',
+            description='List NSF folders and records',
         )
         NsfListCommand.add_arguments_to_parser(parser)
         super().__init__(parser)
@@ -251,7 +277,7 @@ class NsfGetCommand(base.ArgparseCommand):
                 detail.get('record_uid', uid),
             )
         if fmt == 'json':
-            self._print_record_json(vault, detail, verbose)
+            self._print_record_json(vault, detail, verbose, unmask)
         else:
             self._print_record_detail(detail, verbose, unmask)
 
@@ -297,11 +323,11 @@ class NsfGetCommand(base.ArgparseCommand):
             logger.info('')
             logger.info('{0:>25s}:'.format('Folder Access'))
             for a in accessors:
-                label = a.get('username') or a.get('accessor_uid', '')
-                role = a.get('role') or a.get('access_type', '')
+                label = a.get('username', '') or a.get('accessor_uid', '')
+                role = a.get('role', '') or a.get('access_type', '')
                 logger.info('{0:>25s}: {1}'.format(label, role))
                 if verbose and a.get('permissions'):
-                    logger.info('{0:>25s}: {1}'.format('', json.dumps(a['permissions'])))
+                    logger.info('{0:>25s}: {1}'.format('', json.dumps(a.get('permissions', {}))))
 
     def _print_record_detail(self, detail: Dict[str, Any], verbose: bool, unmask: bool) -> None:
         record_uid = detail.get('record_uid', '')
@@ -313,12 +339,10 @@ class NsfGetCommand(base.ArgparseCommand):
         if detail.get('folder'):
             logger.info('{0:>20s}: {1}'.format('Folder', detail['folder']))
 
-        fields = detail.get('fields') or []
+        fields = _mask_sensitive_fields(detail.get('fields') or [], unmask=unmask)
         for label, key in (('Login', 'login'), ('Password', 'password'), ('URL', 'url')):
             val = self._extract_field_value(fields, key)
             if val:
-                if key == 'password':
-                    val = val if unmask else '********'
                 logger.info('{0:>20s}: {1}'.format(label, val))
 
         shown = {'login', 'password', 'url'}
@@ -335,9 +359,7 @@ class NsfGetCommand(base.ArgparseCommand):
             for val in values:
                 if not val and val != 0:
                     continue
-                if ftype in _MASKED_TYPES:
-                    dval = str(val) if unmask else '********'
-                elif isinstance(val, dict):
+                if isinstance(val, dict):
                     dval = ', '.join(f'{k}: {v}' for k, v in val.items() if v)
                 else:
                     dval = str(val)
@@ -354,7 +376,8 @@ class NsfGetCommand(base.ArgparseCommand):
             self,
             vault,
             detail: Dict[str, Any],
-            verbose: bool) -> None:
+            verbose: bool,
+            unmask: bool) -> None:
         ro: Dict[str, Any] = {
             'record_uid': detail.get('record_uid'),
             'title': detail.get('title'),
@@ -365,7 +388,7 @@ class NsfGetCommand(base.ArgparseCommand):
         if detail.get('folder'):
             ro['folder'] = detail['folder']
         if detail.get('fields'):
-            ro['fields'] = detail['fields']
+            ro['fields'] = _mask_sensitive_fields(detail['fields'], unmask=unmask)
         if detail.get('notes'):
             ro['notes'] = detail['notes']
 
@@ -376,7 +399,7 @@ class NsfGetCommand(base.ArgparseCommand):
                     'username': a.get('accessor_name') or a.get('access_type_uid', ''),
                     'owner': a.get('owner', False),
                     'editable': a.get('can_edit', False),
-                    'role': _access_role_label(a),
+                    'role': nsf_common.access_role_label(a),
                     **({flag: a.get(flag) for flag in (
                         'can_view_title', 'can_edit', 'can_view', 'can_list_access',
                         'can_update_access', 'can_delete',
@@ -414,7 +437,7 @@ class NsfGetCommand(base.ArgparseCommand):
             if a.get('owner'):
                 logger.info('  Owner: Yes')
             else:
-                logger.info('  Role: ' + _access_role_label(a))
+                logger.info('  Role: ' + nsf_common.access_role_label(a))
             can_edit = a.get('can_edit', False)
             can_share = a.get('can_approve_access', False) or a.get('can_update_access', False)
             logger.info('  Shareable: ' + ('Yes' if can_share else 'No'))
@@ -494,7 +517,7 @@ class NsfRecordAddCommand(base.ArgparseCommand, _NsfRecordDataMixin):
         folder_uid = kwargs.get('folder_uid')
         if folder_uid:
             resolved = nsf_management.resolve_nsf_folder_uid(vault, folder_uid)
-            if resolved is None:
+            if resolved is None or resolved == '':
                 raise base.CommandError(f'No such NSF folder: {folder_uid}')
             folder_uid = resolved
 
@@ -584,7 +607,7 @@ class NsfRecordUpdateCommand(base.ArgparseCommand, _NsfRecordDataMixin):
 
 
 def _record_title_from_vault(vault, record_uid: str) -> str:
-    entry = vault.keeper_drive_data.get_record(record_uid) if vault.keeper_drive_data else None
+    entry = vault.nsf_data.get_record(record_uid) if vault.nsf_data else None
     if entry and entry.decrypted_data:
         try:
             payload = json.loads(entry.decrypted_data)
@@ -596,8 +619,8 @@ def _record_title_from_vault(vault, record_uid: str) -> str:
 
 
 def _folder_name_from_vault(vault, folder_uid: str) -> str:
-    if vault.keeper_drive_data:
-        folder = vault.keeper_drive_data.get_folder(folder_uid)
+    if vault.nsf_data:
+        folder = vault.nsf_data.get_folder(folder_uid)
         if folder and folder.name:
             return folder.name
     return folder_uid
@@ -617,7 +640,7 @@ def _print_remove_preview_items(
         name = name_fn(vault, pr.item_uid)
         if pr.error:
             any_error = True
-            logger.info(
+            logger.error(
                 f"  {name} [{pr.item_uid}]: "
                 f"{pr.error.get('code', '')} — {pr.error.get('message', '')}"
             )
@@ -845,7 +868,8 @@ class NsfRmCommand(base.ArgparseCommand):
             raise base.CommandError('At least one record UID or title is required')
         if operation == 'unlink' and not folder_arg:
             raise base.CommandError('--folder is required when --operation is "unlink"')
-        if len(record_args) > 500:
+        record_limit = 500
+        if len(record_args) > record_limit:
             raise base.CommandError('Maximum 500 records per invocation')
 
         def _build():
@@ -928,14 +952,15 @@ class NsfRmdirCommand(base.ArgparseCommand):
 
         if not folder_args:
             raise base.CommandError('Enter the name or UID of at least one folder.')
-        if len(folder_args) > 100:
+        folder_limit = 100
+        if len(folder_args) > folder_limit:
             raise base.CommandError('Maximum 100 folders per invocation')
 
         removals: List[Dict[str, str]] = []
         for identifier in folder_args:
             folder_uid = nsf_management.resolve_nsf_folder_uid(vault, identifier)
             if not folder_uid:
-                raise base.CommandError(f"Folder '{identifier}' not found")
+                raise base.CommandError(f'Folder "{identifier}" not found')
             removals.append({'folder_uid': folder_uid, 'operation_type': operation})
 
         if operation == 'delete-permanent' and not force and not dry_run:
@@ -1094,7 +1119,6 @@ class NsfShareFolderCommand(base.ArgparseCommand):
             if '@' in raw:
                 is_team = False
             else:
-                from keepersdk.vault import share_management_utils
                 teams = share_management_utils.get_share_objects(vault).get('teams', {})
                 is_team = (
                     raw in teams
@@ -1324,7 +1348,7 @@ class NsfShortcutListCommand(base.ArgparseCommand):
             logger.info('No NSF shortcut records found')
             return
 
-        view = vault.keeper_drive_data
+        view = vault.nsf_data
         table = []
         for row in rows:
             if fmt == 'json':
@@ -1385,7 +1409,7 @@ class NsfShortcutKeepCommand(base.ArgparseCommand):
             logger.info('Nothing to do — record is already in only one folder.')
             return
         if not kwargs.get('force'):
-            print(f'Will keep record in {folder_arg} and remove from {len(to_remove)} other folder(s).')
+            logger.info(f'Will keep record in {folder_arg} and remove from {len(to_remove)} other folder(s).')
             if not _confirm_removal('Do you want to proceed?', False):
                 return
 
