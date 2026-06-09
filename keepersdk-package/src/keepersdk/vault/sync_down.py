@@ -264,7 +264,7 @@ def sync_down_request(auth: keeper_auth.KeeperAuth,
 
                             sshk = StorageSharedFolderKey()
                             sshk.shared_folder_uid = sf_uid
-                            sshk.encrypter_uid = team_uid
+                            sshk.encrypter_uid = utils.base64_url_encode(sync_down_team.teamUid)
                             sshk.key_type = StorageKeyType.TeamKey_AES_GCM
                             sshk.shared_folder_key = crypto.encrypt_aes_v2(sfkd, team_key)
                             sf_keys.append(sshk)
