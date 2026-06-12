@@ -1,7 +1,6 @@
 import argparse
 from datetime import datetime
-from tkinter.constants import S
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 from keepersdk.authentication import device_management
 
@@ -22,6 +21,20 @@ def _format_timestamp(dt: Optional[datetime]) -> str:
 
 def _sdk_error(exc: Exception) -> base.CommandError:
     return base.CommandError(str(exc))
+
+
+def _run_device_action_command(
+    context: KeeperParams,
+    device_identifiers: List[str],
+    action_fn: Callable,
+    success_message: str,
+) -> None:
+    base.require_login(context)
+    try:
+        for name in action_fn(context.auth, device_identifiers):
+            logger.info(success_message, name)
+    except ValueError as e:
+        raise _sdk_error(e) from e
 
 
 class DeviceListCommand(base.ArgparseCommand):
@@ -115,13 +128,12 @@ class DeviceRemoveCommand(base.ArgparseCommand):
         parser.exit = base.ArgparseCommand.suppress_exit
 
     def execute(self, context: KeeperParams, **kwargs):
-        base.require_login(context)
-        device_identifiers = kwargs.get('devices') or []
-        try:
-            for name in device_management.remove_user_devices(context.auth, device_identifiers):
-                logger.info("Device '%s' successfully removed", name)
-        except ValueError as e:
-            raise _sdk_error(e) from e
+        _run_device_action_command(
+            context,
+            kwargs.get('devices') or [],
+            device_management.remove_user_devices,
+            "Device '%s' successfully removed",
+        )
 
 
 class DeviceLogoutCommand(base.ArgparseCommand):
@@ -140,10 +152,105 @@ class DeviceLogoutCommand(base.ArgparseCommand):
         parser.exit = base.ArgparseCommand.suppress_exit
 
     def execute(self, context: KeeperParams, **kwargs):
-        base.require_login(context)
-        device_identifiers = kwargs.get('devices') or []
-        try:
-            for name in device_management.logout_user_devices(context.auth, device_identifiers):
-                logger.info("Device '%s' successfully logged out", name)
-        except ValueError as e:
-            raise _sdk_error(e) from e
+        _run_device_action_command(
+            context,
+            kwargs.get('devices') or [],
+            device_management.logout_user_devices,
+            "Device '%s' successfully logged out",
+        )
+
+
+class DeviceLockCommand(base.ArgparseCommand):
+    def __init__(self):
+        parser = argparse.ArgumentParser(
+            prog='device-lock',
+            description='Lock one or more devices for all users (logs out all users on those devices)',
+        )
+        DeviceLockCommand.add_arguments_to_parser(parser)
+        super().__init__(parser)
+
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
+        parser.add_argument('devices', nargs='+', help='Device ID (from device-list) or device name substring')
+        parser.error = base.ArgparseCommand.raise_parse_exception
+        parser.exit = base.ArgparseCommand.suppress_exit
+
+    def execute(self, context: KeeperParams, **kwargs):
+        _run_device_action_command(
+            context,
+            kwargs.get('devices') or [],
+            device_management.lock_user_devices,
+            "Device '%s' successfully locked",
+        )
+
+
+class DeviceUnlockCommand(base.ArgparseCommand):
+    def __init__(self):
+        parser = argparse.ArgumentParser(
+            prog='device-unlock',
+            description='Unlock one or more devices for the current user',
+        )
+        DeviceUnlockCommand.add_arguments_to_parser(parser)
+        super().__init__(parser)
+
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
+        parser.add_argument('devices', nargs='+', help='Device ID (from device-list) or device name substring')
+        parser.error = base.ArgparseCommand.raise_parse_exception
+        parser.exit = base.ArgparseCommand.suppress_exit
+
+    def execute(self, context: KeeperParams, **kwargs):
+        _run_device_action_command(
+            context,
+            kwargs.get('devices') or [],
+            device_management.unlock_user_devices,
+            "Device '%s' successfully unlocked",
+        )
+
+
+class DeviceAccountLockCommand(base.ArgparseCommand):
+    def __init__(self):
+        parser = argparse.ArgumentParser(
+            prog='device-account-lock',
+            description='Lock one or more devices for the current user only (logs out if logged in)',
+        )
+        DeviceAccountLockCommand.add_arguments_to_parser(parser)
+        super().__init__(parser)
+
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
+        parser.add_argument('devices', nargs='+', help='Device ID (from device-list) or device name substring')
+        parser.error = base.ArgparseCommand.raise_parse_exception
+        parser.exit = base.ArgparseCommand.suppress_exit
+
+    def execute(self, context: KeeperParams, **kwargs):
+        _run_device_action_command(
+            context,
+            kwargs.get('devices') or [],
+            device_management.account_lock_user_devices,
+            "Device '%s' successfully account locked",
+        )
+
+
+class DeviceAccountUnlockCommand(base.ArgparseCommand):
+    def __init__(self):
+        parser = argparse.ArgumentParser(
+            prog='device-account-unlock',
+            description='Unlock one or more devices for the current user',
+        )
+        DeviceAccountUnlockCommand.add_arguments_to_parser(parser)
+        super().__init__(parser)
+
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
+        parser.add_argument('devices', nargs='+', help='Device ID (from device-list) or device name substring')
+        parser.error = base.ArgparseCommand.raise_parse_exception
+        parser.exit = base.ArgparseCommand.suppress_exit
+
+    def execute(self, context: KeeperParams, **kwargs):
+        _run_device_action_command(
+            context,
+            kwargs.get('devices') or [],
+            device_management.account_unlock_user_devices,
+            "Device '%s' successfully account unlocked",
+        )
