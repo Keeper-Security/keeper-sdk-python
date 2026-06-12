@@ -494,44 +494,46 @@ def login():
     keeper_endpoint = flow.endpoint if keeper_auth_context else None
     return keeper_auth_context, keeper_endpoint
 
+from keepersdk.authentication import device_management
 
-def create_secrets_manager_application(keeper_auth_context: keeper_auth.KeeperAuth):
-    """Create a new Secrets Manager application."""
-    conn = sqlite3.Connection('file::memory:', uri=True)
-    vault_storage = sqlite_storage.SqliteVaultStorage(
-        lambda: conn,
-        vault_owner=bytes(keeper_auth_context.auth_context.username, 'utf-8')
-    )
-    vault = vault_online.VaultOnline(keeper_auth_context, vault_storage)
-    
-    try:
-        app_name = "<app_name>"
-        force_add = False
-        print(f"\nCreating Secrets Manager application: {app_name}")
-        app_uid = ksm_management.create_secrets_manager_app(vault, app_name, force_add=force_add)
-            
-        print(f"\n✓ Secrets Manager application created successfully!")
-        print(f"Application Name: {app_name}")
-        print(f"Application UID: {app_uid}")
-        print("\nNext steps:")
-        print("  1. Share records or folders with this application")
-        print("  2. Generate client devices for access")
-        print("  3. Use the application in your integrations")
-                
-    except ValueError as e:
-        print(f"Error: {e}")
-    except Exception as e:
-        print(f"Error creating application: {e}")
-    
-    vault.close()
-    keeper_auth_context.close()
+
+def print_devices_table(devices):
+    if not devices:
+        print('\nNo devices found.')
+        return
+    print(f'\nUser Devices ({len(devices)} found)')
+    print('=' * 100)
+    print(f"{'ID':<4} {'Name':<24} {'Client Type':<14} {'Login Status':<14} {'Last Accessed':<20}")
+    print('-' * 100)
+    for d in devices:
+        last = d.last_accessed.strftime('%Y-%m-%d %H:%M:%S') if d.last_accessed else 'N/A'
+        print(
+            f"{d.list_index:<4} {d.name[:23]:<24} "
+            f"{d.client_type[:13]:<14} {d.login_status[:13]:<14} {last:<20}"
+        )
+    print('-' * 100)
 
 
 def main():
-    """Main function to orchestrate login and Secrets Manager application creation."""
     keeper_auth_context, _ = login()
-    if keeper_auth_context:
-        create_secrets_manager_application(keeper_auth_context)
+    if not keeper_auth_context:
+        return
+
+    # Fill in your values here.
+    device_identifiers = ['<device_id_or_name>']
+
+    try:
+        print(f'Logging out {len(device_identifiers)} device(s)...')
+        for name in device_management.logout_user_devices(
+            keeper_auth_context, device_identifiers
+        ):
+            print(f"Device '{name}' successfully logged out")
+        print('\nUpdated device list:')
+        print_devices_table(device_management.list_user_devices(keeper_auth_context))
+    except Exception as e:
+        print(f'Error logging out devices: {e}')
+    finally:
+        keeper_auth_context.close()
 
 
 if __name__ == '__main__':

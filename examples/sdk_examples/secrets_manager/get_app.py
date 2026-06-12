@@ -506,53 +506,49 @@ def get_secrets_manager_application(keeper_auth_context: keeper_auth.KeeperAuth)
     vault.sync_down()
     
     try:
-        app_search = input('Enter application name or UID: ').strip()
+        app_uid_or_name = "<app_uid_or_name>"
+        app = ksm_management.get_secrets_manager_app(vault, app_uid_or_name)
+            
+        print(f"\nSecrets Manager Application Details")
+        print("=" * 100)
+        print(f"App Name: {app.name}")
+        print(f"App UID: {app.uid}")
+        print(f"Records Shared: {app.records}")
+        print(f"Folders Shared: {app.folders}")
+        print(f"Client Devices: {app.count}")
         
-        if not app_search:
-            print("Application identifier cannot be empty")
-        else:
-            app = ksm_management.get_secrets_manager_app(vault, app_search)
+        if app.client_devices:
+            print(f"\nClient Devices ({len(app.client_devices)}):")
+            print("-" * 100)
+            print(f"{'Name':<25} {'Short ID':<15} {'Created':<20} {'Last Access':<20} {'IP Address':<20}")
+            print("-" * 100)
             
-            print(f"\nSecrets Manager Application Details")
-            print("=" * 100)
-            print(f"App Name: {app.name}")
-            print(f"App UID: {app.uid}")
-            print(f"Records Shared: {app.records}")
-            print(f"Folders Shared: {app.folders}")
-            print(f"Client Devices: {app.count}")
-            
-            if app.client_devices:
-                print(f"\nClient Devices ({len(app.client_devices)}):")
-                print("-" * 100)
-                print(f"{'Name':<25} {'Short ID':<15} {'Created':<20} {'Last Access':<20} {'IP Address':<20}")
-                print("-" * 100)
+            for client in app.client_devices:
+                name = client.name[:24] if client.name else 'N/A'
+                short_id = client.short_id[:14] if client.short_id else 'N/A'
+                created = client.created_on.strftime('%Y-%m-%d %H:%M') if client.created_on else 'N/A'
+                last_access = client.last_access.strftime('%Y-%m-%d %H:%M') if client.last_access else 'Never'
+                ip_address = client.ip_address[:19] if client.ip_address else 'N/A'
                 
-                for client in app.client_devices:
-                    name = client.name[:24] if client.name else 'N/A'
-                    short_id = client.short_id[:14] if client.short_id else 'N/A'
-                    created = client.created_on.strftime('%Y-%m-%d %H:%M') if client.created_on else 'N/A'
-                    last_access = client.last_access.strftime('%Y-%m-%d %H:%M') if client.last_access else 'Never'
-                    ip_address = client.ip_address[:19] if client.ip_address else 'N/A'
-                    
-                    print(f"{name:<25} {short_id:<15} {created:<20} {last_access:<20} {ip_address:<20}")
+                print(f"{name:<25} {short_id:<15} {created:<20} {last_access:<20} {ip_address:<20}")
+        
+        if app.shared_secrets:
+            print(f"\nShared Secrets ({len(app.shared_secrets)}):")
+            print("-" * 100)
+            print(f"{'Type':<15} {'Name':<45} {'UID':<40}")
+            print("-" * 100)
             
-            if app.shared_secrets:
-                print(f"\nShared Secrets ({len(app.shared_secrets)}):")
-                print("-" * 100)
-                print(f"{'Type':<15} {'Name':<45} {'UID':<40}")
-                print("-" * 100)
+            for secret in app.shared_secrets[:20]:
+                secret_type = secret.type[:14] if secret.type else 'N/A'
+                secret_name = secret.name[:44] if secret.name else 'N/A'
+                secret_uid = secret.uid[:39] if secret.uid else 'N/A'
                 
-                for secret in app.shared_secrets[:20]:
-                    secret_type = secret.type[:14] if secret.type else 'N/A'
-                    secret_name = secret.name[:44] if secret.name else 'N/A'
-                    secret_uid = secret.uid[:39] if secret.uid else 'N/A'
-                    
-                    print(f"{secret_type:<15} {secret_name:<45} {secret_uid:<40}")
-                
-                if len(app.shared_secrets) > 20:
-                    print(f"  ... and {len(app.shared_secrets) - 20} more")
+                print(f"{secret_type:<15} {secret_name:<45} {secret_uid:<40}")
             
-            print("=" * 100)
+            if len(app.shared_secrets) > 20:
+                print(f"  ... and {len(app.shared_secrets) - 20} more")
+        
+        print("=" * 100)
         
     except ValueError as e:
         print(f"Error: {e}")

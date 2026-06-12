@@ -41,6 +41,7 @@ class SecretsManagerCommand(Enum):
     GET = "get"
     ADD = 'add'
     CREATE = "create"
+    UPDATE = "update"
     REMOVE = "remove"
     SHARE = "share"
     UNSHARE = "unshare"
@@ -75,6 +76,10 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
         parser.add_argument(
             '--admin', action='store_true', help='Allow share recipient to manage application'
             )
+        parser.add_argument(
+            '--name', '-n', dest='new_name', action='store',
+            help='New application name (update command only)'
+        )
 
     def execute(self, context: KeeperParams, **kwargs) -> None:
         self._validate_vault(context)
@@ -110,11 +115,14 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
         email = kwargs.get('email')
         is_admin = kwargs.get('admin', False)
 
+        new_name = kwargs.get('new_name')
+
         command_handlers = {
             SecretsManagerCommand.LIST.value: lambda: self.list_app(vault=vault),
             SecretsManagerCommand.GET.value: lambda: self.get_app(vault=vault, uid_or_name=uid_or_name),
             SecretsManagerCommand.CREATE.value: lambda: self._handle_create_app(context, vault, uid_or_name, force),
             SecretsManagerCommand.ADD.value: lambda: self._handle_create_app(context, vault, uid_or_name, force),
+            SecretsManagerCommand.UPDATE.value: lambda: self._handle_update_app(context, vault, uid_or_name, new_name),
             SecretsManagerCommand.REMOVE.value: lambda: self.remove_app(vault=vault, uid_or_name=uid_or_name, force=force),
             SecretsManagerCommand.SHARE.value: lambda: self._handle_share_app(context, uid_or_name, email, is_admin, unshare=False),
             SecretsManagerCommand.UNSHARE.value: lambda: self._handle_share_app(context, uid_or_name, email, is_admin, unshare=True)
@@ -126,6 +134,12 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
         """Handle app creation and sync vault."""
         self.create_app(vault=vault, name=name, force=force)
         context.vault_down()
+
+    def _handle_update_app(self, context: KeeperParams, vault, uid_or_name: str, new_name: Optional[str]) -> None:
+        """Handle app rename and sync vault."""
+        if not new_name:
+            raise ValueError('New application name is required. Use --name="New App Name"')
+        self.update_app(vault=vault, uid_or_name=uid_or_name, new_name=new_name)
 
     def _handle_share_app(self, context: KeeperParams, uid_or_name: str, email: Optional[str], 
                           is_admin: bool, unshare: bool) -> None:
@@ -170,6 +184,12 @@ class SecretsManagerAppCommand(base.ArgparseCommand):
     def remove_app(self, vault: vault_online.VaultOnline, uid_or_name: str, force: Optional[bool] = False):
         app_uid = ksm_management.remove_secrets_manager_app(vault=vault, uid_or_name=uid_or_name, force=force)
         logger.info(f'Application was successfully removed (UID: {app_uid})')
+
+    def update_app(self, vault: vault_online.VaultOnline, uid_or_name: str, new_name: str):
+        app_uid, old_name, updated_name = ksm_management.update_secrets_manager_app(
+            vault=vault, uid_or_name=uid_or_name, new_name=new_name)
+        logger.info(
+            f'Application "{old_name}" was successfully renamed to "{updated_name}" (UID: {app_uid})')
     
     def share_app(self, context: KeeperParams, uid_or_name: str, unshare: bool = False, 
                   email: Optional[str] = None, is_admin: Optional[bool] = False):
@@ -490,12 +510,21 @@ class SecretsManagerShareCommand(base.ArgparseCommand):
     def add_arguments_to_parser(parser: argparse.ArgumentParser) -> None:
         parser.add_argument(
             '--command', type=str, action='store', dest='command',
-            choices=[SecretsManagerCommand.ADD.value, SecretsManagerCommand.REMOVE.value],
-            help=f"One of: {SecretsManagerCommand.ADD.value}, {SecretsManagerCommand.REMOVE.value}"
+            choices=[
+                SecretsManagerCommand.ADD.value,
+                SecretsManagerCommand.REMOVE.value,
+                SecretsManagerCommand.UPDATE.value,
+            ],
+            help=f"One of: {SecretsManagerCommand.ADD.value}, {SecretsManagerCommand.REMOVE.value}, "
+                 f"{SecretsManagerCommand.UPDATE.value}"
         )
         parser.add_argument(
             '--editable', '-e', action='store_true', required=False,
-            help='Is this share going to be editable or not'
+            help='Grant editable access (add or update)'
+        )
+        parser.add_argument(
+            '--readonly', '-r', action='store_true', required=False,
+            help='Set share to read-only (update only)'
         )
         parser.add_argument(
             '--app', '-a', type=str, action='store', help='Application Name or UID'
@@ -519,6 +548,8 @@ class SecretsManagerShareCommand(base.ArgparseCommand):
         if command == SecretsManagerCommand.ADD.value:
             is_editable = kwargs.get('editable', False)
             self._handle_add_share(context, app_uid, secret_uids, is_editable)
+        elif command == SecretsManagerCommand.UPDATE.value:
+            self._handle_update_share(context, app_uid, secret_uids, kwargs)
         elif command == SecretsManagerCommand.REMOVE.value:
             SecretsManagerShareCommand.remove_share(
                 vault=context.vault, 
@@ -526,7 +557,10 @@ class SecretsManagerShareCommand(base.ArgparseCommand):
                 secret_uids=secret_uids
             )
         else:
-            available_commands = f"{SecretsManagerCommand.ADD.value}, {SecretsManagerCommand.REMOVE.value}"
+            available_commands = (
+                f"{SecretsManagerCommand.ADD.value}, {SecretsManagerCommand.REMOVE.value}, "
+                f"{SecretsManagerCommand.UPDATE.value}"
+            )
             raise base.CommandError(f"Unknown command '{command}'. Available commands: {available_commands}")
 
     def _get_app_uid_from_kwargs(self, vault, app_uid_or_name: Optional[str]) -> str:
@@ -552,6 +586,31 @@ class SecretsManagerShareCommand(base.ArgparseCommand):
              if r.record_uid == app_uid_or_name or r.title == app_uid_or_name), 
             None
         )
+
+    def _handle_update_share(self, context: KeeperParams, app_uid: str, secret_uids: List[str], kwargs: dict) -> None:
+        """Handle updating editable permissions on existing shares."""
+        if not secret_uids:
+            raise ValueError('Secret UID(s) are required. Use --secret="uid1 uid2"')
+
+        is_editable = kwargs.get('editable', False)
+        is_readonly = kwargs.get('readonly', False)
+        if not is_editable and not is_readonly:
+            raise ValueError('Specify either --editable or --readonly')
+        if is_editable and is_readonly:
+            raise ValueError('Cannot specify both --editable and --readonly')
+
+        updated_uids = ksm_management.update_secrets_manager_app_shares(
+            vault=context.vault,
+            uid_or_name=app_uid,
+            secret_uids=secret_uids,
+            is_editable=is_editable,
+        )
+        if updated_uids:
+            perm = 'editable' if is_editable else 'read-only'
+            logger.info(f'\nSuccessfully updated share permissions to {perm} for app uid={app_uid}:')
+            for uid in updated_uids:
+                logger.info(f'\t{uid}')
+        context.vault_down()
 
     def _handle_add_share(self, context: KeeperParams, app_uid: str, secret_uids: List[str], is_editable: bool) -> None:
         """Handle adding shares to a KSM application."""

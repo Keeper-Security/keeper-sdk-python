@@ -19,7 +19,7 @@ from keepersdk.authentication.yubikey import (
     yubikey_authenticate,
 )
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
-from keepersdk.vault import sqlite_storage, vault_online, ksm_management
+from keepersdk.enterprise import enterprise_loader, msp_auth, sqlite_enterprise_storage
 
 try:
     import pyperclip
@@ -494,44 +494,47 @@ def login():
     keeper_endpoint = flow.endpoint if keeper_auth_context else None
     return keeper_auth_context, keeper_endpoint
 
-
-def create_secrets_manager_application(keeper_auth_context: keeper_auth.KeeperAuth):
-    """Create a new Secrets Manager application."""
+def open_msp_enterprise_loader(keeper_auth_context: keeper_auth.KeeperAuth):
+    """Open in-memory enterprise storage for MSP operations (enterprise admin required)."""
+    if not keeper_auth_context.auth_context.is_enterprise_admin:
+        print('ERROR: MSP examples require an enterprise administrator account.')
+        keeper_auth_context.close()
+        return None
     conn = sqlite3.Connection('file::memory:', uri=True)
-    vault_storage = sqlite_storage.SqliteVaultStorage(
-        lambda: conn,
-        vault_owner=bytes(keeper_auth_context.auth_context.username, 'utf-8')
-    )
-    vault = vault_online.VaultOnline(keeper_auth_context, vault_storage)
-    
-    try:
-        app_name = "<app_name>"
-        force_add = False
-        print(f"\nCreating Secrets Manager application: {app_name}")
-        app_uid = ksm_management.create_secrets_manager_app(vault, app_name, force_add=force_add)
-            
-        print(f"\n✓ Secrets Manager application created successfully!")
-        print(f"Application Name: {app_name}")
-        print(f"Application UID: {app_uid}")
-        print("\nNext steps:")
-        print("  1. Share records or folders with this application")
-        print("  2. Generate client devices for access")
-        print("  3. Use the application in your integrations")
-                
-    except ValueError as e:
-        print(f"Error: {e}")
-    except Exception as e:
-        print(f"Error creating application: {e}")
-    
-    vault.close()
+    enterprise_id = keeper_auth_context.auth_context.enterprise_id or 0
+    storage = sqlite_enterprise_storage.SqliteEnterpriseStorage(lambda: conn, enterprise_id)
+    return enterprise_loader.EnterpriseLoader(keeper_auth_context, storage)
+
+
+def close_msp_session(loader, keeper_auth_context: keeper_auth.KeeperAuth) -> None:
+    if loader is not None:
+        loader.close()
     keeper_auth_context.close()
+
+def remove_msp_managed_company(loader, managed_company: str):
+    """Remove a managed company using msp_auth.msp_remove_managed_company."""
+    msp_auth.msp_down(loader, reset=False)
+    eid = msp_auth.msp_remove_managed_company(loader, managed_company=managed_company)
+    print(f'Removed managed company id={eid}.')
 
 
 def main():
-    """Main function to orchestrate login and Secrets Manager application creation."""
+    """Main function to orchestrate login and remove an MSP managed company."""
     keeper_auth_context, _ = login()
-    if keeper_auth_context:
-        create_secrets_manager_application(keeper_auth_context)
+    if not keeper_auth_context:
+        return
+
+    # Fill in your values here.
+    managed_company = '<managed_company_name_or_id>'
+
+    loader = open_msp_enterprise_loader(keeper_auth_context)
+    if not loader:
+        return
+
+    try:
+        remove_msp_managed_company(loader, managed_company)
+    finally:
+        close_msp_session(loader, keeper_auth_context)
 
 
 if __name__ == '__main__':

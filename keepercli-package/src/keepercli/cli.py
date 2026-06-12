@@ -149,8 +149,13 @@ def loop(keeper_config: KeeperConfig, commands: base.CliCommands) -> int:
             result = do_command(command, context, commands)
             error_no = 0
             if isinstance(result, KeeperParams):
-                context_stack.append(context)
-                context = result
+                if len(context_stack) > 0 and result is context_stack[-1]:
+                    context_to_release = context
+                    context = context_stack.pop()
+                    context_to_release.clear_session()
+                else:
+                    context_stack.append(context)
+                    context = result
             elif isinstance(result, str):
                 prompt_utils.output_text(result)
         except base.CommandError as ce:

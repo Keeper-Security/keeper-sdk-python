@@ -14,19 +14,13 @@ from keepersdk.proto import pam_pb2, record_pb2
 from keepersdk.helpers import config_utils
 from keepersdk.vault import vault_online, vault_utils, vault_record, record_management
 from keepersdk.helpers.pam_config_facade import PamConfigurationRecordFacade
-from keepersdk.helpers.tunnel.tunnel_graph import TunnelDAG, tunnel_utils
+from keepersdk.helpers.tunnel.tunnel_graph import TunnelDAG, TriStateSetting, tunnel_utils
 from keepersdk.helpers.keeper_dag import dag_utils
+from keepersdk.helpers.keeper_dag.constants import PamConfigurationRecordType, PAM_CONFIGURATIONS
 from .. import record_edit
 
 
 logger = api.get_logger()
-
-
-# PAM Configuration record types
-PAM_CONFIG_RECORD_TYPES = (
-    'pamAwsConfiguration', 'pamAzureConfiguration', 'pamGcpConfiguration',
-    'pamDomainConfiguration', 'pamNetworkConfiguration', 'pamOciConfiguration'
-)
 
 
 class PAMConfigListCommand(base.ArgparseCommand):
@@ -72,8 +66,9 @@ class PAMConfigListCommand(base.ArgparseCommand):
 
     def _print_tunneling_config(self, vault: vault_online.VaultOnline, config_uid: str):
         """Prints tunneling configuration for a specific PAM configuration."""
-        encrypted_session_token, encrypted_transmission_key, _ = tunnel_utils.get_keeper_tokens(vault)
-        tmp_dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, config_uid, is_config=True)
+        encrypted_session_token, encrypted_transmission_key, transmission_key = tunnel_utils.get_keeper_tokens(vault)
+        tmp_dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, config_uid,
+                            is_config=True, transmission_key=transmission_key)
         tmp_dag.print_tunneling_config(config_uid, None)
 
     def _list_single_configuration(self, vault: vault_online.VaultOnline, config_uid: str,
@@ -125,12 +120,13 @@ class PAMConfigListCommand(base.ArgparseCommand):
 
     def _load_and_validate_configuration(self, vault: vault_online.VaultOnline, config_uid: str, format_type: str):
         """Loads and validates a PAM configuration record."""
-        configuration = vault.vault_data.load_record(config_uid)
-        if not configuration:
+        info = vault.vault_data.get_record(config_uid)
+        if not info or info.version != 6 or info.record_type not in PAM_CONFIGURATIONS:
             return self._handle_error(format_type, f'Configuration {config_uid} not found')
 
-        if configuration.version != 6 or not isinstance(configuration, vault_record.TypedRecord):
-            return self._handle_error(format_type, f'{config_uid} is not PAM Configuration')
+        configuration = vault.vault_data.load_record(config_uid)
+        if not configuration or not isinstance(configuration, vault_record.TypedRecord):
+            return self._handle_error(format_type, f'Configuration {config_uid} not found')
 
         return configuration
 
@@ -156,7 +152,7 @@ class PAMConfigListCommand(base.ArgparseCommand):
     def _find_pam_configurations(self, vault: vault_online.VaultOnline):
         """Finds all PAM configuration records."""
         for record in vault.vault_data.find_records(criteria='', record_type=None, record_version=6):
-            if record.record_type in PAM_CONFIG_RECORD_TYPES:
+            if record.record_type in PAM_CONFIGURATIONS:
                 yield record
             else:
                 logger.warning(f'Following configuration has unsupported type: UID: %s, Title: %s',
@@ -174,6 +170,23 @@ class PAMConfigListCommand(base.ArgparseCommand):
                 headers.append('Fields')
         return headers
 
+    @staticmethod
+    def _field_values_for_display(field):
+        """Normalize TypedField.get_external_value() to display strings."""
+        raw = field.get_external_value()
+        if raw is None:
+            raw = field.value if isinstance(field.value, list) else []
+        items = raw if isinstance(raw, list) else [raw]
+        values = []
+        for item in items:
+            if item is None or item == '':
+                continue
+            if isinstance(item, (dict, list)):
+                values.append(json.dumps(item))
+            else:
+                values.append(str(item))
+        return values
+
     def _extract_config_fields(self, record, is_verbose: bool):
         """Extracts field data from a configuration record."""
         fields_data = {} if is_verbose else []
@@ -182,7 +195,7 @@ class PAMConfigListCommand(base.ArgparseCommand):
             if field.type in ('pamResources', 'fileRef'):
                 continue
             
-            values = list(field.get_external_value())
+            values = self._field_values_for_display(field)
             if not values:
                 continue
             
@@ -190,7 +203,7 @@ class PAMConfigListCommand(base.ArgparseCommand):
             if field.type == 'schedule':
                 field_name = 'Default Schedule'
             
-            value_str = ', '.join(field.get_external_value())
+            value_str = ', '.join(values)
             if is_verbose:
                 fields_data[field_name] = value_str
             else:
@@ -262,7 +275,7 @@ class PAMConfigListCommand(base.ArgparseCommand):
             if field.type in ('pamResources', 'fileRef'):
                 continue
             
-            values = list(field.get_external_value())
+            values = self._field_values_for_display(field)
             if not values:
                 continue
             
@@ -290,7 +303,7 @@ class PAMConfigListCommand(base.ArgparseCommand):
             if field.type in ('pamResources', 'fileRef'):
                 continue
             
-            values = list(field.get_external_value())
+            values = self._field_values_for_display(field)
             if not values:
                 continue
             
@@ -298,7 +311,7 @@ class PAMConfigListCommand(base.ArgparseCommand):
             if field.type == 'schedule':
                 field_name = 'Default Schedule'
             
-            table.append([field_name, values])
+            table.append([field_name, ', '.join(values)])
         
         report_utils.dump_report_data(table, header, no_header=True, right_align=(0,))
 
@@ -467,17 +480,17 @@ class PamConfigurationEditMixin(record_edit.RecordEditMixin):
         """Parses properties specific to each configuration type."""
         record_type = record.record_type
         
-        if record_type == 'pamNetworkConfiguration':
+        if record_type == PamConfigurationRecordType.NETWORK:
             self._parse_network_properties(extra_properties, kwargs)
-        elif record_type == 'pamAwsConfiguration':
+        elif record_type == PamConfigurationRecordType.AWS:
             self._parse_aws_properties(extra_properties, kwargs)
-        elif record_type == 'pamGcpConfiguration':
+        elif record_type == PamConfigurationRecordType.GCP:
             self._parse_gcp_properties(extra_properties, kwargs)
-        elif record_type == 'pamAzureConfiguration':
+        elif record_type == PamConfigurationRecordType.AZURE:
             self._parse_azure_properties(extra_properties, kwargs)
-        elif record_type == 'pamDomainConfiguration':
+        elif record_type == PamConfigurationRecordType.DOMAIN:
             self._parse_domain_properties(vault, record, extra_properties, kwargs)
-        elif record_type == 'pamOciConfiguration':
+        elif record_type == PamConfigurationRecordType.OCI:
             self._parse_oci_properties(extra_properties, kwargs)
 
     def _parse_network_properties(self, extra_properties: list, kwargs: dict):
@@ -658,16 +671,37 @@ class PamConfigurationEditMixin(record_edit.RecordEditMixin):
             if custom.required:
                 custom.required = False
 
+    def _configure_tunneling(self, vault: vault_online.VaultOnline, record: vault_record.TypedRecord,
+                              admin_cred_ref: str, kwargs: dict):
+        """Configures tunneling settings for the configuration."""
+        encrypted_session_token, encrypted_transmission_key, transmission_key = tunnel_utils.get_keeper_tokens(vault)
+        tmp_dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key,
+                           record_uid=record.record_uid, is_config=True, transmission_key=transmission_key)
+
+        tmp_dag.edit_tunneling_config(
+            kwargs.get('connections'),
+            kwargs.get('tunneling'),
+            kwargs.get('rotation'),
+            kwargs.get('recording'),
+            kwargs.get('typescriptrecording'),
+            kwargs.get('remotebrowserisolation')
+        )
+
+        if admin_cred_ref:
+            tmp_dag.link_user_to_config_with_options(admin_cred_ref, is_admin=TriStateSetting.ON)
+
+        tmp_dag.print_tunneling_config(record.record_uid, None)
+
 
 # Configuration type mapping
 CONFIG_TYPE_TO_RECORD_TYPE = {
-    'aws': 'pamAwsConfiguration',
-    'azure': 'pamAzureConfiguration',
-    'local': 'pamNetworkConfiguration',
-    'network': 'pamNetworkConfiguration',
-    'gcp': 'pamGcpConfiguration',
-    'domain': 'pamDomainConfiguration',
-    'oci': 'pamOciConfiguration'
+    'aws': PamConfigurationRecordType.AWS,
+    'azure': PamConfigurationRecordType.AZURE,
+    'local': PamConfigurationRecordType.NETWORK,
+    'network': PamConfigurationRecordType.NETWORK,
+    'gcp': PamConfigurationRecordType.GCP,
+    'domain': PamConfigurationRecordType.DOMAIN,
+    'oci': PamConfigurationRecordType.OCI,
 }
 
 common_parser = argparse.ArgumentParser(add_help=False)
@@ -845,7 +879,7 @@ class PAMConfigNewCommand(base.ArgparseCommand, PamConfigurationEditMixin):
         shared_folder_uid = value.get('folderUid')
         admin_cred_ref = None
         
-        if record.record_type == 'pamDomainConfiguration' and not kwargs.get('force_domain_admin', False):
+        if record.record_type == PamConfigurationRecordType.DOMAIN and not kwargs.get('force_domain_admin', False):
             admin_cred_ref = value.get('adminCredentialRef')
         
         return gateway_uid, shared_folder_uid, admin_cred_ref
@@ -874,27 +908,6 @@ class PAMConfigNewCommand(base.ArgparseCommand, PamConfigurationEditMixin):
         
         if gateway_uid:
             self._set_configuration_controller(vault, record.record_uid, gateway_uid)
-
-    def _configure_tunneling(self, vault: vault_online.VaultOnline, record: vault_record.TypedRecord,
-                              admin_cred_ref: str, kwargs: dict):
-        """Configures tunneling settings for the configuration."""
-        encrypted_session_token, encrypted_transmission_key, _ = tunnel_utils.get_keeper_tokens(vault)
-        tmp_dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key,
-                           record_uid=record.record_uid, is_config=True)
-        
-        tmp_dag.edit_tunneling_config(
-            kwargs.get('connections'),
-            kwargs.get('tunneling'),
-            kwargs.get('rotation'),
-            kwargs.get('recording'),
-            kwargs.get('typescriptrecording'),
-            kwargs.get('remotebrowserisolation')
-        )
-        
-        if admin_cred_ref:
-            tmp_dag.link_user_to_config_with_options(admin_cred_ref, is_admin='on')
-        
-        tmp_dag.print_tunneling_config(record.record_uid, None)
 
     def _set_configuration_controller(self, vault: vault_online.VaultOnline, config_uid: str, gateway_uid: str):
         """Sets the controller for the PAM configuration."""
@@ -952,6 +965,20 @@ class PAMConfigEditCommand(base.ArgparseCommand, PamConfigurationEditMixin):
         
         record_management.update_record(vault, configuration)
         self._update_controller_and_folder_if_changed(vault, configuration, orig_gateway_uid, orig_shared_folder_uid)
+
+        target_keys = {
+            'connections', 'tunneling', 'rotation', 'recording', 
+            'typescriptrecording', 'remotebrowserisolation'
+        }
+        if target_keys.isdisjoint(kwargs):
+            admin_cred_ref = None
+            if configuration.record_type == PamConfigurationRecordType.DOMAIN and not kwargs.get('force_domain_admin'):
+                pam_field = configuration.get_typed_field('pamResources')
+                if pam_field:
+                    value = pam_field.get_default_value(dict)
+                    if isinstance(value, dict):
+                        admin_cred_ref = value.get('adminCredentialRef')
+            self._configure_tunneling(vault, configuration, admin_cred_ref, kwargs)
         
         self._log_warnings()
         vault.sync_down()
@@ -966,14 +993,14 @@ class PAMConfigEditCommand(base.ArgparseCommand, PamConfigurationEditMixin):
         if not config_name:
             return None
         info = vault.vault_data.get_record(config_name)
-        if info and info.version == 6 and info.record_type in PAM_CONFIG_RECORD_TYPES:
+        if info and info.version == 6 and info.record_type in PAM_CONFIGURATIONS:
             loaded = vault.vault_data.load_record(config_name)
             if loaded and isinstance(loaded, vault_record.TypedRecord):
                 return loaded
         name_lower = config_name.casefold()
         for record in vault.vault_data.find_records(
                 criteria=None,
-                record_type=PAM_CONFIG_RECORD_TYPES,
+                record_type=PAM_CONFIGURATIONS,
                 record_version=6):
             if record.record_uid == config_name or record.title.casefold() == name_lower:
                 loaded = vault.vault_data.load_record(record.record_uid)
@@ -989,7 +1016,7 @@ class PAMConfigEditCommand(base.ArgparseCommand, PamConfigurationEditMixin):
             raise base.CommandError(f'PAM configuration "{config_name}" not found')
         # Storage format is on KeeperRecordInfo, not TypedRecord.version() (that method returns 3).
         info = vault.vault_data.get_record(configuration.record_uid)
-        if not info or info.version != 6 or info.record_type not in PAM_CONFIG_RECORD_TYPES:
+        if not info or info.version != 6 or info.record_type not in PAM_CONFIGURATIONS:
             raise base.CommandError(f'PAM configuration "{config_name}" not found')
 
     def _update_record_type_if_needed(self, vault: vault_online.VaultOnline, configuration: vault_record.TypedRecord,
@@ -1090,12 +1117,12 @@ class PAMConfigRemoveCommand(base.ArgparseCommand):
         if not config_name:
             return None
         info = vault.vault_data.get_record(config_name)
-        if info and info.version == 6 and info.record_type in PAM_CONFIG_RECORD_TYPES:
+        if info and info.version == 6 and info.record_type in PAM_CONFIGURATIONS:
             return config_name
         name_lower = config_name.casefold()
         for record in vault.vault_data.find_records(
                 criteria=None,
-                record_type=PAM_CONFIG_RECORD_TYPES,
+                record_type=PAM_CONFIGURATIONS,
                 record_version=6):
             if record.record_uid == config_name or record.title.casefold() == name_lower:
                 return record.record_uid

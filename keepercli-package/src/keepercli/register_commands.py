@@ -13,6 +13,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
 
     if not scopes or bool(scopes & base.CommandScope.Account):
         from .commands import account_commands
+        from .commands import device_management
         from .biometric import BiometricCommand
         from .commands import account_commands, two_fa
         commands.register_command('server',
@@ -22,6 +23,10 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('biometric', BiometricCommand(), base.CommandScope.Account)
         commands.register_command('logout', account_commands.LogoutCommand(), base.CommandScope.Account)
         commands.register_command('this-device', account_commands.ThisDeviceCommand(), base.CommandScope.Account)
+        commands.register_command('device-list', device_management.DeviceListCommand(), base.CommandScope.Account)
+        commands.register_command('device-rename', device_management.DeviceRenameCommand(), base.CommandScope.Account)
+        commands.register_command('device-remove', device_management.DeviceRemoveCommand(), base.CommandScope.Account)
+        commands.register_command('device-logout', device_management.DeviceLogoutCommand(), base.CommandScope.Account)
         commands.register_command('whoami', account_commands.WhoamiCommand(), base.CommandScope.Account)
         commands.register_command('reset-password', account_commands.ResetPasswordCommand(), base.CommandScope.Account)
         commands.register_command('2fa', two_fa.TwoFaCommand(), base.CommandScope.Account)
@@ -129,7 +134,11 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('msp-update', msp.MspUpdateCommand(), base.CommandScope.Enterprise, 'mu')
         commands.register_command('msp-remove', msp.MspRemoveCommand(), base.CommandScope.Enterprise, 'mrm')
         commands.register_command('msp-convert-node', msp.MspConvertNodeCommand(), base.CommandScope.Enterprise)
+        commands.register_command('msp-copy-role', msp.MspCopyRoleCommand(), base.CommandScope.Enterprise)
+        commands.register_command('msp-billing-report', msp.MspBillingReportCommand(), base.CommandScope.Enterprise, 'mbr')
+        commands.register_command('msp-legacy-report', msp.MspLegacyReportCommand(), base.CommandScope.Enterprise, 'mlr')
         commands.register_command('switch-to-mc', msp.SwitchToManagedCompanyCommand(), base.CommandScope.Enterprise)
+        commands.register_command('switch-to-msp', msp.SwitchToMspCommand(), base.CommandScope.Enterprise)
         commands.register_command('team-approve', enterprise_team.TeamApproveCommand(), base.CommandScope.Enterprise)
         commands.register_command('user-report', user_report.UserReportCommand(), base.CommandScope.Enterprise, 'ur')
         commands.register_command('security-audit-report', security_audit_report.SecurityAuditReportCommand(), base.CommandScope.Enterprise, 'sar')

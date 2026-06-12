@@ -495,43 +495,49 @@ def login():
     return keeper_auth_context, keeper_endpoint
 
 
-def create_secrets_manager_application(keeper_auth_context: keeper_auth.KeeperAuth):
-    """Create a new Secrets Manager application."""
+def update_secrets_manager_share_permissions(keeper_auth_context: keeper_auth.KeeperAuth):
+    """Update share permissions on secrets in a Secrets Manager application."""
     conn = sqlite3.Connection('file::memory:', uri=True)
     vault_storage = sqlite_storage.SqliteVaultStorage(
         lambda: conn,
         vault_owner=bytes(keeper_auth_context.auth_context.username, 'utf-8')
     )
     vault = vault_online.VaultOnline(keeper_auth_context, vault_storage)
-    
+    vault.sync_down()
+
     try:
-        app_name = "<app_name>"
-        force_add = False
-        print(f"\nCreating Secrets Manager application: {app_name}")
-        app_uid = ksm_management.create_secrets_manager_app(vault, app_name, force_add=force_add)
-            
-        print(f"\n✓ Secrets Manager application created successfully!")
-        print(f"Application Name: {app_name}")
-        print(f"Application UID: {app_uid}")
-        print("\nNext steps:")
-        print("  1. Share records or folders with this application")
-        print("  2. Generate client devices for access")
-        print("  3. Use the application in your integrations")
-                
-    except ValueError as e:
-        print(f"Error: {e}")
+        app_uid_or_name = "<app_uid_or_name>"
+        secret_uids = ["<secret_uid1>", "<secret_uid2>"]
+        is_editable = True # True for editable, False for read-only
+        perm = 'editable' if is_editable else 'read-only'
+        print(f'\nUpdating {len(secret_uids)} share(s) to {perm} on app "{app_uid_or_name}"...')
+
+        updated = ksm_management.update_secrets_manager_app_shares(
+            vault=vault,
+            uid_or_name=app_uid_or_name,
+            secret_uids=secret_uids,
+            is_editable=is_editable,
+        )
+
+        if updated:
+            print(f'Successfully updated share permissions to {perm}:')
+            for uid in updated:
+                print(f'  {uid}')
+        else:
+            print('No shares were updated (secrets may not be shared with the app yet).')
+
     except Exception as e:
-        print(f"Error creating application: {e}")
-    
+        print(f'Error updating Secrets Manager share permissions: {e}')
+
     vault.close()
     keeper_auth_context.close()
 
 
 def main():
-    """Main function to orchestrate login and Secrets Manager application creation."""
+    """Main function to orchestrate login and update Secrets Manager share permissions."""
     keeper_auth_context, _ = login()
     if keeper_auth_context:
-        create_secrets_manager_application(keeper_auth_context)
+        update_secrets_manager_share_permissions(keeper_auth_context)
 
 
 if __name__ == '__main__':
