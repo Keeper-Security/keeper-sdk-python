@@ -4,7 +4,7 @@
 # |_|\_\___\___| .__/\___|_|
 #              |_|
 #
-# Keeper SDK for Python — user device management (list, rename, logout, remove).
+# Keeper SDK for Python — user device management (list, rename, logout, remove, lock, unlock).
 #
 
 import re
@@ -122,6 +122,74 @@ def remove_user_devices(
         ValueError: validation, not found, or API failure.
     """
     return _execute_device_action(auth, device_identifiers, DeviceManagement_pb2.DA_REMOVE)
+
+
+def lock_user_devices(
+    auth: keeper_auth.KeeperAuth,
+    device_identifiers: List[str],
+) -> List[str]:
+    """
+    Lock one or more devices for all users (and linked devices). Logs out all users.
+
+    Returns:
+        Names of devices successfully locked.
+
+    Raises:
+        ValueError: validation, not found, or API failure.
+    """
+    return _execute_device_action(auth, device_identifiers, DeviceManagement_pb2.DA_LOCK)
+
+
+def unlock_user_devices(
+    auth: keeper_auth.KeeperAuth,
+    device_identifiers: List[str],
+) -> List[str]:
+    """
+    Unlock one or more devices (and linked devices) for the calling user.
+
+    Returns:
+        Names of devices successfully unlocked.
+
+    Raises:
+        ValueError: validation, not found, or API failure.
+    """
+    return _execute_device_action(auth, device_identifiers, DeviceManagement_pb2.DA_UNLOCK)
+
+
+def account_lock_user_devices(
+    auth: keeper_auth.KeeperAuth,
+    device_identifiers: List[str],
+) -> List[str]:
+    """
+    Lock one or more devices for the current user only (logs out if logged in).
+
+    Returns:
+        Names of devices successfully account-locked.
+
+    Raises:
+        ValueError: validation, not found, or API failure.
+    """
+    return _execute_device_action(
+        auth, device_identifiers, DeviceManagement_pb2.DA_DEVICE_ACCOUNT_LOCK
+    )
+
+
+def account_unlock_user_devices(
+    auth: keeper_auth.KeeperAuth,
+    device_identifiers: List[str],
+) -> List[str]:
+    """
+    Unlock one or more devices for the current user.
+
+    Returns:
+        Names of devices successfully account-unlocked.
+
+    Raises:
+        ValueError: validation, not found, or API failure.
+    """
+    return _execute_device_action(
+        auth, device_identifiers, DeviceManagement_pb2.DA_DEVICE_ACCOUNT_UNLOCK
+    )
 
 
 def _fetch_devices(auth: keeper_auth.KeeperAuth) -> List[DeviceManagement_pb2.Device]:
