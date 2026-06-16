@@ -24,13 +24,12 @@ class RecordLink:
                  use_write_protobuf: bool = True,
                  **kwargs):
 
+        self.record = record
+        self._dag = None
         self.conn = get_connection(logger=logger,
                                    use_read_protobuf=use_read_protobuf,
                                    use_write_protobuf=use_write_protobuf,
                                    **kwargs)
-
-        self.record = record
-        self._dag = None
         if logger is None:
             logger = logging.getLogger()
         self.logger = logger
@@ -81,9 +80,10 @@ class RecordLink:
         Clean up resources held by this RecordLink instance.
         Releases the DAG instance and connection to prevent memory leaks.
         """
-        if self._dag is not None:
+        if getattr(self, "_dag", None) is not None:
             self._dag = None
-        self.conn = None
+        if getattr(self, "conn", None) is not None:
+            self.conn = None
 
     def __enter__(self):
         """Context manager entry."""

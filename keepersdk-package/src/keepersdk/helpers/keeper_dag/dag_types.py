@@ -49,6 +49,15 @@ ENDPOINT_TO_GRAPH_ID_MAP = {
 }
 
 
+def endpoint_for_graph_id(graph_id: Union[int, "PamGraphId", Enum]) -> Optional[str]:
+    if isinstance(graph_id, Enum):
+        graph_id = graph_id.value
+    for endpoint, gid in ENDPOINT_TO_GRAPH_ID_MAP.items():
+        if gid == graph_id:
+            return endpoint
+    return None
+
+
 class SyncQuery(BaseModel):
     streamId: Optional[str] = None    # base64 of a user's ID who is syncing.
     deviceId: Optional[str] = None
