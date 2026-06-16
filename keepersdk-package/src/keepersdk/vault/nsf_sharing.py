@@ -422,11 +422,11 @@ def plan_nsf_record_permissions(
     """Compute bulk permission changes for nsf-record-permission."""
     folder_uid = None
     if folder_identifier:
-        folder_uid = resolve_nsf_folder_uid(vault, folder_identifier)
-        if folder_uid and folder_uid != ROOT_FOLDER_UID and not is_nsf_folder(vault, folder_uid):
-            raise NsfError(f'Folder "{folder_identifier}" not found')
+        folder_uid = resolve_nsf_folder_uid(vault, folder_identifier) or folder_identifier
+        if not is_nsf_folder(vault, folder_uid):
+            raise NsfError(f'NSF folder not found: {folder_identifier}')
 
-    record_uids = collect_nsf_records_in_folder(vault, folder_uid or folder_identifier, recursive=recursive)
+    record_uids = collect_nsf_records_in_folder(vault, folder_uid, recursive=recursive)
     if not record_uids:
         raise NsfError('No records found in the specified folder')
 

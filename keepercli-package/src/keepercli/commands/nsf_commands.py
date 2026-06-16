@@ -1256,7 +1256,7 @@ class NsfRecordPermissionCommand(base.ArgparseCommand):
         if action == 'grant' and not role:
             raise base.CommandError('Role is required for grant action')
 
-        login = context.auth.login if context.auth else ''
+        login = context.auth.auth_context.username if context.auth and context.auth.auth_context else ''
         plan = _wrap_nsf(
             'nsf-record-permission',
             lambda: nsf_sharing.plan_nsf_record_permissions(

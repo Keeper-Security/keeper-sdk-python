@@ -7,7 +7,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 from .. import crypto, utils
 from ..errors import KeeperApiError
-from ..proto import folder_pb2, record_pb2, remove_pb2
+from ..proto import folder_pb2, record_endpoints_pb2, record_pb2, remove_pb2
 from . import nsf_crypto, nsf_data, sync_down, vault_extensions
 from .vault_online import VaultOnline
 
@@ -472,6 +472,30 @@ def _build_record_add_message(
         data: Dict[str, Any],
         auth_data_key: bytes,
         folder_uid: Optional[str],
+        folder_key: Optional[bytes]) -> record_endpoints_pb2.RecordAdd:
+    ra = record_endpoints_pb2.RecordAdd()
+    ra.recordUid = utils.base64_url_decode(record_uid)
+    ra.clientModifiedTime = utils.current_milli_time()
+    json_bytes = vault_extensions.get_padded_json_bytes(data)
+    if folder_uid and folder_key:
+        ra.folderUid = utils.base64_url_decode(folder_uid)
+        ra.recordKey = crypto.encrypt_aes_v2(record_key, folder_key)
+        ra.recordKeyEncryptedBy = folder_pb2.ENCRYPTED_BY_PARENT_KEY
+    elif folder_uid:
+        raise NsfError(f'Folder key not available for folder: {folder_uid}')
+    else:
+        ra.recordKey = crypto.encrypt_aes_v2(record_key, auth_data_key)
+    ra.recordKeyType = folder_pb2.encrypted_by_data_key_gcm
+    ra.data = crypto.encrypt_aes_v2(json_bytes, record_key)
+    return ra
+
+
+def _build_legacy_record_add_message(
+        record_uid: str,
+        record_key: bytes,
+        data: Dict[str, Any],
+        auth_data_key: bytes,
+        folder_uid: Optional[str],
         folder_key: Optional[bytes]) -> record_pb2.RecordAdd:
     ra = record_pb2.RecordAdd()
     ra.record_uid = utils.base64_url_decode(record_uid)
@@ -529,15 +553,20 @@ def create_nsf_record(
 
     ra = _build_record_add_message(
         record_uid, record_key, data, auth.auth_context.data_key, folder_uid, folder_key)
-    rq = record_pb2.RecordsAddRequest()
-    rq.client_time = utils.current_milli_time()
+    rq = record_endpoints_pb2.RecordsAddRequest()
+    rq.clientTime = utils.current_milli_time()
     rq.records.append(ra)
 
     response = auth.execute_auth_rest(
         'vault/records/v3/add', rq, response_type=record_pb2.RecordsModifyResponse)
     if response is None:
+        legacy_ra = _build_legacy_record_add_message(
+            record_uid, record_key, data, auth.auth_context.data_key, folder_uid, folder_key)
+        legacy_rq = record_pb2.RecordsAddRequest()
+        legacy_rq.client_time = utils.current_milli_time()
+        legacy_rq.records.append(legacy_ra)
         response = auth.execute_auth_rest(
-            'vault/records_add', rq, response_type=record_pb2.RecordsModifyResponse)
+            'vault/records_add', legacy_rq, response_type=record_pb2.RecordsModifyResponse)
     assert response is not None
 
     result = _parse_modify_response(response, record_uid)
