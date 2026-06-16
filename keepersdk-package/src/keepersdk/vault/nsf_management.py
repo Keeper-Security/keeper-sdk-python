@@ -219,11 +219,36 @@ def _resolve_record_key_for_details(
 
 
 def find_nsf_folders_for_record(vault: VaultOnline, record_uid: str) -> List[str]:
+    view = _nsf_view(vault)
     folders: List[str] = []
-    for folder in _nsf_view(vault).folders():
+    for folder in view.folders():
         if record_uid in folder.record_uids:
             folders.append(folder.folder_uid)
+    if any(
+        link.folder_uid == ROOT_FOLDER_UID and link.record_uid == record_uid
+        for link in view.storage.folder_records.get_all_links()
+    ):
+        folders.append(ROOT_FOLDER_UID)
     return folders
+
+
+def get_nsf_root_record_uids(vault: VaultOnline) -> List[str]:
+    """Return record UIDs linked directly to the NSF root folder."""
+    view = _nsf_view(vault)
+    return [
+        link.record_uid
+        for link in view.storage.folder_records.get_all_links()
+        if link.folder_uid == ROOT_FOLDER_UID
+    ]
+
+
+def _is_nsf_root_child_folder(folder: nsf_data.NSFFolderNode, known_folders: set[str]) -> bool:
+    raw_parent = folder.parent_uid or ''
+    normalized = _normalize_parent_uid(raw_parent)
+    return (
+        normalized in ('', 'root')
+        or (bool(raw_parent) and raw_parent not in known_folders)
+    )
 
 
 def list_nsf_items(
@@ -834,13 +859,8 @@ def find_nsf_child_folder(
         if (folder.name or '').casefold() != name_lower:
             continue
         raw_parent = folder.parent_uid or ''
-        normalized = _normalize_parent_uid(raw_parent)
-        is_root_child = (
-            normalized in ('', 'root')
-            or (raw_parent and raw_parent not in known_folders)
-        )
         if looking_for_root:
-            if is_root_child:
+            if _is_nsf_root_child_folder(folder, known_folders):
                 return folder.folder_uid
         elif raw_parent == parent_uid:
             return folder.folder_uid
