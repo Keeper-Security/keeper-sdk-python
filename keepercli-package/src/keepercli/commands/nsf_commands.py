@@ -284,7 +284,12 @@ class NsfGetCommand(base.ArgparseCommand):
         logger.info('{0:>25s}: {1}'.format('NSF Folder UID', detail.get('nsf_folder_uid', '')))
         logger.info('{0:>25s}: {1}'.format('Name', detail.get('name', '')))
         logger.info('{0:>25s}: {1}'.format('Parent', detail.get('parent_uid', '')))
-        NsfGetCommand._print_folder_access(detail.get('access') or {}, verbose)
+        NsfGetCommand._print_folder_access(
+            detail.get('access') or {},
+            verbose,
+            owner_username=detail.get('owner_username'),
+            owner_account_uid=detail.get('owner_account_uid'),
+        )
 
     @staticmethod
     def _print_folder_json(detail: Dict[str, Any], verbose: bool) -> None:
@@ -301,14 +306,24 @@ class NsfGetCommand(base.ArgparseCommand):
                 continue
             accessors = fr.get('accessors') or []
             if accessors:
+                owner_username = detail.get('owner_username')
+                owner_account_uid = detail.get('owner_account_uid')
                 fo['accessors'] = accessors if verbose else [
-                    {'username': a.get('username'), 'role': a.get('role')}
+                    {
+                        'username': a.get('username'),
+                        'role': nsf_common.folder_access_role_label(
+                            a, owner_username, owner_account_uid),
+                    }
                     for a in accessors
                 ]
         logger.info(json.dumps(fo, indent=2))
 
     @staticmethod
-    def _print_folder_access(access: Dict[str, Any], verbose: bool) -> None:
+    def _print_folder_access(
+            access: Dict[str, Any],
+            verbose: bool,
+            owner_username: Optional[str] = None,
+            owner_account_uid: Optional[str] = None) -> None:
         for fr in access.get('results') or []:
             if not fr.get('success'):
                 err = fr.get('error') or {}
@@ -321,7 +336,8 @@ class NsfGetCommand(base.ArgparseCommand):
             logger.info('{0:>25s}:'.format('Folder Access'))
             for a in accessors:
                 label = a.get('username', '') or a.get('accessor_uid', '')
-                role = a.get('role', '') or a.get('access_type', '')
+                role = nsf_common.folder_access_role_label(
+                    a, owner_username, owner_account_uid)
                 logger.info('{0:>25s}: {1}'.format(label, role))
                 if verbose and a.get('permissions'):
                     logger.info('{0:>25s}: {1}'.format('', json.dumps(a.get('permissions', {}))))

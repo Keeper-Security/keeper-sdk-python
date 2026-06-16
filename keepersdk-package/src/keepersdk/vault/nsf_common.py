@@ -255,6 +255,71 @@ def resolve_team_identifier(vault: VaultOnline, team_identifier: str) -> Optiona
     return utils.base64_url_encode(uid_bytes), uid_bytes
 
 
+_FOLDER_ACCESS_ROLE_DISPLAY = {
+    'NAVIGATOR': 'contributor',
+    'REQUESTOR': 'contributor',
+    'VIEWER': 'viewer',
+    'SHARED_MANAGER': 'share-manager',
+    'CONTENT_MANAGER': 'content-manager',
+    'CONTENT_SHARE_MANAGER': 'content-share-manager',
+    'MANAGER': 'full-manager',
+    'UNRESOLVED': 'unresolved',
+}
+
+
+def is_nsf_folder_owner(
+        accessor: Dict[str, Any],
+        owner_username: Optional[str] = None,
+        owner_account_uid: Optional[str] = None) -> bool:
+    """Return True when *accessor* matches folder ownerInfo from sync-down."""
+    if not accessor:
+        return False
+    if accessor.get('access_type') == 'AT_OWNER':
+        return True
+    if owner_username:
+        username = (accessor.get('username') or '').lower()
+        if username and username == owner_username.lower():
+            return True
+    if owner_account_uid:
+        accessor_uid = accessor.get('accessor_uid') or ''
+        if accessor_uid and accessor_uid == owner_account_uid:
+            return True
+    return False
+
+
+def folder_access_role_label(
+        accessor: Dict[str, Any],
+        owner_username: Optional[str] = None,
+        owner_account_uid: Optional[str] = None) -> str:
+    """Display label for an NSF folder accessor (``owner``, ``full-manager``, etc.)."""
+    if accessor.get('owner') or is_nsf_folder_owner(
+            accessor, owner_username, owner_account_uid):
+        return 'owner'
+    role_name = accessor.get('role')
+    if role_name:
+        key = str(role_name).upper().replace('-', '_')
+        return _FOLDER_ACCESS_ROLE_DISPLAY.get(
+            key, str(role_name).lower().replace('_', '-'))
+    role_type = accessor.get('access_role_type')
+    if isinstance(role_type, int):
+        try:
+            name = folder_pb2.AccessRoleType.Name(role_type)
+            return _FOLDER_ACCESS_ROLE_DISPLAY.get(
+                name, name.lower().replace('_', '-'))
+        except Exception:
+            pass
+    perms = accessor.get('permissions') or {}
+    if perms.get('can_change_ownership'):
+        return 'full-manager'
+    if perms.get('can_update_access'):
+        return 'share-manager'
+    if perms.get('can_edit_records'):
+        return 'content-manager'
+    if perms.get('can_view_records'):
+        return 'viewer'
+    return 'unknown'
+
+
 def access_role_label(access: Dict[str, Any]) -> str:
     if access.get('owner'):
         return 'owner'

@@ -7,8 +7,8 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 from .. import crypto, utils
 from ..errors import KeeperApiError
-from ..proto import folder_pb2, record_endpoints_pb2, record_pb2, remove_pb2, record_details_pb2
-from . import nsf_crypto, nsf_data, sync_down, vault_extensions
+from ..proto import folder_pb2, record_endpoints_pb2, record_pb2, remove_pb2, record_details_pb2, folder_access_pb2
+from . import nsf_crypto, nsf_data, nsf_common, sync_down, vault_extensions
 from .vault_online import VaultOnline
 
 ROOT_FOLDER_UID = 'AAAAAAAAAAAAAAAAAPmtNA'
@@ -26,7 +26,6 @@ class NsfListRow:
     title: str
     record_type: str = ''
     description: str = ''
-    parent_or_folder: str = ''
 
 
 @dataclass
@@ -269,7 +268,6 @@ def list_nsf_items(
                 item_type='Folder',
                 uid=folder.folder_uid,
                 title=folder.name or '(NSF Folder)',
-                parent_or_folder=_normalize_parent_uid(folder.parent_uid),
             ))
 
     if include_records:
@@ -302,7 +300,6 @@ def list_nsf_items(
                 title=title or entry.record_uid,
                 record_type=rec_type,
                 description=description,
-                parent_or_folder=location or 'root',
             )
 
         type_by_uid: Dict[str, str] = {}
@@ -330,7 +327,6 @@ def list_nsf_items(
                     title=api_title,
                     record_type=type_by_uid.get(entry.record_uid) or row.record_type,
                     description=row.description,
-                    parent_or_folder=row.parent_or_folder,
                 ))
             else:
                 rows.append(row)
@@ -391,7 +387,6 @@ def get_nsf_folder_detail(
     result: Dict[str, Any] = {
         'nsf_folder_uid': folder_uid,
         'name': folder.name or folder_uid,
-        'parent_uid': _normalize_parent_uid(folder.parent_uid),
         'subfolder_uids': list(folder.subfolder_uids),
         'record_uids': list(folder.record_uids),
     }
@@ -401,7 +396,15 @@ def get_nsf_folder_detail(
 
     if include_access:
         try:
-            result['access'] = get_nsf_folder_access(vault, [folder_uid])
+            access = get_nsf_folder_access(vault, [folder_uid])
+            owner_username = result.get('owner_username') or ''
+            owner_account_uid = result.get('owner_account_uid') or ''
+            for fr in access.get('results') or []:
+                for accessor in fr.get('accessors') or []:
+                    if nsf_common.is_nsf_folder_owner(
+                            accessor, owner_username, owner_account_uid):
+                        accessor['owner'] = True
+            result['access'] = access
         except Exception:
             result['access'] = {'results': []}
     return result
@@ -791,6 +794,22 @@ def get_nsf_record_accesses(
     return result
 
 
+def _resolve_uid_to_username(vault: VaultOnline, uid_b64: str) -> Optional[str]:
+    try:
+        rq = record_pb2.GetShareObjectsRequest()
+        rs = vault.keeper_auth.execute_auth_rest('vault/get_share_objects', rq, response_type=record_pb2.GetShareObjectsResponse)
+        if rs is not None:
+            for user_list in (rs.shareRelationships, rs.shareFamilyUsers,
+                              rs.shareEnterpriseUsers, rs.shareMCEnterpriseUsers):
+                for su in user_list:
+                    if su.userAccountUid:
+                        su_uid = utils.base64_url_encode(su.userAccountUid)
+                        if su_uid == uid_b64:
+                            return su.username
+    except Exception:
+        pass
+
+
 def get_nsf_folder_access(
         vault: VaultOnline,
         folder_uids: Iterable[str]) -> Dict[str, Any]:
@@ -803,46 +822,62 @@ def get_nsf_folder_access(
     if not uids:
         raise NsfError('At least one folder UID is required')
 
-    payload = {'folderUid': uids}
-    rs = vault.keeper_auth.execute_router_json('vault/folders/v3/access', payload)
-    if not isinstance(rs, dict):
-        return {'results': []}
-
-    results: List[Dict[str, Any]] = []
-    for fr in rs.get('folderAccessResults') or []:
-        if not isinstance(fr, dict):
-            continue
-        fuid = str(fr.get('folderUid', ''))
-        if fr.get('error'):
-            err = fr['error']
+    rq = folder_access_pb2.GetFolderAccessRequest()
+    for uid in uids:
+        rq.folderUid.append(utils.base64_url_decode(uid))
+    rs = vault.keeper_auth.execute_auth_rest('vault/folders/v3/access', rq, response_type=folder_access_pb2.GetFolderAccessResponse)
+    results = []
+    for fr in rs.folderAccessResults:
+        fuid = utils.base64_url_encode(fr.folderUid)
+        if fr.HasField('error'):
+            err = fr.error
             results.append({
                 'folder_uid': fuid,
-                'success': False,
-                'error': {
-                    'status': str(err.get('status', '')),
-                    'message': str(err.get('message', '')),
-                },
-            })
-            continue
-        accessors = []
-        for a in fr.get('accessors') or []:
-            if not isinstance(a, dict):
-                continue
-            accessors.append({
-                'accessor_uid': str(a.get('accessTypeUid', '')),
-                'username': a.get('username'),
-                'access_type': str(a.get('accessType', '')),
-                'role': str(a.get('accessRoleType', '')),
-                'inherited': bool(a.get('inherited')),
-                'hidden': bool(a.get('hidden')),
-                'permissions': a.get('permissions'),
-            })
-        results.append({
-            'folder_uid': fuid,
-            'success': True,
-            'accessors': accessors,
-        })
-    return {'results': results}
+                'error': {'status': folder_pb2.FolderModifyStatus.Name(err.status),
+                          'message': err.message},
+                'success': False})
+        else:
+            accessors = []
+            for a in fr.accessors:
+                auid = utils.base64_url_encode(a.accessTypeUid)
+                at = folder_pb2.AccessType.Name(a.accessType)
+                rt = folder_pb2.AccessRoleType.Name(a.accessRoleType)
+                username = None
+                if at == 'AT_USER':
+                    username = _resolve_uid_to_username(vault, auid)
+                ai = {
+                    'accessor_uid': auid, 'access_type': at, 'role': rt,
+                    'access_role_type': int(a.accessRoleType),
+                    'inherited': bool(a.inherited), 'hidden': bool(a.hidden),
+                    'username': username,
+                    'date_created': a.dateCreated or None,
+                    'last_modified': a.lastModified or None,
+                }
+                if at == 'AT_OWNER':
+                    ai['owner'] = True
+                if a.HasField('permissions'):
+                    p = a.permissions
+                    ai['permissions'] = {
+                        'can_add': bool(p.canAdd), 'can_remove': bool(p.canRemove),
+                        'can_delete': bool(p.canDelete),
+                        'can_list_access': bool(p.canListAccess),
+                        'can_update_access': bool(p.canUpdateAccess),
+                        'can_change_ownership': bool(p.canChangeOwnership),
+                        'can_edit_records': bool(p.canEditRecords),
+                        'can_view_records': bool(p.canViewRecords),
+                        'can_approve_access': bool(p.canApproveAccess),
+                        'can_request_access': bool(p.canRequestAccess),
+                        'can_update_setting': bool(p.canUpdateSetting),
+                        'can_list_records': bool(p.canListRecords),
+                        'can_list_folders': bool(p.canListFolders),
+                    }
+                accessors.append(ai)
+            results.append({'folder_uid': fuid, 'accessors': accessors, 'success': True})
+
+    rd = {'results': results, 'has_more': bool(rs.hasMore)}
+    if rs.HasField('continuationToken'):
+        rd['continuation_token'] = rs.continuationToken.lastModified
+    return rd
 
 
 def _request_sync(vault: VaultOnline, request_sync: bool) -> None:
