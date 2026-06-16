@@ -4,7 +4,7 @@
 # |_|\_\___\___| .__/\___|_|
 #              |_|
 #
-# Keeper SDK for Python — user device management (list, rename, logout, remove, lock, unlock).
+# Keeper SDK for Python — user device management (list, rename, logout, remove, lock, unlock, link, unlink).
 #
 
 import re
@@ -192,6 +192,46 @@ def account_unlock_user_devices(
     )
 
 
+def link_user_devices(
+    auth: keeper_auth.KeeperAuth,
+    device_identifiers: List[str],
+) -> List[str]:
+    """
+    Link two or more devices so logging into one can resume sessions on the others
+    when persistent login is enabled.
+
+    Returns:
+        Names of devices successfully linked.
+
+    Raises:
+        ValueError: validation, not found, or API failure.
+    """
+    _validate_link_unlink_identifiers(device_identifiers)
+    return _execute_device_action(auth, device_identifiers, DeviceManagement_pb2.DA_LINK)
+
+
+def unlink_user_devices(
+    auth: keeper_auth.KeeperAuth,
+    device_identifiers: List[str],
+) -> List[str]:
+    """
+    Unlink two or more previously linked devices for the current user.
+
+    Returns:
+        Names of devices successfully unlinked.
+
+    Raises:
+        ValueError: validation, not found, or API failure.
+    """
+    _validate_link_unlink_identifiers(device_identifiers)
+    return _execute_device_action(auth, device_identifiers, DeviceManagement_pb2.DA_UNLINK)
+
+
+def _validate_link_unlink_identifiers(device_identifiers: List[str]) -> None:
+    if len(device_identifiers) < 2:
+        raise ValueError('At least two device identifiers are required for link/unlink')
+
+
 def _fetch_devices(auth: keeper_auth.KeeperAuth) -> List[DeviceManagement_pb2.Device]:
     rs = auth.execute_auth_rest(
         rest_endpoint=URL_DEVICE_USER_LIST,
@@ -273,6 +313,10 @@ def _execute_device_action(
         raise ValueError('No devices found')
 
     resolved = _resolve_devices(devices, device_identifiers)
+    if action_type in (DeviceManagement_pb2.DA_LINK, DeviceManagement_pb2.DA_UNLINK):
+        tokens = [token for token, _ in resolved]
+        if len(set(tokens)) < 2:
+            raise ValueError('Link/unlink requires at least two different devices')
     token_to_device = {token: device for token, device in resolved}
 
     rq = DeviceManagement_pb2.DeviceActionRequest()

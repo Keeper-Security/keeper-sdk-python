@@ -31,6 +31,8 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('device-unlock', device_management.DeviceUnlockCommand(), base.CommandScope.Account)
         commands.register_command('device-account-lock', device_management.DeviceAccountLockCommand(), base.CommandScope.Account)
         commands.register_command('device-account-unlock', device_management.DeviceAccountUnlockCommand(), base.CommandScope.Account)
+        commands.register_command('device-link', device_management.DeviceLinkCommand(), base.CommandScope.Account)
+        commands.register_command('device-unlink', device_management.DeviceUnlinkCommand(), base.CommandScope.Account)
         commands.register_command('whoami', account_commands.WhoamiCommand(), base.CommandScope.Account)
         commands.register_command('reset-password', account_commands.ResetPasswordCommand(), base.CommandScope.Account)
         commands.register_command('2fa', two_fa.TwoFaCommand(), base.CommandScope.Account)

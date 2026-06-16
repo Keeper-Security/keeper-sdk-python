@@ -254,3 +254,60 @@ class DeviceAccountUnlockCommand(base.ArgparseCommand):
             device_management.account_unlock_user_devices,
             "Device '%s' successfully account unlocked",
         )
+
+
+class DeviceLinkCommand(base.ArgparseCommand):
+    def __init__(self):
+        parser = argparse.ArgumentParser(
+            prog='device-link',
+            description=(
+                'Link two or more devices so logging into one activates linked sessions '
+                '(requires persistent login)'
+            ),
+        )
+        DeviceLinkCommand.add_arguments_to_parser(parser)
+        super().__init__(parser)
+
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
+        parser.add_argument(
+            'devices', nargs='+',
+            help='Two or more device IDs (from device-list) or device name substrings',
+        )
+        parser.error = base.ArgparseCommand.raise_parse_exception
+        parser.exit = base.ArgparseCommand.suppress_exit
+
+    def execute(self, context: KeeperParams, **kwargs):
+        _run_device_action_command(
+            context,
+            kwargs.get('devices') or [],
+            device_management.link_user_devices,
+            "Device '%s' successfully linked",
+        )
+
+
+class DeviceUnlinkCommand(base.ArgparseCommand):
+    def __init__(self):
+        parser = argparse.ArgumentParser(
+            prog='device-unlink',
+            description='Unlink two or more previously linked devices for the current user',
+        )
+        DeviceUnlinkCommand.add_arguments_to_parser(parser)
+        super().__init__(parser)
+
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser):
+        parser.add_argument(
+            'devices', nargs='+',
+            help='Two or more device IDs (from device-list) or device name substrings',
+        )
+        parser.error = base.ArgparseCommand.raise_parse_exception
+        parser.exit = base.ArgparseCommand.suppress_exit
+
+    def execute(self, context: KeeperParams, **kwargs):
+        _run_device_action_command(
+            context,
+            kwargs.get('devices') or [],
+            device_management.unlink_user_devices,
+            "Device '%s' successfully unlinked",
+        )
