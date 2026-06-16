@@ -4,8 +4,7 @@ from google.protobuf.internal import containers as _containers
 from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
-from collections.abc import Iterable as _Iterable, Mapping as _Mapping
-from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
+from typing import ClassVar as _ClassVar, Iterable as _Iterable, Mapping as _Mapping, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
@@ -43,6 +42,11 @@ class ControllerMessageType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     CMT_ROTATE: _ClassVar[ControllerMessageType]
     CMT_DISCOVERY: _ClassVar[ControllerMessageType]
     CMT_CONNECT: _ClassVar[ControllerMessageType]
+    CMT_ANALYZE_RECORDING: _ClassVar[ControllerMessageType]
+    CMT_WORKFLOW_ACCESS_ELEVATION: _ClassVar[ControllerMessageType]
+    CMT_USS: _ClassVar[ControllerMessageType]
+    CMT_INFO: _ClassVar[ControllerMessageType]
+    CMT_AUTOMATION: _ClassVar[ControllerMessageType]
 
 class PAMRecordingType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -81,6 +85,11 @@ CMT_GENERAL: ControllerMessageType
 CMT_ROTATE: ControllerMessageType
 CMT_DISCOVERY: ControllerMessageType
 CMT_CONNECT: ControllerMessageType
+CMT_ANALYZE_RECORDING: ControllerMessageType
+CMT_WORKFLOW_ACCESS_ELEVATION: ControllerMessageType
+CMT_USS: ControllerMessageType
+CMT_INFO: ControllerMessageType
+CMT_AUTOMATION: ControllerMessageType
 PRT_SESSION: PAMRecordingType
 PRT_TYPESCRIPT: PAMRecordingType
 PRT_TIME: PAMRecordingType
@@ -103,7 +112,7 @@ class PAMRotationSchedule(_message.Message):
     controllerUid: bytes
     scheduleData: str
     noSchedule: bool
-    def __init__(self, recordUid: _Optional[bytes] = ..., configurationUid: _Optional[bytes] = ..., controllerUid: _Optional[bytes] = ..., scheduleData: _Optional[str] = ..., noSchedule: _Optional[bool] = ...) -> None: ...
+    def __init__(self, recordUid: _Optional[bytes] = ..., configurationUid: _Optional[bytes] = ..., controllerUid: _Optional[bytes] = ..., scheduleData: _Optional[str] = ..., noSchedule: bool = ...) -> None: ...
 
 class PAMRotationSchedulesResponse(_message.Message):
     __slots__ = ("schedules",)
@@ -303,7 +312,7 @@ class PAMController(_message.Message):
     applicationUid: bytes
     appClientType: _enterprise_pb2.AppClientType
     isInitialized: bool
-    def __init__(self, controllerUid: _Optional[bytes] = ..., controllerName: _Optional[str] = ..., deviceToken: _Optional[str] = ..., deviceName: _Optional[str] = ..., nodeId: _Optional[int] = ..., created: _Optional[int] = ..., lastModified: _Optional[int] = ..., applicationUid: _Optional[bytes] = ..., appClientType: _Optional[_Union[_enterprise_pb2.AppClientType, str]] = ..., isInitialized: _Optional[bool] = ...) -> None: ...
+    def __init__(self, controllerUid: _Optional[bytes] = ..., controllerName: _Optional[str] = ..., deviceToken: _Optional[str] = ..., deviceName: _Optional[str] = ..., nodeId: _Optional[int] = ..., created: _Optional[int] = ..., lastModified: _Optional[int] = ..., applicationUid: _Optional[bytes] = ..., appClientType: _Optional[_Union[_enterprise_pb2.AppClientType, str]] = ..., isInitialized: bool = ...) -> None: ...
 
 class PAMSetMaxInstanceCountRequest(_message.Message):
     __slots__ = ("controllerUid", "maxInstanceCount")
@@ -407,7 +416,7 @@ class PAMRecordingsResponse(_message.Message):
     HASMORE_FIELD_NUMBER: _ClassVar[int]
     recordings: _containers.RepeatedCompositeFieldContainer[PAMRecording]
     hasMore: bool
-    def __init__(self, recordings: _Optional[_Iterable[_Union[PAMRecording, _Mapping]]] = ..., hasMore: _Optional[bool] = ...) -> None: ...
+    def __init__(self, recordings: _Optional[_Iterable[_Union[PAMRecording, _Mapping]]] = ..., hasMore: bool = ...) -> None: ...
 
 class PAMData(_message.Message):
     __slots__ = ("vertex", "content")
@@ -465,250 +474,58 @@ class PAMUniversalSyncConfig(_message.Message):
     folders: _containers.RepeatedCompositeFieldContainer[PAMUniversalSyncFolder]
     syncIdentity: bytes
     vaultName: bytes
-    def __init__(self, networkUid: _Optional[bytes] = ..., enabled: _Optional[bool] = ..., dryRunEnabled: _Optional[bool] = ..., folders: _Optional[_Iterable[_Union[PAMUniversalSyncFolder, _Mapping]]] = ..., syncIdentity: _Optional[bytes] = ..., vaultName: _Optional[bytes] = ...) -> None: ...
+    def __init__(self, networkUid: _Optional[bytes] = ..., enabled: bool = ..., dryRunEnabled: bool = ..., folders: _Optional[_Iterable[_Union[PAMUniversalSyncFolder, _Mapping]]] = ..., syncIdentity: _Optional[bytes] = ..., vaultName: _Optional[bytes] = ...) -> None: ...
 
-class CnappWebhookRequest(_message.Message):
-    __slots__ = ("networkUid", "provider", "clientId", "clientSecret", "apiEndpointUrl", "authUrl", "encryptionRecordKeyId", "controllerUid", "webhookId")
-    NETWORKUID_FIELD_NUMBER: _ClassVar[int]
-    PROVIDER_FIELD_NUMBER: _ClassVar[int]
-    CLIENTID_FIELD_NUMBER: _ClassVar[int]
-    CLIENTSECRET_FIELD_NUMBER: _ClassVar[int]
-    APIENDPOINTURL_FIELD_NUMBER: _ClassVar[int]
-    AUTHURL_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTIONRECORDKEYID_FIELD_NUMBER: _ClassVar[int]
-    CONTROLLERUID_FIELD_NUMBER: _ClassVar[int]
-    WEBHOOKID_FIELD_NUMBER: _ClassVar[int]
-    networkUid: bytes
-    provider: str
-    clientId: str
-    clientSecret: str
-    apiEndpointUrl: str
-    authUrl: str
-    encryptionRecordKeyId: bytes
-    controllerUid: bytes
-    webhookId: str
-    def __init__(self, networkUid: _Optional[bytes] = ..., provider: _Optional[str] = ..., clientId: _Optional[str] = ..., clientSecret: _Optional[str] = ..., apiEndpointUrl: _Optional[str] = ..., authUrl: _Optional[str] = ..., encryptionRecordKeyId: _Optional[bytes] = ..., controllerUid: _Optional[bytes] = ..., webhookId: _Optional[str] = ...) -> None: ...
+class NhiMetricsRequest(_message.Message):
+    __slots__ = ("startTime", "endTime")
+    STARTTIME_FIELD_NUMBER: _ClassVar[int]
+    ENDTIME_FIELD_NUMBER: _ClassVar[int]
+    startTime: int
+    endTime: int
+    def __init__(self, startTime: _Optional[int] = ..., endTime: _Optional[int] = ...) -> None: ...
 
-class CnappWebhookResponse(_message.Message):
-    __slots__ = ("webhookId", "webhookUrl", "webhookToken")
-    WEBHOOKID_FIELD_NUMBER: _ClassVar[int]
-    WEBHOOKURL_FIELD_NUMBER: _ClassVar[int]
-    WEBHOOKTOKEN_FIELD_NUMBER: _ClassVar[int]
-    webhookId: str
-    webhookUrl: str
-    webhookToken: str
-    def __init__(self, webhookId: _Optional[str] = ..., webhookUrl: _Optional[str] = ..., webhookToken: _Optional[str] = ...) -> None: ...
+class PamUsageByUser(_message.Message):
+    __slots__ = ("userId", "recordRotationScheduledOk", "pamConnectionStarted", "pamTunnelStarted", "discoveryJobStarted", "recordRotationOnDemandOk", "pamSessionRecordingStarted", "pamRbiStarted", "pamSessionRbiRecordingStarted")
+    USERID_FIELD_NUMBER: _ClassVar[int]
+    RECORDROTATIONSCHEDULEDOK_FIELD_NUMBER: _ClassVar[int]
+    PAMCONNECTIONSTARTED_FIELD_NUMBER: _ClassVar[int]
+    PAMTUNNELSTARTED_FIELD_NUMBER: _ClassVar[int]
+    DISCOVERYJOBSTARTED_FIELD_NUMBER: _ClassVar[int]
+    RECORDROTATIONONDEMANDOK_FIELD_NUMBER: _ClassVar[int]
+    PAMSESSIONRECORDINGSTARTED_FIELD_NUMBER: _ClassVar[int]
+    PAMRBISTARTED_FIELD_NUMBER: _ClassVar[int]
+    PAMSESSIONRBIRECORDINGSTARTED_FIELD_NUMBER: _ClassVar[int]
+    userId: int
+    recordRotationScheduledOk: int
+    pamConnectionStarted: int
+    pamTunnelStarted: int
+    discoveryJobStarted: int
+    recordRotationOnDemandOk: int
+    pamSessionRecordingStarted: int
+    pamRbiStarted: int
+    pamSessionRbiRecordingStarted: int
+    def __init__(self, userId: _Optional[int] = ..., recordRotationScheduledOk: _Optional[int] = ..., pamConnectionStarted: _Optional[int] = ..., pamTunnelStarted: _Optional[int] = ..., discoveryJobStarted: _Optional[int] = ..., recordRotationOnDemandOk: _Optional[int] = ..., pamSessionRecordingStarted: _Optional[int] = ..., pamRbiStarted: _Optional[int] = ..., pamSessionRbiRecordingStarted: _Optional[int] = ...) -> None: ...
 
-class CnappDeleteWebhookRequest(_message.Message):
-    __slots__ = ("networkUid",)
-    NETWORKUID_FIELD_NUMBER: _ClassVar[int]
-    networkUid: bytes
-    def __init__(self, networkUid: _Optional[bytes] = ...) -> None: ...
+class NhiMetricsResponse(_message.Message):
+    __slots__ = ("enterpriseId", "startTime", "endTime", "uniqueKsmDevices", "pamGatewayOnline", "pamUsageByUser", "nhiCount")
+    ENTERPRISEID_FIELD_NUMBER: _ClassVar[int]
+    STARTTIME_FIELD_NUMBER: _ClassVar[int]
+    ENDTIME_FIELD_NUMBER: _ClassVar[int]
+    UNIQUEKSMDEVICES_FIELD_NUMBER: _ClassVar[int]
+    PAMGATEWAYONLINE_FIELD_NUMBER: _ClassVar[int]
+    PAMUSAGEBYUSER_FIELD_NUMBER: _ClassVar[int]
+    NHICOUNT_FIELD_NUMBER: _ClassVar[int]
+    enterpriseId: int
+    startTime: int
+    endTime: int
+    uniqueKsmDevices: int
+    pamGatewayOnline: int
+    pamUsageByUser: _containers.RepeatedCompositeFieldContainer[PamUsageByUser]
+    nhiCount: int
+    def __init__(self, enterpriseId: _Optional[int] = ..., startTime: _Optional[int] = ..., endTime: _Optional[int] = ..., uniqueKsmDevices: _Optional[int] = ..., pamGatewayOnline: _Optional[int] = ..., pamUsageByUser: _Optional[_Iterable[_Union[PamUsageByUser, _Mapping]]] = ..., nhiCount: _Optional[int] = ...) -> None: ...
 
-class CnappTestCredentialsRequest(_message.Message):
-    __slots__ = ("provider", "clientId", "clientSecret", "apiEndpointUrl", "authUrl")
-    PROVIDER_FIELD_NUMBER: _ClassVar[int]
-    CLIENTID_FIELD_NUMBER: _ClassVar[int]
-    CLIENTSECRET_FIELD_NUMBER: _ClassVar[int]
-    APIENDPOINTURL_FIELD_NUMBER: _ClassVar[int]
-    AUTHURL_FIELD_NUMBER: _ClassVar[int]
-    provider: str
-    clientId: str
-    clientSecret: str
-    apiEndpointUrl: str
-    authUrl: str
-    def __init__(self, provider: _Optional[str] = ..., clientId: _Optional[str] = ..., clientSecret: _Optional[str] = ..., apiEndpointUrl: _Optional[str] = ..., authUrl: _Optional[str] = ...) -> None: ...
-
-class CnappTestCredentialsResponse(_message.Message):
-    __slots__ = ("valid", "error", "message")
-    VALID_FIELD_NUMBER: _ClassVar[int]
-    ERROR_FIELD_NUMBER: _ClassVar[int]
-    MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    valid: bool
-    error: str
-    message: str
-    def __init__(self, valid: _Optional[bool] = ..., error: _Optional[str] = ..., message: _Optional[str] = ...) -> None: ...
-
-class CnappQueueListRequest(_message.Message):
-    __slots__ = ("networkUid", "statusFilter", "limit", "offset")
-    NETWORKUID_FIELD_NUMBER: _ClassVar[int]
-    STATUSFILTER_FIELD_NUMBER: _ClassVar[int]
-    LIMIT_FIELD_NUMBER: _ClassVar[int]
-    OFFSET_FIELD_NUMBER: _ClassVar[int]
-    networkUid: bytes
-    statusFilter: int
-    limit: int
-    offset: int
-    def __init__(self, networkUid: _Optional[bytes] = ..., statusFilter: _Optional[int] = ..., limit: _Optional[int] = ..., offset: _Optional[int] = ...) -> None: ...
-
-class CnappQueueItem(_message.Message):
-    __slots__ = ("cnappQueueId", "controlKey", "cnappProviderId", "cnappQueueStatusId", "receivedAt", "resolvedAt", "recordUid", "payload")
-    CNAPPQUEUEID_FIELD_NUMBER: _ClassVar[int]
-    CONTROLKEY_FIELD_NUMBER: _ClassVar[int]
-    CNAPPPROVIDERID_FIELD_NUMBER: _ClassVar[int]
-    CNAPPQUEUESTATUSID_FIELD_NUMBER: _ClassVar[int]
-    RECEIVEDAT_FIELD_NUMBER: _ClassVar[int]
-    RESOLVEDAT_FIELD_NUMBER: _ClassVar[int]
-    RECORDUID_FIELD_NUMBER: _ClassVar[int]
-    PAYLOAD_FIELD_NUMBER: _ClassVar[int]
-    cnappQueueId: str
-    controlKey: str
-    cnappProviderId: int
-    cnappQueueStatusId: int
-    receivedAt: int
-    resolvedAt: int
-    recordUid: bytes
-    payload: bytes
-    def __init__(self, cnappQueueId: _Optional[str] = ..., controlKey: _Optional[str] = ..., cnappProviderId: _Optional[int] = ..., cnappQueueStatusId: _Optional[int] = ..., receivedAt: _Optional[int] = ..., resolvedAt: _Optional[int] = ..., recordUid: _Optional[bytes] = ..., payload: _Optional[bytes] = ...) -> None: ...
-
-class CnappQueueListResponse(_message.Message):
-    __slots__ = ("items", "total", "encryptionRecordKeyId")
-    ITEMS_FIELD_NUMBER: _ClassVar[int]
-    TOTAL_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTIONRECORDKEYID_FIELD_NUMBER: _ClassVar[int]
-    items: _containers.RepeatedCompositeFieldContainer[CnappQueueItem]
-    total: int
-    encryptionRecordKeyId: bytes
-    def __init__(self, items: _Optional[_Iterable[_Union[CnappQueueItem, _Mapping]]] = ..., total: _Optional[int] = ..., encryptionRecordKeyId: _Optional[bytes] = ...) -> None: ...
-
-class CnappQueueItemResponse(_message.Message):
-    __slots__ = ("cnappQueueId", "controlKey", "cnappProviderId", "cnappQueueStatusId", "receivedAt", "resolvedAt", "recordUid", "payload", "controllerUid", "networkId", "encryptionRecordKeyId")
-    CNAPPQUEUEID_FIELD_NUMBER: _ClassVar[int]
-    CONTROLKEY_FIELD_NUMBER: _ClassVar[int]
-    CNAPPPROVIDERID_FIELD_NUMBER: _ClassVar[int]
-    CNAPPQUEUESTATUSID_FIELD_NUMBER: _ClassVar[int]
-    RECEIVEDAT_FIELD_NUMBER: _ClassVar[int]
-    RESOLVEDAT_FIELD_NUMBER: _ClassVar[int]
-    RECORDUID_FIELD_NUMBER: _ClassVar[int]
-    PAYLOAD_FIELD_NUMBER: _ClassVar[int]
-    CONTROLLERUID_FIELD_NUMBER: _ClassVar[int]
-    NETWORKID_FIELD_NUMBER: _ClassVar[int]
-    ENCRYPTIONRECORDKEYID_FIELD_NUMBER: _ClassVar[int]
-    cnappQueueId: str
-    controlKey: str
-    cnappProviderId: int
-    cnappQueueStatusId: int
-    receivedAt: int
-    resolvedAt: int
-    recordUid: bytes
-    payload: bytes
-    controllerUid: bytes
-    networkId: bytes
-    encryptionRecordKeyId: bytes
-    def __init__(self, cnappQueueId: _Optional[str] = ..., controlKey: _Optional[str] = ..., cnappProviderId: _Optional[int] = ..., cnappQueueStatusId: _Optional[int] = ..., receivedAt: _Optional[int] = ..., resolvedAt: _Optional[int] = ..., recordUid: _Optional[bytes] = ..., payload: _Optional[bytes] = ..., controllerUid: _Optional[bytes] = ..., networkId: _Optional[bytes] = ..., encryptionRecordKeyId: _Optional[bytes] = ...) -> None: ...
-
-class CnappAssociateRequest(_message.Message):
-    __slots__ = ("recordUid", "executeAfterSetup")
-    RECORDUID_FIELD_NUMBER: _ClassVar[int]
-    EXECUTEAFTERSETUP_FIELD_NUMBER: _ClassVar[int]
-    recordUid: bytes
-    executeAfterSetup: bool
-    def __init__(self, recordUid: _Optional[bytes] = ..., executeAfterSetup: _Optional[bool] = ...) -> None: ...
-
-class CnappAssociateResponse(_message.Message):
-    __slots__ = ("status", "remediationTriggered")
-    STATUS_FIELD_NUMBER: _ClassVar[int]
-    REMEDIATIONTRIGGERED_FIELD_NUMBER: _ClassVar[int]
-    status: str
-    remediationTriggered: bool
-    def __init__(self, status: _Optional[str] = ..., remediationTriggered: _Optional[bool] = ...) -> None: ...
-
-class CnappResolveRequest(_message.Message):
-    __slots__ = ("resolutionNotes",)
-    RESOLUTIONNOTES_FIELD_NUMBER: _ClassVar[int]
-    resolutionNotes: str
-    def __init__(self, resolutionNotes: _Optional[str] = ...) -> None: ...
-
-class CnappRemediateRequest(_message.Message):
-    __slots__ = ("actionType",)
-    ACTIONTYPE_FIELD_NUMBER: _ClassVar[int]
-    actionType: str
-    def __init__(self, actionType: _Optional[str] = ...) -> None: ...
-
-class CnappRemediateResponse(_message.Message):
-    __slots__ = ("status", "actionType", "result", "executionTimeMs")
-    STATUS_FIELD_NUMBER: _ClassVar[int]
-    ACTIONTYPE_FIELD_NUMBER: _ClassVar[int]
-    RESULT_FIELD_NUMBER: _ClassVar[int]
-    EXECUTIONTIMEMS_FIELD_NUMBER: _ClassVar[int]
-    status: str
-    actionType: str
-    result: str
-    executionTimeMs: int
-    def __init__(self, status: _Optional[str] = ..., actionType: _Optional[str] = ..., result: _Optional[str] = ..., executionTimeMs: _Optional[int] = ...) -> None: ...
-
-class CnappIgnoreRequest(_message.Message):
-    __slots__ = ("reason",)
-    REASON_FIELD_NUMBER: _ClassVar[int]
-    reason: str
-    def __init__(self, reason: _Optional[str] = ...) -> None: ...
-
-class CnappDefaultBehaviorRequest(_message.Message):
-    __slots__ = ("networkId", "cnappProviderId", "controlKey", "cnappActionTypeId", "autoExecute")
-    NETWORKID_FIELD_NUMBER: _ClassVar[int]
-    CNAPPPROVIDERID_FIELD_NUMBER: _ClassVar[int]
-    CONTROLKEY_FIELD_NUMBER: _ClassVar[int]
-    CNAPPACTIONTYPEID_FIELD_NUMBER: _ClassVar[int]
-    AUTOEXECUTE_FIELD_NUMBER: _ClassVar[int]
-    networkId: bytes
-    cnappProviderId: int
-    controlKey: str
-    cnappActionTypeId: int
-    autoExecute: bool
-    def __init__(self, networkId: _Optional[bytes] = ..., cnappProviderId: _Optional[int] = ..., controlKey: _Optional[str] = ..., cnappActionTypeId: _Optional[int] = ..., autoExecute: _Optional[bool] = ...) -> None: ...
-
-class CnappDefaultBehaviorResponse(_message.Message):
-    __slots__ = ("cnappDefaultBehaviorId",)
-    CNAPPDEFAULTBEHAVIORID_FIELD_NUMBER: _ClassVar[int]
-    cnappDefaultBehaviorId: int
-    def __init__(self, cnappDefaultBehaviorId: _Optional[int] = ...) -> None: ...
-
-class CnappBehaviorListRequest(_message.Message):
-    __slots__ = ("networkUid",)
-    NETWORKUID_FIELD_NUMBER: _ClassVar[int]
-    networkUid: bytes
-    def __init__(self, networkUid: _Optional[bytes] = ...) -> None: ...
-
-class CnappBehaviorListResponse(_message.Message):
-    __slots__ = ("items",)
-    ITEMS_FIELD_NUMBER: _ClassVar[int]
-    items: _containers.RepeatedCompositeFieldContainer[CnappDefaultBehaviorItem]
-    def __init__(self, items: _Optional[_Iterable[_Union[CnappDefaultBehaviorItem, _Mapping]]] = ...) -> None: ...
-
-class CnappDefaultBehaviorItem(_message.Message):
-    __slots__ = ("id", "networkId", "cnappProviderId", "controlKey", "cnappActionTypeId", "autoExecute", "enabled")
-    ID_FIELD_NUMBER: _ClassVar[int]
-    NETWORKID_FIELD_NUMBER: _ClassVar[int]
-    CNAPPPROVIDERID_FIELD_NUMBER: _ClassVar[int]
-    CONTROLKEY_FIELD_NUMBER: _ClassVar[int]
-    CNAPPACTIONTYPEID_FIELD_NUMBER: _ClassVar[int]
-    AUTOEXECUTE_FIELD_NUMBER: _ClassVar[int]
-    ENABLED_FIELD_NUMBER: _ClassVar[int]
-    id: int
-    networkId: bytes
-    cnappProviderId: int
-    controlKey: str
-    cnappActionTypeId: int
-    autoExecute: bool
-    enabled: bool
-    def __init__(self, id: _Optional[int] = ..., networkId: _Optional[bytes] = ..., cnappProviderId: _Optional[int] = ..., controlKey: _Optional[str] = ..., cnappActionTypeId: _Optional[int] = ..., autoExecute: _Optional[bool] = ..., enabled: _Optional[bool] = ...) -> None: ...
-
-class CnappBehaviorUpdateRequest(_message.Message):
-    __slots__ = ("cnappDefaultBehaviorId", "controlKey", "cnappActionTypeId", "autoExecute", "enabled")
-    CNAPPDEFAULTBEHAVIORID_FIELD_NUMBER: _ClassVar[int]
-    CONTROLKEY_FIELD_NUMBER: _ClassVar[int]
-    CNAPPACTIONTYPEID_FIELD_NUMBER: _ClassVar[int]
-    AUTOEXECUTE_FIELD_NUMBER: _ClassVar[int]
-    ENABLED_FIELD_NUMBER: _ClassVar[int]
-    cnappDefaultBehaviorId: int
-    controlKey: str
-    cnappActionTypeId: int
-    autoExecute: bool
-    enabled: bool
-    def __init__(self, cnappDefaultBehaviorId: _Optional[int] = ..., controlKey: _Optional[str] = ..., cnappActionTypeId: _Optional[int] = ..., autoExecute: _Optional[bool] = ..., enabled: _Optional[bool] = ...) -> None: ...
-
-class CnappBehaviorDeleteRequest(_message.Message):
-    __slots__ = ("cnappDefaultBehaviorId",)
-    CNAPPDEFAULTBEHAVIORID_FIELD_NUMBER: _ClassVar[int]
-    cnappDefaultBehaviorId: int
-    def __init__(self, cnappDefaultBehaviorId: _Optional[int] = ...) -> None: ...
+class NhiBulkMetricsResponse(_message.Message):
+    __slots__ = ("responses",)
+    RESPONSES_FIELD_NUMBER: _ClassVar[int]
+    responses: _containers.RepeatedCompositeFieldContainer[NhiMetricsResponse]
+    def __init__(self, responses: _Optional[_Iterable[_Union[NhiMetricsResponse, _Mapping]]] = ...) -> None: ...

@@ -1,7 +1,7 @@
 import sqlite3
 from typing import Callable
 
-from . import vault_storage, storage_types
+from . import vault_storage, storage_types, sqlite_nsf_storage, nsf_vault_storage
 from .. import sqlite_dao, utils
 from ..storage import sqlite
 
@@ -49,12 +49,14 @@ class SqliteVaultStorage(vault_storage.IVaultStorage):
         record_type_schema = sqlite_dao.TableSchema.load_schema(
             storage_types.StorageRecordType, 'id', owner_column=self.owner_column, owner_type=bytes)
 
+        nsf_schemas = sqlite_nsf_storage.nsf_table_schemas(self.owner_column, bytes)
+
         sqlite_dao.verify_database(self.get_connection(),
                                    (settings_schema, team_schema, record_schema, shared_folder_schema,
                                     non_shared_data_schema, record_key_schema, shared_folder_key_schema,
                                     shared_folder_permission_schema, user_email_schema, folder_schema,
                                     folder_record_schema, breach_watch_record_schema, breach_watch_security_data_schema,
-                                    record_type_schema, notification_schema))
+                                    record_type_schema, notification_schema) + nsf_schemas)
 
         self._settings_storage = sqlite.SqliteRecordStorage(
             self.get_connection, settings_schema, owner=self.vault_owner)
@@ -92,6 +94,13 @@ class SqliteVaultStorage(vault_storage.IVaultStorage):
 
         self._notifications = sqlite.SqliteEntityStorage(
             self.get_connection, notification_schema, owner=self.vault_owner)
+
+        self._nsf = sqlite_nsf_storage.SqliteNSFStorage(
+            self.get_connection, self.vault_owner, verify=False)
+
+    @property
+    def nsf(self) -> nsf_vault_storage.INSFStorage:
+        return self._nsf
 
     @property
     def user_settings(self):
@@ -173,6 +182,7 @@ class SqliteVaultStorage(vault_storage.IVaultStorage):
         self._breach_watch_security_data.delete_all()
         self._user_emails.delete_all()
         self._notifications.delete_all()
+        self._nsf.clear_all()
 
     def close(self) -> None:
         pass

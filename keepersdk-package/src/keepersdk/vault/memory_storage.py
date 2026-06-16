@@ -1,10 +1,13 @@
 from .vault_storage import IVaultStorage
 from ..storage.in_memory import InMemoryLinkStorage, InMemoryEntityStorage, InMemoryRecordStorage
-from . import storage_types
+from . import storage_types, memory_nsf_storage
+
 
 class InMemoryVaultStorage(IVaultStorage):
     def __init__(self):
         self._personal_scope = 'PersonalScopeUid'
+
+        self._nsf = memory_nsf_storage.InMemoryNSFStorage()
 
         self._user_settings = InMemoryRecordStorage[storage_types.UserSettings]()
         self._records = InMemoryEntityStorage[storage_types.StorageRecord, str]()
@@ -90,6 +93,10 @@ class InMemoryVaultStorage(IVaultStorage):
     def notifications(self):
         return self._notifications
 
+    @property
+    def nsf(self):
+        return self._nsf
+
     def clear(self):
         self._user_settings.delete()
         self._records.clear()
@@ -110,3 +117,4 @@ class InMemoryVaultStorage(IVaultStorage):
         self._breach_watch_security_data.clear()
 
         self._notifications.clear()
+        self._nsf.clear_all()
