@@ -203,21 +203,18 @@ class NsfListCommand(base.ArgparseCommand):
                 logger.info('No NSF records found.')
             return
 
+        table = []
         if fmt in ('json', 'csv'):
             headers = ['Item Type', 'UID', 'Title', 'Type', 'Description', 'Parent/Folder']
-            table = [
-                [r.item_type, r.uid, r.title, r.record_type, r.description, r.parent_or_folder]
-                for r in rows_data
-            ]
+            for r in rows_data:
+                table.append([r.item_type, r.uid, r.title, r.record_type, r.description, r.parent_or_folder])
         else:
             headers = ['Item Type', 'UID', 'Title', 'Type', 'Description']
-            table = [
-                [r.item_type, r.uid, r.title, r.record_type, r.description]
-                for r in rows_data
-            ]
+            for r in rows_data:
+                table.append([r.item_type, r.uid, r.title, r.record_type, r.description])
         if fmt != 'json':
             headers = [report_utils.field_to_title(x) for x in headers]
-        report_utils.dump_report_data(
+        return report_utils.dump_report_data(
             table, headers, fmt=fmt, filename=kwargs.get('output'),
             row_number=True, column_width=40,
         )
@@ -740,15 +737,19 @@ class NsfMkdirCommand(base.ArgparseCommand):
                         help='Do not inherit parent folder permissions')
 
     @staticmethod
-    def _parse_folder_path(folder_path: str) -> str:
-        collapsed = folder_path.replace('//', '\x00')
-        if '/' in collapsed:
-            raise base.CommandError(
-                'Character "/" is reserved. Use "//" inside folder name')
-        name = collapsed.replace('\x00', '/').strip()
-        if not name:
+    def _parse_path(folder_path: str) -> List[str]:
+        """Split *folder_path* into segment names (``//`` → literal ``/`` in a name)."""
+        sentinel = '\x00'
+        collapsed = folder_path.replace('//', sentinel)
+        raw_segments = collapsed.split('/')
+        segments = []
+        for raw in raw_segments:
+            name = raw.replace(sentinel, '/').strip()
+            if name:
+                segments.append(name)
+        if not segments:
             raise base.CommandError('Invalid folder name')
-        return name
+        return segments
 
     def execute(self, context: KeeperParams, **kwargs):
         vault = _require_vault(context)
@@ -756,29 +757,47 @@ class NsfMkdirCommand(base.ArgparseCommand):
         if not folder_path:
             raise base.CommandError('Folder name is required')
 
-        folder_name = self._parse_folder_path(folder_path)
-        parent_uid = kwargs.get('parent')
-        if not parent_uid and context.current_folder:
-            if nsf_management.is_nsf_folder(vault, context.current_folder):
-                parent_uid = context.current_folder
+        color = kwargs.get('color')
+        inherit_permissions = not kwargs.get('no_inherit_permissions', False)
 
-        existing = nsf_management.find_nsf_child_folder(vault, folder_name, parent_uid)
-        if existing:
-            logger.warning('nsf-mkdir: Folder "%s" already exists', folder_name)
-            return existing
+        parent_uid = None
+        current_folder = context.current_folder
+        if current_folder and nsf_management.is_nsf_folder(vault, current_folder):
+            parent_uid = current_folder
 
-        def _run():
-            return nsf_management.create_nsf_folder(
-                vault,
-                folder_name,
-                parent_uid=parent_uid,
-                color=kwargs.get('color'),
-                inherit_permissions=not kwargs.get('no_inherit_permissions', False),
-            )
+        segments = self._parse_path(folder_path)
+        last_idx = len(segments) - 1
+        created_uid: Optional[str] = None
 
-        result = _wrap_nsf('nsf-mkdir', _run)
-        logger.info('NSF folder created: %s', result.folder_uid)
-        return result.folder_uid
+        for idx, segment in enumerate(segments):
+            is_leaf = idx == last_idx
+            existing = nsf_management.find_nsf_child_folder(vault, segment, parent_uid)
+            if existing:
+                if is_leaf:
+                    logger.warning('nsf-mkdir: Folder "%s" already exists', segment)
+                    return existing
+                parent_uid = existing
+                continue
+
+            seg_color = color if is_leaf else None
+            seg_inherit = inherit_permissions if is_leaf else True
+
+            def _run(name=segment, parent=parent_uid, seg_color=seg_color, seg_inherit=seg_inherit):
+                return nsf_management.create_nsf_folder(
+                    vault,
+                    name,
+                    parent_uid=parent,
+                    color=seg_color,
+                    inherit_permissions=seg_inherit,
+                )
+
+            result = _wrap_nsf('nsf-mkdir', _run)
+            created_uid = result.folder_uid
+            parent_uid = created_uid
+
+        if created_uid:
+            logger.info('NSF folder created: %s', created_uid)
+        return created_uid
 
 
 class NsfRndirCommand(base.ArgparseCommand):
@@ -1368,7 +1387,7 @@ class NsfShortcutListCommand(base.ArgparseCommand):
         headers = ['Record UID', 'Record Title', 'Folders']
         if fmt != 'json':
             headers = [report_utils.field_to_title(x) for x in headers]
-        report_utils.dump_report_data(
+        return report_utils.dump_report_data(
             table, headers, fmt=fmt, filename=kwargs.get('output'), row_number=True, column_width=40)
 
 

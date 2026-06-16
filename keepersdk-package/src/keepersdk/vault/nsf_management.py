@@ -792,16 +792,28 @@ def find_nsf_child_folder(
         vault: VaultOnline,
         folder_name: str,
         parent_uid: Optional[str] = None) -> Optional[str]:
-    """Return child folder UID matching name under parent (case-insensitive)."""
-    expected_parent = _api_parent_uid(parent_uid) or ''
+    """Return child folder UID matching name under parent (case-insensitive).
+
+    ``parent_uid=None`` (or the root sentinel) means a direct child of the NSF root.
+    """
+    view = _nsf_view(vault)
+    known_folders = {f.folder_uid for f in view.folders()}
     name_lower = folder_name.casefold()
-    for folder in _nsf_view(vault).folders():
+    looking_for_root = _api_parent_uid(parent_uid) is None
+
+    for folder in view.folders():
         if (folder.name or '').casefold() != name_lower:
             continue
-        existing_parent = folder.parent_uid or ''
-        if existing_parent == ROOT_FOLDER_UID:
-            existing_parent = ''
-        if existing_parent == expected_parent:
+        raw_parent = folder.parent_uid or ''
+        normalized = _normalize_parent_uid(raw_parent)
+        is_root_child = (
+            normalized in ('', 'root')
+            or (raw_parent and raw_parent not in known_folders)
+        )
+        if looking_for_root:
+            if is_root_child:
+                return folder.folder_uid
+        elif raw_parent == parent_uid:
             return folder.folder_uid
     return None
 
