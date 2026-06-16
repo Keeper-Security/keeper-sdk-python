@@ -94,6 +94,18 @@ def get_share_expiration(expire_at: Optional[str], expire_in: Optional[str]) -> 
         raise ShareValidationError(f'Invalid expiration format: {e}') from e
 
 
+def parse_nsf_share_expiration(
+        expire_at: Optional[str],
+        expire_in: Optional[str]) -> Optional[int]:
+    """Parse NSF TLA expiration as a millisecond timestamp (vault/records/v3/share)."""
+    if not expire_at and not expire_in:
+        return None
+    value = get_share_expiration(expire_at, expire_in)
+    if value == NEVER_EXPIRES:
+        return NEVER_EXPIRES
+    return value * 1000
+
+
 def get_share_objects(vault: vault_online.VaultOnline) -> Dict[str, Dict[str, Any]]:
     try:
         request = record_pb2.GetShareObjectsRequest()
