@@ -52,12 +52,14 @@ RECORD_STATUS_ATTRIBUTES = {
 FOLDER_TYPE_SHARED_FOLDER = 'shared_folder'
 FOLDER_TYPE_SHARED_FOLDER_FOLDER = 'shared_folder_folder'
 
-def set_expiration_fields(obj, expiration):
-    """Set expiration and timerNotificationType fields on proto object if expiration is provided."""
+def set_expiration_fields(obj, expiration, rotate_on_expiration: bool = False):
+    """Set expiration, notification, and optional rotateOnExpiration on a share proto object."""
     if isinstance(expiration, int):
         if expiration > 0:
             obj.expiration = expiration * TIMESTAMP_MILLISECONDS_FACTOR
             obj.timerNotificationType = record_pb2.NOTIFY_OWNER
+            if rotate_on_expiration:
+                obj.rotateOnExpiration = True
         elif expiration < 0:
             obj.expiration = -1
 
@@ -205,7 +207,8 @@ class RecordShares():
     
     @staticmethod
     def _build_shared_record(vault, email, record_uid, record_path, action, 
-                            can_edit, can_share, share_expiration, existing_shares):
+                            can_edit, can_share, share_expiration, existing_shares,
+                            rotate_on_expiration: bool = False):
         """Build a SharedRecord proto object for a user."""
         ro = record_pb2.SharedRecord()
         ro.toUsername = email
@@ -227,21 +230,22 @@ class RecordShares():
             else:
                 ro.editable = bool(can_edit)
                 ro.shareable = bool(can_share)
-            set_expiration_fields(ro, share_expiration)
+            set_expiration_fields(ro, share_expiration, rotate_on_expiration)
         else:
             if can_share or can_edit:
                 if email in existing_shares:
                     current = existing_shares[email]
                     ro.editable = False if can_edit else current.get('editable')
                     ro.shareable = False if can_share else current.get('shareable')
-                set_expiration_fields(ro, share_expiration)
+                set_expiration_fields(ro, share_expiration, rotate_on_expiration)
         
         return ro
     
     @staticmethod
     def _process_record_shares(vault, record_uids, all_users, action, can_edit, 
                               can_share, share_expiration, record_cache, 
-                              not_owned_records, is_share_admin, enterprise):
+                              not_owned_records, is_share_admin, enterprise,
+                              rotate_on_expiration: bool = False):
         """Process shares for all records and users, building the request."""
         rq = record_pb2.RecordShareUpdateRequest()
         
@@ -284,7 +288,8 @@ class RecordShares():
             for email in all_users:
                 ro = RecordShares._build_shared_record(
                     vault, email, record_uid, record_path, action,
-                    can_edit, can_share, share_expiration, existing_shares
+                    can_edit, can_share, share_expiration, existing_shares,
+                    rotate_on_expiration,
                 )
                 
                 if action in {ShareAction.GRANT.value, ShareAction.OWNER.value}:
@@ -316,7 +321,8 @@ class RecordShares():
                     enterprise_access: bool = False,
                     recursive: bool = False,
                     can_edit: bool = False,
-                    can_share: bool = False):
+                    can_share: bool = False,
+                    rotate_on_expiration: bool = False):
         """Prepare a record share update request."""
         # Build caches
         record_cache = {x.record_uid: x for x in vault.vault_data.records()}
@@ -345,6 +351,14 @@ class RecordShares():
         
         if not record_uids:
             raise ValueError('There are no records to share selected')
+
+        if rotate_on_expiration:
+            if action != ShareAction.GRANT.value:
+                raise ValueError('--rotate-on-expiration is only valid with --action grant')
+            share_management_utils.validate_rotate_on_expiration(share_expiration, rotate_on_expiration)
+            share_management_utils.validate_record_shares_rotate_on_expiration(
+                vault, record_uids, rotate_on_expiration
+            )
         
         if action == ShareAction.OWNER.value and len(emails) > 1:
             raise ValueError('You can transfer ownership to a single account only')
@@ -382,7 +396,8 @@ class RecordShares():
         # Build the request
         return RecordShares._process_record_shares(
             vault, record_uids, all_users, action, can_edit, can_share,
-            share_expiration, record_cache, not_owned_records, is_share_admin, enterprise
+            share_expiration, record_cache, not_owned_records, is_share_admin, enterprise,
+            rotate_on_expiration,
         )
     
     @staticmethod
@@ -521,7 +536,8 @@ class FolderShares():
             rq.defaultManageUsers = FolderShares._convert_manage_permission(mu)
     
     @staticmethod
-    def _process_users(vault, rq, curr_sf, users, action, mr, mu, share_expiration):
+    def _process_users(vault, rq, curr_sf, users, action, mr, mu, share_expiration,
+                       rotate_on_expiration: bool = False):
         """Process user shares for the shared folder."""
         if not users:
             return
@@ -531,7 +547,7 @@ class FolderShares():
         for email in users:
             uo = folder_pb2.SharedFolderUpdateUser()
             uo.username = email
-            set_expiration_fields(uo, share_expiration)
+            set_expiration_fields(uo, share_expiration, rotate_on_expiration)
             
             if email in existing_users:
                 if action == ShareAction.GRANT.value:
@@ -563,7 +579,8 @@ class FolderShares():
                     logger.warning('User %s not found', email)
     
     @staticmethod
-    def _process_teams(vault, rq, curr_sf, teams, action, mr, mu, share_expiration):
+    def _process_teams(vault, rq, curr_sf, teams, action, mr, mu, share_expiration,
+                       rotate_on_expiration: bool = False):
         """Process team shares for the shared folder."""
         if not teams:
             return
@@ -573,7 +590,7 @@ class FolderShares():
         for team_uid in teams:
             to = folder_pb2.SharedFolderUpdateTeam()
             to.teamUid = utils.base64_url_decode(team_uid)
-            set_expiration_fields(to, share_expiration)
+            set_expiration_fields(to, share_expiration, rotate_on_expiration)
             
             if team_uid in existing_teams:
                 team = existing_teams[team_uid]
@@ -608,7 +625,8 @@ class FolderShares():
             rq.defaultCanShare = FolderShares._convert_manage_permission(cs)
     
     @staticmethod
-    def _process_records(vault, rq, curr_sf, rec_uids, action, ce, cs, share_expiration):
+    def _process_records(vault, rq, curr_sf, rec_uids, action, ce, cs, share_expiration,
+                         rotate_on_expiration: bool = False):
         """Process record shares for the shared folder."""
         if not rec_uids:
             return
@@ -618,7 +636,7 @@ class FolderShares():
         for record_uid in rec_uids:
             ro = folder_pb2.SharedFolderUpdateRecord()
             ro.recordUid = utils.base64_url_decode(record_uid)
-            set_expiration_fields(ro, share_expiration)
+            set_expiration_fields(ro, share_expiration, rotate_on_expiration)
             
             if record_uid in existing_records:
                 if action == ShareAction.GRANT.value:
@@ -650,7 +668,7 @@ class FolderShares():
     @staticmethod
     def prepare_request(vault: vault_online.VaultOnline, kwargs, curr_sf, users, teams, rec_uids, *,
                         default_record=False, default_account=False,
-                        share_expiration=None):
+                        share_expiration=None, rotate_on_expiration: bool = False):
         """Prepare a shared folder update request."""
         rq = folder_pb2.SharedFolderUpdateV3Request()
         FolderShares._initialize_request(rq, curr_sf)
@@ -662,10 +680,10 @@ class FolderShares():
         cs = kwargs.get('can_share')
         
         FolderShares._process_default_account_permissions(rq, action, mr, mu, default_account)
-        FolderShares._process_users(vault, rq, curr_sf, users, action, mr, mu, share_expiration)
-        FolderShares._process_teams(vault, rq, curr_sf, teams, action, mr, mu, share_expiration)
+        FolderShares._process_users(vault, rq, curr_sf, users, action, mr, mu, share_expiration, rotate_on_expiration)
+        FolderShares._process_teams(vault, rq, curr_sf, teams, action, mr, mu, share_expiration, rotate_on_expiration)
         FolderShares._process_default_record_permissions(rq, action, ce, cs, default_record)
-        FolderShares._process_records(vault, rq, curr_sf, rec_uids, action, ce, cs, share_expiration)
+        FolderShares._process_records(vault, rq, curr_sf, rec_uids, action, ce, cs, share_expiration, rotate_on_expiration)
         
         return rq
 
