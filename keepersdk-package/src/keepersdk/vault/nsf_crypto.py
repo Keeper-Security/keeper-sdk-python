@@ -94,6 +94,26 @@ def try_decrypt_folder_key(
     return None
 
 
+def try_decrypt_folder_entity_key(
+        row: nsf.NSFFolder,
+        auth_context: keeper_auth.AuthContext,
+        decrypted_folder_keys: Dict[str, bytes]) -> Optional[bytes]:
+    if not row.folder_key:
+        return None
+    try:
+        encrypted_key = utils.base64_url_decode(row.folder_key)
+        key = try_decrypt_with_user_keys(encrypted_key, auth_context)
+        if key is not None:
+            return key
+        if row.parent_uid:
+            parent_key = decrypted_folder_keys.get(row.parent_uid)
+            if parent_key is not None:
+                return try_decrypt_symmetric(encrypted_key, parent_key)
+    except Exception:
+        pass
+    return None
+
+
 def decrypt_folder_keys(
         storage: INSFStorage,
         auth_context: keeper_auth.AuthContext) -> Dict[str, bytes]:
@@ -101,6 +121,7 @@ def decrypt_folder_keys(
     keys_by_folder: Dict[str, List[nsf.NSFFolderKey]] = {}
     for fk in storage.folder_keys.get_all_links():
         keys_by_folder.setdefault(fk.folder_uid, []).append(fk)
+    folder_rows = list(storage.folders.get_all_entities())
 
     progress = True
     while progress:
@@ -114,6 +135,13 @@ def decrypt_folder_keys(
                     decrypted_keys[folder_uid] = key
                     progress = True
                     break
+        for row in folder_rows:
+            if row.folder_uid in decrypted_keys:
+                continue
+            key = try_decrypt_folder_entity_key(row, auth_context, decrypted_keys)
+            if key is not None:
+                decrypted_keys[row.folder_uid] = key
+                progress = True
 
     for folder_uid in keys_by_folder:
         if folder_uid not in decrypted_keys:

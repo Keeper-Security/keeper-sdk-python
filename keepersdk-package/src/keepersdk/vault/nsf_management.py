@@ -7,7 +7,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 from .. import crypto, utils
 from ..errors import KeeperApiError
-from ..proto import folder_pb2, record_endpoints_pb2, record_pb2, remove_pb2
+from ..proto import folder_pb2, record_endpoints_pb2, record_pb2, remove_pb2, record_details_pb2
 from . import nsf_crypto, nsf_data, sync_down, vault_extensions
 from .vault_online import VaultOnline
 
@@ -456,11 +456,27 @@ def get_nsf_item(
 
 
 def _get_folder_key(vault: VaultOnline, folder_uid: str) -> bytes:
-    folder = _nsf_view(vault).get_folder(folder_uid)
-    if folder is None or not folder.folder_key:
+    view = _nsf_view(vault)
+    folder = view.get_folder(folder_uid)
+    if folder is not None and folder.folder_key:
+        return folder.folder_key
+
+    auth_context = vault.keeper_auth.auth_context
+    decrypted = nsf_crypto.decrypt_folder_keys(view.storage, auth_context)
+    key = decrypted.get(folder_uid)
+    if key is None:
+        label = folder.name if folder and folder.name and folder.name != '(NSF Folder)' else folder_uid
         raise NsfError(
-            f'Folder key not available for {folder_uid}. Run sync-down and rebuild NSF cache.')
-    return folder.folder_key
+            f'Folder key not available for {label}. '
+            'You may not have access to this folder, or run sync-down --force to refresh the NSF cache.')
+    if folder is not None:
+        folder.folder_key = key
+        row = view.storage.folders.get_entity(folder_uid)
+        if row and row.data and (not folder.name or folder.name == '(NSF Folder)'):
+            name = nsf_crypto.decrypt_folder_name(row.data, key)
+            if name:
+                folder.name = name
+    return key
 
 
 def _get_record_key(vault: VaultOnline, record_uid: str) -> bytes:
@@ -745,35 +761,34 @@ def get_nsf_record_accesses(
     if not uids:
         raise NsfError('At least one record UID is required')
 
-    payload = {'recordUids': uids}
-    rs = vault.keeper_auth.execute_router_json('vault/records/v3/details/access', payload)
-    if not isinstance(rs, dict):
+    rq = record_details_pb2.RecordAccessRequest()
+    for uid in uids:
+        rq.recordUids.append(utils.base64_url_decode(uid))
+    rs = vault.keeper_auth.execute_auth_rest('vault/records/v3/details/access', rq, response_type=record_details_pb2.RecordAccessResponse)
+    if rs is None:
         return {'record_accesses': [], 'forbidden_records': []}
 
-    accesses: List[Dict[str, Any]] = []
-    for item in rs.get('recordAccesses') or []:
-        if not isinstance(item, dict):
-            continue
-        data = item.get('data') or {}
-        info = item.get('accessorInfo') or {}
-        entry = {
-            'record_uid': str(data.get('recordUid', '')),
-            'accessor_name': str(info.get('name', '')),
-            'access_type_uid': str(data.get('accessTypeUid', '')),
-            'access_type': str(data.get('accessType', '')),
-            'owner': bool(data.get('owner')),
-            'inherited': bool(data.get('inherited')),
+    result = {'record_accesses': [], 'forbidden_records': []}
+    for ra in rs.recordAccesses:
+        d = ra.data
+        ai = ra.accessorInfo
+        ao = {
+            'record_uid': utils.base64_url_encode(d.recordUid),
+            'accessor_name': ai.name,
+            'access_type': folder_pb2.AccessType.Name(d.accessType) if hasattr(d, 'accessType') else 'UNKNOWN',
+            'access_type_uid': utils.base64_url_encode(d.accessTypeUid),
+            'owner': getattr(d, 'owner', False),
+            'inherited': bool(getattr(d, 'inherited', False)),
+            'access_role_type': int(getattr(d, 'accessRoleType', 0) or 0),
         }
-        for flag in (
-                'can_view_title', 'can_edit', 'can_view', 'can_list_access',
-                'can_update_access', 'can_delete', 'can_change_ownership',
-                'can_request_access', 'can_approve_access',
-        ):
-            entry[flag] = bool(data.get(flag))
-        accesses.append(entry)
-
-    forbidden = [str(x) for x in (rs.get('forbiddenRecords') or [])]
-    return {'record_accesses': accesses, 'forbidden_records': forbidden}
+        for flag in ('can_view_title', 'can_edit', 'can_view', 'can_list_access',
+                     'can_update_access', 'can_delete', 'can_change_ownership',
+                     'can_request_access', 'can_approve_access'):
+            ao[flag] = getattr(d, flag, False)
+        result['record_accesses'].append(ao)
+    for fu in rs.forbiddenRecords:
+        result['forbidden_records'].append(utils.base64_url_encode(fu))
+    return result
 
 
 def get_nsf_folder_access(

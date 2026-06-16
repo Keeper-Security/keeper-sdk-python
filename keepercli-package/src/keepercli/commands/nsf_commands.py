@@ -3,7 +3,7 @@ import json
 from typing import Any, Dict, List, Optional
 
 from keepersdk.vault import nsf_folder_records, nsf_management, nsf_sharing, vault_record, nsf_common
-from keepersdk.vault.share_management_utils import get_share_expiration
+from keepersdk.vault.share_management_utils import parse_nsf_share_expiration
 from keepersdk.vault.nsf_management import (
     NsfError,
     NsfListRow,
@@ -1098,7 +1098,7 @@ class NsfShareFolderCommand(base.ArgparseCommand):
         expiration = None
         if action == 'grant':
             try:
-                expiration = get_share_expiration(kwargs.get('expire_at'), kwargs.get('expire_in'))
+                expiration = parse_nsf_share_expiration(kwargs.get('expire_at'), kwargs.get('expire_in'))
             except Exception as e:
                 raise base.CommandError(str(e)) from e
 
@@ -1195,7 +1195,7 @@ class NsfShareRecordCommand(base.ArgparseCommand):
         expiration = None
         if action == 'grant':
             try:
-                expiration = get_share_expiration(kwargs.get('expire_at'), kwargs.get('expire_in'))
+                expiration = parse_nsf_share_expiration(kwargs.get('expire_at'), kwargs.get('expire_in'))
             except Exception as e:
                 raise base.CommandError(str(e)) from e
 
