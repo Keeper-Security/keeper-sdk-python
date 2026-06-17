@@ -503,15 +503,15 @@ def print_devices_table(devices):
         return
     print(f'\nUser Devices ({len(devices)} found)')
     print('=' * 100)
-    print(f"{'ID':<4} {'Name':<24} {'Client Type':<14} {'Login Status':<14} {'Last Accessed':<20}")
-    print('-' * 100)
+    print(f"{'ID':<4} {'Device Name':<22} {'Client Type':<13} {'Login Status':<14} {'Last Accessed':<19}")
+    print('-' * 4 + '  ' + '-' * 22 + '  ' + '-' * 13 + '  ' + '-' * 14 + '  ' + '-' * 19)
     for d in devices:
         last = d.last_accessed.strftime('%Y-%m-%d %H:%M:%S') if d.last_accessed else 'N/A'
         print(
-            f"{d.list_index:<4} {d.name[:23]:<24} "
-            f"{d.client_type[:13]:<14} {d.login_status[:13]:<14} {last:<20}"
+            f"{d.list_index:<4} {d.name[:21]:<22} "
+            f"{d.client_type[:12]:<13} {d.login_status[:13]:<14} {last:<19}"
         )
-    print('-' * 100)
+    print('-' * 4 + '  ' + '-' * 22 + '  ' + '-' * 13 + '  ' + '-' * 14 + '  ' + '-' * 19)
 
 
 def main():
