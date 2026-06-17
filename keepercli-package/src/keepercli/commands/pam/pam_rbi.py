@@ -5,6 +5,7 @@ from typing import Optional
 from keepersdk import utils
 from keepersdk.errors import KeeperApiError
 from keepersdk.helpers.keeper_dag import dag_utils
+from keepersdk.helpers.keeper_dag.constants import PAM_CONFIGURATIONS
 from keepersdk.helpers.tunnel.tunnel_graph import TunnelDAG
 from keepersdk.helpers.tunnel.tunnel_utils import get_keeper_tokens, get_config_uid
 from keepersdk.vault import record_management, vault_online, vault_record
@@ -14,11 +15,6 @@ from ... import api
 from ...helpers import record_utils
 from ...params import KeeperParams
 choices = ['on', 'off', 'default']
-
-_PAM_CONFIG_RECORD_TYPES = (
-    'pamAwsConfiguration', 'pamAzureConfiguration', 'pamGcpConfiguration',
-    'pamDomainConfiguration', 'pamNetworkConfiguration', 'pamOciConfiguration',
-)
 
 logger = api.get_logger()
 
@@ -80,7 +76,7 @@ def _resolve_pam_config_record(
     info = vault.vault_data.get_record(config_ref)
     if not info:
         info = record_utils.try_resolve_single_record(config_ref, context)
-    if not info or info.version != 6 or info.record_type not in _PAM_CONFIG_RECORD_TYPES:
+    if not info or info.version != 6 or info.record_type not in PAM_CONFIGURATIONS:
         return None
     loaded = vault.vault_data.load_record(info.record_uid)
     if isinstance(loaded, vault_record.TypedRecord):

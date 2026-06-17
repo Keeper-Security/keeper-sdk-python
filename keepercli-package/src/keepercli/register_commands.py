@@ -13,6 +13,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
 
     if not scopes or bool(scopes & base.CommandScope.Account):
         from .commands import account_commands
+        from .commands import device_management
         from .biometric import BiometricCommand
         from .commands import account_commands, two_fa
         commands.register_command('server',
@@ -22,6 +23,10 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('biometric', BiometricCommand(), base.CommandScope.Account)
         commands.register_command('logout', account_commands.LogoutCommand(), base.CommandScope.Account)
         commands.register_command('this-device', account_commands.ThisDeviceCommand(), base.CommandScope.Account)
+        commands.register_command('device-list', device_management.DeviceListCommand(), base.CommandScope.Account)
+        commands.register_command('device-rename', device_management.DeviceRenameCommand(), base.CommandScope.Account)
+        commands.register_command('device-remove', device_management.DeviceRemoveCommand(), base.CommandScope.Account)
+        commands.register_command('device-logout', device_management.DeviceLogoutCommand(), base.CommandScope.Account)
         commands.register_command('whoami', account_commands.WhoamiCommand(), base.CommandScope.Account)
         commands.register_command('reset-password', account_commands.ResetPasswordCommand(), base.CommandScope.Account)
         commands.register_command('2fa', two_fa.TwoFaCommand(), base.CommandScope.Account)
@@ -31,7 +36,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         from .commands import (vault_folder, vault, vault_record, record_edit, importer_commands, breachwatch,
                                record_type, secrets_manager, shares, password_report, trash, record_file_report,
                                record_handling_commands, register, password_generate, verify_records,
-                               shared_records_report, share_report)
+                               shared_records_report, share_report, nsf_commands)
         
         commands.register_command('sync-down', vault.SyncDownCommand(), base.CommandScope.Vault, 'd')
         commands.register_command('cd', vault_folder.FolderCdCommand(), base.CommandScope.Vault)
@@ -85,6 +90,21 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('verify-records', verify_records.VerifyRecordsCommand(), base.CommandScope.Vault)
         commands.register_command('shared-records-report', shared_records_report.SharedRecordsReportCommand(), base.CommandScope.Vault) 
         commands.register_command('share-report', share_report.ShareReportCommand(), base.CommandScope.Vault) 
+        commands.register_command('nsf-list', nsf_commands.NsfListCommand(), base.CommandScope.Vault)
+        commands.register_command('nsf-get', nsf_commands.NsfGetCommand(), base.CommandScope.Vault)
+        commands.register_command('nsf-record-add', nsf_commands.NsfRecordAddCommand(), base.CommandScope.Vault)
+        commands.register_command('nsf-record-update', nsf_commands.NsfRecordUpdateCommand(), base.CommandScope.Vault)
+        commands.register_command('nsf-record-details', nsf_commands.NsfRecordDetailsCommand(), base.CommandScope.Vault)
+        commands.register_command('nsf-rm', nsf_commands.NsfRmCommand(), base.CommandScope.Vault)
+        commands.register_command('nsf-mkdir', nsf_commands.NsfMkdirCommand(), base.CommandScope.Vault)
+        commands.register_command('nsf-rndir', nsf_commands.NsfRndirCommand(), base.CommandScope.Vault)
+        commands.register_command('nsf-rmdir', nsf_commands.NsfRmdirCommand(), base.CommandScope.Vault)
+        commands.register_command('nsf-ln', nsf_commands.NsfLnCommand(), base.CommandScope.Vault)
+        commands.register_command('nsf-share-folder', nsf_commands.NsfShareFolderCommand(), base.CommandScope.Vault)
+        commands.register_command('nsf-share-record', nsf_commands.NsfShareRecordCommand(), base.CommandScope.Vault)
+        commands.register_command('nsf-record-permission', nsf_commands.NsfRecordPermissionCommand(), base.CommandScope.Vault)
+        commands.register_command('nsf-transfer-record', nsf_commands.NsfTransferRecordCommand(), base.CommandScope.Vault)
+        commands.register_command('nsf-shortcut', nsf_commands.NsfShortcutCommand(), base.CommandScope.Vault)
 
 
     if not scopes or bool(scopes & base.CommandScope.Enterprise):

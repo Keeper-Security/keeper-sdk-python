@@ -2,8 +2,7 @@ from google.protobuf.internal import containers as _containers
 from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
-from collections.abc import Iterable as _Iterable, Mapping as _Mapping
-from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
+from typing import ClassVar as _ClassVar, Iterable as _Iterable, Mapping as _Mapping, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
@@ -24,7 +23,7 @@ class BreachWatchRecordRequest(_message.Message):
     encryptedData: bytes
     breachWatchInfoType: BreachWatchInfoType
     updateUserWhoScanned: bool
-    def __init__(self, recordUid: _Optional[bytes] = ..., encryptedData: _Optional[bytes] = ..., breachWatchInfoType: _Optional[_Union[BreachWatchInfoType, str]] = ..., updateUserWhoScanned: _Optional[bool] = ...) -> None: ...
+    def __init__(self, recordUid: _Optional[bytes] = ..., encryptedData: _Optional[bytes] = ..., breachWatchInfoType: _Optional[_Union[BreachWatchInfoType, str]] = ..., updateUserWhoScanned: bool = ...) -> None: ...
 
 class BreachWatchUpdateRequest(_message.Message):
     __slots__ = ("breachWatchRecordRequest", "encryptedData")
@@ -62,7 +61,7 @@ class BreachWatchTokenResponse(_message.Message):
     CLIENTENCRYPTED_FIELD_NUMBER: _ClassVar[int]
     breachWatchToken: bytes
     clientEncrypted: bool
-    def __init__(self, breachWatchToken: _Optional[bytes] = ..., clientEncrypted: _Optional[bool] = ...) -> None: ...
+    def __init__(self, breachWatchToken: _Optional[bytes] = ..., clientEncrypted: bool = ...) -> None: ...
 
 class AnonymizedTokenResponse(_message.Message):
     __slots__ = ("domainToken", "emailToken", "passwordToken")
@@ -100,7 +99,7 @@ class HashStatus(_message.Message):
     hash1: bytes
     euid: bytes
     breachDetected: bool
-    def __init__(self, hash1: _Optional[bytes] = ..., euid: _Optional[bytes] = ..., breachDetected: _Optional[bool] = ...) -> None: ...
+    def __init__(self, hash1: _Optional[bytes] = ..., euid: _Optional[bytes] = ..., breachDetected: bool = ...) -> None: ...
 
 class BreachWatchStatusResponse(_message.Message):
     __slots__ = ("hashStatus",)
@@ -140,7 +139,7 @@ class PaidUserResponse(_message.Message):
     __slots__ = ("paidUser",)
     PAIDUSER_FIELD_NUMBER: _ClassVar[int]
     paidUser: bool
-    def __init__(self, paidUser: _Optional[bool] = ...) -> None: ...
+    def __init__(self, paidUser: bool = ...) -> None: ...
 
 class DetailedScanRequest(_message.Message):
     __slots__ = ("email",)
@@ -166,7 +165,7 @@ class BreachEvent(_message.Message):
     passwordInBreach: bool
     date: str
     description: str
-    def __init__(self, site: _Optional[str] = ..., email: _Optional[str] = ..., passwordInBreach: _Optional[bool] = ..., date: _Optional[str] = ..., description: _Optional[str] = ...) -> None: ...
+    def __init__(self, site: _Optional[str] = ..., email: _Optional[str] = ..., passwordInBreach: bool = ..., date: _Optional[str] = ..., description: _Optional[str] = ...) -> None: ...
 
 class UseOneTimeTokenResponse(_message.Message):
     __slots__ = ("emailBreaches", "passwordBreaches", "breachEvents", "email")
