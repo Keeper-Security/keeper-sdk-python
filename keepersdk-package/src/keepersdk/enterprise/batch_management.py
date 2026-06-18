@@ -851,18 +851,21 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
                         if enforcement_type:
                             enforcement_value = self._to_enforcement_value(enforcement_type, enforcement_value)
                     rq = {
+                        'command': 'role_enforcement_update' if existing_enforcement else 'role_enforcement_add',
                         'role_id': role_id,
                         'enforcement': enforcement
                     }
                     if enforcement_value is not None:
-                        rq['command'] = 'role_enforcement_update' if existing_enforcement else 'role_enforcement_add'
-                        if not isinstance(enforcement_value, bool):
-                            rq['value'] = enforcement_value
+                        if isinstance(enforcement_value, bool) and existing_enforcement:
+                            self.logger.warning('Enforcement \"%s\" is already set for role %d. Skipping', enforcement, role_id)
+                            continue
+                        rq['value'] = enforcement_value
                     else:
                         if existing_enforcement:
                             rq['command'] = 'role_enforcement_remove'
                         else:
                             continue
+                    requests.append(rq)
                 except Exception as e:
                     self.logger.warning(f'Role Enforcement {action.name}: Role ID = \"{role_enforcement.role_id}\", '
                                         f'Enforcement = \"{role_enforcement.name}\": {e}')
@@ -1203,9 +1206,7 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
                 if enforcement_value.lower() in {'true', 't', '1'}:
                     enforcement_value = True
                 elif enforcement_value.lower() in {'false', 'f', '0'}:
-                    enforcement_value = False
-            if enforcement_value is False:
-                enforcement_value = None
+                    enforcement_value = None
             else:
                 raise Exception(f'{enforcement_type} \"{enforcement_value}\" is invalid')
         elif enforcement_type == 'long':
