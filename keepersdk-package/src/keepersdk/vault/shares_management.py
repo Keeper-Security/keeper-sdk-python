@@ -613,7 +613,7 @@ class FolderShares():
         if not rec_uids:
             return
         
-        existing_records = {x['record_uid'] for x in curr_sf.get('records', [])}
+        existing_records = {x.record_uid for x in curr_sf.get('records', [])}
         
         for record_uid in rec_uids:
             ro = folder_pb2.SharedFolderUpdateRecord()

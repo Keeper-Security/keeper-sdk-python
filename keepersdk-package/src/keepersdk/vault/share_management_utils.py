@@ -341,8 +341,8 @@ def _build_record_details_request(record_uids: set) -> record_pb2.GetRecordDataW
 
 def _load_records_in_batches(
     vault: vault_online.VaultOnline,
-    record_set: set,
-    record_keys: dict,
+    record_set: Set[str],
+    record_keys: Dict[str, bytes],
     key_encrypter_uid: str,
 ) -> Set[str]:
 
@@ -367,7 +367,7 @@ def _load_records_in_batches(
     return loaded
 
 
-def _process_record_owner_key(record_data, record_uid: str, record_keys: dict):
+def _process_record_owner_key(record_data: record_pb2.RecordData, record_uid: str, record_keys: Dict[str, bytes]):
 
     if record_data.recordUid and record_data.recordKey:
         owner_id = utils.base64_url_encode(record_data.recordUid)
@@ -380,8 +380,8 @@ def _process_record_owner_key(record_data, record_uid: str, record_keys: dict):
 
 def _process_record_batch(
     vault: vault_online.VaultOnline,
-    response,
-    record_keys: dict,
+    response: record_pb2.GetRecordDataWithAccessInfoResponse,
+    record_keys: Dict[str, bytes],
     record_set: set,
     key_encrypter_uid: str,
 ) -> Set[str]:
@@ -410,7 +410,7 @@ def _process_record_batch(
     return _persist_loaded_records(vault, batch_records, key_encrypter_uid)
 
 
-def _create_record_dict(record_uid: str, record_data, record_key: bytes, version: int) -> dict:
+def _create_record_dict(record_uid: str, record_data: record_pb2.RecordData, record_key: bytes, version: int) -> Dict:
     """Create record dictionary from API data."""
     return {
         'record_uid': record_uid,
@@ -423,7 +423,7 @@ def _create_record_dict(record_uid: str, record_data, record_key: bytes, version
     }
 
 
-def _decrypt_record_data(record_data, record_key: bytes, version: int) -> bytes:
+def _decrypt_record_data(record_data: record_pb2.RecordData, record_key: bytes, version: int) -> bytes:
 
     data_decoded = utils.base64_url_decode(record_data.encryptedRecordData)
     
@@ -433,7 +433,7 @@ def _decrypt_record_data(record_data, record_key: bytes, version: int) -> bytes:
         return crypto.decrypt_aes_v2(data_decoded, record_key)
 
 
-def _process_v2_extra_data(record: dict, record_data, record_key: bytes):
+def _process_v2_extra_data(record: Dict, record_data: record_pb2.RecordData, record_key: bytes):
 
     if record_data.encryptedExtraData:
         record['extra'] = record_data.encryptedExtraData
@@ -441,7 +441,7 @@ def _process_v2_extra_data(record: dict, record_data, record_key: bytes):
         record['extra_unencrypted'] = crypto.decrypt_aes_v1(extra_decoded, record_key)
 
 
-def _collect_typed_record_ref_uids(record: dict) -> Set[str]:
+def _collect_typed_record_ref_uids(record: Dict) -> Set[str]:
     version = record.get('version', 0)
     if version < V3_VERSION or version == V4_VERSION:
         return set()
@@ -478,7 +478,7 @@ def _encrypted_field_to_bytes(value: Union[str, bytes]) -> bytes:
     return b''
 
 
-def _dict_to_storage_record(record: dict) -> storage_types.StorageRecord:
+def _dict_to_storage_record(record: Dict) -> storage_types.StorageRecord:
     sr = storage_types.StorageRecord()
     sr.record_uid = record['record_uid']
     sr.revision = record.get('revision', 0)
@@ -493,7 +493,7 @@ def _dict_to_storage_record(record: dict) -> storage_types.StorageRecord:
 
 def _ensure_record_key_link(
     vault: vault_online.VaultOnline,
-    record: dict,
+    record: Dict,
     key_encrypter_uid: str,
 ) -> None:
     record_uid = record['record_uid']
@@ -522,7 +522,7 @@ def _ensure_record_key_link(
 
 def _persist_loaded_records(
     vault: vault_online.VaultOnline,
-    records: List[dict],
+    records: List[Dict],
     key_encrypter_uid: str,
 ) -> Set[str]:
     if not records:
@@ -540,7 +540,7 @@ def _persist_loaded_records(
     return loaded
 
 
-def _process_v4_record_metadata(record: dict, record_data):
+def _process_v4_record_metadata(record: Dict, record_data: record_pb2.RecordData):
 
     if record_data.fileSize > 0:
         record['file_size'] = record_data.fileSize
@@ -548,14 +548,14 @@ def _process_v4_record_metadata(record: dict, record_data):
         record['thumbnail_size'] = record_data.thumbnailSize
 
 
-def _process_record_owner_info(record: dict, record_data):
+def _process_record_owner_info(record: Dict, record_data: record_pb2.RecordData):
 
     if record_data.recordUid and record_data.recordKey:
         record['owner_uid'] = utils.base64_url_encode(record_data.recordUid)
         record['link_key'] = utils.base64_url_encode(record_data.recordKey)
 
 
-def _handle_record_versions(record: dict, record_data, version: int) -> None:
+def _handle_record_versions(record: Dict, record_data: record_pb2.RecordData, version: int) -> None:
 
     record_key = record['record_key_unencrypted']
     record['data_unencrypted'] = _decrypt_record_data(record_data, record_key, version)
@@ -568,7 +568,7 @@ def _handle_record_versions(record: dict, record_data, version: int) -> None:
     _process_record_owner_info(record, record_data)
 
 
-def _add_share_permissions(record: dict, record_info):
+def _add_share_permissions(record: Dict, record_info: record_pb2.RecordDataWithAccessInfo):
     """Add share permissions to record."""
     record['shares'] = {
         'user_permissions': [{
@@ -613,7 +613,7 @@ def get_record_shares(
         raise ValueError(f"Error fetching record shares: {e}")
 
 
-def _needs_share_info(uid: str, record_cache: dict, is_share_admin: bool) -> bool:
+def _needs_share_info(uid: str, record_cache: Dict[str, Any], is_share_admin: bool) -> bool:
     """Check if a record needs share information."""
     if uid in record_cache:
         record = record_cache[uid]
