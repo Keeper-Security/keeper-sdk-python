@@ -1268,7 +1268,8 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
                         raise Exception(f'IP address range \"{range_str}\" not valid')
                 enforcement_value = ','.join(ip_ranges)
         elif enforcement_type == 'record_types':
-            if self._record_types is None:
+            self._load_record_types()
+            if not self._record_types:
                 raise Exception('Record types could not be loaded')
             record_types: Dict[str, List[int]] = {
                 'std': [],
@@ -1276,7 +1277,7 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
             }
             rtypes = [x.strip().lower() for x in enforcement_value.split(',')]
             for rtype in rtypes:
-                if rtype is self._record_types:
+                if rtype in self._record_types:
                     rt_id, rt_scope = self._record_types[rtype]
                     if rt_scope:
                         if rt_scope == record_pb2.RT_STANDARD:
@@ -1312,7 +1313,7 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
         return enforcement_value
 
     def _load_record_types(self):
-        if self._record_types:
+        if self._record_types is not None:
             return
         rt_rq = record_pb2.RecordTypesRequest()
         rt_rq.standard = True
@@ -1326,8 +1327,7 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
                 rto = json.loads(rti.content)
                 if '$id' in rto:
                     record_type = rto['$id'].lower()
-                    if rti.scope == record_pb2.RT_STANDARD and rti.scope == record_pb2.RT_ENTERPRISE:
-                        self._record_types[record_type] = (rti.recordTypeId, rti.scope)
+                    self._record_types[record_type] = (rti.recordTypeId, rti.scope)
             except Exception:
                 pass
 
