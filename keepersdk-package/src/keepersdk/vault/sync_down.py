@@ -73,9 +73,7 @@ def sync_down_request(auth: keeper_auth.KeeperAuth,
         if nsf_storage is not None:
             if nsf_task is None:
                 nsf_task = nsf_data.NSFRebuildTask(False)
-            if not nsf_sync.try_apply_nsf_from_sync_down_proto(response, nsf_storage, nsf_task):
-                nsf_sync.try_apply_nsf_from_sync_down_json(
-                    auth, nsf_storage, rq.continuationToken, nsf_task)
+            nsf_sync.try_apply_nsf_from_sync_down_proto(response, nsf_storage, nsf_task)
 
         if len(response.removedRecords) > 0:
             record_uids = [utils.base64_url_encode(x) for x in response.removedRecords]

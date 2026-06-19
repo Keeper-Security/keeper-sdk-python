@@ -203,7 +203,7 @@ class RoleUtils:
     def parse_enforcements(enforcement_names: Any) -> Tuple[Dict[str, Any], List[str]]:
         enforcements: Dict[str, Any] = {}
         errors: List[str] = []
-        if isinstance(enforcements, str):
+        if isinstance(enforcement_names, str):
             enforcement_names = [enforcement_names]
         file_prefix = '$FILE='
         for enf in enforcement_names:
@@ -232,6 +232,7 @@ class RoleUtils:
                 else:
                     errors.append(f'Enforcement {key} is skipped. Expected format: KEY:$FILE=<FILEPATH>')
                     continue
+            enforcements[key] = enforcement_value
         return enforcements, errors
 
 

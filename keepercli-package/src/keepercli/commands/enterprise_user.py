@@ -540,12 +540,10 @@ class EnterpriseUserEditCommand(base.ArgparseCommand, enterprise_management.IEnt
         if not emails:
             raise base.CommandError('No email(s) provided')
 
-        parent_id: Optional[int]
+        parent_id: Optional[int] = None
         if kwargs.get('parent'):
             parent_node = enterprise_utils.NodeUtils.resolve_single_node(context.enterprise_data, kwargs.get('parent'))
             parent_id = parent_node.node_id
-        else:
-            parent_id = context.enterprise_data.root_node.node_id
 
         users = enterprise_utils.UserUtils.resolve_existing_users(context.enterprise_data, emails)
         if not users:
@@ -603,7 +601,7 @@ class EnterpriseUserEditCommand(base.ArgparseCommand, enterprise_management.IEnt
 
         if parent_id or full_name or job_title:
             users_to_update = [enterprise_management.UserEdit(
-                enterprise_user_id=x.enterprise_user_id, node_id=parent_id, full_name=full_name, job_title=job_title)
+                enterprise_user_id=x.enterprise_user_id, node_id=parent_id or x.node_id, full_name=full_name, job_title=job_title)
                 for x in users]
             batch.modify_users(to_update=users_to_update)
 

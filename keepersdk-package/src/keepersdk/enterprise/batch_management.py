@@ -851,18 +851,21 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
                         if enforcement_type:
                             enforcement_value = self._to_enforcement_value(enforcement_type, enforcement_value)
                     rq = {
+                        'command': 'role_enforcement_update' if existing_enforcement else 'role_enforcement_add',
                         'role_id': role_id,
                         'enforcement': enforcement
                     }
                     if enforcement_value is not None:
-                        rq['command'] = 'role_enforcement_update' if existing_enforcement else 'role_enforcement_add'
-                        if not isinstance(enforcement_value, bool):
-                            rq['value'] = enforcement_value
+                        if isinstance(enforcement_value, bool) and existing_enforcement:
+                            self.logger.warning('Enforcement \"%s\" is already set for role %d. Skipping', enforcement, role_id)
+                            continue
+                        rq['value'] = enforcement_value
                     else:
                         if existing_enforcement:
                             rq['command'] = 'role_enforcement_remove'
                         else:
                             continue
+                    requests.append(rq)
                 except Exception as e:
                     self.logger.warning(f'Role Enforcement {action.name}: Role ID = \"{role_enforcement.role_id}\", '
                                         f'Enforcement = \"{role_enforcement.name}\": {e}')
@@ -1203,9 +1206,7 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
                 if enforcement_value.lower() in {'true', 't', '1'}:
                     enforcement_value = True
                 elif enforcement_value.lower() in {'false', 'f', '0'}:
-                    enforcement_value = False
-            if enforcement_value is False:
-                enforcement_value = None
+                    enforcement_value = None
             else:
                 raise Exception(f'{enforcement_type} \"{enforcement_value}\" is invalid')
         elif enforcement_type == 'long':
@@ -1267,7 +1268,8 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
                         raise Exception(f'IP address range \"{range_str}\" not valid')
                 enforcement_value = ','.join(ip_ranges)
         elif enforcement_type == 'record_types':
-            if self._record_types is None:
+            self._load_record_types()
+            if not self._record_types:
                 raise Exception('Record types could not be loaded')
             record_types: Dict[str, List[int]] = {
                 'std': [],
@@ -1275,7 +1277,7 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
             }
             rtypes = [x.strip().lower() for x in enforcement_value.split(',')]
             for rtype in rtypes:
-                if rtype is self._record_types:
+                if rtype in self._record_types:
                     rt_id, rt_scope = self._record_types[rtype]
                     if rt_scope:
                         if rt_scope == record_pb2.RT_STANDARD:
@@ -1311,7 +1313,7 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
         return enforcement_value
 
     def _load_record_types(self):
-        if self._record_types:
+        if self._record_types is not None:
             return
         rt_rq = record_pb2.RecordTypesRequest()
         rt_rq.standard = True
@@ -1325,8 +1327,7 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
                 rto = json.loads(rti.content)
                 if '$id' in rto:
                     record_type = rto['$id'].lower()
-                    if rti.scope == record_pb2.RT_STANDARD and rti.scope == record_pb2.RT_ENTERPRISE:
-                        self._record_types[record_type] = (rti.recordTypeId, rti.scope)
+                    self._record_types[record_type] = (rti.recordTypeId, rti.scope)
             except Exception:
                 pass
 
