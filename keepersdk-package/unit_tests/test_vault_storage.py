@@ -16,6 +16,7 @@ class TestVaultStorage(TestCase):
 
     def test_sqlite_storage_create(self) -> None:
         conn = sqlite3.Connection('file:///?mode=memory&cache=shared', uri=True)
+        self.addCleanup(conn.close)
         vault_data: vault_storage.IVaultStorage = \
             sqlite_storage.SqliteVaultStorage(lambda: conn, utils.generate_aes_key())
         self.assertIsNotNone(vault_data)

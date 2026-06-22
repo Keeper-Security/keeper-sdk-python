@@ -21,6 +21,7 @@ class Settings:
 class TestSqliteDao(TestCase):
     def test_proto(self) -> None:
         connection = sqlite3.Connection(':memory:')
+        self.addCleanup(connection.close)
 
         settings_table = sqlite_dao.TableSchema.load_schema(
             enterprise_pb2.Node, ['nodeId'], owner_column='enterprise_id', owner_type=int)
@@ -42,6 +43,7 @@ class TestSqliteDao(TestCase):
 
     def test_create_query(self) -> None:
         connection = sqlite3.Connection(':memory:')
+        self.addCleanup(connection.close)
 
         settings_table = sqlite_dao.TableSchema.load_schema(
             Settings, [], owner_column='account_uid', owner_type=str)
@@ -70,6 +72,7 @@ class TestSqliteDao(TestCase):
 
     def test_entity_storage(self) -> None:
         connection = sqlite3.Connection(':memory:')
+        self.addCleanup(connection.close)
         record_table = sqlite_dao.TableSchema.load_schema(
             vault_storage_types.StorageRecord, 'record_uid', owner_column='account_uid', owner_type=str)
         record_key_table = sqlite_dao.TableSchema.load_schema(
@@ -132,6 +135,7 @@ class TestSqliteDao(TestCase):
 
     def test_link_storage(self) -> None:
         connection = sqlite3.Connection(':memory:')
+        self.addCleanup(connection.close)
         owner_column = 'enterprise_id'
 
         collection_link_schema = sqlite_dao.TableSchema.load_schema(
