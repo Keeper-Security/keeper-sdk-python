@@ -6,7 +6,7 @@ from re import findall
 from typing import Optional, Dict, List, Any, Generator, Iterable, Set, Tuple, Union
 
 from .. import crypto, utils
-from ..proto import enterprise_pb2, folder_pb2, record_pb2
+from ..proto import enterprise_pb2, folder_pb2, pam_pb2, record_pb2, router_pb2
 from . import vault_data, storage_types, vault_online, vault_record, vault_types, vault_utils, sync_down
 from ..enterprise import enterprise_data
 
@@ -104,6 +104,94 @@ def parse_nsf_share_expiration(
     if value == NEVER_EXPIRES:
         return NEVER_EXPIRES
     return value * 1000
+
+
+PAM_USER_RECORD_TYPE = 'pamUser'
+
+
+def validate_rotate_on_expiration(share_expiration: int, rotate_on_expiration: bool) -> None:
+    """Require a positive expiration when rotate-on-expiration is requested."""
+    if not rotate_on_expiration:
+        return
+    if share_expiration <= 0 or share_expiration == NEVER_EXPIRES:
+        raise ShareValidationError(
+            '--rotate-on-expiration requires a positive --expire-at or --expire-in (not "never")'
+        )
+
+
+def is_pam_user_record(vault: vault_online.VaultOnline, record_uid: str) -> bool:
+    info = vault.vault_data.get_record(record_uid)
+    return bool(info and info.record_type == PAM_USER_RECORD_TYPE)
+
+
+def pam_user_has_rotation_configured(vault: vault_online.VaultOnline, record_uid: str) -> bool:
+    """True when pam/get_rotation_info reports an enabled rotation configuration."""
+    try:
+        rq = pam_pb2.PAMGenericUidRequest()
+        rq.uid = utils.base64_url_decode(record_uid)
+        rs = vault.keeper_auth.execute_auth_rest(
+            rest_endpoint='pam/get_rotation_info',
+            request=rq,
+            response_type=router_pb2.RouterRotationInfo,
+        )
+    except Exception:
+        return False
+    if not rs or rs.disabled:
+        return False
+    return bool(rs.configurationUid)
+
+
+def get_shared_folder_record_uids(vault: vault_online.VaultOnline, shared_folder_uid: str) -> Set[str]:
+    """Collect record UIDs contained in a shared folder tree."""
+    record_uids: Set[str] = set()
+    folder = vault.vault_data.get_folder(shared_folder_uid)
+    if not folder:
+        return record_uids
+
+    def add_records(folder_obj: vault_types.Folder) -> None:
+        record_uids.update(folder_obj.records)
+
+    vault_utils.traverse_folder_tree(vault.vault_data, folder, add_records)
+    return record_uids
+
+
+def validate_record_shares_rotate_on_expiration(
+    vault: vault_online.VaultOnline,
+    record_uids: Iterable[str],
+    rotate_on_expiration: bool,
+) -> None:
+    if not rotate_on_expiration:
+        return
+    for record_uid in record_uids:
+        if not is_pam_user_record(vault, record_uid):
+            info = vault.vault_data.get_record(record_uid)
+            title = info.title if info else record_uid
+            raise ShareValidationError(
+                f'--rotate-on-expiration is supported only for pamUser records '
+                f'("{title}" / {record_uid})'
+            )
+
+
+def validate_folder_shares_rotate_on_expiration(
+    vault: vault_online.VaultOnline,
+    shared_folder_uids: Iterable[str],
+    rotate_on_expiration: bool,
+) -> None:
+    if not rotate_on_expiration:
+        return
+    for sf_uid in shared_folder_uids:
+        record_uids = get_shared_folder_record_uids(vault, sf_uid)
+        for record_uid in record_uids:
+            if is_pam_user_record(vault, record_uid) and pam_user_has_rotation_configured(vault, record_uid):
+                return
+        sf_name = sf_uid
+        sf_info = vault.vault_data.get_shared_folder(sf_uid)
+        if sf_info:
+            sf_name = sf_info.name or sf_uid
+        raise ShareValidationError(
+            f'--rotate-on-expiration requires at least one pamUser record with rotation '
+            f'configured in shared folder "{sf_name}"'
+        )
 
 
 def get_share_objects(vault: vault_online.VaultOnline) -> Dict[str, Dict[str, Any]]:

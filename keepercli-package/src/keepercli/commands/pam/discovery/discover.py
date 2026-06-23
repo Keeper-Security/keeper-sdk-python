@@ -18,7 +18,7 @@ from keepersdk.helpers.keeper_dag.constants import PAM_CONFIGURATIONS
 
 from keepersdk.helpers.pam_user_record_facade import PamUserRecordFacade
 from keepersdk.helpers.keeper_dag.jobs import Jobs
-from keepersdk.helpers.keeper_dag.dag_types import (CredentialBase, DiscoveryDelta, DiscoveryObject, JobItem, UserAcl, DirectoryInfo, 
+from keepersdk.helpers.keeper_dag.dag_types import (CredentialBase, DiscoveryDelta, DiscoveryObject, JobItem, Settings, UserAcl, DirectoryInfo, 
                 BulkRecordConvert, BulkRecordAdd, BulkRecordSuccess, BulkProcessResults, NormalizedRecord, BulkRecordFail, PromptResult,
                 PromptActionEnum, RecordField)
 from keepersdk.helpers.keeper_dag.dag_vertex import DAGVertex
@@ -152,7 +152,7 @@ class PAMGatewayActionDiscoverJobStatusCommand(PAMGatewayActionDiscoverCommandBa
                          job_id: str):
 
         def _find_job(configuration_record) -> Optional[Dict]:
-            jobs_obj = Jobs(record=configuration_record)
+            jobs_obj = Jobs(record=configuration_record, vault=vault)
             job_item = jobs_obj.get_job(job_id)
             if job_item is not None:
                 return {
@@ -167,7 +167,7 @@ class PAMGatewayActionDiscoverJobStatusCommand(PAMGatewayActionDiscoverCommandBa
         if gateway_context is not None:
             jobs = payload["jobs"]
             job = jobs.get_job(job_id)
-            infra = Infrastructure(record=gateway_context.configuration)
+            infra = Infrastructure(record=gateway_context.configuration, vault=vault)
 
             status = "RUNNING"
             if job.end_ts is not None and not job.error:
@@ -296,7 +296,7 @@ class PAMGatewayActionDiscoverJobStatusCommand(PAMGatewayActionDiscoverCommandBa
                 if len(gateway_context.gateway_name) > max_gateway_name:
                     max_gateway_name = len(gateway_context.gateway_name)
 
-                jobs = Jobs(record=configuration_record)
+                jobs = Jobs(record=configuration_record, vault=vault)
                 if show_history is True:
                     job_list = reversed(jobs.history)
                 else:
@@ -391,7 +391,7 @@ class PAMGatewayActionDiscoverJobStartCommand(PAMGatewayActionDiscoverCommandBas
             multi_conf_msg(gateway, err)
             return
 
-        jobs = Jobs(record=gateway_context.configuration)
+        jobs = Jobs(record=gateway_context.configuration, vault=vault)
         current_job_item = jobs.current_job
         removed_prior_job = None
         if current_job_item is not None:
@@ -467,15 +467,20 @@ class PAMGatewayActionDiscoverJobStartCommand(PAMGatewayActionDiscoverCommandBas
                         setattr(c, key, obj[key])
                     credentials.append(c.model_dump())
 
+        user_map_entries = self.make_protobuf_user_map(
+            context=context,
+            gateway_context=gateway_context
+        )
+        if len(user_map_entries) == 0:
+            logger.info(
+                "No pamUser records are linked to this configuration; "
+                "discovery will run without an existing user map."
+            )
+
         action_inputs = GatewayActionDiscoverJobStartInputs(
             configuration_uid=gateway_context.configuration_uid,
             resource_uid=kwargs.get('resource_uid'),
-            user_map=gateway_context.encrypt(
-                self.make_protobuf_user_map(
-                    context=context,
-                    gateway_context=gateway_context
-                )[0]
-            ),
+            user_map=gateway_context.encrypt({"users": user_map_entries}),
 
             shared_folder_uid=gateway_context.default_shared_folder_uid,
             languages=[kwargs.get('language')],
@@ -507,16 +512,39 @@ class PAMGatewayActionDiscoverJobStartCommand(PAMGatewayActionDiscoverCommandBas
             logger.error(f"The router returned a failure.")
             return
 
+        discovery_settings = Settings(
+            credentials=[CredentialBase(**c) for c in credentials],
+            default_shared_folder_uid=gateway_context.default_shared_folder_uid,
+            include_azure_aadds=kwargs.get('include_azure_aadds', False),
+            skip_rules=kwargs.get('skip_rules', False),
+            skip_machines=kwargs.get('skip_machines', False),
+            skip_databases=kwargs.get('skip_databases', False),
+            skip_directories=kwargs.get('skip_directories', False),
+            skip_cloud_users=kwargs.get('skip_cloud_users', False),
+            user_map=user_map_entries or None,
+        )
+        job_id = jobs.start(
+            settings=discovery_settings,
+            resource_uid=kwargs.get('resource_uid'),
+            conversation_id=conversation_id,
+        )
+        jobs.close()
+
         if "has been queued" in data.get("Response", ""):
 
             if removed_prior_job is None:
-                logger.info("The discovery job is currently running.")
+                logger.info(f"Discovery job {job_id} is running.")
             else:
-                logger.info(f"Active discovery job {removed_prior_job} has been removed and new discovery job is running.")
+                logger.info(
+                    f"Active discovery job {removed_prior_job} has been removed; "
+                    f"discovery job {job_id} is running."
+                )
             logger.info(f"To check the status, use the command 'pam action discover status'.")
-            logger.info(f"To stop and remove the current job, use the command 'pam action discover remove -j <Job ID>'.")
+            logger.info(f"To stop and remove the current job, use the command 'pam action discover remove -j {job_id}'.")
         else:
             router_utils.print_router_response(router_response, "job_info", conversation_id, gateway_uid=gateway_context.gateway_uid)
+            logger.info(f"Discovery job {job_id} was recorded on the configuration.")
+            logger.info(f"To check the status, use the command 'pam action discover status -j {job_id}'.")
 
     @staticmethod
     def make_protobuf_user_map(context: KeeperParams, gateway_context: GatewayContext) -> List[dict]:
@@ -580,7 +608,7 @@ class PAMGatewayActionDiscoverJobRemoveCommand(PAMGatewayActionDiscoverCommandBa
         all_gateways = GatewayContext.all_gateways(vault)
 
         def _find_job(configuration_record) -> Optional[Dict]:
-            jobs_obj = Jobs(record=configuration_record)
+            jobs_obj = Jobs(record=configuration_record, vault=vault)
             job_item = jobs_obj.get_job(job_id)
             if job_item is not None:
                 return {
@@ -1775,7 +1803,7 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
     def remove_job(context: KeeperParams, configuration_record: vault_record.KeeperRecord, job_id: str):
 
         try:
-            jobs = Jobs(record=configuration_record, context=context)
+            jobs = Jobs(record=configuration_record, vault=context.vault)
             jobs.cancel(job_id)
             logger.info(f"No items left to process. Removing completed discovery job.")
         except Exception as err:
@@ -1786,7 +1814,7 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
 
         sync_point = job_item.sync_point
         infra = Infrastructure(record=gateway_context.configuration,
-                               context=context,
+                               vault=context.vault,
                                logger=logger,
                                debug_level=debug_level)
         infra.load(sync_point)
@@ -1941,7 +1969,7 @@ class PAMGatewayActionDiscoverResultProcessCommand(PAMGatewayActionDiscoverComma
 
             # Get the current job.
             # There can only be one active job.
-            jobs = Jobs(record=configuration_record, context=context, logger=logger, debug_level=debug_level)
+            jobs = Jobs(record=configuration_record, vault=vault, logger=logger, debug_level=debug_level)
             job_item = jobs.current_job
             if job_item is None:
                 continue

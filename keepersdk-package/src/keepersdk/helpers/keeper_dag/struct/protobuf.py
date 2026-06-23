@@ -109,11 +109,16 @@ class DataStruct(DataStructBase):
 
         data_list: List[SyncDataItem] = []
         for item in message.data:
+            raw_content = item.data.content
+            if raw_content:
+                encoded_content = dag_crypto.bytes_to_urlsafe_str(raw_content)
+            else:
+                encoded_content = None
             data_list.append(
                 SyncDataItem(
                     type=DataStruct.PB_TO_DATA_MAP.get(item.data.type),
-                    content=item.data.content,
-                    content_is_base64=False,
+                    content=encoded_content,
+                    content_is_base64=True,
                     ref=Ref(
                         type=DataStruct.PB_TO_REF_MAP.get(item.data.ref.type),
                         value=dag_crypto.bytes_to_urlsafe_str(item.data.ref.value),
