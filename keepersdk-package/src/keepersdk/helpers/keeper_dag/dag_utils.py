@@ -33,6 +33,10 @@ def get_connection(**kwargs):
         return kwargs.get("connection")
 
     vault = kwargs.get("vault")
+    if vault is None:
+        context = kwargs.get("context")
+        if context is not None:
+            vault = getattr(context, "vault", None)
     logger = kwargs.get("logger")
     if value_to_boolean(os.environ.get("USE_LOCAL_DAG")):
         from ..keeper_dag.connection.local import Connection
@@ -40,6 +44,12 @@ def get_connection(**kwargs):
     else:
         use_read_protobuf = kwargs.get("use_read_protobuf")
         use_write_protobuf = kwargs.get("use_write_protobuf")
+        if use_read_protobuf is None:
+            env_val = os.environ.get("GS_USE_READ_PROTOBUF")
+            use_read_protobuf = True if env_val is None else value_to_boolean(env_val)
+        if use_write_protobuf is None:
+            env_val = os.environ.get("GS_USE_WRITE_PROTOBUF")
+            use_write_protobuf = True if env_val is None else value_to_boolean(env_val)
 
         if vault is not None:
             from ..keeper_dag.connection.commander import Connection

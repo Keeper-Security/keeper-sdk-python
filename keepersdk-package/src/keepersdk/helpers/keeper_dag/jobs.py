@@ -32,10 +32,11 @@ class Jobs:
                  log_prefix: str = "GS Jobs", save_batch_count: int = 200, agent: Optional[str] = None,
                  **kwargs):
 
-        self.conn = get_connection(logger=logger, **kwargs)
-
         self.record = record
         self._dag = None
+        self.conn = None
+
+        self.conn = get_connection(logger=logger, **kwargs)
         if logger is None:
             logger = logging.getLogger()
         logger.propagate = False
@@ -89,7 +90,7 @@ class Jobs:
         Clean up resources held by this Jobs instance.
         Releases the DAG instance and connection to prevent memory leaks.
         """
-        if self._dag is not None:
+        if getattr(self, "_dag", None) is not None:
             self._dag = None
         self.conn = None
 

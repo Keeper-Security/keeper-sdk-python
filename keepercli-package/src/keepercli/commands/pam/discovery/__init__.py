@@ -200,7 +200,10 @@ class GatewayContext:
             application_id = utils.base64_url_encode(found_gateway.applicationUid)
             application = vault.vault_data.load_record(application_id)
             if application is None:
-                logger.debug(f"cannot find application for gateway {gateway}, skipping.")
+                logger.warning(
+                    f"KSM application for gateway {gateway} is not in the vault "
+                    f"(record {application_id}); discovery may still work via the router."
+                )
 
             if (utils.base64_url_encode(found_gateway.controllerUid) == gateway or
                     found_gateway.controllerName.lower() == gateway.lower()):

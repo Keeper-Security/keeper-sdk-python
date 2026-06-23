@@ -255,7 +255,10 @@ class PAMGatewayActionRotateCommand(base.ArgparseCommand):
             config_uid = facade.controller_uid
 
         if not resource_uid:
-            tmp_dag = tunnel_graph.TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, record.record_uid)
+            tmp_dag = tunnel_graph.TunnelDAG(
+                vault, encrypted_session_token, encrypted_transmission_key, record.record_uid,
+                transmission_key=transmission_key,
+            )
             resource_uid = tmp_dag.get_resource_uid(record_uid)
             if not resource_uid:
                 is_noop = False
