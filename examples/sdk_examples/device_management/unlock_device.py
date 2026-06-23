@@ -523,15 +523,15 @@ def main():
     device_identifiers = ['<device_id_or_name>']
 
     try:
-        print(f'Logging out {len(device_identifiers)} device(s)...')
-        for name in device_management.logout_user_devices(
+        print(f'Unlocking {len(device_identifiers)} device(s)...')
+        for name in device_management.unlock_user_devices(
             keeper_auth_context, device_identifiers
         ):
-            print(f"Device '{name}' successfully logged out")
+            print(f"Device '{name}' successfully unlocked")
         print('\nUpdated device list:')
         print_devices_table(device_management.list_user_devices(keeper_auth_context))
     except Exception as e:
-        print(f'Error logging out devices: {e}')
+        print(f'Error unlocking devices: {e}')
     finally:
         keeper_auth_context.close()
 
