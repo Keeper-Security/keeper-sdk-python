@@ -528,7 +528,7 @@ def nsf_list(vault: vault_online.VaultOnline) -> None:
     for row in rows:
         print(
             f"{row.item_type:<8} {row.uid:<28} {row.title[:28]:<30} "
-            f"{(row.record_type or '')[:15]:<15} {row.parent_or_folder or ''}"
+            f"{(row.record_type or '')[:15]:<15}"
         )
     print(f"\nTotal items: {len(rows)}")
 

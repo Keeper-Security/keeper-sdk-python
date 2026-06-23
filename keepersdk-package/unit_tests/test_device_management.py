@@ -5,13 +5,17 @@ from keepersdk.authentication import device_management
 from keepersdk.proto import DeviceManagement_pb2
 
 
-def _device(name: str, last_modified: int = 0) -> DeviceManagement_pb2.Device:
+def _device(
+    name: str,
+    last_modified: int = 0,
+    token: bytes = b'\x01\x02',
+) -> DeviceManagement_pb2.Device:
     d = DeviceManagement_pb2.Device()
     d.deviceName = name
     d.lastModifiedTime = last_modified
     d.clientType = DeviceManagement_pb2.COMMANDER
     d.loginState = 0
-    d.encryptedDeviceToken = b'\x01\x02'
+    d.encryptedDeviceToken = token
     return d
 
 
@@ -73,6 +77,97 @@ class DeviceManagementSdkTests(unittest.TestCase):
         self.assertEqual(
             request.deviceAction[0].deviceActionType,
             DeviceManagement_pb2.DA_REMOVE,
+        )
+
+    def test_lock_user_devices(self):
+        auth = MagicMock()
+        list_rs = DeviceManagement_pb2.DeviceUserResponse()
+        g = list_rs.deviceGroups.add()
+        g.devices.append(_device('Workstation', 75))
+
+        action_rs = DeviceManagement_pb2.DeviceActionResponse()
+        ar = action_rs.deviceActionResult.add()
+        ar.deviceActionStatus = DeviceManagement_pb2.SUCCESS
+        ar.encryptedDeviceToken.append(b'\x01\x02')
+
+        auth.execute_auth_rest.side_effect = [list_rs, action_rs]
+
+        names = device_management.lock_user_devices(auth, ['Workstation'])
+        self.assertEqual(names, ['Workstation'])
+        request = auth.execute_auth_rest.call_args_list[1].kwargs.get('request')
+        self.assertEqual(
+            request.deviceAction[0].deviceActionType,
+            DeviceManagement_pb2.DA_LOCK,
+        )
+
+    def test_link_user_devices_requires_two_identifiers(self):
+        auth = MagicMock()
+        with self.assertRaises(ValueError):
+            device_management.link_user_devices(auth, ['1'])
+
+    def test_link_user_devices(self):
+        auth = MagicMock()
+        list_rs = DeviceManagement_pb2.DeviceUserResponse()
+        g = list_rs.deviceGroups.add()
+        g.devices.append(_device('Phone', 100, b'\x01'))
+        g.devices.append(_device('Laptop', 50, b'\x02'))
+
+        action_rs = DeviceManagement_pb2.DeviceActionResponse()
+        ar = action_rs.deviceActionResult.add()
+        ar.deviceActionStatus = DeviceManagement_pb2.SUCCESS
+        ar.encryptedDeviceToken.extend([b'\x01', b'\x02'])
+
+        auth.execute_auth_rest.side_effect = [list_rs, action_rs]
+
+        names = device_management.link_user_devices(auth, ['1', '2'])
+        self.assertEqual(names, ['Phone', 'Laptop'])
+        request = auth.execute_auth_rest.call_args_list[1].kwargs.get('request')
+        self.assertEqual(
+            request.deviceAction[0].deviceActionType,
+            DeviceManagement_pb2.DA_LINK,
+        )
+
+    def test_unlink_user_devices(self):
+        auth = MagicMock()
+        list_rs = DeviceManagement_pb2.DeviceUserResponse()
+        g = list_rs.deviceGroups.add()
+        g.devices.append(_device('Phone', 100, b'\x01'))
+        g.devices.append(_device('Laptop', 50, b'\x02'))
+
+        action_rs = DeviceManagement_pb2.DeviceActionResponse()
+        ar = action_rs.deviceActionResult.add()
+        ar.deviceActionStatus = DeviceManagement_pb2.SUCCESS
+        ar.encryptedDeviceToken.extend([b'\x01', b'\x02'])
+
+        auth.execute_auth_rest.side_effect = [list_rs, action_rs]
+
+        names = device_management.unlink_user_devices(auth, ['Phone', 'Laptop'])
+        self.assertEqual(names, ['Phone', 'Laptop'])
+        request = auth.execute_auth_rest.call_args_list[1].kwargs.get('request')
+        self.assertEqual(
+            request.deviceAction[0].deviceActionType,
+            DeviceManagement_pb2.DA_UNLINK,
+        )
+
+    def test_account_unlock_user_devices(self):
+        auth = MagicMock()
+        list_rs = DeviceManagement_pb2.DeviceUserResponse()
+        g = list_rs.deviceGroups.add()
+        g.devices.append(_device('Tablet', 10))
+
+        action_rs = DeviceManagement_pb2.DeviceActionResponse()
+        ar = action_rs.deviceActionResult.add()
+        ar.deviceActionStatus = DeviceManagement_pb2.SUCCESS
+        ar.encryptedDeviceToken.append(b'\x01\x02')
+
+        auth.execute_auth_rest.side_effect = [list_rs, action_rs]
+
+        names = device_management.account_unlock_user_devices(auth, ['1'])
+        self.assertEqual(names, ['Tablet'])
+        request = auth.execute_auth_rest.call_args_list[1].kwargs.get('request')
+        self.assertEqual(
+            request.deviceAction[0].deviceActionType,
+            DeviceManagement_pb2.DA_DEVICE_ACCOUNT_UNLOCK,
         )
 
 
