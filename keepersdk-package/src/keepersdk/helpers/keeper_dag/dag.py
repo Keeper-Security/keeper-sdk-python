@@ -9,7 +9,7 @@ import traceback
 from typing import Any, List, Optional, Tuple, Union
 
 from . import dag_utils, dag_crypto
-from .dag_types import EdgeType, Ref, RefType, ENDPOINT_TO_GRAPH_ID_MAP, DAGData
+from .dag_types import EdgeType, Ref, RefType, ENDPOINT_TO_GRAPH_ID_MAP, DAGData, endpoint_for_graph_id
 from .dag_vertex import DAGVertex
 from .struct.protobuf import DataStruct as ProtobufDataStruct
 from .struct.default import DataStruct as DefaultDataStruct
@@ -170,6 +170,15 @@ class DAG:
         self.corrupt_uids = []
 
         self.conn = conn
+
+        if self.conn.use_write_protobuf and self.write_endpoint is None and self.graph_id is not None:
+            mapped_endpoint = endpoint_for_graph_id(self.graph_id)
+            if mapped_endpoint is not None:
+                self.write_endpoint = mapped_endpoint
+        if self.conn.use_read_protobuf and self.read_endpoint is None and self.graph_id is not None:
+            mapped_endpoint = endpoint_for_graph_id(self.graph_id)
+            if mapped_endpoint is not None:
+                self.read_endpoint = mapped_endpoint
 
         self.read_struct_obj: Union[ProtobufDataStruct, DefaultDataStruct] = ProtobufDataStruct() \
             if conn.use_read_protobuf else DefaultDataStruct()

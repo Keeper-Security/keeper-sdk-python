@@ -118,6 +118,9 @@ def dump_report_data(data: List[List[Any]],
     #           sort_desc: bool            - Descending Sort
     #           right_align: Sequence[int] - Force right align
 
+    if filename:
+        filename = os.path.expanduser(filename)
+
     append = kwargs.get('append') is True
     title = kwargs.get('title')
     sort_by = kwargs.get('sort_by')

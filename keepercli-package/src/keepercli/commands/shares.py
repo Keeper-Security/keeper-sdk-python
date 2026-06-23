@@ -111,6 +111,10 @@ class ShareRecordCommand(base.ArgparseCommand):
             help='share expiration: never or period'
         )
         parser.add_argument(
+            '-roe', '--rotate-on-expiration', dest='rotate_on_expiration', action='store_true',
+            help='Rotate pamUser password when share access expires (requires positive expiration)'
+        )
+        parser.add_argument(
             'record', nargs='?', type=str, action='store', help='record/shared folder path/UID'
         )
     
@@ -136,22 +140,31 @@ class ShareRecordCommand(base.ArgparseCommand):
             vault.sync_down()
             return
         
-        share_expiration = share_management_utils.get_share_expiration(
-            kwargs.get('expire_at'), kwargs.get('expire_in')
-        )
+        rotate_on_expiration = kwargs.get('rotate_on_expiration') is True
+        try:
+            share_expiration = share_management_utils.get_share_expiration(
+                kwargs.get('expire_at'), kwargs.get('expire_in')
+            )
+            share_management_utils.validate_rotate_on_expiration(share_expiration, rotate_on_expiration)
+        except share_management_utils.ShareValidationError as err:
+            raise base.CommandError(str(err)) from err
 
-        request = RecordShares.prep_request(
-            vault=vault, 
-            enterprise=context.enterprise_data,
-            uid_or_name=uid_or_name, 
-            emails=emails, 
-            share_expiration=share_expiration, 
-            action=action, 
-            dry_run=kwargs.get('dry_run', False), 
-            can_edit=kwargs.get('can_edit'), 
-            can_share=kwargs.get('can_share'), 
-            recursive=kwargs.get('recursive')
-        )
+        try:
+            request = RecordShares.prep_request(
+                vault=vault,
+                enterprise=context.enterprise_data,
+                uid_or_name=uid_or_name,
+                emails=emails,
+                share_expiration=share_expiration,
+                action=action,
+                dry_run=kwargs.get('dry_run', False),
+                can_edit=kwargs.get('can_edit'),
+                can_share=kwargs.get('can_share'),
+                recursive=kwargs.get('recursive'),
+                rotate_on_expiration=rotate_on_expiration,
+            )
+        except (share_management_utils.ShareValidationError, ValueError) as err:
+            raise base.CommandError(str(err)) from err
         if request:
             success_responses, failed_responses = RecordShares.send_requests(vault, [request])
             if success_responses:
@@ -262,6 +275,10 @@ class ShareFolderCommand(base.ArgparseCommand):
             help='share expiration: never or period (<NUMBER>[(y)ears|(mo)nths|(d)ays|(h)ours(mi)nutes]'
         )
         parser.add_argument(
+            '-roe', '--rotate-on-expiration', dest='rotate_on_expiration', action='store_true',
+            help='Rotate pamUser passwords when share access expires (requires positive expiration)'
+        )
+        parser.add_argument(
             'folder', nargs='+', type=str, action='store', help='shared folder path or UID'
         )
     
@@ -277,7 +294,19 @@ class ShareFolderCommand(base.ArgparseCommand):
             raise ValueError('Enter name of at least one existing folder')
 
         action = kwargs.get('action') or ShareAction.GRANT.value
-        share_expiration = self._get_share_expiration(action, kwargs)
+        rotate_on_expiration = kwargs.get('rotate_on_expiration') is True
+        try:
+            share_expiration = self._get_share_expiration(action, kwargs)
+            share_management_utils.validate_rotate_on_expiration(share_expiration, rotate_on_expiration)
+            if rotate_on_expiration and action != ShareAction.GRANT.value:
+                raise share_management_utils.ShareValidationError(
+                    '--rotate-on-expiration is only valid with --action grant'
+                )
+            share_management_utils.validate_folder_shares_rotate_on_expiration(
+                vault, shared_folder_uids, rotate_on_expiration
+            )
+        except share_management_utils.ShareValidationError as err:
+            raise base.CommandError(str(err)) from err
         
         user_data = self._parse_user_arguments(vault, kwargs)
         record_data = self._parse_record_arguments(vault, kwargs)
@@ -287,8 +316,8 @@ class ShareFolderCommand(base.ArgparseCommand):
             return
 
         rq_groups = self._prepare_request_groups(
-            vault, shared_folder_uids, user_data, record_data, 
-            action, share_expiration, kwargs
+            vault, shared_folder_uids, user_data, record_data,
+            action, share_expiration, kwargs, rotate_on_expiration
         )
         success_responses, failed_responses = FolderShares.send_requests(vault=vault, partitioned_requests=rq_groups)
         if success_responses:
@@ -523,15 +552,16 @@ class ShareFolderCommand(base.ArgparseCommand):
     
     def _prepare_request_groups(self, vault: vault_online.VaultOnline, shared_folder_uids: Set,
                                 user_data: Dict, record_data: Dict, action: str,
-                                share_expiration, kwargs: Dict) -> List:
+                                share_expiration, kwargs: Dict,
+                                rotate_on_expiration: bool = False) -> List:
         """Prepare request groups for all shared folders."""
         rq_groups = []
         shared_folder_cache = {x.shared_folder_uid: x for x in vault.vault_data.shared_folders()}
         
         for sf_uid in shared_folder_uids:
             folder_requests = self._prepare_folder_requests(
-                vault, sf_uid, shared_folder_cache, user_data, 
-                record_data, action, share_expiration, kwargs
+                vault, sf_uid, shared_folder_cache, user_data,
+                record_data, action, share_expiration, kwargs, rotate_on_expiration
             )
             rq_groups.extend(folder_requests)
         
@@ -540,7 +570,7 @@ class ShareFolderCommand(base.ArgparseCommand):
     def _prepare_folder_requests(self, vault: vault_online.VaultOnline, sf_uid: str,
                                   shared_folder_cache: Dict, user_data: Dict,
                                   record_data: Dict, action: str, share_expiration,
-                                  kwargs: Dict) -> List:
+                                  kwargs: Dict, rotate_on_expiration: bool = False) -> List:
         """Prepare requests for a single shared folder."""
         sf_users = user_data['users'].copy()
         sf_teams = user_data['teams'].copy()
@@ -557,7 +587,8 @@ class ShareFolderCommand(base.ArgparseCommand):
         
         return self._chunk_and_prepare_requests(
             vault, kwargs, sh_fol, sf_uid, sf_users, sf_teams, sf_records,
-            record_data['default_record'], user_data['default_account'], share_expiration
+            record_data['default_record'], user_data['default_account'], share_expiration,
+            rotate_on_expiration,
         )
     
     def _load_or_create_shared_folder(self, vault: vault_online.VaultOnline, sf_uid: str, shared_folder_cache: Dict,
@@ -613,7 +644,7 @@ class ShareFolderCommand(base.ArgparseCommand):
     def _chunk_and_prepare_requests(self, vault: vault_online.VaultOnline, kwargs: Dict, sh_fol, sf_uid: str,
                                      sf_users: Set, sf_teams: Set, sf_records: Set,
                                      default_record: bool, default_account: bool,
-                                     share_expiration) -> List:
+                                     share_expiration, rotate_on_expiration: bool = False) -> List:
         """Chunk records and users, then prepare requests."""
         rec_list = list(sf_records)
         user_list = list(sf_users)
@@ -644,7 +675,8 @@ class ShareFolderCommand(base.ArgparseCommand):
                     vault, kwargs, sf_info, u_chunk, sf_teams, r_chunk,
                     default_record=default_record,
                     default_account=default_account,
-                    share_expiration=share_expiration
+                    share_expiration=share_expiration,
+                    rotate_on_expiration=rotate_on_expiration,
                 )
                 rq_groups[group_idx].append(request)
                 group_idx += 1

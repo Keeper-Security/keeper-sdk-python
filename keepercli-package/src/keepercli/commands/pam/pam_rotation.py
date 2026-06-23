@@ -295,7 +295,8 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
         def config_resource(_dag, target_record, target_config_uid, silent=None):
             if not _dag.linking_dag.has_graph:
                 if target_config_uid:
-                    _dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, target_config_uid)
+                    _dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, target_config_uid,
+                                     transmission_key=transmission_key)
                     _dag.edit_tunneling_config(rotation=True)
                 else:
                     raise base.CommandError(f'Resource "{target_record.record_uid}" is not associated '
@@ -305,7 +306,7 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
             resource_dag = None
             if not _dag.resource_belongs_to_config(target_record.record_uid):
                 resource_dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key,
-                                         target_record.record_uid)
+                                         target_record.record_uid, transmission_key=transmission_key)
                 _dag.link_resource_to_config(target_record.record_uid)
 
             admin = kwargs.get('admin')
@@ -401,10 +402,12 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                 return
 
             if _dag and not _dag.linking_dag.has_graph:
-                _dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, target_iam_aad_config_uid)
+                _dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, target_iam_aad_config_uid,
+                                 transmission_key=transmission_key)
                 if not _dag or not _dag.linking_dag.has_graph:
                     _dag.edit_tunneling_config(rotation=True)
-            old_dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, target_record.record_uid)
+            old_dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, target_record.record_uid,
+                                transmission_key=transmission_key)
             if old_dag.linking_dag.has_graph and old_dag.record.record_uid != target_iam_aad_config_uid:
                 old_dag.remove_from_dag(target_record.record_uid)
 
@@ -621,7 +624,8 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                     return
 
             if isinstance(target_resource_uid, str) and len(target_resource_uid) > 0:
-                _dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, target_resource_uid)
+                _dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, target_resource_uid,
+                                   transmission_key=transmission_key)
                 if not _dag or not _dag.linking_dag.has_graph:
                     if target_config_uid and target_resource_uid:
                         config_resource(_dag, target_record, target_config_uid, silent=silent)
@@ -639,7 +643,8 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
             current_record_rotation = context.get_record_rotation(target_record.record_uid)
 
             if not _dag or not _dag.linking_dag.has_graph:
-                _dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, target_resource_uid)
+                _dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, target_resource_uid,
+                                   transmission_key=transmission_key)
                 if not _dag.linking_dag.has_graph:
                     raise base.CommandError(f'Resource "{target_resource_uid}" is not associated '
                                            f'with any configuration. '
@@ -824,6 +829,8 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
         if record_name:
             if record_name in vault.vault_data._records:
                 record_uids.add(record_name)
+            elif vault.vault_data.load_record(record_name):
+                record_uids.add(record_name)
             else:
                 rs = folder_utils.try_resolve_path(context, record_name)
                 if rs is not None:
@@ -866,7 +873,10 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
         if folder_uids:
             regex = re.compile(fnmatch.translate(record_pattern), re.IGNORECASE).match if record_pattern else None
             for folder_uid in folder_uids:
-                folder_records = vault.vault_data.get_folder(folder_uid).records
+                folder = vault.vault_data.get_folder(folder_uid)
+                if not folder:
+                    continue
+                folder_records = folder.records
                 if not folder_records:
                     continue
                 if record_pattern and record_pattern in folder_records:
@@ -957,7 +967,8 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
         r_requests = []
 
         for _record in pam_records:
-            tmp_dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, _record.record_uid)
+            tmp_dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, _record.record_uid,
+                                 transmission_key=transmission_key)
             if _record.record_type in ['pamMachine', 'pamDatabase', 'pamDirectory', 'pamRemoteBrowser']:
                 config_resource(tmp_dag, _record, config_uid, silent=kwargs.get('silent'))
             elif _record.record_type == 'pamUser':
@@ -1108,7 +1119,7 @@ class PAMRouterGetRotationInfo(base.ArgparseCommand):
             logger.info(f"Is Rotation Disabled: {rri.disabled}")
 
             rq = pam_pb2.PAMGenericUidsRequest()
-            schedules_proto = router_utils.router_get_rotation_schedules(context, rq)
+            schedules_proto = router_utils.router_get_rotation_schedules(vault, rq)
             if schedules_proto:
                 schedules = list(schedules_proto.schedules)
                 for s in schedules:
