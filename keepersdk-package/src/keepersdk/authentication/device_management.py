@@ -304,6 +304,50 @@ def _validate_link_unlink_identifiers(device_identifiers: List[str]) -> None:
         raise ValueError('At least two device identifiers are required for link/unlink')
 
 
+def lock_admin_user_devices(
+    auth: keeper_auth.KeeperAuth,
+    enterprise_user_id: int,
+    device_identifiers: List[str],
+) -> List[str]:
+    """Lock devices for all users and linked devices; log out all users (enterprise admin)."""
+    return _execute_admin_device_action(
+        auth, enterprise_user_id, device_identifiers, DeviceManagement_pb2.DA_LOCK
+    )
+
+
+def unlock_admin_user_devices(
+    auth: keeper_auth.KeeperAuth,
+    enterprise_user_id: int,
+    device_identifiers: List[str],
+) -> List[str]:
+    """Unlock devices and linked devices for the enterprise user (enterprise admin)."""
+    return _execute_admin_device_action(
+        auth, enterprise_user_id, device_identifiers, DeviceManagement_pb2.DA_UNLOCK
+    )
+
+
+def account_lock_admin_user_devices(
+    auth: keeper_auth.KeeperAuth,
+    enterprise_user_id: int,
+    device_identifiers: List[str],
+) -> List[str]:
+    """Account-lock devices for the enterprise user only (enterprise admin)."""
+    return _execute_admin_device_action(
+        auth, enterprise_user_id, device_identifiers, DeviceManagement_pb2.DA_DEVICE_ACCOUNT_LOCK
+    )
+
+
+def account_unlock_admin_user_devices(
+    auth: keeper_auth.KeeperAuth,
+    enterprise_user_id: int,
+    device_identifiers: List[str],
+) -> List[str]:
+    """Account-unlock devices for the enterprise user (enterprise admin)."""
+    return _execute_admin_device_action(
+        auth, enterprise_user_id, device_identifiers, DeviceManagement_pb2.DA_DEVICE_ACCOUNT_UNLOCK
+    )
+
+
 def _fetch_devices(auth: keeper_auth.KeeperAuth) -> List[DeviceManagement_pb2.Device]:
     rs = auth.execute_auth_rest(
         rest_endpoint=URL_DEVICE_USER_LIST,

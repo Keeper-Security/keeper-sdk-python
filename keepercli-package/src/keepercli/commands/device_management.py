@@ -186,6 +186,31 @@ DEVICE_ADMIN_ACTION_DEFINITIONS: Dict[str, Dict] = {
         'handler': device_management.remove_admin_user_devices,
         'action_verb': 'removed',
     },
+    'lock': {
+        'description': (
+            'Lock the device for all users on the devices and the associated auto linked devices. '
+            'Logout all users from the device'
+        ),
+        'handler': device_management.lock_admin_user_devices,
+        'action_verb': 'locked',
+    },
+    'unlock': {
+        'description': (
+            'Unlock the devices and the associated auto linked devices for the calling user'
+        ),
+        'handler': device_management.unlock_admin_user_devices,
+        'action_verb': 'unlocked',
+    },
+    'account-lock': {
+        'description': 'Lock the device for the user only. If user is logged in, logout',
+        'handler': device_management.account_lock_admin_user_devices,
+        'action_verb': 'account locked',
+    },
+    'account-unlock': {
+        'description': 'Unlock the device for the user',
+        'handler': device_management.account_unlock_admin_user_devices,
+        'action_verb': 'account unlocked',
+    },
 }
 
 DEVICE_ADMIN_ACTION_CHOICES = list(DEVICE_ADMIN_ACTION_DEFINITIONS.keys())
