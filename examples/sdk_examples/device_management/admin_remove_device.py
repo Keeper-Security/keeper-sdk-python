@@ -10,6 +10,7 @@ import webbrowser
 from keepersdk import errors, utils
 from keepersdk.authentication import (
     configuration,
+    device_management,
     endpoint,
     keeper_auth,
     login_auth,
@@ -493,8 +494,6 @@ def login():
         enable_persistent_login(keeper_auth_context)
     keeper_endpoint = flow.endpoint if keeper_auth_context else None
     return keeper_auth_context, keeper_endpoint
-
-from keepersdk.authentication import device_management
 
 
 def print_admin_devices_table(devices):
