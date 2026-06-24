@@ -222,7 +222,7 @@ def get_user_public_key(
             raise ValueError(
                 f"Share invitation sent to '{recipient_email}'. "
                 f"Repeat after the invitation is accepted.")
-        raise ValueError(f"User {recipient_email} has no public key")
+        raise ValueError(f"User {recipient_email} has no public key or user not found")
     if not recipient_uid_bytes:
         recipient_uid_bytes = resolve_user_uid_bytes(vault, recipient_email)
     if require_uid and not recipient_uid_bytes:

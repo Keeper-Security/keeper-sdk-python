@@ -126,7 +126,7 @@ def grant_nsf_folder_access(
         team_keys = vault.keeper_auth.get_team_keys(utils.base64_url_encode(uid_bytes))
         if not team_keys:
             raise NsfError(f'Team keys not available for {recipient}')
-        efk, key_type = nsf_common.encrypt_for_team(fk, team_keys, forbid_rsa=True)
+        efk, key_type = nsf_common.encrypt_for_team(fk, team_keys, forbid_rsa=vault.keeper_auth.auth_context.forbid_rsa)
         ek = folder_pb2.EncryptedDataKey()
         ek.encryptedKey = efk
         ek.encryptedKeyType = key_type

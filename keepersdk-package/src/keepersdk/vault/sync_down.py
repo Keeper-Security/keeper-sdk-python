@@ -255,6 +255,7 @@ def sync_down_request(auth: keeper_auth.KeeperAuth,
             sf_keys: List[StorageSharedFolderKey] = []
 
             def to_team(sync_down_team: SyncDown_pb2.Team) -> Optional[StorageTeam]:
+                team_uid = utils.base64_url_encode(sync_down_team.teamUid)
                 try:
                     team_key = decrypt_keeper_key(auth.auth_context, sync_down_team.teamKey, sync_down_team.teamKeyType)
 
@@ -287,7 +288,7 @@ def sync_down_request(auth: keeper_auth.KeeperAuth,
                             logger.error('Shared Folder %s key decrypt error: %s', sf_uid, e)
 
                     s_team = StorageTeam()
-                    s_team.team_uid = utils.base64_url_encode(sync_down_team.teamUid)
+                    s_team.team_uid = team_uid
                     s_team.name = sync_down_team.name
                     s_team.team_key = crypto.encrypt_aes_v2(team_key, auth.auth_context.client_key)
                     s_team.key_type = StorageKeyType.UserClientKey_AES_GCM
