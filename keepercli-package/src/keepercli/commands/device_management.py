@@ -167,7 +167,7 @@ for _action, _config in DEVICE_ACTION_DEFINITIONS.items():
     _parser.add_argument(
         'devices',
         nargs='+',
-        help='Device IDs (from device-list) or device name substrings',
+        help='Device IDs (from device-list) or exact device names (case insensitive)',
     )
     _device_action_parsers[_action] = _parser
 
@@ -281,7 +281,7 @@ class DeviceRenameCommand(base.ArgparseCommand):
 
     @staticmethod
     def add_arguments_to_parser(parser: argparse.ArgumentParser):
-        parser.add_argument('device', help='Device ID (from device-list) or device name substring')
+        parser.add_argument('device', help='Device ID (from device-list) or exact device name')
         parser.add_argument('new_name', help='New name for the device')
         parser.error = base.ArgparseCommand.raise_parse_exception
         parser.exit = base.ArgparseCommand.suppress_exit
@@ -324,7 +324,7 @@ class DeviceActionCommand(base.ArgparseCommand):
         parser.add_argument(
             'devices',
             nargs='+',
-            help='Device IDs (from device-list) or device name substrings',
+            help='Device IDs (from device-list) or exact device names',
         )
         parser.error = base.ArgparseCommand.raise_parse_exception
         parser.exit = base.ArgparseCommand.suppress_exit
