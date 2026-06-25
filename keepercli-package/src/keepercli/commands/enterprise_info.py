@@ -37,18 +37,6 @@ class EnterpriseDownCommand(base.ArgparseCommand):
         enterprise_loader.load(reset=reset or False)
 
 
-class EnterpriseInfoCommand(base.GroupCommand):
-    def __init__(self):
-        super().__init__('Print Enterprise Information')
-        self.register_command(EnterpriseInfoTreeCommand(), 'tree')
-        self.register_command(EnterpriseInfoNodeCommand(), 'node', 'n')
-        self.register_command(EnterpriseInfoUserCommand(), 'user', 'u')
-        self.register_command(EnterpriseInfoTeamCommand(), 'team', 't')
-        self.register_command(EnterpriseInfoRoleCommand(), 'role', 'r')
-        self.register_command(EnterpriseInfoManagedCompanyCommand(), 'managed-company', 'mc')
-        self.default_verb = 'tree'
-
-
 class EnterpriseInfoTreeCommand(base.ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(prog='enterprise-info tree',
@@ -422,7 +410,7 @@ class EnterpriseInfoUserCommand(base.ArgparseCommand, enterprise_utils.Enterpris
                 elif column == 'transfer_status':
                     row.append(enterprise_utils.UserUtils.get_user_transfer_status_text(u))
                 elif column == 'node':
-                    row.append(enterprise_utils.NodeUtils.get_node_path(enterprise_data, u.node_id, omit_root=True))
+                    row.append(enterprise_utils.NodeUtils.get_node_path(enterprise_data, u.node_id))
                 elif column == 'queued_team_count':
                     qts = {x.team_uid for x in enterprise_data.queued_team_users.get_links_by_object(user_id)}
                     row.append(len(qts) if qts else 0)
@@ -778,3 +766,97 @@ class EnterpriseInfoManagedCompanyCommand(base.ArgparseCommand, enterprise_utils
         if kwargs.get('format') != 'json':
             headers = [report_utils.field_to_title(x) for x in headers]
         return report_utils.dump_report_data(rows, headers, fmt=kwargs.get('format'), filename=kwargs.get('output'))
+
+
+_LEGACY_SUBCOMMANDS = {
+    'tree': 'tree',
+    'user': 'user',
+    'u': 'user',
+    'node': 'node',
+    'n': 'node',
+    'team': 'team',
+    't': 'team',
+    'role': 'role',
+    'r': 'role',
+    'managed-company': 'managed-company',
+    'mc': 'managed-company',
+}
+
+
+class EnterpriseInfoCommand(base.ArgparseCommand):
+    """Commander-compatible enterprise-info with --users, --nodes, --teams, --roles flags."""
+
+    def __init__(self):
+        parser = argparse.ArgumentParser(
+            prog='enterprise-info',
+            parents=[base.report_output_parser],
+            description='Display a tree structure of the enterprise tenant',
+            formatter_class=argparse.RawTextHelpFormatter,
+        )
+        parser.add_argument('-n', '--nodes', dest='nodes', action='store_true', help='print node list')
+        parser.add_argument('-u', '--users', dest='users', action='store_true', help='print user list')
+        parser.add_argument('-t', '--teams', dest='teams', action='store_true', help='print team list')
+        parser.add_argument('-r', '--roles', dest='roles', action='store_true', help='print role list')
+        parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', help='print ids')
+        parser.add_argument('-q', '--quiet', dest='quiet', action='store_true', help='minimize screen output')
+        parser.add_argument('--node', dest='node', action='store', help='limit results to node (name or ID)')
+        parser.add_argument(
+            '--columns', dest='columns', action='store',
+            help='comma-separated list of available columns per argument:'
+                 '\n for `nodes` (%s)' % ', '.join(SUPPORTED_NODE_COLUMNS) +
+                 '\n for `users` (%s)' % ', '.join(SUPPORTED_USER_COLUMNS) +
+                 '\n for `teams` (%s)' % ', '.join(SUPPORTED_TEAM_COLUMNS) +
+                 '\n for `roles` (%s)' % ', '.join(SUPPORTED_ROLE_COLUMNS),
+        )
+        parser.add_argument(
+            'pattern', nargs='?', type=str,
+            help='search pattern. applicable to users, teams, and roles.',
+        )
+        super().__init__(parser)
+        self._tree_cmd = EnterpriseInfoTreeCommand()
+        self._node_cmd = EnterpriseInfoNodeCommand()
+        self._user_cmd = EnterpriseInfoUserCommand()
+        self._team_cmd = EnterpriseInfoTeamCommand()
+        self._role_cmd = EnterpriseInfoRoleCommand()
+        self._mc_cmd = EnterpriseInfoManagedCompanyCommand()
+
+    def execute_args(self, context: KeeperParams, args: str, **kwargs):
+        args = (args or '').strip()
+        if args and not args.startswith('-'):
+            pos = args.find(' ')
+            verb = args[:pos].strip() if pos > 0 else args.strip()
+            rest = args[pos + 1:].strip() if pos > 0 else ''
+            if verb in _LEGACY_SUBCOMMANDS:
+                subcommand = _LEGACY_SUBCOMMANDS[verb]
+                if subcommand == 'managed-company':
+                    return self._mc_cmd.execute_args(context, rest, **kwargs)
+                if subcommand == 'tree':
+                    return self._tree_cmd.execute_args(context, rest, **kwargs)
+                legacy_cmd = {
+                    'user': self._user_cmd,
+                    'node': self._node_cmd,
+                    'team': self._team_cmd,
+                    'role': self._role_cmd,
+                }[subcommand]
+                return legacy_cmd.execute_args(context, rest, **kwargs)
+        return super().execute_args(context, args, **kwargs)
+
+    def execute(self, context: KeeperParams, **kwargs):
+        base.require_login(context)
+        base.require_enterprise_admin(context)
+
+        if not kwargs.get('quiet'):
+            api.get_logger().info(
+                'Enterprise name: %s',
+                context.enterprise_data.enterprise_info.enterprise_name,
+            )
+
+        if kwargs.get('users'):
+            return self._user_cmd.execute(context, **kwargs)
+        if kwargs.get('nodes'):
+            return self._node_cmd.execute(context, **kwargs)
+        if kwargs.get('teams'):
+            return self._team_cmd.execute(context, **kwargs)
+        if kwargs.get('roles'):
+            return self._role_cmd.execute(context, **kwargs)
+        return self._tree_cmd.execute(context, **kwargs)
