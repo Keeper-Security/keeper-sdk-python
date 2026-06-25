@@ -16,6 +16,8 @@ from .. import utils
 from ..proto import APIRequest_pb2, DeviceManagement_pb2
 from . import keeper_auth
 
+logger = utils.get_logger()
+
 URL_DEVICE_USER_LIST = 'dm/device_user_list'
 URL_DEVICE_USER_RENAME = 'dm/device_user_rename'
 URL_DEVICE_USER_ACTION = 'dm/device_user_action'
@@ -431,13 +433,12 @@ def _report_multiple_matches(
     identifier: str,
     matched_devices: List[DeviceManagement_pb2.Device],
 ) -> None:
-    logger = utils.get_logger()
     logger.warning("Warning: Multiple devices found matching '%s':", identifier)
     for device in matched_devices:
         device_id = _device_list_index(devices, device)
         logger.info('  - ID %s: %s', device_id, device.deviceName or 'N/A')
     logger.info(
-        'Please be more specific or use the device ID. Skipping this identifier.'
+        'Mutiple device with same name found, please use device ID instead'
     )
 
 
@@ -449,13 +450,13 @@ def _resolve_single_device(
 ) -> Optional[DeviceManagement_pb2.Device]:
     matched_devices = _find_matching_devices(devices, identifier)
     if not matched_devices:
-        utils.get_logger().warning("Warning: No device found matching '%s'", identifier)
+        logger.warning("Warning: No device found matching '%s'", identifier)
         return None
     if len(matched_devices) > 1 and not allow_multiple:
         _report_multiple_matches(devices, identifier, matched_devices)
         return None
     if len(matched_devices) > 1:
-        utils.get_logger().warning(
+        logger.warning(
             "Warning: Multiple devices found matching '%s'. Using first match.",
             identifier,
         )
