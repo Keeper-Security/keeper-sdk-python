@@ -1,5 +1,4 @@
 import argparse
-import json
 import shlex
 from datetime import datetime
 from typing import Callable, Dict, List, Optional
@@ -33,14 +32,10 @@ def _sdk_error(exc: Exception) -> base.CommandError:
 def _display_admin_devices(
     context: KeeperParams,
     enterprise_user_ids: List[int],
-    *,
-    enterprise_user_id: Optional[int] = None,
 ) -> None:
+    """Fetch and print the admin device list table for the given enterprise user IDs."""
     try:
-        if enterprise_user_id is not None:
-            devices = device_management.list_admin_devices(context.auth, [enterprise_user_id])
-        else:
-            devices = device_management.list_admin_devices(context.auth, enterprise_user_ids)
+        devices = device_management.list_admin_devices(context.auth, enterprise_user_ids)
     except ValueError as e:
         raise _sdk_error(e) from e
 
@@ -99,6 +94,8 @@ for _action, _config in DEVICE_ADMIN_ACTION_DEFINITIONS.items():
 
 
 class DeviceListCommand(base.ArgparseCommand):
+    """List all active devices for the current user."""
+
     def __init__(self):
         parser = argparse.ArgumentParser(
             prog='device-list',
@@ -114,6 +111,7 @@ class DeviceListCommand(base.ArgparseCommand):
         parser.exit = base.ArgparseCommand.suppress_exit
 
     def execute(self, context: KeeperParams, **kwargs):
+        """Display user devices in table or JSON format."""
         base.require_login(context)
         try:
             devices = device_management.list_user_devices(context.auth)
@@ -144,6 +142,8 @@ class DeviceListCommand(base.ArgparseCommand):
 
 
 class DeviceRenameCommand(base.ArgparseCommand):
+    """Rename a device for the current user."""
+
     def __init__(self):
         parser = argparse.ArgumentParser(
             prog='device-rename',
@@ -160,6 +160,7 @@ class DeviceRenameCommand(base.ArgparseCommand):
         parser.exit = base.ArgparseCommand.suppress_exit
 
     def execute(self, context: KeeperParams, **kwargs):
+        """Rename the specified device and log the old and new names."""
         base.require_login(context)
         device_identifier = (kwargs.get('device') or '').strip()
         new_name = (kwargs.get('new_name') or '').strip()
@@ -174,6 +175,8 @@ class DeviceRenameCommand(base.ArgparseCommand):
 
 
 class DeviceRemoveCommand(base.ArgparseCommand):
+    """Log out and remove the current user from one or more devices."""
+
     def __init__(self):
         parser = argparse.ArgumentParser(
             prog='device-remove',
@@ -189,6 +192,7 @@ class DeviceRemoveCommand(base.ArgparseCommand):
         parser.exit = base.ArgparseCommand.suppress_exit
 
     def execute(self, context: KeeperParams, **kwargs):
+        """Remove the current user from each specified device."""
         base.require_login(context)
         device_identifiers = kwargs.get('devices') or []
         try:
@@ -199,6 +203,8 @@ class DeviceRemoveCommand(base.ArgparseCommand):
 
 
 class DeviceLogoutCommand(base.ArgparseCommand):
+    """Log out the current user from one or more devices."""
+
     def __init__(self):
         parser = argparse.ArgumentParser(
             prog='device-logout',
@@ -214,6 +220,7 @@ class DeviceLogoutCommand(base.ArgparseCommand):
         parser.exit = base.ArgparseCommand.suppress_exit
 
     def execute(self, context: KeeperParams, **kwargs):
+        """Log out the current user from each specified device."""
         base.require_login(context)
         device_identifiers = kwargs.get('devices') or []
         try:
@@ -224,6 +231,8 @@ class DeviceLogoutCommand(base.ArgparseCommand):
 
 
 class DeviceAdminListCommand(base.ArgparseCommand):
+    """List devices across enterprise users that the admin can manage."""
+
     def __init__(self):
         parser = argparse.ArgumentParser(
             prog='device-admin-list',
@@ -245,6 +254,7 @@ class DeviceAdminListCommand(base.ArgparseCommand):
         parser.exit = base.ArgparseCommand.suppress_exit
 
     def execute(self, context: KeeperParams, **kwargs):
+        """Display admin device list in table or JSON format for the given enterprise user IDs."""
         base.require_enterprise_admin(context)
         enterprise_user_ids = kwargs.get('enterprise_user_ids') or []
 
@@ -259,22 +269,6 @@ class DeviceAdminListCommand(base.ArgparseCommand):
 
         fmt = kwargs.get('format') or 'table'
         output = kwargs.get('output')
-
-        if fmt == 'json':
-            device_list = [{
-                'id': d.list_index,
-                'enterpriseUserId': d.enterprise_user_id,
-                'deviceName': d.name,
-                'uiCategory': d.ui_category,
-                'deviceStatus': d.device_status,
-                'loginStatus': d.login_status,
-                'lastAccessedTimestamp': _format_timestamp(d.last_accessed),
-            } for d in devices]
-            report = json.dumps({'devices': device_list}, indent=2)
-            if output:
-                with open(output, 'w', encoding='utf-8') as fd:
-                    fd.write(report)
-            return report
 
         rows: List[List] = []
         for d in devices:
@@ -295,7 +289,7 @@ class DeviceAdminListCommand(base.ArgparseCommand):
 
 
 class DeviceAdminActionCommand(base.ArgparseCommand):
-    """Perform actions on devices across enterprise users."""
+    """Perform admin actions (logout, remove) on devices for an enterprise user."""
 
     def __init__(self):
         parser = argparse.ArgumentParser(
@@ -326,6 +320,7 @@ class DeviceAdminActionCommand(base.ArgparseCommand):
         parser.exit = base.ArgparseCommand.suppress_exit
 
     def execute_args(self, context: KeeperParams, args, **kwargs):
+        """Route per-action --help to the action-specific parser when requested."""
         args = '' if args is None else args
         args = base.expand_cmd_args(args, context.environment_variables)
         args = base.normalize_output_param(args)
@@ -347,6 +342,7 @@ class DeviceAdminActionCommand(base.ArgparseCommand):
         return super().execute_args(context, args, **kwargs)
 
     def execute(self, context: KeeperParams, **kwargs):
+        """Run the requested admin device action and refresh the device list."""
         base.require_enterprise_admin(context)
         action = kwargs.get('action')
         enterprise_user_id = kwargs.get('enterprise_user_id')
@@ -371,8 +367,4 @@ class DeviceAdminActionCommand(base.ArgparseCommand):
             raise _sdk_error(e) from e
 
         logger.info('Updated device list for user %s:', enterprise_user_id)
-        _display_admin_devices(
-            context,
-            [enterprise_user_id],
-            enterprise_user_id=enterprise_user_id,
-        )
+        _display_admin_devices(context, [enterprise_user_id])

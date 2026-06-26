@@ -64,6 +64,26 @@ class DeviceManagementSdkTests(unittest.TestCase):
             DeviceManagement_pb2.DA_LOGOUT,
         )
 
+    def test_logout_user_devices_rejects_duplicate_identifiers(self):
+        auth = MagicMock()
+        list_rs = DeviceManagement_pb2.DeviceUserResponse()
+        g = list_rs.deviceGroups.add()
+        g.devices.append(_device('Laptop', 100))
+        auth.execute_auth_rest.return_value = list_rs
+
+        with self.assertRaisesRegex(ValueError, 'Duplicate device specified'):
+            device_management.logout_user_devices(auth, ['1', '1'])
+
+    def test_logout_user_devices_rejects_id_and_name_for_same_device(self):
+        auth = MagicMock()
+        list_rs = DeviceManagement_pb2.DeviceUserResponse()
+        g = list_rs.deviceGroups.add()
+        g.devices.append(_device('Laptop', 100))
+        auth.execute_auth_rest.return_value = list_rs
+
+        with self.assertRaisesRegex(ValueError, 'Duplicate device specified'):
+            device_management.logout_user_devices(auth, ['1', 'Laptop'])
+
     def test_remove_user_devices(self):
         auth = MagicMock()
         list_rs = DeviceManagement_pb2.DeviceUserResponse()
@@ -103,6 +123,11 @@ class DeviceManagementSdkTests(unittest.TestCase):
         auth = MagicMock()
         with self.assertRaises(ValueError):
             device_management.list_admin_devices(auth, [])
+
+    def test_list_admin_devices_rejects_bool_user_id(self):
+        auth = MagicMock()
+        with self.assertRaises(ValueError):
+            device_management.list_admin_devices(auth, [True])
 
     def test_logout_admin_user_devices(self):
         auth = MagicMock()

@@ -58,7 +58,8 @@ def rename_user_device(
     new_name: str,
 ) -> Tuple[str, str]:
     """
-    Rename a device by list index (from list_user_devices) or unique name substring.
+    Rename a device by list index (from list_user_devices) or device name.
+    All-digit identifiers (e.g. '01') are treated as list indices, not names.
 
     Returns:
         (old_name, new_name) on success.
@@ -101,8 +102,6 @@ def rename_user_device(
         status = DeviceManagement_pb2.DeviceActionStatus.Name(r.deviceActionStatus)
         raise ValueError(f'Device rename failed: {status}')
 
-    raise ValueError('No response returned from device rename')
-
 
 def logout_user_devices(
     auth: keeper_auth.KeeperAuth,
@@ -112,7 +111,8 @@ def logout_user_devices(
     Log out the current user from one or more devices.
 
     Args:
-        device_identifiers: List index strings ('1', '2', ...) or unique name substrings.
+        device_identifiers: List index strings ('1', '2', ...) or device names.
+            All-digit values (including '01') are list indices, not names.
 
     Returns:
         Names of devices successfully logged out.
@@ -266,11 +266,8 @@ def _fetch_admin_devices_for_user(
 
 
 def _validate_enterprise_user_id(user_id: int) -> None:
-    if not isinstance(user_id, int):
-        try:
-            user_id = int(user_id)
-        except (ValueError, TypeError) as exc:
-            raise ValueError(f'Invalid enterprise user ID: {user_id}') from exc
+    if type(user_id) is not int:
+        raise ValueError(f'Invalid enterprise user ID: {user_id}')
     if user_id < 1:
         raise ValueError(f'Invalid enterprise user ID: {user_id}')
 
@@ -289,7 +286,17 @@ def _sanitize_device_name(name: str) -> str:
 def _resolve_device(
     devices: List[DeviceManagement_pb2.Device], identifier: str
 ) -> Optional[Tuple[bytes, DeviceManagement_pb2.Device]]:
+    """
+    Resolve a device identifier to its token and device record.
+
+    Resolution order:
+    1. If the identifier contains only digits (``str.isdigit()``), it is treated as a
+       1-based list index from ``list_user_devices`` / ``device-list`` (``int`` is applied,
+       so ``"01"`` resolves to the first device, not a device named ``"01"``).
+    2. Otherwise, match by case-insensitive device name (exact or substring per caller).
+    """
     ident = identifier.strip()
+    # All-digit strings are list IDs, not names ("01" -> index 1 via int(), not name "01").
     if ident.isdigit():
         idx = int(ident)
         if 1 <= idx <= len(devices):
@@ -310,6 +317,7 @@ def _resolve_devices(
     if not identifiers:
         raise ValueError('At least one device identifier is required')
     resolved: List[Tuple[bytes, DeviceManagement_pb2.Device]] = []
+    seen_tokens: set[bytes] = set()
     for identifier in identifiers:
         _validate_identifier(identifier)
         match = _resolve_device(devices, identifier)
@@ -317,7 +325,14 @@ def _resolve_devices(
             raise ValueError(
                 f'No matching device found for "{identifier}" (or ambiguous device name)'
             )
-        resolved.append(match)
+        token, device = match
+        if token in seen_tokens:
+            raise ValueError(
+                f'Duplicate device specified: "{identifier}" resolves to a device '
+                'already included'
+            )
+        seen_tokens.add(token)
+        resolved.append((token, device))
     return resolved
 
 
