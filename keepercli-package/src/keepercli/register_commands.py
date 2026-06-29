@@ -109,7 +109,8 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
     if not scopes or bool(scopes & base.CommandScope.Enterprise):
         from .commands import (enterprise_info, enterprise_node, enterprise_role, enterprise_team, enterprise_user, enterprise_create_user,
                                importer_commands, audit_report, audit_alert, audit_log, transfer_account, pedm_admin, msp, user_report,
-                               aging_report, action_report, security_audit_report, enterprise_push, compliance, ext_shares_report)
+                               aging_report, action_report, security_audit_report, enterprise_push, compliance, ext_shares_report,
+                               device_management)
         from .commands.pam import keeper_pam
 
         commands.register_command('create-user', enterprise_create_user.CreateEnterpriseUserCommand(), base.CommandScope.Enterprise, 'ecu')
@@ -126,6 +127,8 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('download-membership', importer_commands.DownloadMembershipCommand(), base.CommandScope.Enterprise)
         commands.register_command('apply-membership', importer_commands.ApplyMembershipCommand(), base.CommandScope.Enterprise)
         commands.register_command('device-approve', enterprise_user.EnterpriseDeviceApprovalCommand(), base.CommandScope.Enterprise)
+        commands.register_command('device-admin-list', device_management.DeviceAdminListCommand(), base.CommandScope.Enterprise)
+        commands.register_command('device-admin-action', device_management.DeviceAdminActionCommand(), base.CommandScope.Enterprise)
         commands.register_command('pedm', pedm_admin.PedmCommand(), base.CommandScope.Enterprise)
         commands.register_command('msp-down', msp.MspDownCommand(), base.CommandScope.Enterprise, 'md')
         commands.register_command('msp-info', msp.MspInfoCommand(), base.CommandScope.Enterprise, 'mi')

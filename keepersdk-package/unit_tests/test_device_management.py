@@ -19,6 +19,16 @@ def _device(
     return d
 
 
+def _admin_list_response(enterprise_user_id: int, *devices: DeviceManagement_pb2.Device):
+    rs = DeviceManagement_pb2.DeviceAdminResponse()
+    user_list = rs.deviceUserList.add()
+    user_list.enterpriseUserId = enterprise_user_id
+    group = user_list.deviceGroups.add()
+    for device in devices:
+        group.devices.append(device)
+    return rs
+
+
 class DeviceManagementSdkTests(unittest.TestCase):
     def test_list_user_devices(self):
         auth = MagicMock()
@@ -58,6 +68,26 @@ class DeviceManagementSdkTests(unittest.TestCase):
             DeviceManagement_pb2.DA_LOGOUT,
         )
 
+    def test_logout_user_devices_rejects_duplicate_identifiers(self):
+        auth = MagicMock()
+        list_rs = DeviceManagement_pb2.DeviceUserResponse()
+        g = list_rs.deviceGroups.add()
+        g.devices.append(_device('Laptop', 100))
+        auth.execute_auth_rest.return_value = list_rs
+
+        with self.assertRaisesRegex(ValueError, 'Duplicate device specified'):
+            device_management.logout_user_devices(auth, ['1', '1'])
+
+    def test_logout_user_devices_rejects_id_and_name_for_same_device(self):
+        auth = MagicMock()
+        list_rs = DeviceManagement_pb2.DeviceUserResponse()
+        g = list_rs.deviceGroups.add()
+        g.devices.append(_device('Laptop', 100))
+        auth.execute_auth_rest.return_value = list_rs
+
+        with self.assertRaisesRegex(ValueError, 'Duplicate device specified'):
+            device_management.logout_user_devices(auth, ['1', 'Laptop'])
+
     def test_remove_user_devices(self):
         auth = MagicMock()
         list_rs = DeviceManagement_pb2.DeviceUserResponse()
@@ -78,6 +108,68 @@ class DeviceManagementSdkTests(unittest.TestCase):
             request.deviceAction[0].deviceActionType,
             DeviceManagement_pb2.DA_REMOVE,
         )
+
+    def test_list_admin_devices(self):
+        auth = MagicMock()
+        auth.execute_auth_rest.return_value = _admin_list_response(
+            12345, _device('A', 100), _device('B', 200)
+        )
+
+        devices = device_management.list_admin_devices(auth, [12345])
+        self.assertEqual(len(devices), 2)
+        self.assertEqual(devices[0].name, 'B')
+        self.assertEqual(devices[0].enterprise_user_id, 12345)
+        self.assertEqual(devices[0].list_index, 1)
+        call = auth.execute_auth_rest.call_args
+        self.assertEqual(call.kwargs.get('rest_endpoint'), 'dm/device_admin_list')
+
+    def test_list_admin_devices_requires_user_ids(self):
+        auth = MagicMock()
+        with self.assertRaises(ValueError):
+            device_management.list_admin_devices(auth, [])
+
+    def test_list_admin_devices_rejects_bool_user_id(self):
+        auth = MagicMock()
+        with self.assertRaises(ValueError):
+            device_management.list_admin_devices(auth, [True])
+
+    def test_logout_admin_user_devices(self):
+        auth = MagicMock()
+        list_rs = _admin_list_response(12345, _device('Laptop', 100))
+
+        action_rs = DeviceManagement_pb2.DeviceAdminActionResponse()
+        ar = action_rs.deviceAdminActionResults.add()
+        ar.deviceActionStatus = DeviceManagement_pb2.SUCCESS
+        ar.encryptedDeviceToken.append(b'\x01\x02')
+
+        auth.execute_auth_rest.side_effect = [list_rs, action_rs]
+
+        names = device_management.logout_admin_user_devices(auth, 12345, ['1'])
+        self.assertEqual(names, ['Laptop'])
+        action_call = auth.execute_auth_rest.call_args_list[1]
+        self.assertEqual(action_call.kwargs.get('rest_endpoint'), 'dm/device_admin_action')
+        request = action_call.kwargs.get('request')
+        admin_action = request.deviceAdminAction[0]
+        self.assertEqual(admin_action.deviceActionType, DeviceManagement_pb2.DA_LOGOUT)
+        self.assertEqual(admin_action.enterpriseUserId, 12345)
+
+    def test_remove_admin_user_devices(self):
+        auth = MagicMock()
+        list_rs = _admin_list_response(99999, _device('Phone', 50))
+
+        action_rs = DeviceManagement_pb2.DeviceAdminActionResponse()
+        ar = action_rs.deviceAdminActionResults.add()
+        ar.deviceActionStatus = DeviceManagement_pb2.SUCCESS
+        ar.encryptedDeviceToken.append(b'\x01\x02')
+
+        auth.execute_auth_rest.side_effect = [list_rs, action_rs]
+
+        names = device_management.remove_admin_user_devices(auth, 99999, ['Phone'])
+        self.assertEqual(names, ['Phone'])
+        request = auth.execute_auth_rest.call_args_list[1].kwargs.get('request')
+        admin_action = request.deviceAdminAction[0]
+        self.assertEqual(admin_action.deviceActionType, DeviceManagement_pb2.DA_REMOVE)
+        self.assertEqual(admin_action.enterpriseUserId, 99999)
 
     def test_lock_user_devices(self):
         auth = MagicMock()
