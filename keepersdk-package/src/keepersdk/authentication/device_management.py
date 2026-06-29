@@ -406,7 +406,7 @@ def _device_list_index(
 
 def _find_matching_devices(
     devices: List[DeviceManagement_pb2.Device], identifier: str
-) -> Optional[Tuple[bytes, DeviceManagement_pb2.Device]]:
+) -> List[DeviceManagement_pb2.Device]:
     """
     Resolve a device identifier to its token and device record.
 
@@ -472,12 +472,10 @@ def _resolve_devices(
     seen_tokens: set[bytes] = set()
     for identifier in identifiers:
         _validate_identifier(identifier)
-        match = _resolve_single_device(devices, identifier)
-        if not match:
-            raise ValueError(
-                f'No matching device found for "{identifier}" (or ambiguous device name)'
-            )
-        token, device = match
+        device = _resolve_single_device(devices, identifier)
+        if not device:
+            raise ValueError('No matching devices found')
+        token = device.encryptedDeviceToken
         if token in seen_tokens:
             raise ValueError(
                 f'Duplicate device specified: "{identifier}" resolves to a device '
