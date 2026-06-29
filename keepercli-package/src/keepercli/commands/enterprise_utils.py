@@ -295,11 +295,21 @@ class UserUtils:
 
     @staticmethod
     def get_user_transfer_status_text(user: enterprise_types.User) -> str:
+        ta_status = user.transfer_acceptance_status or 0
+        if ta_status == enterprise_pb2.NOT_REQUIRED:
+            return 'Not required'
+        if ta_status == enterprise_pb2.NOT_ACCEPTED:
+            return 'Pending transfer'
+        if ta_status == enterprise_pb2.PARTIALLY_ACCEPTED:
+            return 'Partially accepted'
+        if ta_status == enterprise_pb2.ACCEPTED:
+            return 'Transfer accepted'
+
         if isinstance(user.account_share_expiration, int) and user.account_share_expiration > 0:
             expire_at = datetime.datetime.fromtimestamp(user.account_share_expiration / 1000.0)
             if expire_at < datetime.datetime.now():
                 return 'Blocked'
-            return 'Pending Transfer'
+            return 'Pending transfer'
 
         return ''
 

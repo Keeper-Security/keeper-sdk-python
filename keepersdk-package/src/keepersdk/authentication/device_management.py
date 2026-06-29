@@ -4,13 +4,13 @@
 # |_|\_\___\___| .__/\___|_|
 #              |_|
 #
-# Keeper SDK for Python — user device management (list, rename, logout, remove, lock, unlock, link, unlink).
+# Keeper SDK for Python — user and admin device management.
 #
 
 import re
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 from ..proto import APIRequest_pb2, DeviceManagement_pb2
 from . import keeper_auth
@@ -18,6 +18,8 @@ from . import keeper_auth
 URL_DEVICE_USER_LIST = 'dm/device_user_list'
 URL_DEVICE_USER_RENAME = 'dm/device_user_rename'
 URL_DEVICE_USER_ACTION = 'dm/device_user_action'
+URL_DEVICE_ADMIN_LIST = 'dm/device_admin_list'
+URL_DEVICE_ADMIN_ACTION = 'dm/device_admin_action'
 
 
 @dataclass(frozen=True)
@@ -27,6 +29,19 @@ class UserDeviceInfo:
     list_index: int
     name: str
     client_type: str
+    login_status: str
+    last_accessed: Optional[datetime]
+
+
+@dataclass(frozen=True)
+class AdminDeviceInfo:
+    """A device for an enterprise user (sorted by last access, newest first)."""
+
+    list_index: int
+    enterprise_user_id: int
+    name: str
+    ui_category: str
+    device_status: str
     login_status: str
     last_accessed: Optional[datetime]
 
@@ -43,7 +58,8 @@ def rename_user_device(
     new_name: str,
 ) -> Tuple[str, str]:
     """
-    Rename a device by list index (from list_user_devices) or unique name substring.
+    Rename a device by list index (from list_user_devices) or device name.
+    All-digit identifiers (e.g. '01') are treated as list indices, not names.
 
     Returns:
         (old_name, new_name) on success.
@@ -86,8 +102,6 @@ def rename_user_device(
         status = DeviceManagement_pb2.DeviceActionStatus.Name(r.deviceActionStatus)
         raise ValueError(f'Device rename failed: {status}')
 
-    raise ValueError('No response returned from device rename')
-
 
 def logout_user_devices(
     auth: keeper_auth.KeeperAuth,
@@ -97,7 +111,8 @@ def logout_user_devices(
     Log out the current user from one or more devices.
 
     Args:
-        device_identifiers: List index strings ('1', '2', ...) or unique name substrings.
+        device_identifiers: List index strings ('1', '2', ...) or device names.
+            All-digit values (including '01') are list indices, not names.
 
     Returns:
         Names of devices successfully logged out.
@@ -122,6 +137,59 @@ def remove_user_devices(
         ValueError: validation, not found, or API failure.
     """
     return _execute_device_action(auth, device_identifiers, DeviceManagement_pb2.DA_REMOVE)
+
+
+def list_admin_devices(
+    auth: keeper_auth.KeeperAuth,
+    enterprise_user_ids: List[int],
+) -> List[AdminDeviceInfo]:
+    """
+    List devices for one or more enterprise users (enterprise admin).
+
+    Args:
+        enterprise_user_ids: Enterprise user IDs to query.
+
+    Returns:
+        Devices sorted by last access (newest first), with list indices assigned after sort.
+
+    Raises:
+        ValueError: validation or empty result when IDs are invalid.
+    """
+    if not enterprise_user_ids:
+        raise ValueError(
+            'Enterprise User ID is required. You can get enterprise user IDs by running: ei --users'
+        )
+    for user_id in enterprise_user_ids:
+        _validate_enterprise_user_id(user_id)
+
+    entries = _fetch_admin_device_entries(auth, enterprise_user_ids)
+    entries.sort(key=lambda e: e[1].lastModifiedTime or 0, reverse=True)
+    return [
+        _to_admin_device_info(i, enterprise_user_id, device)
+        for i, (enterprise_user_id, device) in enumerate(entries, start=1)
+    ]
+
+
+def logout_admin_user_devices(
+    auth: keeper_auth.KeeperAuth,
+    enterprise_user_id: int,
+    device_identifiers: List[str],
+) -> List[str]:
+    """Log out an enterprise user from one or more devices (enterprise admin)."""
+    return _execute_admin_device_action(
+        auth, enterprise_user_id, device_identifiers, DeviceManagement_pb2.DA_LOGOUT
+    )
+
+
+def remove_admin_user_devices(
+    auth: keeper_auth.KeeperAuth,
+    enterprise_user_id: int,
+    device_identifiers: List[str],
+) -> List[str]:
+    """Log out and remove an enterprise user from one or more devices (enterprise admin)."""
+    return _execute_admin_device_action(
+        auth, enterprise_user_id, device_identifiers, DeviceManagement_pb2.DA_REMOVE
+    )
 
 
 def lock_user_devices(
@@ -257,6 +325,61 @@ def _to_user_device_info(index: int, device: DeviceManagement_pb2.Device) -> Use
     )
 
 
+def _to_admin_device_info(
+    index: int,
+    enterprise_user_id: int,
+    device: DeviceManagement_pb2.Device,
+) -> AdminDeviceInfo:
+    return AdminDeviceInfo(
+        list_index=index,
+        enterprise_user_id=enterprise_user_id,
+        name=device.deviceName or 'N/A',
+        ui_category=_ui_category_name(device),
+        device_status=_device_status_name(device.deviceStatus),
+        login_status=_login_state_name(device.loginState),
+        last_accessed=_timestamp_to_datetime(device.lastModifiedTime),
+    )
+
+
+def _fetch_admin_device_entries(
+    auth: keeper_auth.KeeperAuth,
+    enterprise_user_ids: List[int],
+) -> List[Tuple[int, DeviceManagement_pb2.Device]]:
+    rq = DeviceManagement_pb2.DeviceAdminRequest()
+    rq.enterpriseUserIds.extend(enterprise_user_ids)
+    rs = auth.execute_auth_rest(
+        rest_endpoint=URL_DEVICE_ADMIN_LIST,
+        request=rq,
+        response_type=DeviceManagement_pb2.DeviceAdminResponse,
+    )
+    if not rs:
+        return []
+    entries: List[Tuple[int, DeviceManagement_pb2.Device]] = []
+    for device_user_group in rs.deviceUserList:
+        enterprise_user_id = device_user_group.enterpriseUserId
+        for device_group in device_user_group.deviceGroups:
+            for device in device_group.devices:
+                entries.append((enterprise_user_id, device))
+    return entries
+
+
+def _fetch_admin_devices_for_user(
+    auth: keeper_auth.KeeperAuth,
+    enterprise_user_id: int,
+) -> List[DeviceManagement_pb2.Device]:
+    entries = _fetch_admin_device_entries(auth, [enterprise_user_id])
+    devices = [device for user_id, device in entries if user_id == enterprise_user_id]
+    devices.sort(key=lambda d: d.lastModifiedTime or 0, reverse=True)
+    return devices
+
+
+def _validate_enterprise_user_id(user_id: int) -> None:
+    if type(user_id) is not int:
+        raise ValueError(f'Invalid enterprise user ID: {user_id}')
+    if user_id < 1:
+        raise ValueError(f'Invalid enterprise user ID: {user_id}')
+
+
 def _validate_identifier(identifier: str) -> None:
     if not identifier or not identifier.strip():
         raise ValueError('Device identifier cannot be empty')
@@ -271,7 +394,17 @@ def _sanitize_device_name(name: str) -> str:
 def _resolve_device(
     devices: List[DeviceManagement_pb2.Device], identifier: str
 ) -> Optional[Tuple[bytes, DeviceManagement_pb2.Device]]:
+    """
+    Resolve a device identifier to its token and device record.
+
+    Resolution order:
+    1. If the identifier contains only digits (``str.isdigit()``), it is treated as a
+       1-based list index from ``list_user_devices`` / ``device-list`` (``int`` is applied,
+       so ``"01"`` resolves to the first device, not a device named ``"01"``).
+    2. Otherwise, match by case-insensitive device name (exact or substring per caller).
+    """
     ident = identifier.strip()
+    # All-digit strings are list IDs, not names ("01" -> index 1 via int(), not name "01").
     if ident.isdigit():
         idx = int(ident)
         if 1 <= idx <= len(devices):
@@ -292,6 +425,7 @@ def _resolve_devices(
     if not identifiers:
         raise ValueError('At least one device identifier is required')
     resolved: List[Tuple[bytes, DeviceManagement_pb2.Device]] = []
+    seen_tokens: set[bytes] = set()
     for identifier in identifiers:
         _validate_identifier(identifier)
         match = _resolve_device(devices, identifier)
@@ -299,7 +433,14 @@ def _resolve_devices(
             raise ValueError(
                 f'No matching device found for "{identifier}" (or ambiguous device name)'
             )
-        resolved.append(match)
+        token, device = match
+        if token in seen_tokens:
+            raise ValueError(
+                f'Duplicate device specified: "{identifier}" resolves to a device '
+                'already included'
+            )
+        seen_tokens.add(token)
+        resolved.append((token, device))
     return resolved
 
 
@@ -349,6 +490,133 @@ def _execute_device_action(
                     msg = f'Action failed ({status_name})'
                 raise ValueError(f"Device '{device_name}': {msg}")
     return succeeded
+
+
+def _execute_admin_device_action(
+    auth: keeper_auth.KeeperAuth,
+    enterprise_user_id: int,
+    device_identifiers: List[str],
+    action_type: int,
+) -> List[str]:
+    _validate_enterprise_user_id(enterprise_user_id)
+    if not device_identifiers:
+        raise ValueError('At least one device must be specified')
+
+    devices = _fetch_admin_devices_for_user(auth, enterprise_user_id)
+    if not devices:
+        raise ValueError('No devices found')
+
+    resolved = _resolve_devices(devices, device_identifiers)
+    token_to_device = {token: device for token, device in resolved}
+
+    rq = DeviceManagement_pb2.DeviceAdminActionRequest()
+    admin_action = rq.deviceAdminAction.add()
+    admin_action.deviceActionType = action_type
+    admin_action.enterpriseUserId = enterprise_user_id
+    admin_action.encryptedDeviceToken.extend(list(token_to_device.keys()))
+
+    rs = auth.execute_auth_rest(
+        rest_endpoint=URL_DEVICE_ADMIN_ACTION,
+        request=rq,
+        response_type=DeviceManagement_pb2.DeviceAdminActionResponse,
+    )
+    if not rs or not rs.deviceAdminActionResults:
+        raise ValueError('No response returned from device admin action')
+
+    succeeded: List[str] = []
+    for result in rs.deviceAdminActionResults:
+        for token in result.encryptedDeviceToken:
+            device = token_to_device.get(token)
+            device_name = (device.deviceName if device else None) or 'Unknown Device'
+            if result.deviceActionStatus == DeviceManagement_pb2.SUCCESS:
+                succeeded.append(device_name)
+            else:
+                status_name = DeviceManagement_pb2.DeviceActionStatus.Name(
+                    result.deviceActionStatus
+                )
+                if result.deviceActionStatus == DeviceManagement_pb2.NOT_ALLOWED:
+                    msg = 'Operation not allowed'
+                else:
+                    msg = f'Action failed ({status_name})'
+                raise ValueError(f"Device '{device_name}': {msg}")
+    return succeeded
+
+
+_UI_CATEGORY_RULES: List[Tuple[Callable[[DeviceManagement_pb2.Device], bool], str]] = [
+    (lambda d: d.clientTypeCategory == DeviceManagement_pb2.CAT_EXTENSION, 'Browser Extension'),
+    (lambda d: d.clientTypeCategory == DeviceManagement_pb2.CAT_DESKTOP, 'Desktop'),
+    (lambda d: d.clientTypeCategory == DeviceManagement_pb2.CAT_WEB_VAULT, 'Web Vault'),
+    (
+        lambda d: (
+            d.clientType == DeviceManagement_pb2.ENTERPRISE_MANAGEMENT_CONSOLE
+            and d.clientTypeCategory == DeviceManagement_pb2.CAT_ADMIN
+        ),
+        'Admin Console',
+    ),
+    (
+        lambda d: (
+            d.clientType == DeviceManagement_pb2.COMMANDER
+            and d.clientTypeCategory == DeviceManagement_pb2.CAT_ADMIN
+        ),
+        'Commander CLI',
+    ),
+    (
+        lambda d: (
+            d.clientType == DeviceManagement_pb2.IOS
+            and d.clientTypeCategory == DeviceManagement_pb2.CAT_MOBILE
+        ),
+        'iOS App',
+    ),
+    (
+        lambda d: (
+            d.clientType == DeviceManagement_pb2.ANDROID
+            and d.clientTypeCategory == DeviceManagement_pb2.CAT_MOBILE
+        ),
+        'Android App',
+    ),
+    (
+        lambda d: (
+            d.clientTypeCategory == DeviceManagement_pb2.CAT_MOBILE
+            and d.clientFormFactor == APIRequest_pb2.FF_PHONE
+        ),
+        'Mobile',
+    ),
+    (
+        lambda d: (
+            d.clientTypeCategory == DeviceManagement_pb2.CAT_MOBILE
+            and d.clientFormFactor == APIRequest_pb2.FF_TABLET
+        ),
+        'Tablet',
+    ),
+    (
+        lambda d: (
+            d.clientTypeCategory == DeviceManagement_pb2.CAT_MOBILE
+            and d.clientFormFactor == APIRequest_pb2.FF_WATCH
+        ),
+        'Wear OS',
+    ),
+]
+
+_DEVICE_STATUS_NAMES = {
+    APIRequest_pb2.DEVICE_NEEDS_APPROVAL: 'NEEDS_APPROVAL',
+    APIRequest_pb2.DEVICE_OK: 'OK',
+    APIRequest_pb2.DEVICE_DISABLED_BY_USER: 'DISABLED_BY_USER',
+    APIRequest_pb2.DEVICE_LOCKED_BY_ADMIN: 'LOCKED_BY_ADMIN',
+}
+
+
+def _ui_category_name(device: DeviceManagement_pb2.Device) -> str:
+    try:
+        for rule_check, category_name in _UI_CATEGORY_RULES:
+            if rule_check(device):
+                return category_name
+        return 'Unknown Device'
+    except (AttributeError, TypeError):
+        return 'Unknown Device'
+
+
+def _device_status_name(device_status: int) -> str:
+    return _DEVICE_STATUS_NAMES.get(device_status, f'UNKNOWN_STATUS_{device_status}')
 
 
 def _timestamp_to_datetime(timestamp: Optional[int]) -> Optional[datetime]:
