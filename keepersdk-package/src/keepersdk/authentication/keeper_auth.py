@@ -5,7 +5,7 @@ import enum
 import json
 import logging
 import time
-from typing import Optional, Dict, Any, List, Type, Set, Iterable, Union
+from typing import Optional, Dict, Any, List, Type, Set, Iterable, Union, Tuple
 
 import attrs
 from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePrivateKey, EllipticCurvePublicKey
@@ -45,6 +45,35 @@ class UserKeys:
     aes: Optional[bytes] = None
     rsa: Optional[bytes] = None
     ec: Optional[bytes] = None
+
+
+def parse_team_asymmetric_key_entry(team_key_entry: dict) -> Tuple[bytes, bytes]:
+    """Return RSA/EC public key bytes from a ``team_get_keys`` entry."""
+    rsa = b''
+    ec = b''
+    team_pub = team_key_entry.get('team_public_key')
+    team_pub_type = team_key_entry.get('team_public_key_type')
+    if team_pub:
+        try:
+            pub_bytes = utils.base64_url_decode(team_pub)
+            if team_pub_type == -1:
+                ec = pub_bytes
+            elif team_pub_type == -3:
+                rsa = pub_bytes
+        except Exception:
+            pass
+    if not rsa and not ec and 'key' in team_key_entry:
+        key_type = team_key_entry.get('type')
+        if key_type in (-1, -3):
+            try:
+                key_bytes = utils.base64_url_decode(team_key_entry['key'])
+                if key_type == -1:
+                    ec = key_bytes
+                elif key_type == -3:
+                    rsa = key_bytes
+            except Exception:
+                pass
+    return rsa, ec
 
 
 class AuthContext:
@@ -278,31 +307,37 @@ class KeeperAuth:
             rs = self.execute_auth_command(rq)
             if 'keys' in rs:
                 for tk in rs['keys']:
-                    if 'key' in tk:
-                        team_uid = tk['team_uid']
-                        try:
-                            aes: Optional[bytes] = None
-                            rsa: Optional[bytes] = None
-                            ec: Optional[bytes] = None
-                            encrypted_key = utils.base64_url_decode(tk['key'])
-                            key_type = tk['type']
-                            if key_type == 1:
-                                aes = crypto.decrypt_aes_v1(encrypted_key, self.auth_context.data_key)
-                            elif key_type == 2:
-                                assert self.auth_context.rsa_private_key is not None
-                                aes = crypto.decrypt_rsa(encrypted_key, self.auth_context.rsa_private_key)
-                            elif key_type == 3:
-                                aes = crypto.decrypt_aes_v2(encrypted_key, self.auth_context.data_key)
-                            elif key_type == 4:
-                                assert self.auth_context.ec_private_key is not None
-                                aes = crypto.decrypt_ec(encrypted_key, self.auth_context.ec_private_key)
-                            elif key_type == -3:
-                                rsa = encrypted_key
-                            elif key_type == -1:
-                                ec = encrypted_key
-                            self._key_cache[team_uid] = UserKeys(aes=aes,rsa=rsa, ec=ec)
-                        except Exception as e:
-                            utils.get_logger().debug(e)
+                    if 'key' not in tk:
+                        continue
+                    team_uid = tk['team_uid']
+                    try:
+                        aes: Optional[bytes] = None
+                        rsa: Optional[bytes] = None
+                        ec: Optional[bytes] = None
+                        encrypted_key = utils.base64_url_decode(tk['key'])
+                        key_type = tk['type']
+                        if key_type == 1:
+                            aes = crypto.decrypt_aes_v1(encrypted_key, self.auth_context.data_key)
+                        elif key_type == 2:
+                            assert self.auth_context.rsa_private_key is not None
+                            aes = crypto.decrypt_rsa(encrypted_key, self.auth_context.rsa_private_key)
+                        elif key_type == 3:
+                            aes = crypto.decrypt_aes_v2(encrypted_key, self.auth_context.data_key)
+                        elif key_type == 4:
+                            assert self.auth_context.ec_private_key is not None
+                            aes = crypto.decrypt_ec(encrypted_key, self.auth_context.ec_private_key)
+                        elif key_type == -3:
+                            rsa = encrypted_key
+                        elif key_type == -1:
+                            ec = encrypted_key
+                        pub_rsa, pub_ec = parse_team_asymmetric_key_entry(tk)
+                        if pub_rsa:
+                            rsa = pub_rsa
+                        if pub_ec:
+                            ec = pub_ec
+                        self._key_cache[team_uid] = UserKeys(aes=aes, rsa=rsa, ec=ec)
+                    except Exception as e:
+                        utils.get_logger().debug(e)
 
     def get_user_keys(self, username: str) -> Optional[UserKeys]:
         if self._key_cache:

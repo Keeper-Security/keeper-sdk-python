@@ -786,8 +786,11 @@ def get_nsf_record_accesses(
         }
         for flag in ('can_view_title', 'can_edit', 'can_view', 'can_list_access',
                      'can_update_access', 'can_delete', 'can_change_ownership',
-                     'can_request_access', 'can_approve_access'):
-            ao[flag] = getattr(d, flag, False)
+                     'can_request_access', 'can_approve_access', 'denied_access'):
+            if flag == 'denied_access':
+                ao[flag] = getattr(d, 'deniedAccess', False)
+            else:
+                ao[flag] = getattr(d, flag, False)
         result['record_accesses'].append(ao)
     for fu in rs.forbiddenRecords:
         result['forbidden_records'].append(utils.base64_url_encode(fu))

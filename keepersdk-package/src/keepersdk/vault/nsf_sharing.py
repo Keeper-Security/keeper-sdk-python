@@ -16,6 +16,7 @@ from .nsf_management import (
     _get_record_key,
     _nsf_view,
     _request_sync,
+    get_nsf_folder_access,
     get_nsf_record_accesses,
     is_nsf_folder,
     resolve_nsf_folder_uid,
@@ -24,6 +25,32 @@ from .nsf_management import (
 from .vault_online import VaultOnline
 
 _SHARE_BATCH_SIZE = 200
+
+
+def _ensure_folder_share_permission(vault: VaultOnline, folder_uid: str) -> None:
+    try:
+        nsf_common.require_nsf_folder_share_permission(vault, folder_uid)
+    except ValueError as exc:
+        raise NsfError(str(exc)) from exc
+
+
+def _ensure_record_share_permission(vault: VaultOnline, record_uid: str) -> None:
+    try:
+        nsf_common.require_nsf_record_share_permission(vault, record_uid)
+    except ValueError as exc:
+        raise NsfError(str(exc)) from exc
+
+
+def _ensure_record_ownership_permission(vault: VaultOnline, record_uid: str) -> None:
+    try:
+        nsf_common.require_nsf_record_ownership_permission(vault, record_uid)
+    except ValueError as exc:
+        raise NsfError(str(exc)) from exc
+
+
+def _prepare_folder_for_access_change(vault: VaultOnline, folder_uid: str) -> None:
+    """Break parent permission inheritance before changing folder accessors."""
+    nsf_common.ensure_folder_direct_permissions(vault, folder_uid, request_sync=False)
 
 
 @dataclass
@@ -38,6 +65,7 @@ class NsfRecordPermissionPlan:
     updates: List[Dict[str, Any]] = field(default_factory=list)
     creates: List[Dict[str, Any]] = field(default_factory=list)
     revokes: List[Dict[str, Any]] = field(default_factory=list)
+    denies: List[Dict[str, Any]] = field(default_factory=list)
     skipped: List[Dict[str, Any]] = field(default_factory=list)
 
 
@@ -60,6 +88,52 @@ def _folder_access_update(
         response_type=folder_pb2.FolderAccessResponse)
     assert response is not None
     return response
+
+
+def _resolve_folder_accessor(
+        vault: VaultOnline,
+        recipient: str,
+        *,
+        as_team: bool) -> Tuple[bytes, str, int]:
+    """Return (uid_bytes, label, access_type_enum) for a folder accessor."""
+    if as_team:
+        resolved = nsf_common.resolve_team_identifier(vault, recipient)
+        if not resolved:
+            raise NsfError(f"Team '{recipient}' not found")
+        team_uid_b64, uid_bytes = resolved
+        return uid_bytes, team_uid_b64, folder_pb2.AT_TEAM
+
+    if '@' in recipient:
+        _, _, uid_bytes, _ = nsf_common.get_user_public_key(vault, recipient)
+        if not uid_bytes:
+            raise NsfError(f"User '{recipient}' not found")
+        return uid_bytes, recipient, folder_pb2.AT_USER
+
+    uid_bytes = nsf_common.resolve_user_uid_bytes(vault, recipient)
+    if not uid_bytes:
+        raise NsfError(f"User '{recipient}' not found")
+    return uid_bytes, recipient, folder_pb2.AT_USER
+
+
+def _check_existing_nsf_folder_access(
+        vault: VaultOnline,
+        folder_uid: str,
+        uid_bytes: bytes,
+        access_type_label: str) -> Optional[str]:
+    """Return the existing AccessRoleType name for an accessor, or None."""
+    try:
+        uid_encoded = utils.base64_url_encode(uid_bytes)
+        info = get_nsf_folder_access(vault, [folder_uid])
+        for result in info.get('results', []):
+            if not result.get('success'):
+                continue
+            for accessor in result.get('accessors', []):
+                if (accessor.get('access_type') == access_type_label
+                        and accessor.get('accessor_uid') == uid_encoded):
+                    return accessor.get('role')
+    except Exception:
+        pass
+    return None
 
 
 def collect_nsf_records_in_folder(
@@ -107,50 +181,117 @@ def grant_nsf_folder_access(
     folder_uid = resolve_nsf_folder_uid(vault, folder_identifier) or folder_identifier
     if not is_nsf_folder(vault, folder_uid):
         raise NsfError(f'NSF folder not found: {folder_identifier}')
+    _ensure_folder_share_permission(vault, folder_uid)
+    _prepare_folder_for_access_change(vault, folder_uid)
 
     access_role = nsf_common.resolve_nsf_role(role)
+    target_role_name = folder_pb2.AccessRoleType.Name(access_role)
+    access_type_label = 'AT_TEAM' if as_team else 'AT_USER'
+
+    uid_bytes, label, access_type_enum = _resolve_folder_accessor(
+        vault, recipient, as_team=as_team)
+
+    existing_role = _check_existing_nsf_folder_access(
+        vault, folder_uid, uid_bytes, access_type_label)
+    if existing_role is not None:
+        if existing_role == target_role_name and expiration_timestamp is None:
+            return {
+                'folder_uid': folder_uid,
+                'accessor': label,
+                'access_type': access_type_label,
+                'status': 'SUCCESS',
+                'message': f"{'Team' if as_team else 'User'} already has {role} access",
+                'success': True,
+                'action_taken': 'already_had_access',
+            }
+        result = update_nsf_folder_access(
+            vault, folder_uid, recipient, role=role, as_team=as_team,
+            expiration_timestamp=expiration_timestamp, request_sync=request_sync)
+        result['action_taken'] = 'updated'
+        return result
+
     ad = folder_pb2.FolderAccessData()
     ad.folderUid = utils.base64_url_decode(folder_uid)
+    ad.accessTypeUid = uid_bytes
+    ad.accessType = access_type_enum
     ad.accessRoleType = access_role
     ad.permissions.CopyFrom(nsf_common.get_folder_permissions_for_role(access_role))
-
-    if as_team:
-        resolved = nsf_common.resolve_team_identifier(vault, recipient)
-        if not resolved:
-            raise NsfError(f"Team '{recipient}' not found")
-        _, uid_bytes = resolved
-        ad.accessTypeUid = uid_bytes
-        ad.accessType = folder_pb2.AT_TEAM
-        fk = _get_folder_key(vault, folder_uid)
-        vault.keeper_auth.load_team_keys([utils.base64_url_encode(uid_bytes)])
-        team_keys = vault.keeper_auth.get_team_keys(utils.base64_url_encode(uid_bytes))
-        if not team_keys:
-            raise NsfError(f'Team keys not available for {recipient}')
-        efk, key_type = nsf_common.encrypt_for_team(fk, team_keys, forbid_rsa=vault.keeper_auth.auth_context.forbid_rsa)
-        ek = folder_pb2.EncryptedDataKey()
-        ek.encryptedKey = efk
-        ek.encryptedKeyType = key_type
-        ad.folderKey.CopyFrom(ek)
-        label = recipient
-    else:
-        pub_key, use_ecc, uid_bytes, _ = nsf_common.get_user_public_key(vault, recipient)
-        ad.accessTypeUid = uid_bytes
-        ad.accessType = folder_pb2.AT_USER
-        fk = _get_folder_key(vault, folder_uid)
-        ek = folder_pb2.EncryptedDataKey()
-        ek.encryptedKey = nsf_common.encrypt_for_recipient(fk, pub_key, use_ecc)
-        ek.encryptedKeyType = (
-            folder_pb2.encrypted_by_public_key_ecc if use_ecc
-            else folder_pb2.encrypted_by_public_key)
-        ad.folderKey.CopyFrom(ek)
-        label = recipient
 
     if expiration_timestamp is not None:
         ad.tlaProperties.expiration = expiration_timestamp
 
+    fk = _get_folder_key(vault, folder_uid)
+    ek = folder_pb2.EncryptedDataKey()
+    if as_team:
+        team_uid_b64 = utils.base64_url_encode(uid_bytes)
+        try:
+            team_keys = nsf_common.get_team_keys(vault, team_uid_b64)
+        except ValueError as exc:
+            raise NsfError(f'Team keys not available for {recipient}') from exc
+        efk, key_type = nsf_common.encrypt_for_team(
+            fk, team_keys,
+            forbid_rsa=vault.keeper_auth.auth_context.forbid_rsa)
+    else:
+        pub_key, use_ecc, _, _ = nsf_common.get_user_public_key(vault, recipient)
+        efk = nsf_common.encrypt_for_recipient(fk, pub_key, use_ecc)
+        key_type = (
+            folder_pb2.encrypted_by_public_key_ecc if use_ecc
+            else folder_pb2.encrypted_by_public_key)
+    ek.encryptedKey = efk
+    ek.encryptedKeyType = key_type
+    ad.folderKey.CopyFrom(ek)
+
     response = _folder_access_update(vault, adds=[ad])
     result = nsf_common.parse_folder_access_result(
         response, folder_uid, label, 'Access granted successfully')
+    result['access_type'] = access_type_label
+    result.setdefault('action_taken', 'granted' if result['success'] else 'grant_failed')
+    if not result['success']:
+        raise KeeperApiError(result['status'], result['message'])
+    _request_sync(vault, request_sync)
+    return result
+
+
+def update_nsf_folder_access(
+        vault: VaultOnline,
+        folder_identifier: str,
+        recipient: str,
+        *,
+        role: Optional[str] = None,
+        hidden: Optional[bool] = None,
+        expiration_timestamp: Optional[int] = None,
+        as_team: bool = False,
+        request_sync: bool = True) -> Dict[str, Any]:
+    """Update role, visibility, or expiration for an existing NSF folder accessor."""
+    if role is None and hidden is None and expiration_timestamp is None:
+        raise NsfError('At least one field (role, hidden, or expiration) is required')
+
+    folder_uid = resolve_nsf_folder_uid(vault, folder_identifier) or folder_identifier
+    if not is_nsf_folder(vault, folder_uid):
+        raise NsfError(f'NSF folder not found: {folder_identifier}')
+    _ensure_folder_share_permission(vault, folder_uid)
+    _prepare_folder_for_access_change(vault, folder_uid)
+
+    uid_bytes, label, access_type_enum = _resolve_folder_accessor(
+        vault, recipient, as_team=as_team)
+
+    ad = folder_pb2.FolderAccessData()
+    ad.folderUid = utils.base64_url_decode(folder_uid)
+    ad.accessTypeUid = uid_bytes
+    ad.accessType = access_type_enum
+    if role is not None:
+        access_role = nsf_common.resolve_nsf_role(role)
+        ad.accessRoleType = access_role
+        ad.permissions.CopyFrom(nsf_common.get_folder_permissions_for_role(access_role))
+    if hidden is not None:
+        ad.hidden = hidden
+    if expiration_timestamp is not None:
+        ad.tlaProperties.expiration = expiration_timestamp
+
+    response = _folder_access_update(vault, updates=[ad])
+    result = nsf_common.parse_folder_access_result(
+        response, folder_uid, label, 'Access updated successfully')
+    result['access_type'] = 'AT_TEAM' if as_team else 'AT_USER'
     if not result['success']:
         raise KeeperApiError(result['status'], result['message'])
     _request_sync(vault, request_sync)
@@ -168,26 +309,21 @@ def revoke_nsf_folder_access(
     folder_uid = resolve_nsf_folder_uid(vault, folder_identifier) or folder_identifier
     if not is_nsf_folder(vault, folder_uid):
         raise NsfError(f'NSF folder not found: {folder_identifier}')
+    _ensure_folder_share_permission(vault, folder_uid)
+    _prepare_folder_for_access_change(vault, folder_uid)
+
+    uid_bytes, label, access_type_enum = _resolve_folder_accessor(
+        vault, recipient, as_team=as_team)
 
     ad = folder_pb2.FolderAccessData()
     ad.folderUid = utils.base64_url_decode(folder_uid)
-    if as_team:
-        resolved = nsf_common.resolve_team_identifier(vault, recipient)
-        if not resolved:
-            raise NsfError(f"Team '{recipient}' not found")
-        _, uid_bytes = resolved
-        ad.accessTypeUid = uid_bytes
-        ad.accessType = folder_pb2.AT_TEAM
-    else:
-        uid_bytes = nsf_common.resolve_user_uid_bytes(vault, recipient)
-        if not uid_bytes:
-            raise NsfError(f"User '{recipient}' not found")
-        ad.accessTypeUid = uid_bytes
-        ad.accessType = folder_pb2.AT_USER
+    ad.accessTypeUid = uid_bytes
+    ad.accessType = access_type_enum
 
     response = _folder_access_update(vault, removes=[ad])
     result = nsf_common.parse_folder_access_result(
-        response, folder_uid, recipient, 'Access revoked successfully')
+        response, folder_uid, label, 'Access revoked successfully')
+    result['access_type'] = 'AT_TEAM' if as_team else 'AT_USER'
     if not result['success']:
         raise KeeperApiError(result['status'], result['message'])
     _request_sync(vault, request_sync)
@@ -201,7 +337,8 @@ def _build_share_permission(
         access_role_type: Optional[int],
         expiration_timestamp: Optional[int],
         *,
-        include_role: bool) -> record_sharing_pb2.Permissions:
+        include_role: bool,
+        denied_access: bool = False) -> record_sharing_pb2.Permissions:
     record_key = _get_record_key(vault, record_uid)
     pub_key, use_ecc, uid_bytes, _ = nsf_common.get_user_public_key(vault, recipient_email)
     enc_rk = nsf_common.encrypt_for_recipient(record_key, pub_key, use_ecc)
@@ -215,11 +352,53 @@ def _build_share_permission(
     perm.rules.accessType = folder_pb2.AT_USER
     perm.rules.recordUid = uid_b
     perm.rules.owner = False
-    if include_role and access_role_type is not None:
+    if denied_access:
+        perm.rules.deniedAccess = True
+    elif include_role and access_role_type is not None:
         perm.rules.accessRoleType = access_role_type
     if expiration_timestamp:
         perm.rules.tlaProperties.expiration = expiration_timestamp
     return perm
+
+
+def _build_revoke_share_permission(
+        vault: VaultOnline,
+        record_uid: str,
+        recipient_email: str) -> record_sharing_pb2.Permissions:
+    uid_bytes = nsf_common.resolve_user_uid_bytes(vault, recipient_email)
+    if not uid_bytes:
+        raise NsfError(f"User '{recipient_email}' not found")
+    uid_b = utils.base64_url_decode(record_uid)
+    perm = record_sharing_pb2.Permissions()
+    perm.recipientUid = uid_bytes
+    perm.recordUid = uid_b
+    perm.rules.accessTypeUid = uid_bytes
+    perm.rules.accessType = folder_pb2.AT_USER
+    perm.rules.recordUid = uid_b
+    return perm
+
+
+def _revoke_direct_record_share(
+        vault: VaultOnline,
+        record_uid: str,
+        recipient_email: str) -> NsfShareResult:
+    perm = _build_revoke_share_permission(vault, record_uid, recipient_email)
+    rq = record_sharing_pb2.Request()
+    rq.revokeSharingPermissions.append(perm)
+    return _share_rest(vault, rq, 'revokedSharingStatus')
+
+
+def _deny_inherited_record_share(
+        vault: VaultOnline,
+        record_uid: str,
+        recipient_email: str) -> NsfShareResult:
+    """Add a direct deny row so inherited folder access no longer applies."""
+    perm = _build_share_permission(
+        vault, record_uid, recipient_email, None, None,
+        include_role=False, denied_access=True)
+    rq = record_sharing_pb2.Request()
+    rq.createSharingPermissions.append(perm)
+    return _share_rest(vault, rq, 'createdSharingStatus')
 
 
 def _share_rest(
@@ -247,6 +426,7 @@ def share_nsf_record(
         request_sync: bool = True) -> NsfShareResult:
     """Grant record share."""
     resolved = resolve_nsf_record_uid(vault, record_uid) or record_uid
+    _ensure_record_share_permission(vault, resolved)
     role_type = nsf_common.resolve_nsf_role(role)
     perm = _build_share_permission(
         vault, resolved, recipient_email, role_type, expiration_timestamp, include_role=True)
@@ -269,6 +449,12 @@ def update_nsf_record_share(
         expiration_timestamp: Optional[int] = None,
         request_sync: bool = True) -> NsfShareResult:
     resolved = resolve_nsf_record_uid(vault, record_uid) or record_uid
+    _ensure_record_share_permission(vault, resolved)
+    user_accesses = nsf_common.find_record_user_accesses(vault, resolved, recipient_email)
+    if not nsf_common.record_user_has_direct_access(user_accesses):
+        return share_nsf_record(
+            vault, resolved, recipient_email, role=role,
+            expiration_timestamp=expiration_timestamp, request_sync=request_sync)
     role_type = nsf_common.resolve_nsf_role(role)
     perm = _build_share_permission(
         vault, resolved, recipient_email, role_type, expiration_timestamp, include_role=True)
@@ -289,24 +475,38 @@ def unshare_nsf_record(
         *,
         request_sync: bool = True) -> NsfShareResult:
     resolved = resolve_nsf_record_uid(vault, record_uid) or record_uid
-    uid_bytes = nsf_common.resolve_user_uid_bytes(vault, recipient_email)
-    if not uid_bytes:
-        raise NsfError(f"User '{recipient_email}' not found")
-    uid_b = utils.base64_url_decode(resolved)
-    perm = record_sharing_pb2.Permissions()
-    perm.recipientUid = uid_bytes
-    perm.recordUid = uid_b
-    perm.rules.accessTypeUid = uid_bytes
-    perm.rules.accessType = folder_pb2.AT_USER
-    perm.rules.recordUid = uid_b
-    rq = record_sharing_pb2.Request()
-    rq.revokeSharingPermissions.append(perm)
-    result = _share_rest(vault, rq, 'revokedSharingStatus')
-    if not result.success:
-        msg = result.results[0]['message'] if result.results else 'Revoke failed'
-        raise KeeperApiError('share_revoke_failed', msg)
+    _ensure_record_share_permission(vault, resolved)
+    user_accesses = nsf_common.find_record_user_accesses(vault, resolved, recipient_email)
+    has_direct = nsf_common.record_user_has_direct_access(user_accesses)
+    has_inherited = nsf_common.record_user_has_inherited_access(user_accesses)
+    results: List[Dict[str, Any]] = []
+
+    if has_direct:
+        revoke_result = _revoke_direct_record_share(vault, resolved, recipient_email)
+        results.extend(revoke_result.results)
+        if not revoke_result.success:
+            msg = revoke_result.results[0]['message'] if revoke_result.results else 'Revoke failed'
+            raise KeeperApiError('share_revoke_failed', msg)
+
+    if has_inherited:
+        deny_result = _deny_inherited_record_share(vault, resolved, recipient_email)
+        results.extend(deny_result.results)
+        if not deny_result.success:
+            msg = deny_result.results[0]['message'] if deny_result.results else 'Deny failed'
+            raise KeeperApiError('share_revoke_failed', msg)
+
+    if not has_direct and not has_inherited:
+        revoke_result = _revoke_direct_record_share(vault, resolved, recipient_email)
+        results.extend(revoke_result.results)
+        if not revoke_result.success:
+            msg = revoke_result.results[0]['message'] if revoke_result.results else 'Revoke failed'
+            raise KeeperApiError('share_revoke_failed', msg)
+
     _request_sync(vault, request_sync)
-    return result
+    return NsfShareResult(
+        success=all(r.get('success', False) for r in results) if results else True,
+        results=results,
+    )
 
 
 def transfer_nsf_record_ownership(
@@ -319,6 +519,7 @@ def transfer_nsf_record_ownership(
     record_uid = resolve_nsf_record_uid(vault, record_identifier)
     if not record_uid:
         raise NsfError(f'NSF record not found: {record_identifier}')
+    _ensure_record_ownership_permission(vault, record_uid)
     record_key = _get_record_key(vault, record_uid)
     pub_key, use_ecc, _, _ = nsf_common.get_user_public_key(
         vault, new_owner_email, require_uid=False)
@@ -386,6 +587,8 @@ def share_nsf_record_with_action(
     - action: 'grant', 'update', 'revoke', or 'owner'
     """
     resolved = resolve_nsf_record_uid(vault, record_uid) or record_uid
+    if action != 'owner':
+        _ensure_record_share_permission(vault, resolved)
     if action == 'owner':
         return transfer_nsf_record_ownership(
             vault, resolved, recipient_email, request_sync=request_sync), 'owner'
@@ -394,14 +597,8 @@ def share_nsf_record_with_action(
             vault, resolved, recipient_email, request_sync=request_sync), 'revoke'
     if not role:
         raise NsfError('Role is required for grant action')
-    accesses = get_nsf_record_accesses(vault, [resolved]).get('record_accesses', [])
-    already_shared = any(
-        a.get('record_uid') == resolved
-        and not a.get('owner')
-        and a.get('access_type', '') in ('AT_USER', '')
-        and not a.get('inherited')
-        and (a.get('accessor_name') or '').casefold() == recipient_email.casefold()
-        for a in accesses)
+    user_accesses = nsf_common.find_record_user_accesses(vault, resolved, recipient_email)
+    already_shared = nsf_common.record_user_has_direct_access(user_accesses)
     if already_shared:
         return update_nsf_record_share(
             vault, resolved, recipient_email, role=role,
@@ -476,9 +673,8 @@ def plan_nsf_record_permissions(
                     plan.updates.append(entry)
         elif not role or cur_role == role:
             if access.get('inherited'):
-                plan.skipped.append({
+                plan.denies.append({
                     'record_uid': rec_uid, 'email': email, 'cur_role': cur_role,
-                    'reason': 'Inherited — revoke at parent folder',
                 })
             else:
                 plan.revokes.append({'record_uid': rec_uid, 'email': email, 'cur_role': cur_role})
@@ -498,17 +694,13 @@ def _batch_share(
         for item in chunk:
             try:
                 if mode == 'revoke':
-                    uid_bytes = nsf_common.resolve_user_uid_bytes(vault, item['email'])
-                    if not uid_bytes:
-                        raise ValueError(f"User {item['email']} not found")
-                    uid_b = utils.base64_url_decode(item['record_uid'])
-                    perm = record_sharing_pb2.Permissions()
-                    perm.recipientUid = uid_bytes
-                    perm.recordUid = uid_b
-                    perm.rules.accessTypeUid = uid_bytes
-                    perm.rules.accessType = folder_pb2.AT_USER
-                    perm.rules.recordUid = uid_b
+                    perm = _build_revoke_share_permission(vault, item['record_uid'], item['email'])
                     rq.revokeSharingPermissions.append(perm)
+                elif mode == 'deny':
+                    perm = _build_share_permission(
+                        vault, item['record_uid'], item['email'],
+                        None, None, include_role=False, denied_access=True)
+                    rq.createSharingPermissions.append(perm)
                 else:
                     perm = _build_share_permission(
                         vault, item['record_uid'], item['email'],
@@ -527,6 +719,7 @@ def _batch_share(
             'create': 'createdSharingStatus',
             'update': 'updatedSharingStatus',
             'revoke': 'revokedSharingStatus',
+            'deny': 'createdSharingStatus',
         }[mode]
         try:
             result = _share_rest(vault, rq, status_attr)
@@ -550,6 +743,7 @@ def apply_nsf_record_permissions(
         'updates': _batch_share(vault, plan.updates, mode='update'),
         'creates': _batch_share(vault, plan.creates, mode='create'),
         'revokes': _batch_share(vault, plan.revokes, mode='revoke'),
+        'denies': _batch_share(vault, plan.denies, mode='deny'),
     }
     _request_sync(vault, request_sync)
     return results
