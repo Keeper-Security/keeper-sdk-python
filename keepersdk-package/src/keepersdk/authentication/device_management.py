@@ -12,8 +12,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Callable, List, Optional, Tuple
 
+from .. import utils
 from ..proto import APIRequest_pb2, DeviceManagement_pb2
 from . import keeper_auth
+
+logger = utils.get_logger()
 
 URL_DEVICE_USER_LIST = 'dm/device_user_list'
 URL_DEVICE_USER_RENAME = 'dm/device_user_rename'
@@ -76,11 +79,12 @@ def rename_user_device(
     if not devices:
         raise ValueError('No devices found')
 
-    resolved = _resolve_device(devices, device_identifier)
-    if not resolved:
-        raise ValueError('No matching device found (or ambiguous device name)')
+    resolved_device = _resolve_single_device(devices, device_identifier)
+    if not resolved_device:
+        raise ValueError('No matching devices found.')
 
-    device_token, device = resolved
+    device_token = resolved_device.encryptedDeviceToken
+    device = resolved_device
     old_name = device.deviceName or 'N/A'
 
     rq = DeviceManagement_pb2.DeviceRenameRequest()
@@ -391,7 +395,16 @@ def _sanitize_device_name(name: str) -> str:
     return re.sub(r'[<>"\'\x00-\x1f\x7f-\x9f]', '', name).strip()
 
 
-def _resolve_device(
+def _device_list_index(
+    devices: List[DeviceManagement_pb2.Device], device: DeviceManagement_pb2.Device
+) -> int:
+    for index, candidate in enumerate(devices, start=1):
+        if candidate.encryptedDeviceToken == device.encryptedDeviceToken:
+            return index
+    return 0
+
+
+def _find_matching_devices(
     devices: List[DeviceManagement_pb2.Device], identifier: str
 ) -> Optional[Tuple[bytes, DeviceManagement_pb2.Device]]:
     """
@@ -408,15 +421,46 @@ def _resolve_device(
     if ident.isdigit():
         idx = int(ident)
         if 1 <= idx <= len(devices):
-            d = devices[idx - 1]
-            return d.encryptedDeviceToken, d
-        return None
+            return [devices[idx - 1]]
+        return []
+
     ident_l = ident.lower()
-    matches = [d for d in devices if (d.deviceName or '').lower().find(ident_l) >= 0]
-    if len(matches) == 1:
-        d = matches[0]
-        return d.encryptedDeviceToken, d
-    return None
+    return [d for d in devices if (d.deviceName or '').lower() == ident_l]
+
+
+def _report_multiple_matches(
+    devices: List[DeviceManagement_pb2.Device],
+    identifier: str,
+    matched_devices: List[DeviceManagement_pb2.Device],
+) -> None:
+    logger.warning("Warning: Multiple devices found matching '%s':", identifier)
+    for device in matched_devices:
+        device_id = _device_list_index(devices, device)
+        logger.info('  - ID %s: %s', device_id, device.deviceName or 'N/A')
+    logger.info(
+        'Mutiple device with same name found, please use device ID instead'
+    )
+
+
+def _resolve_single_device(
+    devices: List[DeviceManagement_pb2.Device],
+    identifier: str,
+    *,
+    allow_multiple: bool = False,
+) -> Optional[DeviceManagement_pb2.Device]:
+    matched_devices = _find_matching_devices(devices, identifier)
+    if not matched_devices:
+        logger.warning("Warning: No device found matching '%s'", identifier)
+        return None
+    if len(matched_devices) > 1 and not allow_multiple:
+        _report_multiple_matches(devices, identifier, matched_devices)
+        return None
+    if len(matched_devices) > 1:
+        logger.warning(
+            "Warning: Multiple devices found matching '%s'. Using first match.",
+            identifier,
+        )
+    return matched_devices[0]
 
 
 def _resolve_devices(
@@ -428,7 +472,7 @@ def _resolve_devices(
     seen_tokens: set[bytes] = set()
     for identifier in identifiers:
         _validate_identifier(identifier)
-        match = _resolve_device(devices, identifier)
+        match = _resolve_single_device(devices, identifier)
         if not match:
             raise ValueError(
                 f'No matching device found for "{identifier}" (or ambiguous device name)'
