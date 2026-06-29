@@ -263,5 +263,44 @@ class DeviceManagementSdkTests(unittest.TestCase):
         )
 
 
+    def test_resolve_device_requires_exact_name(self):
+        auth = MagicMock()
+        list_rs = DeviceManagement_pb2.DeviceUserResponse()
+        g = list_rs.deviceGroups.add()
+        g.devices.append(_device('Web Vault Chrome', 100))
+        g.devices.append(_device('Commander CLI on macOS', 50))
+        auth.execute_auth_rest.return_value = list_rs
+
+        with self.assertRaises(ValueError):
+            device_management.logout_user_devices(auth, ['Web Vault'])
+
+    def test_resolve_device_exact_name(self):
+        auth = MagicMock()
+        list_rs = DeviceManagement_pb2.DeviceUserResponse()
+        g = list_rs.deviceGroups.add()
+        g.devices.append(_device('Web Vault Chrome', 100))
+
+        action_rs = DeviceManagement_pb2.DeviceActionResponse()
+        ar = action_rs.deviceActionResult.add()
+        ar.deviceActionStatus = DeviceManagement_pb2.SUCCESS
+        ar.encryptedDeviceToken.append(b'\x01\x02')
+
+        auth.execute_auth_rest.side_effect = [list_rs, action_rs]
+
+        names = device_management.logout_user_devices(auth, ['Web Vault Chrome'])
+        self.assertEqual(names, ['Web Vault Chrome'])
+
+    def test_ambiguous_device_name_lists_matches(self):
+        auth = MagicMock()
+        list_rs = DeviceManagement_pb2.DeviceUserResponse()
+        g = list_rs.deviceGroups.add()
+        g.devices.append(_device('web Vault Chrome', 200, b'\x01'))
+        g.devices.append(_device('Web Vault Chrome', 100, b'\x02'))
+        auth.execute_auth_rest.return_value = list_rs
+
+        with self.assertRaisesRegex(ValueError, 'No matching devices found'):
+            device_management.unlock_user_devices(auth, ['Web Vault Chrome'])
+
+
 if __name__ == '__main__':
     unittest.main()

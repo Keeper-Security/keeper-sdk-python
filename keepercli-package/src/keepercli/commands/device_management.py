@@ -22,6 +22,9 @@ ADMIN_DEVICE_TABLE_HEADERS = [
     'ID', 'Enterprise User ID', 'Device Name', 'UI Category',
     'Device Status', 'Login Status', 'Last Accessed',
 ]
+DEVICE_IDENTIFIER_HELP = (
+    'Device ID (from device-list) or exact device name (case-insensitive match)'
+)
 
 
 def _format_timestamp(dt: Optional[datetime]) -> str:
@@ -167,7 +170,7 @@ for _action, _config in DEVICE_ACTION_DEFINITIONS.items():
     _parser.add_argument(
         'devices',
         nargs='+',
-        help='Device IDs (from device-list) or device name substrings',
+        help=DEVICE_IDENTIFIER_HELP,
     )
     _device_action_parsers[_action] = _parser
 
@@ -281,7 +284,7 @@ class DeviceRenameCommand(base.ArgparseCommand):
 
     @staticmethod
     def add_arguments_to_parser(parser: argparse.ArgumentParser):
-        parser.add_argument('device', help='Device ID (from device-list) or device name substring')
+        parser.add_argument('device', help=DEVICE_IDENTIFIER_HELP)
         parser.add_argument('new_name', help='New name for the device')
         parser.error = base.ArgparseCommand.raise_parse_exception
         parser.exit = base.ArgparseCommand.suppress_exit
@@ -324,7 +327,7 @@ class DeviceActionCommand(base.ArgparseCommand):
         parser.add_argument(
             'devices',
             nargs='+',
-            help='Device IDs (from device-list) or device name substrings',
+            help=DEVICE_IDENTIFIER_HELP,
         )
         parser.error = base.ArgparseCommand.raise_parse_exception
         parser.exit = base.ArgparseCommand.suppress_exit
