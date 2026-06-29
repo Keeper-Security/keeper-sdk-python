@@ -1,4 +1,5 @@
 import argparse
+import json
 import shlex
 from datetime import datetime
 from typing import Callable, Dict, List, Optional
@@ -12,6 +13,10 @@ from ..params import KeeperParams
 
 
 logger = api.get_logger()
+
+DEVICE_LIST_TABLE_HEADERS = [
+    'ID', 'Device Name', 'Client Type', 'Login Status', 'Last Accessed',
+]
 
 ADMIN_DEVICE_TABLE_HEADERS = [
     'ID', 'Enterprise User ID', 'Device Name', 'UI Category',
@@ -27,6 +32,41 @@ def _format_timestamp(dt: Optional[datetime]) -> str:
 
 def _sdk_error(exc: Exception) -> base.CommandError:
     return base.CommandError(str(exc))
+
+
+def _run_device_action_command(
+    context: KeeperParams,
+    device_identifiers: List[str],
+    action_fn: Callable,
+    success_message: str,
+) -> None:
+    base.require_login(context)
+    try:
+        for name in action_fn(context.auth, device_identifiers):
+            logger.info(success_message, name)
+    except ValueError as e:
+        raise _sdk_error(e) from e
+
+
+def _display_user_devices(context: KeeperParams, title_prefix: str = '') -> None:
+    devices = device_management.list_user_devices(context.auth)
+    if not devices:
+        logger.info('No devices found.')
+        return
+
+    headers = DEVICE_LIST_TABLE_HEADERS
+    rows: List[List] = []
+    for d in devices:
+        rows.append([
+            d.list_index,
+            d.name,
+            d.client_type,
+            d.login_status,
+            _format_timestamp(d.last_accessed),
+        ])
+
+    title = f'{title_prefix}User Devices ({len(rows)} found)'.strip()
+    report_utils.dump_report_data(rows, headers, fmt='table', title=title)
 
 
 def _display_admin_devices(
@@ -57,6 +97,79 @@ def _display_admin_devices(
 
     title = f'Admin Device List ({len(rows)} devices found)'
     report_utils.dump_report_data(rows, ADMIN_DEVICE_TABLE_HEADERS, fmt='table', title=title)
+
+
+DEVICE_ACTION_DEFINITIONS: Dict[str, Dict] = {
+    'logout': {
+        'description': 'Logout the user from the device',
+        'min_devices': 1,
+        'handler': device_management.logout_user_devices,
+        'success_message': "Device '%s' successfully logged out",
+    },
+    'remove': {
+        'description': 'Logout and remove the user from that device',
+        'min_devices': 1,
+        'handler': device_management.remove_user_devices,
+        'success_message': "Device '%s' successfully removed",
+    },
+    'lock': {
+        'description': (
+            'Lock the device for all users on the devices and linked devices; '
+            'logout all users from the device'
+        ),
+        'min_devices': 1,
+        'handler': device_management.lock_user_devices,
+        'success_message': "Device '%s' successfully locked",
+    },
+    'unlock': {
+        'description': 'Unlock the devices and linked devices for the calling user',
+        'min_devices': 1,
+        'handler': device_management.unlock_user_devices,
+        'success_message': "Device '%s' successfully unlocked",
+    },
+    'account-lock': {
+        'description': (
+            'Lock the device for the calling user only; '
+            'if logged in, logout the calling user'
+        ),
+        'min_devices': 1,
+        'handler': device_management.account_lock_user_devices,
+        'success_message': "Device '%s' successfully account locked",
+    },
+    'account-unlock': {
+        'description': 'Unlock the device for the calling user',
+        'min_devices': 1,
+        'handler': device_management.account_unlock_user_devices,
+        'success_message': "Device '%s' successfully account unlocked",
+    },
+    'link': {
+        'description': 'Link devices for the calling user (requires persistent login)',
+        'min_devices': 2,
+        'handler': device_management.link_user_devices,
+        'success_message': "Device '%s' successfully linked",
+    },
+    'unlink': {
+        'description': 'Unlink devices for the calling user',
+        'min_devices': 2,
+        'handler': device_management.unlink_user_devices,
+        'success_message': "Device '%s' successfully unlinked",
+    },
+}
+
+DEVICE_ACTION_CHOICES = list(DEVICE_ACTION_DEFINITIONS.keys())
+
+_device_action_parsers: Dict[str, argparse.ArgumentParser] = {}
+for _action, _config in DEVICE_ACTION_DEFINITIONS.items():
+    _parser = argparse.ArgumentParser(
+        prog=f'device-action {_action}',
+        description=_config['description'],
+    )
+    _parser.add_argument(
+        'devices',
+        nargs='+',
+        help='Device IDs (from device-list) or device name substrings',
+    )
+    _device_action_parsers[_action] = _parser
 
 
 DEVICE_ADMIN_ACTION_DEFINITIONS: Dict[str, Dict] = {
@@ -125,7 +238,21 @@ class DeviceListCommand(base.ArgparseCommand):
         fmt = kwargs.get('format') or 'table'
         output = kwargs.get('output')
 
-        headers = ['id', 'name', 'client_type', 'login_status', 'last_accessed']
+        if fmt == 'json':
+            device_list = [{
+                'id': d.list_index,
+                'deviceName': d.name,
+                'clientType': d.client_type,
+                'loginStatus': d.login_status,
+                'lastAccessedTimestamp': _format_timestamp(d.last_accessed),
+            } for d in devices]
+            report = json.dumps({'devices': device_list}, indent=2)
+            if output:
+                with open(output, 'w', encoding='utf-8') as fd:
+                    fd.write(report)
+            return report
+
+        headers = DEVICE_LIST_TABLE_HEADERS
         rows: List[List] = []
         for d in devices:
             rows.append([
@@ -170,64 +297,77 @@ class DeviceRenameCommand(base.ArgparseCommand):
                 context.auth, device_identifier, new_name
             )
             logger.info("Device name updated from '%s' to '%s'", old_name, updated_name)
+            logger.info('')
+            _display_user_devices(context, title_prefix='Updated ')
         except ValueError as e:
             raise _sdk_error(e) from e
 
 
-class DeviceRemoveCommand(base.ArgparseCommand):
-    """Log out and remove the current user from one or more devices."""
+class DeviceActionCommand(base.ArgparseCommand):
+    """Perform actions on user devices (logout, remove, lock, unlock, link, unlink, etc.)."""
 
     def __init__(self):
         parser = argparse.ArgumentParser(
-            prog='device-remove',
-            description='Logout and remove the current user from one or more devices',
+            prog='device-action',
+            description='Perform actions on user devices',
         )
-        DeviceRemoveCommand.add_arguments_to_parser(parser)
+        DeviceActionCommand.add_arguments_to_parser(parser)
         super().__init__(parser)
 
     @staticmethod
     def add_arguments_to_parser(parser: argparse.ArgumentParser):
-        parser.add_argument('devices', nargs='+', help='Device ID (from device-list) or device name substring')
-        parser.error = base.ArgparseCommand.raise_parse_exception
-        parser.exit = base.ArgparseCommand.suppress_exit
-
-    def execute(self, context: KeeperParams, **kwargs):
-        """Remove the current user from each specified device."""
-        base.require_login(context)
-        device_identifiers = kwargs.get('devices') or []
-        try:
-            for name in device_management.remove_user_devices(context.auth, device_identifiers):
-                logger.info("Device '%s' successfully removed", name)
-        except ValueError as e:
-            raise _sdk_error(e) from e
-
-
-class DeviceLogoutCommand(base.ArgparseCommand):
-    """Log out the current user from one or more devices."""
-
-    def __init__(self):
-        parser = argparse.ArgumentParser(
-            prog='device-logout',
-            description='Logout the current user from one or more devices',
+        parser.add_argument(
+            'action',
+            choices=DEVICE_ACTION_CHOICES,
+            help='Action to perform on devices',
         )
-        DeviceLogoutCommand.add_arguments_to_parser(parser)
-        super().__init__(parser)
-
-    @staticmethod
-    def add_arguments_to_parser(parser: argparse.ArgumentParser):
-        parser.add_argument('devices', nargs='+', help='Device ID (from device-list) or device name substring')
+        parser.add_argument(
+            'devices',
+            nargs='+',
+            help='Device IDs (from device-list) or device name substrings',
+        )
         parser.error = base.ArgparseCommand.raise_parse_exception
         parser.exit = base.ArgparseCommand.suppress_exit
 
-    def execute(self, context: KeeperParams, **kwargs):
-        """Log out the current user from each specified device."""
-        base.require_login(context)
-        device_identifiers = kwargs.get('devices') or []
+    def execute_args(self, context: KeeperParams, args, **kwargs):
+        args = '' if args is None else args
+        args = base.expand_cmd_args(args, context.environment_variables)
+        args = base.normalize_output_param(args)
         try:
-            for name in device_management.logout_user_devices(context.auth, device_identifiers):
-                logger.info("Device '%s' successfully logged out", name)
-        except ValueError as e:
-            raise _sdk_error(e) from e
+            parsed_args = shlex.split(args)
+            if len(parsed_args) >= 2 and parsed_args[1] in ('--help', '-h'):
+                action_parser = _device_action_parsers.get(parsed_args[0])
+                if action_parser:
+                    action_parser.print_help()
+                    return
+        except base.ParseError as e:
+            logger.warning(str(e))
+            return
+        return super().execute_args(context, args, **kwargs)
+
+    def execute(self, context: KeeperParams, **kwargs):
+        action = kwargs.get('action')
+        devices = kwargs.get('devices') or []
+        config = DEVICE_ACTION_DEFINITIONS.get(action or '')
+        if not config:
+            raise _sdk_error(ValueError(f"Invalid action: '{action}'"))
+
+        min_devices = config['min_devices']
+        if len(devices) < min_devices:
+            if min_devices == 1:
+                raise _sdk_error(ValueError('At least one device must be specified'))
+            raise _sdk_error(ValueError(
+                f'{action} action requires at least {min_devices} devices'
+            ))
+
+        _run_device_action_command(
+            context,
+            devices,
+            config['handler'],
+            config['success_message'],
+        )
+        logger.info('')
+        _display_user_devices(context, title_prefix='Updated ')
 
 
 class DeviceAdminListCommand(base.ArgparseCommand):
