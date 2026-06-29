@@ -1279,7 +1279,7 @@ class NsfRecordPermissionCommand(base.ArgparseCommand):
                 vault, kwargs.get('folder'), action=action, role=role,
                 recursive=kwargs.get('recursive', False), current_user=login))
 
-        if not plan.updates and not plan.creates and not plan.revokes:
+        if not plan.updates and not plan.creates and not plan.revokes and not plan.denies:
             if plan.skipped:
                 logger.warning('No permission changes can be made (see skipped entries).')
             else:
@@ -1309,7 +1309,7 @@ class NsfRecordPermissionCommand(base.ArgparseCommand):
     def _print_plan(plan) -> None:
         for label, items in (
                 ('SKIP', plan.skipped), ('GRANT/UPDATE', plan.updates + plan.creates),
-                ('REVOKE', plan.revokes)):
+                ('REVOKE', plan.revokes), ('DENY INHERITED', plan.denies)):
             if not items:
                 continue
             logger.info(f'\n{label}:')
