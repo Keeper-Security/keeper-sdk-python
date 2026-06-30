@@ -416,7 +416,7 @@ class DeviceAdminListCommand(base.ArgparseCommand):
             'enterprise_user_ids',
             nargs='+',
             type=int,
-            help='List of Enterprise User IDs (required). You can get enterprise user IDs by running "ei --users" command',
+            help='List of Enterprise User IDs (required). You can get enterprise user IDs by running "enterprise-info user"',
         )
         parser.error = base.ArgparseCommand.raise_parse_exception
         parser.exit = base.ArgparseCommand.suppress_exit

@@ -161,7 +161,7 @@ def list_admin_devices(
     """
     if not enterprise_user_ids:
         raise ValueError(
-            'Enterprise User ID is required. You can get enterprise user IDs by running: ei --users'
+            'Enterprise User ID is required. You can get enterprise user IDs by running: enterprise-info user'
         )
     for user_id in enterprise_user_ids:
         _validate_enterprise_user_id(user_id)
