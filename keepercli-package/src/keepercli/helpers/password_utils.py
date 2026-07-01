@@ -125,6 +125,11 @@ class GenerationRequest:
     dice_rolls: Optional[int] = None
     delimiter: str = ' '
     word_list_file: Optional[str] = None
+
+    pp_separator: Optional[str] = None
+    pp_capitalize: Optional[bool] = None
+    pp_number: Optional[bool] = None
+    passphrase_word_count: Optional[int] = None
     
     enable_breach_scan: bool = True
     max_breach_attempts: int = BREACHWATCH_MAX
@@ -277,6 +282,14 @@ class PasswordGenerationService:
                 dice_rolls, 
                 word_list_file=request.word_list_file,
                 delimiter=request.delimiter
+            )
+        elif algorithm == 'passphrase':
+            return generator.KeeperPassphraseGenerator.create_with_options(
+                None,
+                word_count=request.passphrase_word_count,
+                separator=request.pp_separator,
+                capitalize=request.pp_capitalize,
+                append_number=request.pp_number,
             )
         else:
             if request.rules and all(i is None for i in (request.symbols, request.digits, request.uppercase, request.lowercase)):
