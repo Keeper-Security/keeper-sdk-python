@@ -4,6 +4,7 @@ import shlex
 from datetime import datetime
 from typing import Callable, Dict, List, Optional
 
+from keepersdk import errors
 from keepersdk.authentication import device_management
 
 from . import base
@@ -34,6 +35,9 @@ def _format_timestamp(dt: Optional[datetime]) -> str:
 
 
 def _sdk_error(exc: Exception) -> base.CommandError:
+    if isinstance(exc, errors.KeeperApiError):
+        if device_management.is_device_api_unavailable(exc):
+            return base.CommandError(device_management.DEVICE_FEATURE_UNAVAILABLE_MESSAGE)
     return base.CommandError(str(exc))
 
 
@@ -47,7 +51,7 @@ def _run_device_action_command(
     try:
         for name in action_fn(context.auth, device_identifiers):
             logger.info(success_message, name)
-    except ValueError as e:
+    except (ValueError, errors.KeeperApiError) as e:
         raise _sdk_error(e) from e
 
 
@@ -79,7 +83,7 @@ def _display_admin_devices(
     """Fetch and print the admin device list table for the given enterprise user IDs."""
     try:
         devices = device_management.list_admin_devices(context.auth, enterprise_user_ids)
-    except ValueError as e:
+    except (ValueError, errors.KeeperApiError) as e:
         raise _sdk_error(e) from e
 
     if not devices:
@@ -256,7 +260,7 @@ class DeviceListCommand(base.ArgparseCommand):
         base.require_login(context)
         try:
             devices = device_management.list_user_devices(context.auth)
-        except ValueError as e:
+        except (ValueError, errors.KeeperApiError) as e:
             raise _sdk_error(e) from e
 
         if not devices:
@@ -327,7 +331,7 @@ class DeviceRenameCommand(base.ArgparseCommand):
             logger.info("Device name updated from '%s' to '%s'", old_name, updated_name)
             logger.info('')
             _display_user_devices(context, title_prefix='Updated ')
-        except ValueError as e:
+        except (ValueError, errors.KeeperApiError) as e:
             raise _sdk_error(e) from e
 
 
@@ -428,7 +432,7 @@ class DeviceAdminListCommand(base.ArgparseCommand):
 
         try:
             devices = device_management.list_admin_devices(context.auth, enterprise_user_ids)
-        except ValueError as e:
+        except (ValueError, errors.KeeperApiError) as e:
             raise _sdk_error(e) from e
 
         if not devices:
@@ -531,7 +535,7 @@ class DeviceAdminActionCommand(base.ArgparseCommand):
                     "Device action successfully completed: '%s' %s for user %s",
                     name, action_verb, enterprise_user_id,
                 )
-        except ValueError as e:
+        except (ValueError, errors.KeeperApiError) as e:
             raise _sdk_error(e) from e
 
         logger.info('Updated device list for user %s:', enterprise_user_id)

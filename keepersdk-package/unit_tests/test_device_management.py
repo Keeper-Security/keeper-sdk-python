@@ -133,6 +133,19 @@ class DeviceManagementSdkTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             device_management.list_admin_devices(auth, [True])
 
+    def test_list_admin_devices_feature_unavailable(self):
+        from keepersdk import errors
+
+        auth = MagicMock()
+        auth.execute_auth_rest.side_effect = errors.KeeperApiError(
+            'invalid_path_or_method',
+            'An error has occurred. (bad_path)',
+        )
+        with self.assertRaisesRegex(
+            ValueError, device_management.DEVICE_FEATURE_UNAVAILABLE_MESSAGE
+        ):
+            device_management.list_admin_devices(auth, [12345])
+
     def test_logout_admin_user_devices(self):
         auth = MagicMock()
         list_rs = _admin_list_response(12345, _device('Laptop', 100))
