@@ -63,6 +63,7 @@ class ICliCommand(abc.ABC):
 class CommandScope(enum.IntFlag):
     Account = enum.auto()
     Vault = enum.auto()
+    DeviceManagement = enum.auto()
     Enterprise = enum.auto()
     MSP = enum.auto()
     Distributor = enum.auto()

@@ -133,6 +133,19 @@ class DeviceManagementSdkTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             device_management.list_admin_devices(auth, [True])
 
+    def test_list_admin_devices_feature_unavailable(self):
+        from keepersdk import errors
+
+        auth = MagicMock()
+        auth.execute_auth_rest.side_effect = errors.KeeperApiError(
+            'invalid_path_or_method',
+            'An error has occurred. (bad_path)',
+        )
+        with self.assertRaisesRegex(
+            ValueError, device_management.DEVICE_FEATURE_UNAVAILABLE_MESSAGE
+        ):
+            device_management.list_admin_devices(auth, [12345])
+
     def test_logout_admin_user_devices(self):
         auth = MagicMock()
         list_rs = _admin_list_response(12345, _device('Laptop', 100))
@@ -301,6 +314,41 @@ class DeviceManagementSdkTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'No matching devices found'):
             device_management.unlock_user_devices(auth, ['Web Vault Chrome'])
 
+    def _admin_action_test(self, fn, action_type, user_id=12345, ident='1', device_name='Laptop'):
+        auth = MagicMock()
+        list_rs = _admin_list_response(user_id, _device(device_name, 100))
+        action_rs = DeviceManagement_pb2.DeviceAdminActionResponse()
+        ar = action_rs.deviceAdminActionResults.add()
+        ar.deviceActionStatus = DeviceManagement_pb2.SUCCESS
+        ar.encryptedDeviceToken.append(b'\x01\x02')
+        auth.execute_auth_rest.side_effect = [list_rs, action_rs]
+        names = fn(auth, user_id, [ident])
+        self.assertEqual(names, [device_name])
+        admin_action = auth.execute_auth_rest.call_args_list[1].kwargs.get('request').deviceAdminAction[0]
+        self.assertEqual(admin_action.deviceActionType, action_type)
+        self.assertEqual(admin_action.enterpriseUserId, user_id)
+
+    def test_lock_admin_user_devices(self):
+        self._admin_action_test(
+            device_management.lock_admin_user_devices, DeviceManagement_pb2.DA_LOCK
+        )
+
+    def test_unlock_admin_user_devices(self):
+        self._admin_action_test(
+            device_management.unlock_admin_user_devices, DeviceManagement_pb2.DA_UNLOCK
+        )
+
+    def test_account_lock_admin_user_devices(self):
+        self._admin_action_test(
+            device_management.account_lock_admin_user_devices,
+            DeviceManagement_pb2.DA_DEVICE_ACCOUNT_LOCK,
+        )
+
+    def test_account_unlock_admin_user_devices(self):
+        self._admin_action_test(
+            device_management.account_unlock_admin_user_devices,
+            DeviceManagement_pb2.DA_DEVICE_ACCOUNT_UNLOCK,
+        )
 
 if __name__ == '__main__':
     unittest.main()

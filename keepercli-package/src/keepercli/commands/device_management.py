@@ -4,6 +4,7 @@ import shlex
 from datetime import datetime
 from typing import Callable, Dict, List, Optional
 
+from keepersdk import errors
 from keepersdk.authentication import device_management
 
 from . import base
@@ -34,7 +35,33 @@ def _format_timestamp(dt: Optional[datetime]) -> str:
 
 
 def _sdk_error(exc: Exception) -> base.CommandError:
+    if isinstance(exc, errors.KeeperApiError):
+        if device_management.is_device_api_unavailable(exc):
+            return base.CommandError(device_management.DEVICE_FEATURE_UNAVAILABLE_MESSAGE)
     return base.CommandError(str(exc))
+
+
+def _validate_admin_enterprise_user_ids(
+    context: KeeperParams,
+    enterprise_user_ids: List[int],
+) -> List[int]:
+    """Return enterprise user IDs known to enterprise data; warn when IDs are not found."""
+    base.require_enterprise_admin(context)
+    resolved: List[int] = []
+    seen: set[int] = set()
+    for user_id in enterprise_user_ids:
+        if user_id in seen:
+            continue
+        seen.add(user_id)
+        if context.enterprise_data.users.get_entity(user_id) is None:
+            logger.warning(
+                "Warning: No enterprise_user_id found matching '%s'", user_id
+            )
+        else:
+            resolved.append(user_id)
+    if not resolved and enterprise_user_ids:
+        logger.info('No matching enterprise_user_id found')
+    return resolved
 
 
 def _run_device_action_command(
@@ -47,7 +74,7 @@ def _run_device_action_command(
     try:
         for name in action_fn(context.auth, device_identifiers):
             logger.info(success_message, name)
-    except ValueError as e:
+    except (ValueError, errors.KeeperApiError) as e:
         raise _sdk_error(e) from e
 
 
@@ -79,7 +106,7 @@ def _display_admin_devices(
     """Fetch and print the admin device list table for the given enterprise user IDs."""
     try:
         devices = device_management.list_admin_devices(context.auth, enterprise_user_ids)
-    except ValueError as e:
+    except (ValueError, errors.KeeperApiError) as e:
         raise _sdk_error(e) from e
 
     if not devices:
@@ -186,6 +213,31 @@ DEVICE_ADMIN_ACTION_DEFINITIONS: Dict[str, Dict] = {
         'handler': device_management.remove_admin_user_devices,
         'action_verb': 'removed',
     },
+    'lock': {
+        'description': (
+            'Lock the device for all users on the devices and the associated auto linked devices. '
+            'Logout all users from the device'
+        ),
+        'handler': device_management.lock_admin_user_devices,
+        'action_verb': 'locked',
+    },
+    'unlock': {
+        'description': (
+            'Unlock the devices and the associated auto linked devices for the calling user'
+        ),
+        'handler': device_management.unlock_admin_user_devices,
+        'action_verb': 'unlocked',
+    },
+    'account-lock': {
+        'description': 'Lock the device for the user only. If user is logged in, logout',
+        'handler': device_management.account_lock_admin_user_devices,
+        'action_verb': 'account locked',
+    },
+    'account-unlock': {
+        'description': 'Unlock the device for the user',
+        'handler': device_management.account_unlock_admin_user_devices,
+        'action_verb': 'account unlocked',
+    },
 }
 
 DEVICE_ADMIN_ACTION_CHOICES = list(DEVICE_ADMIN_ACTION_DEFINITIONS.keys())
@@ -231,7 +283,7 @@ class DeviceListCommand(base.ArgparseCommand):
         base.require_login(context)
         try:
             devices = device_management.list_user_devices(context.auth)
-        except ValueError as e:
+        except (ValueError, errors.KeeperApiError) as e:
             raise _sdk_error(e) from e
 
         if not devices:
@@ -277,7 +329,7 @@ class DeviceRenameCommand(base.ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(
             prog='device-rename',
-            description='Rename a device for the current user',
+            description='Rename user devices',
         )
         DeviceRenameCommand.add_arguments_to_parser(parser)
         super().__init__(parser)
@@ -302,7 +354,7 @@ class DeviceRenameCommand(base.ArgparseCommand):
             logger.info("Device name updated from '%s' to '%s'", old_name, updated_name)
             logger.info('')
             _display_user_devices(context, title_prefix='Updated ')
-        except ValueError as e:
+        except (ValueError, errors.KeeperApiError) as e:
             raise _sdk_error(e) from e
 
 
@@ -391,7 +443,7 @@ class DeviceAdminListCommand(base.ArgparseCommand):
             'enterprise_user_ids',
             nargs='+',
             type=int,
-            help='List of Enterprise User IDs (required). You can get enterprise user IDs by running "ei --users" command',
+            help='List of Enterprise User IDs (required). You can get enterprise user IDs by running "enterprise-info user"',
         )
         parser.error = base.ArgparseCommand.raise_parse_exception
         parser.exit = base.ArgparseCommand.suppress_exit
@@ -399,11 +451,15 @@ class DeviceAdminListCommand(base.ArgparseCommand):
     def execute(self, context: KeeperParams, **kwargs):
         """Display admin device list in table or JSON format for the given enterprise user IDs."""
         base.require_enterprise_admin(context)
-        enterprise_user_ids = kwargs.get('enterprise_user_ids') or []
+        enterprise_user_ids = _validate_admin_enterprise_user_ids(
+            context, kwargs.get('enterprise_user_ids') or []
+        )
+        if not enterprise_user_ids:
+            return
 
         try:
             devices = device_management.list_admin_devices(context.auth, enterprise_user_ids)
-        except ValueError as e:
+        except (ValueError, errors.KeeperApiError) as e:
             raise _sdk_error(e) from e
 
         if not devices:
@@ -437,7 +493,7 @@ class DeviceAdminActionCommand(base.ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(
             prog='device-admin-action',
-            description='Perform various action on one or more devices that the Admin has control of.',
+            description='Perform actions on devices across enterprise users',
         )
         DeviceAdminActionCommand.add_arguments_to_parser(parser)
         super().__init__(parser)
@@ -488,7 +544,12 @@ class DeviceAdminActionCommand(base.ArgparseCommand):
         """Run the requested admin device action and refresh the device list."""
         base.require_enterprise_admin(context)
         action = kwargs.get('action')
-        enterprise_user_id = kwargs.get('enterprise_user_id')
+        validated_user_ids = _validate_admin_enterprise_user_ids(
+            context, [kwargs.get('enterprise_user_id')]
+        )
+        if not validated_user_ids:
+            return
+        enterprise_user_id = validated_user_ids[0]
         devices = kwargs.get('devices') or []
         config = DEVICE_ADMIN_ACTION_DEFINITIONS.get(action or '')
         if not config:
@@ -506,7 +567,7 @@ class DeviceAdminActionCommand(base.ArgparseCommand):
                     "Device action successfully completed: '%s' %s for user %s",
                     name, action_verb, enterprise_user_id,
                 )
-        except ValueError as e:
+        except (ValueError, errors.KeeperApiError) as e:
             raise _sdk_error(e) from e
 
         logger.info('Updated device list for user %s:', enterprise_user_id)
