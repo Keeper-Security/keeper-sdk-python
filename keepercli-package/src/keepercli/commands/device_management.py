@@ -41,6 +41,29 @@ def _sdk_error(exc: Exception) -> base.CommandError:
     return base.CommandError(str(exc))
 
 
+def _validate_admin_enterprise_user_ids(
+    context: KeeperParams,
+    enterprise_user_ids: List[int],
+) -> List[int]:
+    """Return enterprise user IDs known to enterprise data; warn when IDs are not found."""
+    assert context.enterprise_data is not None
+    resolved: List[int] = []
+    seen: set[int] = set()
+    for user_id in enterprise_user_ids:
+        if user_id in seen:
+            continue
+        seen.add(user_id)
+        if context.enterprise_data.users.get_entity(user_id) is None:
+            logger.warning(
+                "Warning: No enterprise_user_id found matching '%s'", user_id
+            )
+        else:
+            resolved.append(user_id)
+    if not resolved and enterprise_user_ids:
+        logger.info('No matching enterprise_user_id found')
+    return resolved
+
+
 def _run_device_action_command(
     context: KeeperParams,
     device_identifiers: List[str],
@@ -306,7 +329,7 @@ class DeviceRenameCommand(base.ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(
             prog='device-rename',
-            description='Rename a device for the current user',
+            description='Rename user devices',
         )
         DeviceRenameCommand.add_arguments_to_parser(parser)
         super().__init__(parser)
@@ -428,7 +451,11 @@ class DeviceAdminListCommand(base.ArgparseCommand):
     def execute(self, context: KeeperParams, **kwargs):
         """Display admin device list in table or JSON format for the given enterprise user IDs."""
         base.require_enterprise_admin(context)
-        enterprise_user_ids = kwargs.get('enterprise_user_ids') or []
+        enterprise_user_ids = _validate_admin_enterprise_user_ids(
+            context, kwargs.get('enterprise_user_ids') or []
+        )
+        if not enterprise_user_ids:
+            return
 
         try:
             devices = device_management.list_admin_devices(context.auth, enterprise_user_ids)
@@ -466,7 +493,7 @@ class DeviceAdminActionCommand(base.ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(
             prog='device-admin-action',
-            description='Perform various action on one or more devices that the Admin has control of.',
+            description='Perform actions on devices across enterprise users',
         )
         DeviceAdminActionCommand.add_arguments_to_parser(parser)
         super().__init__(parser)
@@ -517,7 +544,12 @@ class DeviceAdminActionCommand(base.ArgparseCommand):
         """Run the requested admin device action and refresh the device list."""
         base.require_enterprise_admin(context)
         action = kwargs.get('action')
-        enterprise_user_id = kwargs.get('enterprise_user_id')
+        validated_user_ids = _validate_admin_enterprise_user_ids(
+            context, [kwargs.get('enterprise_user_id')]
+        )
+        if not validated_user_ids:
+            return
+        enterprise_user_id = validated_user_ids[0]
         devices = kwargs.get('devices') or []
         config = DEVICE_ADMIN_ACTION_DEFINITIONS.get(action or '')
         if not config:
