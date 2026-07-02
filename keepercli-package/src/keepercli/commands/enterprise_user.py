@@ -624,10 +624,8 @@ class EnterpriseUserEditCommand(base.ArgparseCommand, enterprise_management.IEnt
             hide_shared_folders: Optional[bool] = None
             hsf = kwargs.get('hide_shared_folders')
             if isinstance(hsf, str) and len(hsf) > 0:
-                hide_shared_folders = True if hsf == 'on' else False
-            user_type: Optional[int] = None
-            if isinstance(hide_shared_folders, bool):
-                user_type = 0 if hide_shared_folders else 2
+                hide_shared_folders = hsf == 'on'
+            user_type = enterprise_management.team_user_type_from_hide_shared_folders(hide_shared_folders)
             for user in users:
                 for team_uid in teams_to_add:
                     team_membership_to_add.append(enterprise_management.TeamUserEdit(

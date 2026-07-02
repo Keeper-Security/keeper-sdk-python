@@ -311,8 +311,10 @@ class EnterpriseTeamMembershipCommand(base.ArgparseCommand, enterprise_managemen
         parser = argparse.ArgumentParser(prog='enterprise-team membership', description='Manage enterprise team membership.')
         parser.add_argument('-au', '--add-user', action='append', help='add user to team')
         parser.add_argument('-ru', '--remove-user', action='append', help='remove user from team. @all')
-        parser.add_argument('-ar', '--add-role', action='append', help='add user to team')
-        parser.add_argument('-rr', '--remove-role', action='append', help='remove user from team, @all')
+        parser.add_argument('-ar', '--add-role', action='append', help='add role to team')
+        parser.add_argument('-rr', '--remove-role', action='append', help='remove role from team. @all')
+        parser.add_argument('-hsf', '--hide-shared-folders', dest='hide_shared_folders', action='store',
+                            choices=['on', 'off'], help='User does not see shared folders. --add-user only')
         parser.add_argument('team', type=str, nargs='+', help='Team Name or UID. Can be repeated.')
         super().__init__(parser)
         self.logger = api.get_logger()
@@ -323,10 +325,18 @@ class EnterpriseTeamMembershipCommand(base.ArgparseCommand, enterprise_managemen
     def execute(self, context: KeeperParams, **kwargs) -> None:
         base.require_enterprise_admin(context)
 
-        team_list, missing_names = enterprise_utils.TeamUtils.resolve_existing_teams(context.enterprise_data, kwargs.get('team'))
+        if not any((kwargs.get('add_user'), kwargs.get('remove_user'),
+                    kwargs.get('add_role'), kwargs.get('remove_role'))):
+            raise base.CommandError(
+                'No membership changes specified. Use -au/--add-user, -ru/--remove-user, '
+                '-ar/--add-role, or -rr/--remove-role.')
+
+        team_list, missing_names = enterprise_utils.TeamUtils.resolve_existing_teams(
+            context.enterprise_data, kwargs.get('team'))
         queued_team_list: List[enterprise_types.QueuedTeam]
         if missing_names:
-            queued_team_list, missing_names = enterprise_utils.TeamUtils.resolve_queued_teams(context.enterprise_data, missing_names)
+            queued_team_list, missing_names = enterprise_utils.TeamUtils.resolve_queued_teams(
+                context.enterprise_data, missing_names)
         else:
             queued_team_list = []
         if isinstance(missing_names, list) and len(missing_names) > 0:
@@ -342,35 +352,62 @@ class EnterpriseTeamMembershipCommand(base.ArgparseCommand, enterprise_managemen
 
         add_users = kwargs.get('add_user')
         if isinstance(add_users, list):
-            users_to_add = enterprise_utils.UserUtils.resolve_existing_users(context.enterprise_data, add_users)
+            users_to_add = enterprise_utils.UserUtils.resolve_existing_users(
+                context.enterprise_data, add_users)
         add_roles = kwargs.get('add_role')
         if isinstance(add_roles, list):
-            roles_to_add = enterprise_utils.RoleUtils.resolve_existing_roles(context.enterprise_data, add_roles)
+            resolved_roles = enterprise_utils.RoleUtils.resolve_existing_roles(
+                context.enterprise_data, add_roles)
+            roles_to_add = []
+            for role in resolved_roles:
+                if enterprise_utils.RoleUtils.is_admin_role(context.enterprise_data, role.role_id):
+                    self.logger.warning(
+                        'Teams cannot be assigned to roles with administrative permissions.')
+                else:
+                    roles_to_add.append(role)
+            if not roles_to_add:
+                roles_to_add = None
         remove_users = kwargs.get('remove_user')
         if isinstance(remove_users, list):
             has_remove_all_users = any((True for x in remove_users if x == '@all'))
             if not has_remove_all_users:
-                users_to_remove = enterprise_utils.UserUtils.resolve_existing_users(context.enterprise_data, remove_users)
+                users_to_remove = enterprise_utils.UserUtils.resolve_existing_users(
+                    context.enterprise_data, remove_users)
         remove_roles = kwargs.get('remove_role')
         if isinstance(remove_roles, list):
             has_remove_all_roles = any((True for x in remove_roles if x == '@all'))
             if not has_remove_all_roles:
-                roles_to_remove = enterprise_utils.RoleUtils.resolve_existing_roles(context.enterprise_data, remove_roles)
+                roles_to_remove = enterprise_utils.RoleUtils.resolve_existing_roles(
+                    context.enterprise_data, remove_roles)
+
+        user_type = enterprise_management.team_user_type_from_hsf_flag(kwargs.get('hide_shared_folders'))
 
         batch = batch_management.BatchManagement(loader=context.enterprise_loader, logger=self)
         for team in team_list:
-            existing_users = {x.enterprise_user_id for x in context.enterprise_data.team_users.get_links_by_subject(team.team_uid)}
-            existing_roles = {x.role_id for x in context.enterprise_data.role_teams.get_links_by_object(team.team_uid)}
+            existing_users = {
+                x.enterprise_user_id
+                for x in context.enterprise_data.team_users.get_links_by_subject(team.team_uid)
+            }
+            existing_roles = {
+                x.role_id
+                for x in context.enterprise_data.role_teams.get_links_by_object(team.team_uid)
+            }
             if users_to_add:
-                users_to_add = [x for x in users_to_add if x.enterprise_user_id not in existing_users]
-                if users_to_add:
+                for user in users_to_add:
+                    if user.enterprise_user_id in existing_users:
+                        if user_type is None:
+                            self.logger.warning(
+                                'User \"%s\" is already a member of team \"%s\"', user.username, team.name)
+                            continue
                     batch.modify_team_users(to_add=[enterprise_management.TeamUserEdit(
-                        team_uid=team.team_uid, enterprise_user_id=x.enterprise_user_id) for x in users_to_add])
+                        team_uid=team.team_uid,
+                        enterprise_user_id=user.enterprise_user_id,
+                        user_type=user_type)])
             if roles_to_add:
-                roles_to_add = [x for x in roles_to_add if x.role_id not in existing_roles]
-                if roles_to_add:
+                team_roles_to_add = [x for x in roles_to_add if x.role_id not in existing_roles]
+                if team_roles_to_add:
                     batch.modify_role_teams(to_add=[enterprise_management.RoleTeamEdit(
-                        role_id=x.role_id, team_uid=team.team_uid) for x in roles_to_add])
+                        role_id=x.role_id, team_uid=team.team_uid) for x in team_roles_to_add])
             if has_remove_all_users:
                 batch.modify_team_users(to_remove=[enterprise_management.TeamUserEdit(
                     team_uid=team.team_uid, enterprise_user_id=x) for x in existing_users])
@@ -385,18 +422,28 @@ class EnterpriseTeamMembershipCommand(base.ArgparseCommand, enterprise_managemen
                     role_id=x.role_id, team_uid=team.team_uid) for x in roles_to_remove])
 
         for queued_team in queued_team_list:
-            existing_users = {x.enterprise_user_id for x in context.enterprise_data.queued_team_users.get_links_by_subject(queued_team.team_uid)}
+            existing_users = {
+                x.enterprise_user_id
+                for x in context.enterprise_data.queued_team_users.get_links_by_subject(queued_team.team_uid)
+            }
             if users_to_add:
-                users_to_add = [x for x in users_to_add if x.enterprise_user_id not in existing_users]
-                if users_to_add:
+                for user in users_to_add:
+                    if user.enterprise_user_id in existing_users:
+                        if user_type is None:
+                            self.logger.warning(
+                                'User \"%s\" is already queued for team \"%s\"', user.username, queued_team.name)
+                            continue
                     batch.modify_team_users(to_add=[enterprise_management.TeamUserEdit(
-                        team_uid=queued_team.team_uid, enterprise_user_id=x.enterprise_user_id) for x in users_to_add])
+                        team_uid=queued_team.team_uid,
+                        enterprise_user_id=user.enterprise_user_id,
+                        user_type=user_type)])
             if has_remove_all_users:
                 batch.modify_team_users(to_remove=[enterprise_management.TeamUserEdit(
                     team_uid=queued_team.team_uid, enterprise_user_id=x) for x in existing_users])
             elif users_to_remove:
                 batch.modify_team_users(to_remove=[enterprise_management.TeamUserEdit(
-                    team_uid=queued_team.team_uid, enterprise_user_id=x.enterprise_user_id) for x in users_to_remove])
+                    team_uid=queued_team.team_uid, enterprise_user_id=x.enterprise_user_id)
+                    for x in users_to_remove])
 
         batch.apply()
 

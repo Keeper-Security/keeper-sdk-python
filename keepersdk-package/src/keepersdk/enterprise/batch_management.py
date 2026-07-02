@@ -911,34 +911,47 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
                         if not t and not qt:
                             raise Exception('team not found')
                         if u.status == 'active' and t:
-                            team_keys: Optional[keeper_auth.UserKeys]
-                            if self._team_keys and team_user.team_uid in self._team_keys:
-                                team_keys = self._team_keys[team_user.team_uid]
+                            is_member = enterprise_data.team_users.get_link(
+                                team_user.team_uid, team_user.enterprise_user_id) is not None
+                            user_type = team_user.user_type if team_user.user_type is not None else 0
+                            if is_member:
+                                if team_user.user_type is None:
+                                    raise Exception('user is already a team member')
+                                rq['command'] = 'team_enterprise_user_update'
+                                rq['user_type'] = team_user.user_type
                             else:
-                                team_keys = self.loader.keeper_auth.get_team_keys(team_user.team_uid)
-                            if not team_keys:
-                                raise Exception('team key is not loaded')
-                            if not team_keys.aes:
-                                team = enterprise_data.teams.get_entity(team_user.team_uid)
-                                if team:
-                                    team_keys.aes = team.encrypted_team_key
-                            user_keys = self.loader.keeper_auth.get_user_keys(u.username)
-                            if not user_keys:
-                                raise Exception('user key is not loaded')
-                            rq['command'] = 'team_enterprise_user_add'
-                            rq['user_type'] = 0
-                            if self.loader.keeper_auth.auth_context.forbid_rsa:
-                                if user_keys.ec:
-                                    ec_public_key = crypto.load_ec_public_key(user_keys.ec)
-                                    team_key = crypto.encrypt_ec(team_keys.aes, ec_public_key)
-                                    rq['team_key'] = utils.base64_url_encode(team_key)
-                                    rq['team_key_type'] = 'encrypted_by_public_key_ecc'
-                            else:
-                                if user_keys.rsa:
-                                    rsa_public_key = crypto.load_rsa_public_key(user_keys.rsa)
-                                    team_key = crypto.encrypt_rsa(team_keys.aes, rsa_public_key)
-                                    rq['team_key'] = utils.base64_url_encode(team_key)
-                                    rq['team_key_type'] = 'encrypted_by_public_key'
+                                team_keys: Optional[keeper_auth.UserKeys]
+                                if self._team_keys and team_user.team_uid in self._team_keys:
+                                    team_keys = self._team_keys[team_user.team_uid]
+                                else:
+                                    team_keys = self.loader.keeper_auth.get_team_keys(team_user.team_uid)
+                                if not team_keys:
+                                    raise Exception('team key is not loaded')
+                                if not team_keys.aes:
+                                    team = enterprise_data.teams.get_entity(team_user.team_uid)
+                                    if team:
+                                        team_keys.aes = team.encrypted_team_key
+                                user_keys = self.loader.keeper_auth.get_user_keys(u.username)
+                                if not user_keys:
+                                    raise Exception('user key is not loaded')
+                                rq['command'] = 'team_enterprise_user_add'
+                                rq['user_type'] = user_type
+                                if self.loader.keeper_auth.auth_context.forbid_rsa:
+                                    if user_keys.ec:
+                                        ec_public_key = crypto.load_ec_public_key(user_keys.ec)
+                                        team_key = crypto.encrypt_ec(team_keys.aes, ec_public_key)
+                                        rq['team_key'] = utils.base64_url_encode(team_key)
+                                        rq['team_key_type'] = 'encrypted_by_public_key_ecc'
+                                    else:
+                                        raise Exception('user does not have EC key')
+                                else:
+                                    if user_keys.rsa:
+                                        rsa_public_key = crypto.load_rsa_public_key(user_keys.rsa)
+                                        team_key = crypto.encrypt_rsa(team_keys.aes, rsa_public_key)
+                                        rq['team_key'] = utils.base64_url_encode(team_key)
+                                        rq['team_key_type'] = 'encrypted_by_public_key'
+                                    else:
+                                        raise Exception('user does not have RSA key')
                         else:
                             rq['command'] = 'team_queue_user'
                     elif action == EntityAction.Remove:
@@ -1026,7 +1039,14 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
         add_rt_requests: List[enterprise_pb2.RoleTeam] = []
         remove_rt_requests: List[enterprise_pb2.RoleTeam] = []
         if self._role_teams:
+            enterprise_data = self.loader.enterprise_data
             for action, role_team in self._role_teams.values():
+                if action == EntityAction.Add:
+                    is_admin_role = any(enterprise_data.managed_nodes.get_links_by_subject(role_team.role_id))
+                    if is_admin_role:
+                        self.logger.warning(
+                            'Teams cannot be assigned to roles with administrative permissions.')
+                        continue
                 rqs = add_rt_requests if action == EntityAction.Add else remove_rt_requests
                 rt = enterprise_pb2.RoleTeam()
                 rt.role_id = role_team.role_id
