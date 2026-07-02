@@ -1,12 +1,12 @@
 import logging
 import sys
-from typing import Optional, Any, Iterable, List
+from typing import Optional, Any, Iterable, List, Callable
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import History
 
 from . import prompt_utils, api, autocomplete
-from .commands import command_completer, base, command_history
+from .commands import command_completer, base, command_history, command_visibility
 from .helpers import report_utils
 from .params import KeeperParams, KeeperConfig
 from keepersdk import constants
@@ -30,6 +30,27 @@ class KeeperHistory(History):
             command_history.append(string)
 
 
+_SCOPE_DISPLAY_NAMES = {
+    base.CommandScope.Account: 'Account Commands',
+    base.CommandScope.Vault: 'Vault Commands',
+    base.CommandScope.DeviceManagement: 'Device Management Commands',
+    base.CommandScope.Enterprise: 'Enterprise Commands',
+    base.CommandScope.MSP: 'MSP Commands',
+    base.CommandScope.Distributor: 'Distributor Commands',
+    base.CommandScope.Common: 'Miscellaneous Commands',
+}
+
+_SCOPE_DISPLAY_ORDER = (
+    base.CommandScope.Account,
+    base.CommandScope.Vault,
+    base.CommandScope.DeviceManagement,
+    base.CommandScope.Enterprise,
+    base.CommandScope.MSP,
+    base.CommandScope.Distributor,
+    base.CommandScope.Common,
+)
+
+
 def do_command(command_line: str, context: KeeperParams, commands: base.CliCommands) -> Any:
     cmd, sep, args = command_line.partition(' ')
     orig_cmd = cmd
@@ -44,7 +65,7 @@ def do_command(command_line: str, context: KeeperParams, commands: base.CliComma
         command, _ = commands.commands[cmd]
         return command.execute_args(context, args.strip(), command=orig_cmd)
     else:
-        display_command_help(commands)
+        display_command_help(commands, context)
     return None
 
 
@@ -81,7 +102,8 @@ def loop(keeper_config: KeeperConfig, commands: base.CliCommands) -> int:
         if sys.stdin.isatty() and sys.stdout.isatty():
             from prompt_toolkit.enums import EditingMode
             from prompt_toolkit.shortcuts import CompleteStyle
-            completer = command_completer.CommandCompleter(commands, autocomplete.standard_completer(context))
+            completer = command_completer.CommandCompleter(
+                commands, autocomplete.standard_completer(context), context_getter=lambda: context)
             prompt_session = PromptSession(
                 multiline=False, editing_mode=EditingMode.EMACS, complete_style=CompleteStyle.MULTI_COLUMN,
                 complete_while_typing=False, completer=completer, auto_suggest=None, key_bindings=prompt_utils.kb,
@@ -174,18 +196,31 @@ def loop(keeper_config: KeeperConfig, commands: base.CliCommands) -> int:
     context.clear_session()
     return 0
 
-def display_command_help(commands: base.CliCommands):
+def display_command_help(commands: base.CliCommands, context: Optional[KeeperParams] = None):
     alias_lookup = {x[1]: x[0] for x in commands.aliases.items()}
-    all_scopes = {x[1]: x[1].name for x in commands.commands.values()}
-    scopes = sorted(all_scopes.keys())
+    available_scopes = {value[1] for value in commands.commands.values()}
     headers = ['', 'Command', 'Alias', '', 'Description']
     table = []
-    for scope in scopes:
-        scope_commands = [key for key, value in commands.commands.items() if value[1] == scope]
+    for scope in _SCOPE_DISPLAY_ORDER:
+        if scope not in available_scopes:
+            continue
+        scope_commands = [
+            key for key, value in commands.commands.items()
+            if value[1] == scope and command_visibility.is_command_visible(key, context)
+        ]
+        if not scope_commands:
+            continue
+        scope_name = _SCOPE_DISPLAY_NAMES.get(scope, scope.name)
         idx = 0
         for cmd in sorted(scope_commands):
             c = commands.commands[cmd][0]
-            table.append([all_scopes[scope] if idx == 0 else '', cmd, alias_lookup.get(cmd) or '', '...', c.description()])
+            table.append([
+                scope_name if idx == 0 else '',
+                cmd,
+                alias_lookup.get(cmd) or '',
+                '...',
+                c.description(),
+            ])
             idx += 1
 
     prompt_utils.output_text('\nCommands:')

@@ -4,14 +4,17 @@ from prompt_toolkit import completion
 
 from . import base
 from .. import autocomplete
+from .command_visibility import is_command_visible
 
 
 class CommandCompleter(completion.Completer):
     def __init__(self,
                  command_collection: base.CommandCollection,
-                 on_complete: Optional[Callable[[str, str], Iterable[str]]] = None) -> None:
+                 on_complete: Optional[Callable[[str, str], Iterable[str]]] = None,
+                 context_getter: Optional[Callable[[], object]] = None) -> None:
         self.commands = command_collection
         self.on_complete = on_complete
+        self.context_getter = context_getter
 
     def get_completions(self, document, complete_event):
         if not document.is_cursor_at_the_end:
@@ -33,7 +36,11 @@ class CommandCompleter(completion.Completer):
         command = self.commands.get_command_by_name(cmd)
         if command is None:
             if len(tokens) == 0 and document.char_before_cursor != ' ':
-                cmds = [x for x in self.commands.query_commands(cmd)]
+                context = self.context_getter() if self.context_getter else None
+                cmds = [
+                    x for x in self.commands.query_commands(cmd)
+                    if is_command_visible(x, context)
+                ]
                 cmds.sort()
                 for c in cmds:
                     yield completion.Completion(c, start_position=-len(document.text))

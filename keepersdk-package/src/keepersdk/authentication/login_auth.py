@@ -570,8 +570,12 @@ def _process_start_login(login: LoginAuth, request: APIRequest_pb2.StartLoginReq
         _on_sso_redirect(login, sso_login_info, response.encryptedLoginToken)
     elif response.loginState == APIRequest_pb2.REQUIRES_DEVICE_ENCRYPTED_DATA_KEY:
         _on_request_data_key(login, response.encryptedLoginToken)
-    elif response.loginState in (APIRequest_pb2.DEVICE_ACCOUNT_LOCKED, APIRequest_pb2.DEVICE_LOCKED):
-        raise errors.InvalidDeviceTokenError(response.message)
+    elif response.loginState == APIRequest_pb2.DEVICE_ACCOUNT_LOCKED:
+        login.login_step = LoginStepError(
+            'device_account_locked', 'Device for this account is locked')
+    elif response.loginState == APIRequest_pb2.DEVICE_LOCKED:
+        login.login_step = LoginStepError(
+            'device_locked', 'This device is locked')
     else:
         state = APIRequest_pb2.LoginState.Name(response.loginState)  # type: ignore
         message = f'State {state}: Not implemented: {response.message}'
