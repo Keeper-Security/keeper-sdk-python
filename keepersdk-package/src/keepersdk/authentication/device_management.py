@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Callable, List, Optional, Tuple
 
-from .. import utils
+from .. import errors, utils
 from ..proto import APIRequest_pb2, DeviceManagement_pb2
 from . import keeper_auth
 
@@ -23,6 +23,33 @@ URL_DEVICE_USER_RENAME = 'dm/device_user_rename'
 URL_DEVICE_USER_ACTION = 'dm/device_user_action'
 URL_DEVICE_ADMIN_LIST = 'dm/device_admin_list'
 URL_DEVICE_ADMIN_ACTION = 'dm/device_admin_action'
+
+DEVICE_FEATURE_UNAVAILABLE_MESSAGE = (
+    'Notice: This feature is not in production yet. It will be available soon.'
+)
+
+
+def is_device_api_unavailable(error: errors.KeeperApiError) -> bool:
+    return error.result_code in (404, '404', 'invalid_path_or_method')
+
+
+def _execute_device_rest(
+    auth: keeper_auth.KeeperAuth,
+    rest_endpoint: str,
+    request,
+    response_type,
+):
+    """Call a device-management REST endpoint with Commander-aligned unavailable-API handling."""
+    try:
+        return auth.execute_auth_rest(
+            rest_endpoint=rest_endpoint,
+            request=request,
+            response_type=response_type,
+        )
+    except errors.KeeperApiError as exc:
+        if is_device_api_unavailable(exc):
+            raise ValueError(DEVICE_FEATURE_UNAVAILABLE_MESSAGE) from exc
+        raise
 
 
 @dataclass(frozen=True)
@@ -92,10 +119,11 @@ def rename_user_device(
     dr.encryptedDeviceToken = device_token
     dr.deviceNewName = sanitized
 
-    rs = auth.execute_auth_rest(
-        rest_endpoint=URL_DEVICE_USER_RENAME,
-        request=rq,
-        response_type=DeviceManagement_pb2.DeviceRenameResponse,
+    rs = _execute_device_rest(
+        auth,
+        URL_DEVICE_USER_RENAME,
+        rq,
+        DeviceManagement_pb2.DeviceRenameResponse,
     )
     if not rs or not rs.deviceRenameResult:
         raise ValueError('No response returned from device rename')
@@ -161,7 +189,7 @@ def list_admin_devices(
     """
     if not enterprise_user_ids:
         raise ValueError(
-            'Enterprise User ID is required. You can get enterprise user IDs by running: ei --users'
+            'Enterprise User ID is required. You can get enterprise user IDs by running: enterprise-info user'
         )
     for user_id in enterprise_user_ids:
         _validate_enterprise_user_id(user_id)
@@ -304,11 +332,56 @@ def _validate_link_unlink_identifiers(device_identifiers: List[str]) -> None:
         raise ValueError('At least two device identifiers are required for link/unlink')
 
 
+def lock_admin_user_devices(
+    auth: keeper_auth.KeeperAuth,
+    enterprise_user_id: int,
+    device_identifiers: List[str],
+) -> List[str]:
+    """Lock devices for all users and linked devices; log out all users (enterprise admin)."""
+    return _execute_admin_device_action(
+        auth, enterprise_user_id, device_identifiers, DeviceManagement_pb2.DA_LOCK
+    )
+
+
+def unlock_admin_user_devices(
+    auth: keeper_auth.KeeperAuth,
+    enterprise_user_id: int,
+    device_identifiers: List[str],
+) -> List[str]:
+    """Unlock devices and linked devices for the enterprise user (enterprise admin)."""
+    return _execute_admin_device_action(
+        auth, enterprise_user_id, device_identifiers, DeviceManagement_pb2.DA_UNLOCK
+    )
+
+
+def account_lock_admin_user_devices(
+    auth: keeper_auth.KeeperAuth,
+    enterprise_user_id: int,
+    device_identifiers: List[str],
+) -> List[str]:
+    """Account-lock devices for the enterprise user only (enterprise admin)."""
+    return _execute_admin_device_action(
+        auth, enterprise_user_id, device_identifiers, DeviceManagement_pb2.DA_DEVICE_ACCOUNT_LOCK
+    )
+
+
+def account_unlock_admin_user_devices(
+    auth: keeper_auth.KeeperAuth,
+    enterprise_user_id: int,
+    device_identifiers: List[str],
+) -> List[str]:
+    """Account-unlock devices for the enterprise user (enterprise admin)."""
+    return _execute_admin_device_action(
+        auth, enterprise_user_id, device_identifiers, DeviceManagement_pb2.DA_DEVICE_ACCOUNT_UNLOCK
+    )
+
+
 def _fetch_devices(auth: keeper_auth.KeeperAuth) -> List[DeviceManagement_pb2.Device]:
-    rs = auth.execute_auth_rest(
-        rest_endpoint=URL_DEVICE_USER_LIST,
-        request=None,
-        response_type=DeviceManagement_pb2.DeviceUserResponse,
+    rs = _execute_device_rest(
+        auth,
+        URL_DEVICE_USER_LIST,
+        None,
+        DeviceManagement_pb2.DeviceUserResponse,
     )
     if not rs:
         return []
@@ -351,10 +424,11 @@ def _fetch_admin_device_entries(
 ) -> List[Tuple[int, DeviceManagement_pb2.Device]]:
     rq = DeviceManagement_pb2.DeviceAdminRequest()
     rq.enterpriseUserIds.extend(enterprise_user_ids)
-    rs = auth.execute_auth_rest(
-        rest_endpoint=URL_DEVICE_ADMIN_LIST,
-        request=rq,
-        response_type=DeviceManagement_pb2.DeviceAdminResponse,
+    rs = _execute_device_rest(
+        auth,
+        URL_DEVICE_ADMIN_LIST,
+        rq,
+        DeviceManagement_pb2.DeviceAdminResponse,
     )
     if not rs:
         return []
@@ -507,10 +581,11 @@ def _execute_device_action(
     device_action.deviceActionType = action_type
     device_action.encryptedDeviceToken.extend(list(token_to_device.keys()))
 
-    rs = auth.execute_auth_rest(
-        rest_endpoint=URL_DEVICE_USER_ACTION,
-        request=rq,
-        response_type=DeviceManagement_pb2.DeviceActionResponse,
+    rs = _execute_device_rest(
+        auth,
+        URL_DEVICE_USER_ACTION,
+        rq,
+        DeviceManagement_pb2.DeviceActionResponse,
     )
     if not rs or not rs.deviceActionResult:
         raise ValueError('No response returned from device action')
@@ -557,10 +632,11 @@ def _execute_admin_device_action(
     admin_action.enterpriseUserId = enterprise_user_id
     admin_action.encryptedDeviceToken.extend(list(token_to_device.keys()))
 
-    rs = auth.execute_auth_rest(
-        rest_endpoint=URL_DEVICE_ADMIN_ACTION,
-        request=rq,
-        response_type=DeviceManagement_pb2.DeviceAdminActionResponse,
+    rs = _execute_device_rest(
+        auth,
+        URL_DEVICE_ADMIN_ACTION,
+        rq,
+        DeviceManagement_pb2.DeviceAdminActionResponse,
     )
     if not rs or not rs.deviceAdminActionResults:
         raise ValueError('No response returned from device admin action')
