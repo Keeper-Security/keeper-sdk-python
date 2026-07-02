@@ -25,7 +25,7 @@ URL_DEVICE_ADMIN_LIST = 'dm/device_admin_list'
 URL_DEVICE_ADMIN_ACTION = 'dm/device_admin_action'
 
 DEVICE_FEATURE_UNAVAILABLE_MESSAGE = (
-    'This feature is not available on this server yet. It will be available soon.'
+    'Notice: This feature is not in production yet. It will be available soon.'
 )
 
 

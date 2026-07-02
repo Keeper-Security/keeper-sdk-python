@@ -46,7 +46,7 @@ def _validate_admin_enterprise_user_ids(
     enterprise_user_ids: List[int],
 ) -> List[int]:
     """Return enterprise user IDs known to enterprise data; warn when IDs are not found."""
-    assert context.enterprise_data is not None
+    base.require_enterprise_admin(context)
     resolved: List[int] = []
     seen: set[int] = set()
     for user_id in enterprise_user_ids:
