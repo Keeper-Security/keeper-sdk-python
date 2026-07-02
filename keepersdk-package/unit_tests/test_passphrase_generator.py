@@ -19,7 +19,7 @@ class TestKeeperPassphraseGenerator(TestCase):
             result = gen.generate()
         self.assertEqual(result, 'one two three four five')
 
-    def test_capitalize_and_number_apply_to_first_word_only(self):
+    def test_capitalize_applies_to_every_word_number_to_first_word_only(self):
         gen = generator.KeeperPassphraseGenerator(
             word_count=5, separator='-', capitalize=True, append_number=True)
         with mock.patch('secrets.choice', side_effect=['alpha', 'bravo', 'charlie', 'delta', 'echo']):

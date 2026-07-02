@@ -400,11 +400,12 @@ class CryptoPassphraseGenerator(PasswordGenerator):
 
 
 class KeeperPassphraseGenerator(PasswordGenerator):
-    """Vault-style passphrase generator using the bundled diceware word list.
+    """Vault-style passphrase generator using the bundled EFF large word list.
 
-    Produces ordered word passphrases (not shuffled) matching Keeper Vault behavior:
-    configurable word count (5-9), separator, first-word capitalization, and
-    optional digit appended to the first word.
+    Matches Keeper Vault / Commander behavior: each word is chosen with a
+    cryptographically secure random selector (``secrets``), using configurable
+    word count (5-9), separator, optional capitalization of every word, and
+    an optional single digit appended to the first word only.
 
     Use :meth:`create_with_options` or :meth:`create_from_policy` to apply
     enterprise passphrase policy defaults with optional CLI/$GEN overrides.
@@ -431,11 +432,12 @@ class KeeperPassphraseGenerator(PasswordGenerator):
         passphrase = ''
         first_word = True
         for _ in range(self.word_count):
+            # secrets.choice / secrets.randbelow use os.urandom (CSPRNG).
             word = secrets.choice(self._vocabulary)
             if self.capitalize and word:
-                word = word[0].upper() + word[1:]
+                word = word[0].upper() + word[1:]  # Vault UI: capitalize every word
             if self.append_number and first_word:
-                word += str(secrets.randbelow(10))
+                word += str(secrets.randbelow(10))  # Vault UI: one digit on first word only
             if not first_word:
                 passphrase += self.separator
             passphrase += word
