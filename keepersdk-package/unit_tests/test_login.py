@@ -14,6 +14,7 @@ class TestLogin(TestCase):
     StopAtDeviceApproval = False
     StopAtTwoFactor = False
     StopAtPassword = False
+    StopAtDeviceAccountLocked = False
 
     @staticmethod
     def mock_execute_rest(keeper_endpoint, rest_endpoint, request=None, response_type=None, session_token=None, payload_version=None):
@@ -32,6 +33,9 @@ class TestLogin(TestCase):
             lrq: APIRequest_pb2.StartLoginRequest = request
             lrs = response_type()
             lrs.encryptedLoginToken = data_vault.EncryptedLoginToken
+            if TestLogin.StopAtDeviceAccountLocked:
+                lrs.loginState = APIRequest_pb2.DEVICE_ACCOUNT_LOCKED
+                return lrs
             if TestLogin.StopAtDeviceApproval:
                 lrs.loginState = APIRequest_pb2.DEVICE_APPROVAL_REQUIRED
             elif TestLogin.StopAtTwoFactor:
@@ -169,6 +173,7 @@ class TestLogin(TestCase):
         TestLogin.StopAtDeviceApproval = False
         TestLogin.StopAtTwoFactor = False
         TestLogin.StopAtPassword = False
+        TestLogin.StopAtDeviceAccountLocked = False
 
     def test_success_flow(self):
         TestLogin.reset_stops()
@@ -353,3 +358,24 @@ class TestLogin(TestCase):
         self.assertIsInstance(step, login_auth.LoginStepPassword)
         with self.assertRaises(errors.KeeperApiError):
             step.verify_password('wrong password')
+
+    def test_device_account_locked(self):
+        TestLogin.reset_stops()
+        TestLogin.StopAtDeviceAccountLocked = True
+
+        auth = self.get_auth_sync()
+        config = auth.keeper_endpoint.get_configuration_storage().get()
+        device_count_before = len(list(config.devices().list()))
+
+        auth.login(data_vault.UserName)
+
+        step = auth.login_step
+        self.assertIsInstance(step, login_auth.LoginStepError)
+        self.assertEqual(step.code, 'device_account_locked')
+        config = auth.keeper_endpoint.get_configuration_storage().get()
+        self.assertEqual(len(list(config.devices().list())), device_count_before)
+        register_calls = [
+            c for c in auth.keeper_endpoint.execute_rest.call_args_list
+            if c.args and c.args[0] == 'authentication/register_device'
+        ]
+        self.assertEqual(register_calls, [])
