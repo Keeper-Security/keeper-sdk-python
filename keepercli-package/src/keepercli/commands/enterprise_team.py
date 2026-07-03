@@ -24,28 +24,20 @@ def _add_team_membership_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _add_edit_team_membership_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument('-au', '--add-user', action='append', help='add user to team')
-    parser.add_argument('-ru', '--remove-user', action='append', help='remove user from team')
-    parser.add_argument(
-        '-hsf', '--hide-shared-folders', dest='hide_shared_folders', action='store',
-        choices=['on', 'off'], help='User does not see shared folders. --add-user only',
-    )
-
-
 def _validate_add_edit_membership(kwargs: Dict[str, Any], *, has_queued_teams: bool = False) -> None:
-    if kwargs.get('add_role') or kwargs.get('remove_role'):
-        raise base.CommandError(
-            'Role membership is not supported on enterprise-team add/edit. '
-            'Use enterprise-team membership with -ar/--add-role or -rr/--remove-role.')
     remove_users = kwargs.get('remove_user')
     if isinstance(remove_users, list) and any(x == '@all' for x in remove_users):
         raise base.CommandError(
             '@all is not supported on enterprise-team add/edit. '
             'Use enterprise-team membership with -ru @all.')
-    if has_queued_teams:
+    remove_roles = kwargs.get('remove_role')
+    if isinstance(remove_roles, list) and any(x == '@all' for x in remove_roles):
         raise base.CommandError(
-            'Membership changes are not supported when adding queued teams. '
+            '@all is not supported on enterprise-team add/edit. '
+            'Use enterprise-team membership with -rr @all.')
+    if has_queued_teams and (kwargs.get('add_user') or kwargs.get('remove_user')):
+        raise base.CommandError(
+            'User membership changes are not supported when adding queued teams. '
             'Use enterprise-team membership.')
 
 
@@ -327,7 +319,7 @@ class EnterpriseTeamAddCommand(base.ArgparseCommand, enterprise_management.IEnte
                             action='store', help='disable record re-shares')
         parser.add_argument('--restrict-view', dest='restrict_view', choices=['on', 'off'],
                             action='store', help='disable view/copy passwords')
-        _add_edit_team_membership_arguments(parser)
+        _add_team_membership_arguments(parser)
         parser.add_argument('team', type=str, nargs='+', help='Team Name or Queued Team UID. Can be repeated.')
         super().__init__(parser)
         self.logger = api.get_logger()
@@ -406,10 +398,17 @@ class EnterpriseTeamAddCommand(base.ArgparseCommand, enterprise_management.IEnte
 
         if _has_membership_changes(kwargs):
             _validate_add_edit_membership(kwargs, has_queued_teams=bool(queued_teams))
+            membership_targets = [
+                _TeamMembershipTarget.from_team_edit(x) for x in new_team_edits
+            ]
+            if queued_teams:
+                membership_targets.extend(
+                    _TeamMembershipTarget.from_team_edit(enterprise_management.TeamEdit(
+                        team_uid=x.team_uid, name=x.name))
+                    for x in queued_teams
+                )
             _queue_team_membership_changes(
-                batch, context, self, kwargs,
-                [_TeamMembershipTarget.from_team_edit(x) for x in new_team_edits],
-                users_only=True,
+                batch, context, self, kwargs, membership_targets,
             )
 
         batch.apply()
@@ -427,7 +426,7 @@ class EnterpriseTeamEditCommand(base.ArgparseCommand, enterprise_management.IEnt
                             action='store', help='disable record re-shares')
         parser.add_argument('--restrict-view', dest='restrict_view', choices=['on', 'off'],
                             action='store', help='disable view/copy passwords')
-        _add_edit_team_membership_arguments(parser)
+        _add_team_membership_arguments(parser)
         parser.add_argument('team', type=str, nargs='+', help='Team Name or UID. Can be repeated.')
         super().__init__(parser)
         self.logger = api.get_logger()
@@ -482,7 +481,6 @@ class EnterpriseTeamEditCommand(base.ArgparseCommand, enterprise_management.IEnt
             _queue_team_membership_changes(
                 batch, context, self, kwargs,
                 [_TeamMembershipTarget.from_team(x) for x in team_list],
-                users_only=True,
             )
         batch.apply()
 
