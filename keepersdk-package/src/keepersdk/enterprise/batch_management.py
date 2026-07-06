@@ -31,7 +31,7 @@ class EntityAction(int, enum.Enum):
 class BatchManagement(enterprise_management.IEnterpriseManagement):
     def __init__(self,
                  loader: enterprise_types.IEnterpriseLoader,
-                 logger: enterprise_management.IEnterpriseManagementLogger):
+                 logger: Optional[enterprise_management.IEnterpriseManagementLogger] = None):
         self.loader = loader
         self.logger = logger or _NilLogger()
         self._record_types: Optional[Dict[str, Tuple[int, record_pb2.RecordTypeScope]]] = None
