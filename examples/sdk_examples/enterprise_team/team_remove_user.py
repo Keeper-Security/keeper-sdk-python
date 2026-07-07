@@ -536,8 +536,8 @@ def main():
         return
 
     # Fill in your values here (enterprise admin required).
-    team_name_or_uid = 'Testing Team'
-    user_email = 'manan.tyagi+dev@metronlabs.com'
+    team_name_or_uid = '<team_name_or_uid>' # team name or UID
+    user_email = '<user_email>' # user email
 
     try:
         loader = load_enterprise(keeper_auth_context)

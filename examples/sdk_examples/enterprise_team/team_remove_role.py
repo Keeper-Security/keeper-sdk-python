@@ -538,8 +538,8 @@ def main():
         return
 
     # Fill in your values here (enterprise admin required).
-    team_name_or_uid = 'Testing Team'
-    role_name_or_id = 'Role Name'
+    team_name_or_uid = '<team_name_or_uid>' # team name or UID
+    role_name_or_id = '<role_name_or_id>' # role name or ID
 
     try:
         loader = load_enterprise(keeper_auth_context)

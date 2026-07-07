@@ -516,60 +516,57 @@ def view_team_membership(keeper_auth_context: keeper_auth.KeeperAuth):
         
         enterprise = enterprise_loader.EnterpriseLoader(keeper_auth_context, enterprise_storage)
         
-        team_search = input('Enter team name or UID: ').strip()
+        team_uid_or_name = "<team_uid>"
         
-        if not team_search:
-            print('No team specified')
-        else:
-            team_found = None
+        team_found = None
+        
+        for team in enterprise.enterprise_data.teams.get_all_entities():
+            team_name = team.name if hasattr(team, 'name') and team.name else ''
+            team_uid = team.team_uid if hasattr(team, 'team_uid') else ''
             
-            for team in enterprise.enterprise_data.teams.get_all_entities():
-                team_name = team.name if hasattr(team, 'name') and team.name else ''
-                team_uid = team.team_uid if hasattr(team, 'team_uid') else ''
-                
-                if (team_search.lower() in team_name.lower() or 
-                    team_search == team_uid):
-                    team_found = team
-                    break
+            if (team_uid_or_name.lower() in team_name.lower() or 
+                team_uid_or_name == team_uid):
+                team_found = team
+                break
+        
+        if team_found:
+            team_name = team_found.name if hasattr(team_found, 'name') and team_found.name else 'N/A'
+            team_uid = team_found.team_uid if hasattr(team_found, 'team_uid') else 'N/A'
             
-            if team_found:
-                team_name = team_found.name if hasattr(team_found, 'name') and team_found.name else 'N/A'
-                team_uid = team_found.team_uid if hasattr(team_found, 'team_uid') else 'N/A'
+            print(f"\nTeam Membership for: {team_name}")
+            print(f"Team UID: {team_uid}")
+            print("=" * 100)
+            
+            team_users = list(enterprise.enterprise_data.team_users.get_links_by_subject(team_uid))
+            
+            if team_users:
+                print(f"\nUsers ({len(team_users)}):")
+                print("-" * 100)
+                print(f"{'Username':<40} {'Email':<40} {'Status':<20}")
+                print("-" * 100)
                 
-                print(f"\nTeam Membership for: {team_name}")
-                print(f"Team UID: {team_uid}")
-                print("=" * 100)
-                
-                team_users = list(enterprise.enterprise_data.team_users.get_links_by_subject(team_uid))
-                
-                if team_users:
-                    print(f"\nUsers ({len(team_users)}):")
-                    print("-" * 100)
-                    print(f"{'Username':<40} {'Email':<40} {'Status':<20}")
-                    print("-" * 100)
-                    
-                    for team_user in team_users:
-                        user = enterprise.enterprise_data.users.get_entity(team_user.enterprise_user_id)
-                        if user:
-                            user_name = user.full_name if hasattr(user, 'full_name') and user.full_name else user.username
-                            user_email = user.username
-                            user_status = user.status if hasattr(user, 'status') else 'unknown'
-                            print(f"{user_name[:39]:<40} {user_email[:39]:<40} {user_status:<20}")
-                else:
-                    print("\nNo users in this team")
-                
-                queued_users = list(enterprise.enterprise_data.queued_team_users.get_links_by_subject(team_uid))
-                if queued_users:
-                    print(f"\nQueued Users ({len(queued_users)}):")
-                    print("-" * 100)
-                    for queued_user in queued_users:
-                        user = enterprise.enterprise_data.users.get_entity(queued_user.enterprise_user_id)
-                        if user:
-                            print(f"  - {user.username}")
-                
-                print("=" * 100)
+                for team_user in team_users:
+                    user = enterprise.enterprise_data.users.get_entity(team_user.enterprise_user_id)
+                    if user:
+                        user_name = user.full_name if hasattr(user, 'full_name') and user.full_name else user.username
+                        user_email = user.username
+                        user_status = user.status if hasattr(user, 'status') else 'unknown'
+                        print(f"{user_name[:39]:<40} {user_email[:39]:<40} {user_status:<20}")
             else:
-                print(f'\nNo team found matching: "{team_search}"')
+                print("\nNo users in this team")
+            
+            queued_users = list(enterprise.enterprise_data.queued_team_users.get_links_by_subject(team_uid))
+            if queued_users:
+                print(f"\nQueued Users ({len(queued_users)}):")
+                print("-" * 100)
+                for queued_user in queued_users:
+                    user = enterprise.enterprise_data.users.get_entity(queued_user.enterprise_user_id)
+                    if user:
+                        print(f"  - {user.username}")
+            
+            print("=" * 100)
+        else:
+            print(f'\nNo team found matching: "{team_uid_or_name}"')
         
         enterprise.close()
         keeper_auth_context.close()
