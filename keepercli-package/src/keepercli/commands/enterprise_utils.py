@@ -189,6 +189,10 @@ class RoleUtils:
             raise base.CommandError(f'Role name \"{role_name}\" does not exist')
         return role
 
+    @staticmethod
+    def is_admin_role(e_data: enterprise_types.IEnterpriseData, role_id: int) -> bool:
+        return any(e_data.managed_nodes.get_links_by_subject(role_id))
+
 
     @staticmethod
     def enforcement_value_from_file(filepath: str) -> str:
