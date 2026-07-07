@@ -22,9 +22,11 @@ COMPLEXITY_RULES_COUNT = 4
 
 from . import base
 from .. import api
+from keepersdk import generator
+
 from ..helpers.password_utils import (
     PasswordGenerationService, GenerationRequest, GeneratedPassword,
-    BreachStatus
+    BreachStatus, DEFAULT_PASSWORD_LENGTH,
 )
 from ..params import KeeperParams
 
@@ -86,6 +88,37 @@ class PasswordGenerateCommand(base.ArgparseCommand):
                                  help='Generate crypto-style strong password')
         special_group.add_argument('--recoveryphrase', dest='recoveryphrase', action='store_true',
                                  help='Generate 24-word recovery phrase')
+
+        passphrase_group = parser.add_argument_group('Keeper Passphrase')
+        passphrase_group.add_argument(
+            '--passphrase', dest='passphrase', action='store_true',
+            help='Generate a vault-style passphrase from the EFF word list',
+        )
+        passphrase_group.add_argument(
+            '--pp-separator', '-pps', dest='pp_separator', action='store',
+            help=(
+                f'Word separator (single character, or "space"). Allowed: '
+                f'{generator.PASSPHRASE_SEPARATOR_HELP}. '
+                'Overrides enterprise policy for this command.'
+            ),
+        )
+        passphrase_group.add_argument(
+            '--pp-capitalize', '-ppc', dest='pp_capitalize', action='store_true',
+            help='Capitalize the first letter of each word. Overrides enterprise policy for this command.',
+        )
+        passphrase_group.add_argument(
+            '--pp-no-capitalize', dest='pp_capitalize', action='store_false',
+            help='Do not capitalize words. Overrides enterprise policy for this command.',
+        )
+        passphrase_group.add_argument(
+            '--pp-number', '-ppn', dest='pp_number', action='store_true',
+            help='Append a digit (0-9) to the first word only. Overrides enterprise policy for this command.',
+        )
+        passphrase_group.add_argument(
+            '--pp-no-number', dest='pp_number', action='store_false',
+            help='Do not append a digit to the first word. Overrides enterprise policy for this command.',
+        )
+        passphrase_group.set_defaults(pp_capitalize=None, pp_number=None)
         
         diceware_group = parser.add_argument_group('Diceware Options')
         diceware_group.add_argument('--dice-rolls', '-dr', dest='dice_rolls', type=int,
@@ -139,13 +172,17 @@ class PasswordGenerateCommand(base.ArgparseCommand):
     def _create_generation_request(self, **kwargs) -> GenerationRequest:
         """Create a GenerationRequest from command line arguments."""
         count = self._validate_count(kwargs.get('number', 1))
-        length = self._validate_length(kwargs.get('length', 20))
+        length = self._validate_length(kwargs.get('length', DEFAULT_PASSWORD_LENGTH))
         algorithm = self._determine_algorithm(kwargs)
         
         symbols, digits, uppercase, lowercase = self._validate_complexity_parameters(kwargs)
         rules = self._validate_rules(kwargs.get('rules'))
         dice_rolls = self._validate_dice_rolls(kwargs.get('dice_rolls'))
-        
+        pp_separator = self._parse_passphrase_separator(kwargs.get('pp_separator'))
+        passphrase_word_count = None
+        if algorithm == 'passphrase' and length != DEFAULT_PASSWORD_LENGTH:
+            passphrase_word_count = length
+
         return GenerationRequest(
             length=length,
             count=count,
@@ -158,6 +195,10 @@ class PasswordGenerateCommand(base.ArgparseCommand):
             dice_rolls=dice_rolls,
             delimiter=kwargs.get('delimiter', ' '),
             word_list_file=kwargs.get('word_list'),
+            pp_separator=pp_separator,
+            pp_capitalize=kwargs.get('pp_capitalize'),
+            pp_number=kwargs.get('pp_number'),
+            passphrase_word_count=passphrase_word_count,
             enable_breach_scan=not kwargs.get('no_breachwatch', False)
             # max_breach_attempts uses GenerationRequest default value
         )
@@ -182,12 +223,24 @@ class PasswordGenerateCommand(base.ArgparseCommand):
         """Determine password generation algorithm from arguments."""
         if kwargs.get('crypto'):
             return 'crypto'
+        elif kwargs.get('passphrase'):
+            return 'passphrase'
         elif kwargs.get('recoveryphrase'):
             return 'recovery'
         elif kwargs.get('dice_rolls'):
             return 'diceware'
         else:
             return 'random'  # default
+
+    @staticmethod
+    def _parse_passphrase_separator(pp_separator: Optional[str]) -> Optional[str]:
+        """Parse and validate passphrase separator from CLI."""
+        if not isinstance(pp_separator, str) or not pp_separator.strip():
+            return None
+        separator, error = generator._parse_passphrase_separator_token(pp_separator.strip())
+        if error:
+            raise base.CommandError(error)
+        return separator
     
     def _validate_complexity_parameters(self, kwargs: Dict[str, Any]) -> tuple:
         """Validate complexity parameters (symbols, digits, uppercase, lowercase)."""

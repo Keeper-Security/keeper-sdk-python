@@ -6,7 +6,7 @@ import datetime
 import itertools
 import json
 import os
-from typing import Iterable, Optional, List, Any, Sequence, Union, Dict
+from typing import Iterable, Optional, List, Any, Sequence, Union, Dict, Tuple
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
@@ -118,8 +118,9 @@ $<ACTION>[:<PARAMS>, <PARAMS>]   executes an action that returns a field value
 Value                   Field type         Description                      Example
 ====================    ===============    ===================              ==============
 $GEN:[alg],[n]          password           Generates a random password      $GEN:dice,5
-                                           Default algorith is rand         alg: [rand | dice | crypto]
+                                           Default algorith is rand         alg: [rand | dice | crypto | passphrase]
                                            Optional: password length        
+                                           passphrase: $GEN:passphrase[,word_count][,separator][,capitalize][,number]
 $GEN                    oneTimeCode        Generates TOTP URL               
 $GEN:[alg,][enc]        keyPair            Generates a key pair and         $GEN:ec,enc
                                            optional passcode                alg: [rsa | ec | ed25519], enc 
@@ -183,8 +184,13 @@ class RecordEditMixin(typed_field_utils.TypedFieldMixin):
             if parsed_field.type == 'login':
                 record.login = parsed_field.value
             elif parsed_field.type == 'password':
+                action_params.clear()
                 if self.is_generate_value(parsed_field.value, action_params):
-                    record.password = self.generate_password(action_params)
+                    password, gen_error = self.generate_password(action_params)
+                    if gen_error:
+                        self.on_warning(gen_error)
+                    elif password is not None:
+                        record.password = password
                 else:
                     record.password = parsed_field.value
             elif parsed_field.type == 'url':
@@ -260,22 +266,49 @@ class RecordEditMixin(typed_field_utils.TypedFieldMixin):
         }
 
     @staticmethod
-    def generate_password(parameters: Optional[Sequence[str]]=None) -> str:
+    def generate_password(parameters: Optional[Sequence[str]] = None,
+                          policy: Optional[dict] = None) -> Tuple[Optional[str], Optional[str]]:
+        algorithm, error = generator.resolve_gen_password_algorithm(
+            parameters if isinstance(parameters, (tuple, list, set)) else None)
+        if error:
+            return None, error
+
+        length = None
         if isinstance(parameters, (tuple, list, set)):
-            algorithm = next((x for x in parameters if x in ('rand', 'dice', 'crypto')), 'rand')
             length = next((x for x in parameters if x.isnumeric()), None)
             if isinstance(length, str) and len(length) > 0:
                 try:
                     length = int(length)
                 except ValueError:
                     pass
-        else:
-            algorithm = 'rand'
-            length = None
 
         gen: generator.PasswordGenerator
         if algorithm == 'crypto':
             gen = generator.CryptoPassphraseGenerator()
+        elif algorithm == 'passphrase':
+            pp_opts, pp_error = generator.parse_passphrase_gen_parameters(parameters)
+            if pp_error:
+                return None, pp_error
+            if policy and policy.get('passphrase-allow') is False:
+                logger.warning(
+                    'Passphrase generation is disabled by enterprise policy; using random password.')
+                fallback_length = pp_opts.word_count or length
+                if isinstance(fallback_length, int):
+                    if fallback_length < 4:
+                        fallback_length = 4
+                    elif fallback_length > 200:
+                        fallback_length = 200
+                else:
+                    fallback_length = 20
+                gen = generator.KeeperPasswordGenerator(length=fallback_length)
+            else:
+                gen = generator.KeeperPassphraseGenerator.create_with_options(
+                    policy,
+                    word_count=pp_opts.word_count if pp_opts.word_count is not None else length,
+                    separator=pp_opts.separator,
+                    capitalize=pp_opts.capitalize,
+                    append_number=pp_opts.append_number,
+                )
         elif algorithm == 'dice':
             if isinstance(length, int):
                 if length < 1:
@@ -294,7 +327,7 @@ class RecordEditMixin(typed_field_utils.TypedFieldMixin):
             else:
                 length = 20
             gen = generator.KeeperPasswordGenerator(length=length)
-        return gen.generate()
+        return gen.generate(), None
 
     @staticmethod
     def generate_totp_url() -> str:
@@ -456,12 +489,20 @@ class RecordEditMixin(typed_field_utils.TypedFieldMixin):
                 value: Any = None
                 if self.is_generate_value(parsed_field.value, action_params):
                     if record_field.type == 'password':
-                        value = self.generate_password(action_params)
+                        value, gen_error = self.generate_password(action_params)
+                        if gen_error:
+                            self.on_warning(gen_error)
+                            value = None
                     elif record_field.type in ('oneTimeCode', 'otp'):
                         value = self.generate_totp_url()
                     elif record_field.type in ('keyPair', 'privateKey'):
                         should_encrypt = 'enc' in action_params
-                        passphrase = self.generate_password() if should_encrypt else ''
+                        passphrase = ''
+                        if should_encrypt:
+                            passphrase, gen_error = self.generate_password()
+                            if gen_error:
+                                self.on_warning(gen_error)
+                                continue
                         key_type = next((x for x in action_params if x in ('rsa', 'ec', 'ed25519')), 'rsa')
                         value = self.generate_key_pair(key_type, passphrase)
                         if passphrase:

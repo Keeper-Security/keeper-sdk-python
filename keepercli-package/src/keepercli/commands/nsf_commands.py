@@ -851,6 +851,8 @@ class NsfRndirCommand(base.ArgparseCommand):
                 raise base.CommandError('Folder name cannot be empty')
         if new_name is None and color is None:
             raise base.CommandError('New folder name and/or color parameters are required.')
+        
+        display = _folder_name_from_vault(vault, folder_arg)
 
         def _run():
             return nsf_management.update_nsf_folder(
@@ -858,7 +860,6 @@ class NsfRndirCommand(base.ArgparseCommand):
 
         result = _wrap_nsf('nsf-rndir', _run)
         if not kwargs.get('quiet'):
-            display = _folder_name_from_vault(vault, result.folder_uid)
             if new_name:
                 logger.info('Folder "%s" has been renamed to "%s"', display, new_name)
             elif color:
