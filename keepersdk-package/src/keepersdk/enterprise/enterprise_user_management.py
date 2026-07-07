@@ -574,9 +574,9 @@ def add_users_to_teams(
     
     enterprise_data = loader.enterprise_data
     
-    user_type: Optional[int] = None
-    if isinstance(hide_shared_folders, bool):
-        user_type = 0 if hide_shared_folders else 2
+    user_type = enterprise_management.team_user_type_from_hide_shared_folders(
+        hide_shared_folders if isinstance(hide_shared_folders, bool) else None
+    )
     
     batch = batch_management.BatchManagement(loader=loader, logger=logger)
     
