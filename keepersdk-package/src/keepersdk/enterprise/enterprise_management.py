@@ -8,6 +8,18 @@ import attrs
 from . import enterprise_types
 
 
+def team_user_type_from_hide_shared_folders(hide_shared_folders: Optional[bool]) -> Optional[int]:
+    if hide_shared_folders is None:
+        return None
+    return 2 if hide_shared_folders else 1
+
+
+def team_user_type_from_hsf_flag(hsf_flag: Optional[str]) -> Optional[int]:
+    if not hsf_flag:
+        return None
+    return 2 if hsf_flag == 'on' else 1
+
+
 @attrs.define(kw_only=True)
 class NodeEdit:
     _node_id: int

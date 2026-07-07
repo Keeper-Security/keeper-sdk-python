@@ -19,8 +19,14 @@ from keepersdk.authentication.yubikey import (
     yubikey_authenticate,
 )
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
-from keepersdk.enterprise import enterprise_loader, sqlite_enterprise_storage
-from keepersdk.errors import KeeperApiError
+from keepersdk.enterprise import (
+    batch_management,
+    enterprise_loader,
+    enterprise_management,
+    enterprise_user_management,
+    sqlite_enterprise_storage,
+)
+
 
 try:
     import pyperclip
@@ -496,101 +502,104 @@ def login():
     return keeper_auth_context, keeper_endpoint
 
 
-def view_team_membership(keeper_auth_context: keeper_auth.KeeperAuth):
-    """
-    View team membership details for a specific team.
-    
-    Args:
-        keeper_auth_context: The authenticated Keeper context with enterprise admin privileges.
-    """
+def find_team(enterprise_data, team_name_or_uid: str):
+    search = team_name_or_uid.strip()
+    for team in enterprise_data.teams.get_all_entities():
+        team_name = team.name if team.name else ''
+        if search.lower() in team_name.lower() or search == team.team_uid:
+            return team
+    return None
+
+
+def find_user_by_email(enterprise_data, email: str):
+    email_lower = email.strip().lower()
+    for user in enterprise_data.users.get_all_entities():
+        if user.username.lower() == email_lower:
+            return user
+    return None
+
+
+def load_enterprise(keeper_auth_context):
     if not keeper_auth_context.auth_context.is_enterprise_admin:
-        print("ERROR: This operation requires enterprise admin privileges.")
-        print("The current user is not an enterprise administrator.")
-        keeper_auth_context.close()
-        return
-    
-    try:
-        conn = sqlite3.Connection('file::memory:', uri=True)
-        enterprise_id = keeper_auth_context.auth_context.enterprise_id or 0
-        enterprise_storage = sqlite_enterprise_storage.SqliteEnterpriseStorage(lambda: conn, enterprise_id)
-        
-        enterprise = enterprise_loader.EnterpriseLoader(keeper_auth_context, enterprise_storage)
-        
-        team_uid_or_name = "<team_uid>"
-        
-        team_found = None
-        
-        for team in enterprise.enterprise_data.teams.get_all_entities():
-            team_name = team.name if hasattr(team, 'name') and team.name else ''
-            team_uid = team.team_uid if hasattr(team, 'team_uid') else ''
-            
-            if (team_uid_or_name.lower() in team_name.lower() or 
-                team_uid_or_name == team_uid):
-                team_found = team
-                break
-        
-        if team_found:
-            team_name = team_found.name if hasattr(team_found, 'name') and team_found.name else 'N/A'
-            team_uid = team_found.team_uid if hasattr(team_found, 'team_uid') else 'N/A'
-            
-            print(f"\nTeam Membership for: {team_name}")
-            print(f"Team UID: {team_uid}")
-            print("=" * 100)
-            
-            team_users = list(enterprise.enterprise_data.team_users.get_links_by_subject(team_uid))
-            
-            if team_users:
-                print(f"\nUsers ({len(team_users)}):")
-                print("-" * 100)
-                print(f"{'Username':<40} {'Email':<40} {'Status':<20}")
-                print("-" * 100)
-                
-                for team_user in team_users:
-                    user = enterprise.enterprise_data.users.get_entity(team_user.enterprise_user_id)
-                    if user:
-                        user_name = user.full_name if hasattr(user, 'full_name') and user.full_name else user.username
-                        user_email = user.username
-                        user_status = user.status if hasattr(user, 'status') else 'unknown'
-                        print(f"{user_name[:39]:<40} {user_email[:39]:<40} {user_status:<20}")
-            else:
-                print("\nNo users in this team")
-            
-            queued_users = list(enterprise.enterprise_data.queued_team_users.get_links_by_subject(team_uid))
-            if queued_users:
-                print(f"\nQueued Users ({len(queued_users)}):")
-                print("-" * 100)
-                for queued_user in queued_users:
-                    user = enterprise.enterprise_data.users.get_entity(queued_user.enterprise_user_id)
-                    if user:
-                        print(f"  - {user.username}")
-            
-            print("=" * 100)
-        else:
-            print(f'\nNo team found matching: "{team_uid_or_name}"')
-        
-        enterprise.close()
-        keeper_auth_context.close()
-        
-    except KeeperApiError as e:
-        print(f"\nAPI Error: {e}")
-        keeper_auth_context.close()
-    except Exception as e:
-        print(f"\nError loading enterprise data: {e}")
-        keeper_auth_context.close()
+        raise RuntimeError('This operation requires enterprise admin privileges.')
+    enterprise_id = keeper_auth_context.auth_context.enterprise_id or 0
+    conn = sqlite3.Connection('file::memory:', uri=True)
+    enterprise_storage = sqlite_enterprise_storage.SqliteEnterpriseStorage(
+        lambda: conn, enterprise_id
+    )
+    loader = enterprise_loader.EnterpriseLoader(keeper_auth_context, enterprise_storage)
+    loader.load()
+    return loader
 
 
 def main():
-    """
-    Main entry point for the enterprise team membership script.
-    Performs login and displays team membership details.
-    """
     keeper_auth_context, _ = login()
-    
-    if keeper_auth_context:
-        view_team_membership(keeper_auth_context)
-    else:
-        print("Login failed. Unable to retrieve enterprise information.")
+    if not keeper_auth_context:
+        return
+
+    # Fill in your values here (enterprise admin required).
+    team_name_or_uid = '<team_name_or_uid>'
+    user_email = '<user_email>'
+    # 'on' hides shared folders from the user on this team; 'off' shows them.
+    hide_shared_folders = 'on'
+
+    try:
+        loader = load_enterprise(keeper_auth_context)
+        enterprise_data = loader.enterprise_data
+
+        team = find_team(enterprise_data, team_name_or_uid)
+        if not team:
+            print(f'Team not found: {team_name_or_uid}')
+            return
+        user = find_user_by_email(enterprise_data, user_email)
+        if not user:
+            print(f'User not found: {user_email}')
+            return
+
+        user_type = enterprise_management.team_user_type_from_hsf_flag(hide_shared_folders)
+        if user_type is None:
+            print("hide_shared_folders must be 'on' or 'off'")
+            return
+
+        existing_users = {
+            x.enterprise_user_id
+            for x in enterprise_data.team_users.get_links_by_subject(team.team_uid)
+        }
+        if user.enterprise_user_id not in existing_users:
+            result = enterprise_user_management.add_users_to_teams(
+                loader,
+                user_ids=[user.enterprise_user_id],
+                team_uids={team.team_uid},
+                hide_shared_folders=hide_shared_folders == 'on',
+            )
+            print(result.message or 'Done')
+            if result.added_count:
+                hsf_label = 'hidden' if hide_shared_folders == 'on' else 'visible'
+                print(
+                    f"Added user '{user.username}' to team '{team.name}' "
+                    f"with shared folders {hsf_label}"
+                )
+            return
+
+        batch = batch_management.BatchManagement(loader=loader)
+        batch.modify_team_users(to_add=[
+            enterprise_management.TeamUserEdit(
+                team_uid=team.team_uid,
+                enterprise_user_id=user.enterprise_user_id,
+                user_type=user_type,
+            )
+        ])
+        batch.apply()
+        hsf_label = 'hidden' if hide_shared_folders == 'on' else 'visible'
+        print(
+            f"Updated team '{team.name}' member '{user.username}': "
+            f"shared folders are now {hsf_label}"
+        )
+    except Exception as e:
+        print(f'Error updating hide shared folders setting: {e}')
+    finally:
+        keeper_auth_context.close()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

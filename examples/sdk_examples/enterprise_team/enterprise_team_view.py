@@ -516,21 +516,21 @@ def view_enterprise_teams(keeper_auth_context: keeper_auth.KeeperAuth):
         
         enterprise = enterprise_loader.EnterpriseLoader(keeper_auth_context, enterprise_storage)
         
-        team_search = input('Enter team name or UID (or leave empty for all teams): ').strip()
+        team_uid_or_name = "<team_uid_or_name>" # team name or UID to search for or leave empty to display all teams
         
         teams_to_display = []
         
-        if team_search:
+        if team_uid_or_name:
             for team in enterprise.enterprise_data.teams.get_all_entities():
                 team_name = team.name if hasattr(team, 'name') and team.name else ''
                 team_uid = team.team_uid if hasattr(team, 'team_uid') else ''
                 
-                if (team_search.lower() in team_name.lower() or 
-                    team_search == team_uid):
+                if (team_uid_or_name.lower() in team_name.lower() or 
+                    team_uid_or_name == team_uid):
                     teams_to_display.append(team)
             
             if not teams_to_display:
-                print(f'\nNo teams found matching: "{team_search}"')
+                print(f'\nNo teams found matching: "{team_uid_or_name}"')
         else:
             teams_to_display = list(enterprise.enterprise_data.teams.get_all_entities())
         
