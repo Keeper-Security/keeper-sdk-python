@@ -9,8 +9,7 @@ from . import base
 from .. import api, prompt_utils
 from ..params import KeeperParams
 from ..helpers import folder_utils, report_utils
-from keepersdk import utils
-from keepersdk.proto import enterprise_pb2
+from keepersdk.enterprise import enterprise_team_management
 from keepersdk.vault import record_management, vault_data, vault_types, vault_record, vault_utils, share_management_utils
 
 
@@ -310,14 +309,11 @@ class TeamListCommand(base.ArgparseCommand):
         def fetch_members(team_uid: str) -> List[str]:
             if not allow_fetch:
                 return []
-            rq = enterprise_pb2.GetTeamMemberRequest()
-            rq.teamUid = utils.base64_url_decode(team_uid)
-            rs = context.vault.keeper_auth.execute_auth_rest(
-                rest_endpoint='vault/get_team_members',
-                request=rq,
-                response_type=enterprise_pb2.GetTeamMemberResponse
-            )
-            return [x.email for x in rs.enterpriseUser]
+            auth = context.auth or (context.vault.keeper_auth if context.vault else None)
+            if auth is None:
+                return []
+            members = enterprise_team_management.get_team_members(auth, team_uid)
+            return [x.email for x in members if x.email]
 
         enterprise_teams = get_enterprise_teams()
         for t in teams:

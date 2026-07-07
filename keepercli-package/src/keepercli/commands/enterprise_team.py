@@ -3,7 +3,7 @@ import json
 from typing import Dict, List, Optional, Any, Tuple, Set
 
 from keepersdk import utils, crypto
-from keepersdk.enterprise import enterprise_types, batch_management, enterprise_management
+from keepersdk.enterprise import enterprise_types, batch_management, enterprise_management, enterprise_team_management
 from . import base, enterprise_utils
 from .. import api, prompt_utils
 from ..helpers import report_utils
@@ -17,6 +17,7 @@ class EnterpriseTeamCommand(base.GroupCommand):
     def __init__(self):
         super().__init__('Manage an enterprise team(s)')
         self.register_command(EnterpriseTeamViewCommand(), 'view', 'v')
+        self.register_command(EnterpriseTeamGetCommand(), 'get', 'g')
         self.register_command(EnterpriseTeamAddCommand(), 'add', 'a')
         self.register_command(EnterpriseTeamEditCommand(), 'edit', 'e')
         self.register_command(EnterpriseTeamDeleteCommand(), 'delete')
@@ -24,61 +25,42 @@ class EnterpriseTeamCommand(base.GroupCommand):
 
 
 class EnterpriseTeamViewCommand(base.ArgparseCommand):
+    command_prog = 'enterprise-team view'
+
     def __init__(self):
-        parser = argparse.ArgumentParser(prog='enterprise-team view', parents=[base.json_output_parser], description='View enterprise team.')
+        parser = argparse.ArgumentParser(
+            prog=self.command_prog,
+            parents=[base.json_output_parser],
+            description='View enterprise team.',
+        )
         parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', help='print verbose information')
         parser.add_argument('team', help='Team Name or UID')
         super().__init__(parser)
 
     def execute(self, context: KeeperParams, **kwargs) -> Any:
+        return self._execute_team_view(context, **kwargs)
+
+    def _execute_team_view(self, context: KeeperParams, **kwargs) -> Any:
         base.require_enterprise_admin(context)
         if context.vault is None:
             raise base.CommandError('Vault is not initialized. Login to initialize the vault.')
 
         verbose = kwargs.get('verbose') is True
+        team_name = kwargs.get('team')
 
-        enterprise_data = context.enterprise_data
-        team_name =  kwargs.get('team')
-        team = enterprise_utils.TeamUtils.resolve_single_team(enterprise_data, team_name)
-        if team is None:
-            raise base.CommandError(f'Team name \"{team_name}\" does not exist')
-        node_name = enterprise_utils.NodeUtils.get_node_path(enterprise_data, team.node_id, omit_root=False)
-        team_obj = {
-            'team_uid': team.team_uid,
-            'team_name': team.name,
-            'node_id': team.node_id,
-            'node_name': node_name,
-            'restrict_edit': team.restrict_edit,
-            'restrict_share': team.restrict_share,
-            'restrict_view': team.restrict_view,
-        }
-        role_ids = {x.role_id for x in enterprise_data.role_teams.get_links_by_object(team.team_uid)}
-        if role_ids:
-            roles = [r for r in (enterprise_data.roles.get_entity(x) for x in role_ids) if r]
-            if len(roles) > 0:
-                team_obj['team_roles'] = [{
-                    'role_id': x.role_id,
-                    'role_name': x.name,
-                } for x in roles]
+        try:
+            team_info = enterprise_team_management.get_team(
+                team_name,
+                enterprise_data=context.enterprise_data,
+                vault_data_obj=context.vault.vault_data if context.vault else None,
+                auth=context.auth,
+                is_enterprise_admin=True,
+                fetch_live_members=verbose,
+            )
+        except enterprise_team_management.EnterpriseTeamManagementError as exc:
+            raise base.CommandError(str(exc)) from exc
 
-        user_ids = {x.enterprise_user_id for x in enterprise_data.team_users.get_links_by_subject(team.team_uid)}
-        if len(user_ids) > 0:
-            users = [u for u in (enterprise_data.users.get_entity(x) for x in user_ids) if u is not None]
-            if len(users) > 0:
-                team_obj['team_users'] = [{
-                    'enterprise_user_id': x.enterprise_user_id,
-                    'username': x.username,
-                } for x in users]
-
-        user_ids = {x.enterprise_user_id for x in enterprise_data.queued_team_users.get_links_by_subject(team.team_uid)}
-        if len(user_ids) > 0:
-            users = [u for u in (enterprise_data.users.get_entity(x) for x in user_ids) if u]
-            if len(users) > 0:
-                team_obj['queued_team_users'] = [{
-                    'enterprise_user_id': x.enterprise_user_id,
-                    'username': x.username,
-                } for x in users]
-
+        team_obj = team_info.to_dict()
 
         if kwargs.get('format') == 'json':
             json_text = json.dumps(team_obj, indent=4)
@@ -97,9 +79,12 @@ class EnterpriseTeamViewCommand(base.ArgparseCommand):
             if field_value is not None:
                 row = [field_title, field_value]
                 if verbose:
-                    if field == 'node':
+                    if field == 'node_name':
                         row.append(team_obj.get('node_id'))
                 table.append(row)
+
+        if team_obj.get('access_level'):
+            table.append(['Access Level', team_obj['access_level']])
 
         trs = team_obj.get('team_roles')
         if isinstance(trs, list) and len(trs) > 0:
@@ -125,10 +110,22 @@ class EnterpriseTeamViewCommand(base.ArgparseCommand):
                 row.append([x['enterprise_user_id'] for x in qtus])
             table.append(row)
 
+        members = team_obj.get('members')
+        if isinstance(members, list) and len(members) > 0:
+            row = ['Member Email(s)']
+            row.append([x['email'] for x in members])
+            if verbose:
+                row.append([x['enterprise_user_id'] for x in members])
+            table.append(row)
+
         headers = ['', '']
         if verbose:
             headers.append('')
         report_utils.dump_report_data(table, headers=headers, no_header=True, right_align=[0])
+
+
+class EnterpriseTeamGetCommand(EnterpriseTeamViewCommand):
+    command_prog = 'enterprise-team get'
 
 
 class EnterpriseTeamAddCommand(base.ArgparseCommand, enterprise_management.IEnterpriseManagementLogger):
