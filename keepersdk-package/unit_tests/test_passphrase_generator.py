@@ -7,24 +7,25 @@ class TestKeeperPassphraseGenerator(TestCase):
 
     def test_default_generates_five_hyphen_separated_words(self):
         gen = generator.KeeperPassphraseGenerator()
-        with mock.patch('secrets.choice', side_effect=['alpha', 'bravo', 'charlie', 'delta', 'echo']):
-            with mock.patch('secrets.randbelow', return_value=3):
-                result = gen.generate()
+        gen._vocabulary = ['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot']
+        with mock.patch('secrets.randbelow', side_effect=[0, 0, 0, 0, 0, 3]):
+            result = gen.generate()
         self.assertEqual(result, 'Alpha3-Bravo-Charlie-Delta-Echo')
 
     def test_does_not_shuffle_words_like_diceware(self):
         gen = generator.KeeperPassphraseGenerator(
             word_count=5, separator=' ', capitalize=False, append_number=False)
-        with mock.patch('secrets.choice', side_effect=['one', 'two', 'three', 'four', 'five']):
+        gen._vocabulary = ['one', 'two', 'three', 'four', 'five', 'six']
+        with mock.patch('secrets.randbelow', side_effect=[0, 0, 0, 0, 0]):
             result = gen.generate()
         self.assertEqual(result, 'one two three four five')
 
     def test_capitalize_applies_to_every_word_number_to_first_word_only(self):
         gen = generator.KeeperPassphraseGenerator(
             word_count=5, separator='-', capitalize=True, append_number=True)
-        with mock.patch('secrets.choice', side_effect=['alpha', 'bravo', 'charlie', 'delta', 'echo']):
-            with mock.patch('secrets.randbelow', return_value=7):
-                result = gen.generate()
+        gen._vocabulary = ['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot']
+        with mock.patch('secrets.randbelow', side_effect=[0, 0, 0, 0, 0, 7]):
+            result = gen.generate()
         self.assertEqual(result, 'Alpha7-Bravo-Charlie-Delta-Echo')
 
     def test_create_from_policy_honors_passphrase_fields(self):
@@ -34,10 +35,17 @@ class TestKeeperPassphraseGenerator(TestCase):
             'passphrase-capitalize': True,
             'passphrase-number': True,
         })
-        with mock.patch('secrets.choice', side_effect=['alpha', 'bravo', 'charlie', 'delta', 'echo']):
-            with mock.patch('secrets.randbelow', return_value=4):
-                result = gen.generate()
+        gen._vocabulary = ['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot']
+        with mock.patch('secrets.randbelow', side_effect=[0, 0, 0, 0, 0, 4]):
+            result = gen.generate()
         self.assertEqual(result, 'Alpha4-Bravo-Charlie-Delta-Echo')
+
+    def test_generated_words_are_unique(self):
+        gen = generator.KeeperPassphraseGenerator(word_count=9, capitalize=False, append_number=False)
+        for _ in range(100):
+            words = gen.generate().split(gen.separator)
+            self.assertEqual(len(words), 9)
+            self.assertEqual(len(words), len(set(words)))
 
     def test_parse_passphrase_gen_parameters(self):
         opts, error = generator.parse_passphrase_gen_parameters(

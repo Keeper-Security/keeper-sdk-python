@@ -402,10 +402,10 @@ class CryptoPassphraseGenerator(PasswordGenerator):
 class KeeperPassphraseGenerator(PasswordGenerator):
     """Vault-style passphrase generator using the bundled EFF large word list.
 
-    Matches Keeper Vault / Commander behavior: each word is chosen with a
-    cryptographically secure random selector (``secrets``), using configurable
-    word count (5-9), separator, optional capitalization of every word, and
-    an optional single digit appended to the first word only.
+    Each word is chosen with a cryptographically secure random selector (``secrets``), 
+    using configurable word count (5-9), separator, optional capitalization of every word, 
+    and an optional single digit appended to the first word only. Words are never
+    repeated within a single passphrase.
 
     Use :meth:`create_with_options` or :meth:`create_from_policy` to apply
     enterprise passphrase policy defaults with optional CLI/$GEN overrides.
@@ -424,6 +424,15 @@ class KeeperPassphraseGenerator(PasswordGenerator):
         self.append_number = append_number
         self._vocabulary = _load_wordlist(word_list_file)
 
+    def _select_unique_words(self) -> List[str]:
+        """Select word_count unique words using secrets.randbelow (CSPRNG)."""
+        pool = list(self._vocabulary)
+        words: List[str] = []
+        for _ in range(self.word_count):
+            idx = secrets.randbelow(len(pool))
+            words.append(pool.pop(idx))
+        return words
+
     def generate(self) -> str:
         """Generate a passphrase using the configured word count, separator, and formatting."""
         if not self._vocabulary:
@@ -431,9 +440,7 @@ class KeeperPassphraseGenerator(PasswordGenerator):
 
         passphrase = ''
         first_word = True
-        for _ in range(self.word_count):
-            # secrets.choice / secrets.randbelow use os.urandom (CSPRNG).
-            word = secrets.choice(self._vocabulary)
+        for word in self._select_unique_words():
             if self.capitalize and word:
                 word = word[0].upper() + word[1:]  # Vault UI: capitalize every word
             if self.append_number and first_word:
