@@ -2019,4 +2019,6 @@ class RecordSearchCommand(base.ArgparseCommand):
         """Display detailed information for teams."""
         get_command = RecordGetCommand()
         for team in teams:
-            get_command._display_team_detail(context=context, uid=team.team_uid)
+            team_info = get_command._find_team(context, team.team_uid)
+            if team_info is not None:
+                get_command._display_team(context, team_info, 'detail')
