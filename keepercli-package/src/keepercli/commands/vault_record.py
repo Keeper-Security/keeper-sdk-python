@@ -349,7 +349,7 @@ class TeamGetCommand(base.ArgparseCommand):
         from .record_edit import RecordGetCommand
 
         get_command = RecordGetCommand()
-        team_info = get_command._find_team(context, team_name)
+        team_info = get_command._find_team(context, team_name, include_share_objects=True)
         if team_info is None:
             raise base.CommandError('The given UID or title is not a valid team')
 

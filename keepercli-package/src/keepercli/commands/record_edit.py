@@ -1117,7 +1117,7 @@ class RecordGetCommand(base.ArgparseCommand):
                 else:
                     raise base.CommandError('The given UID or title is not a valid folder')
         elif team:
-            team = self._find_team(context, team)
+            team = self._find_team(context, team, include_share_objects=True)
             if team:
                 target_object = ('team', team)
             else:
@@ -1195,7 +1195,13 @@ class RecordGetCommand(base.ArgparseCommand):
             None
         )
     
-    def _find_team(self, context: KeeperParams, uid_or_title: str):
+    def _find_team(
+        self,
+        context: KeeperParams,
+        uid_or_title: str,
+        *,
+        include_share_objects: bool = False,
+    ):
         """Find a team by UID or name using the SDK."""
         is_admin = bool(
             context.auth
@@ -1210,6 +1216,7 @@ class RecordGetCommand(base.ArgparseCommand):
                 auth=context.auth,
                 vault=context.vault,
                 is_enterprise_admin=is_admin,
+                include_share_objects=include_share_objects,
                 fetch_live_members=True,
             )
         except enterprise_team_management.EnterpriseTeamManagementError:

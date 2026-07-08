@@ -567,7 +567,9 @@ def main():
             enterprise_data=enterprise.enterprise_data if enterprise else None,
             vault_data_obj=vault.vault_data,
             auth=keeper_auth_context,
+            vault=vault,
             is_enterprise_admin=is_admin,
+            include_share_objects=True,
             fetch_live_members=fetch_live_members,
         )
         print_team_info(team_info)

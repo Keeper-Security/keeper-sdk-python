@@ -174,10 +174,23 @@ class EnterpriseTeamManagementTests(unittest.TestCase):
             resolved = enterprise_team_management.resolve_team(
                 'Testing Team',
                 vault=vault,
+                include_share_objects=True,
             )
         self.assertEqual(resolved.team_uid, 'IuiVKCcPSjW1BZ-85o9bwA')
         self.assertIsNotNone(resolved.share_team)
         self.assertEqual(resolved.share_team.name, 'Testing Team')
+
+    def test_resolve_team_skips_share_objects_by_default(self):
+        vault = MagicMock()
+        with unittest.mock.patch(
+            'keepersdk.enterprise.enterprise_team_management.share_management_utils.get_share_objects',
+        ) as get_share_objects:
+            resolved = enterprise_team_management.resolve_team(
+                'record-uid-not-a-team',
+                vault=vault,
+            )
+        get_share_objects.assert_not_called()
+        self.assertFalse(resolved.found)
 
     def test_get_team_marks_non_member_for_share_reference(self):
         auth = MagicMock()
@@ -197,6 +210,7 @@ class EnterpriseTeamManagementTests(unittest.TestCase):
                 'Developers',
                 auth=auth,
                 vault=vault,
+                include_share_objects=True,
                 fetch_live_members=True,
             )
 
@@ -226,6 +240,7 @@ class EnterpriseTeamManagementTests(unittest.TestCase):
                 'Testing Team',
                 auth=auth,
                 vault=vault,
+                include_share_objects=True,
                 fetch_live_members=True,
             )
 

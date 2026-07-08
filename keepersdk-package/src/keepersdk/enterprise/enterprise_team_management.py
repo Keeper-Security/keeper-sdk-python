@@ -219,6 +219,7 @@ def resolve_team(
     is_enterprise_admin: bool = False,
     auth: Optional[keeper_auth.KeeperAuth] = None,
     vault: Optional[vault_online.VaultOnline] = None,
+    include_share_objects: bool = False,
 ) -> TeamResolveResult:
     """
     Resolve a team by UID or case-insensitive name.
@@ -228,8 +229,8 @@ def resolve_team(
     2. Vault cache by name
     3. Enterprise cache by UID (enterprise admin)
     4. Enterprise cache by name (enterprise admin)
-    5. Share objects / available teams by UID
-    6. Share objects / available teams by name
+    5. Share objects / available teams by UID (when include_share_objects)
+    6. Share objects / available teams by name (when include_share_objects)
     """
     if not team_name_or_uid:
         return TeamResolveResult()
@@ -264,7 +265,7 @@ def resolve_team(
             team = enterprise_matches[0]
             return TeamResolveResult(team_uid=team.team_uid, enterprise_team=team)
 
-    if auth is not None or vault is not None:
+    if include_share_objects and (auth is not None or vault is not None):
         shareable_teams = _collect_shareable_teams(auth=auth, vault=vault)
         share_team = next(
             (team for team in shareable_teams if team.team_uid == team_name_or_uid),
@@ -421,6 +422,7 @@ def get_team(
     auth: Optional[keeper_auth.KeeperAuth] = None,
     vault: Optional[vault_online.VaultOnline] = None,
     is_enterprise_admin: bool = False,
+    include_share_objects: bool = False,
     include_roles: bool = True,
     include_users: bool = True,
     include_queued_users: bool = True,
@@ -440,6 +442,7 @@ def get_team(
         is_enterprise_admin=is_enterprise_admin,
         auth=auth,
         vault=vault,
+        include_share_objects=include_share_objects,
     )
     if resolved.multiple_found:
         raise EnterpriseTeamManagementError(
