@@ -14,6 +14,7 @@ from cryptography.hazmat.primitives.asymmetric import ed25519
 from keepersdk.vault import (record_types, typed_field_utils, vault_record, attachment, record_facades, one_time_share,
                              record_management, vault_online, vault_data, vault_types, vault_utils, vault_extensions, share_management_utils)
 from keepersdk import crypto, generator
+from keepersdk.enterprise import enterprise_team_management
 
 from . import base, enterprise_utils
 from .. import prompt_utils, api, constants
@@ -1157,7 +1158,7 @@ class RecordGetCommand(base.ArgparseCommand):
                 else:
                     raise base.CommandError('The given UID or title is not a valid folder')
         elif team:
-            team = self._find_team(context, team)
+            team = self._find_team(context, team, include_share_objects=True)
             if team:
                 target_object = ('team', team)
             else:
@@ -1235,13 +1236,32 @@ class RecordGetCommand(base.ArgparseCommand):
             None
         )
     
-    def _find_team(self, context: KeeperParams, uid_or_title: str):
-        """Find a team by UID or name."""
-        if not context.enterprise_data:
-            raise base.CommandError('You must be an enterprise admin to use this command')
-
-        team = enterprise_utils.TeamUtils.resolve_single_team(context.enterprise_data, uid_or_title)
-        return team
+    def _find_team(
+        self,
+        context: KeeperParams,
+        uid_or_title: str,
+        *,
+        include_share_objects: bool = False,
+    ):
+        """Find a team by UID or name using the SDK."""
+        is_admin = bool(
+            context.auth
+            and context.auth.auth_context
+            and context.auth.auth_context.is_enterprise_admin
+        )
+        try:
+            return enterprise_team_management.get_team(
+                uid_or_title,
+                enterprise_data=context.enterprise_data if is_admin else None,
+                vault_data_obj=context.vault.vault_data if context.vault else None,
+                auth=context.auth,
+                vault=context.vault,
+                is_enterprise_admin=is_admin,
+                include_share_objects=include_share_objects,
+                fetch_live_members=True,
+            )
+        except enterprise_team_management.EnterpriseTeamManagementError:
+            return None
 
     def _display_object(self, context: KeeperParams, target_object, output_format: str, unmask: bool):
         """Display the target object in the specified format."""
@@ -1282,12 +1302,28 @@ class RecordGetCommand(base.ArgparseCommand):
         else:  # detail format
             self._display_folder_detail(vault, folder.folder_uid)
 
-    def _display_team(self, context: KeeperParams, team, output_format: str):
+    def _display_team(self, context: KeeperParams, team_info: enterprise_team_management.EnterpriseTeamInfo, output_format: str):
         """Display a team in the specified format."""
         if output_format == 'json':
-            self._display_team_json(context, team.team_uid)
-        else:  # detail format
-            self._display_team_detail(context, team.team_uid)
+            self._display_team_json(team_info)
+        elif not team_info.is_member:
+            self._display_non_member_team(context, team_info)
+        else:
+            self._display_team_detail(team_info)
+
+    def _display_non_member_team(
+        self,
+        context: KeeperParams,
+        team_info: enterprise_team_management.EnterpriseTeamInfo,
+    ):
+        """Display team info when the logged-in user is not a team member."""
+        username = context.auth.auth_context.username if context.auth else ''
+        logger.info('')
+        logger.info('User {} does not belong to team {}'.format(username, team_info.team_name))
+        logger.info('')
+        logger.info('{0:>20s}: {1:<20s}'.format('Team UID', team_info.team_uid))
+        logger.info('{0:>20s}: {1}'.format('Name', team_info.team_name))
+        logger.info('')
     
     def _display_record_json(self, vault: vault_online.VaultOnline, uid: str, unmask: bool = False):
         """Display record information in JSON format."""
@@ -1439,18 +1475,52 @@ class RecordGetCommand(base.ArgparseCommand):
         }
         logger.info(json.dumps(output, indent=2))
     
-    def _display_team_json(self, context: KeeperParams, uid: str):
+    def _display_team_json(self, team_info: enterprise_team_management.EnterpriseTeamInfo):
         """Display team information in JSON format."""
-        team = context.enterprise_data.teams.get_entity(uid)
-        user = enterprise_utils.UserUtils.resolve_single_user(context.enterprise_data, context.auth.auth_context.username)
-        team_users = {x.team_uid for x in context.enterprise_data.team_users.get_links_by_object(user.enterprise_user_id)}
-        if team.team_uid not in team_users:
-            logger.info(f'User {context.auth.auth_context.username} does not belong to team {team.name}')
-        output = {
-            'Team UID:': uid,
-            'Name:': team.name
-        }
-        logger.info(json.dumps(output, indent=2))
+        logger.info(json.dumps(team_info.to_dict(), indent=2))
+
+    def _display_team_detail(self, team_info: enterprise_team_management.EnterpriseTeamInfo):
+        """Display team information in detailed format."""
+        logger.info('')
+        logger.info('{0:>20s}: {1:<20s}'.format('Team UID', team_info.team_uid))
+        logger.info('{0:>20s}: {1}'.format('Name', team_info.team_name))
+        if team_info.node_name:
+            logger.info('{0:>20s}: {1}'.format('Node', team_info.node_name))
+        logger.info('{0:>20s}: {1}'.format('Access Level', team_info.access_level))
+        logger.info('{0:>20s}: {1}'.format('Restrict Edit', team_info.restrict_edit))
+        logger.info('{0:>20s}: {1}'.format('Restrict View', team_info.restrict_view))
+        logger.info('{0:>20s}: {1}'.format('Restrict Share', team_info.restrict_share))
+
+        if team_info.team_roles:
+            logger.info('{0:>20s}: {1}'.format('Role(s)', ', '.join(x.role_name for x in team_info.team_roles)))
+
+        if team_info.team_users:
+            logger.info('{0:>20s}: {1}'.format('User(s)', ', '.join(x.username for x in team_info.team_users)))
+
+        if team_info.queued_team_users:
+            logger.info(
+                '{0:>20s}: {1}'.format(
+                    'Queued User(s)',
+                    ', '.join(x.username for x in team_info.queued_team_users),
+                )
+            )
+
+        if team_info.members:
+            logger.info('')
+            logger.info('{0:>20s}  {1:<40s}  {2:<40s}  {3}'.format(
+                'Enterprise User ID', 'Email', 'Enterprise Username', 'Share Admin'
+            ))
+            for member in team_info.members:
+                logger.info('{0:>20d}  {1:<40s}  {2:<40s}  {3}'.format(
+                    member.enterprise_user_id,
+                    member.email,
+                    member.enterprise_username,
+                    'Yes' if member.is_share_admin else 'No',
+                ))
+        elif not team_info.team_users:
+            logger.info('')
+            logger.info('No team members found.')
+        logger.info('')
     
     def _display_record_detail(self, vault: vault_online.VaultOnline, uid: str, unmask: bool):
         """Display record information in detailed format."""
@@ -1671,26 +1741,6 @@ class RecordGetCommand(base.ArgparseCommand):
             logger.info('{0:>20s}: {1:<20s}'.format('Parent Folder UID', folder.parent_uid))
         if folder.folder_type == 'shared_folder_folder':
             logger.info('{0:>20s}: {1:<20s}'.format('Shared Folder UID', folder.folder_scope_uid))
-    
-    def _display_team_detail(self, context: KeeperParams, uid: str):
-        """Display team information in detailed format."""
-        team = context.enterprise_data.teams.get_entity(uid)
-
-        user = enterprise_utils.UserUtils.resolve_single_user(context.enterprise_data, context.auth.auth_context.username)
-        team_users = {x.team_uid for x in context.enterprise_data.team_users.get_links_by_object(user.enterprise_user_id)}
-        team_user = True
-        if team.team_uid not in team_users:
-            logger.info(f'User {context.auth.auth_context.username} does not belong to team {team.name}')
-            team_user = False
-
-        logger.info('')
-        logger.info('{0:>20s}: {1:<20s}'.format('Team UID', team.team_uid))
-        logger.info('{0:>20s}: {1}'.format('Name', team.name))
-        if team_user:
-            logger.info('{0:>20s}: {1}'.format('Restrict Edit', team.restrict_edit))
-            logger.info('{0:>20s}: {1}'.format('Restrict View', team.restrict_view))
-            logger.info('{0:>20s}: {1}'.format('Restrict Share', team.restrict_share))
-        logger.info('')
     
     def _display_record_password(self, vault: vault_online.VaultOnline, uid: str):
         """Display only the password field of a record."""
@@ -2017,4 +2067,6 @@ class RecordSearchCommand(base.ArgparseCommand):
         """Display detailed information for teams."""
         get_command = RecordGetCommand()
         for team in teams:
-            get_command._display_team_detail(context=context, uid=team.team_uid)
+            team_info = get_command._find_team(context, team.team_uid)
+            if team_info is not None:
+                get_command._display_team(context, team_info, 'detail')
