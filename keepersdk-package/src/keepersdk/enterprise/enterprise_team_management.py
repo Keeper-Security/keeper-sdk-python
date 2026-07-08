@@ -15,7 +15,7 @@ from typing import List, Optional
 from .. import utils
 from ..authentication import keeper_auth
 from ..proto import enterprise_pb2
-from ..vault import vault_data, vault_types
+from ..vault import share_management_utils, vault_data, vault_online, vault_types, vault_utils
 from . import enterprise_types
 
 TEAM_MEMBERS_ENDPOINT = 'vault/get_team_members'
@@ -70,6 +70,7 @@ class TeamResolveResult:
     team_uid: Optional[str] = None
     vault_team: Optional[vault_types.TeamInfo] = None
     enterprise_team: Optional[enterprise_types.Team] = None
+    share_team: Optional[vault_types.TeamInfo] = None
     multiple_found: bool = False
 
     @property
@@ -87,6 +88,7 @@ class EnterpriseTeamInfo:
     restrict_share: bool
     restrict_view: bool
     access_level: str = 'enterprise_admin'
+    is_member: bool = True
     team_roles: List[EnterpriseTeamRoleInfo] = field(default_factory=list)
     team_users: List[EnterpriseTeamUserInfo] = field(default_factory=list)
     queued_team_users: List[EnterpriseTeamUserInfo] = field(default_factory=list)
@@ -102,6 +104,7 @@ class EnterpriseTeamInfo:
             'restrict_share': self.restrict_share,
             'restrict_view': self.restrict_view,
             'access_level': self.access_level,
+            'is_member': self.is_member,
         }
         if self.team_roles:
             result['team_roles'] = [
@@ -168,12 +171,54 @@ def _vault_teams_by_name(
     return [t for t in vault_data_obj.teams() if t.name.lower() == name_lower]
 
 
+def _shareable_teams_by_name(
+    teams: List[vault_types.TeamInfo],
+    team_name: str,
+) -> List[vault_types.TeamInfo]:
+    name_lower = team_name.lower()
+    return [t for t in teams if t.name.lower() == name_lower]
+
+
+def _collect_shareable_teams(
+    *,
+    auth: Optional[keeper_auth.KeeperAuth] = None,
+    vault: Optional[vault_online.VaultOnline] = None,
+) -> List[vault_types.TeamInfo]:
+    """Teams visible via share objects and get_available_teams (same sources as list-team)."""
+    teams: List[vault_types.TeamInfo] = []
+    seen: set = set()
+
+    if vault is not None:
+        share_objects = share_management_utils.get_share_objects(vault=vault)
+        for team_uid, team_info in share_objects.get('teams', {}).items():
+            if team_uid in seen:
+                continue
+            seen.add(team_uid)
+            teams.append(
+                vault_types.TeamInfo(
+                    team_uid=team_uid,
+                    name=team_info.get('name') or '',
+                )
+            )
+
+    if auth is not None:
+        for team in vault_utils.load_available_teams(auth):
+            if team.team_uid in seen:
+                continue
+            seen.add(team.team_uid)
+            teams.append(team)
+
+    return teams
+
+
 def resolve_team(
     team_name_or_uid: str,
     *,
     vault_data_obj: Optional[vault_data.VaultData] = None,
     enterprise_data: Optional[enterprise_types.IEnterpriseData] = None,
     is_enterprise_admin: bool = False,
+    auth: Optional[keeper_auth.KeeperAuth] = None,
+    vault: Optional[vault_online.VaultOnline] = None,
 ) -> TeamResolveResult:
     """
     Resolve a team by UID or case-insensitive name.
@@ -183,6 +228,8 @@ def resolve_team(
     2. Vault cache by name
     3. Enterprise cache by UID (enterprise admin)
     4. Enterprise cache by name (enterprise admin)
+    5. Share objects / available teams by UID
+    6. Share objects / available teams by name
     """
     if not team_name_or_uid:
         return TeamResolveResult()
@@ -216,6 +263,25 @@ def resolve_team(
         if len(enterprise_matches) == 1:
             team = enterprise_matches[0]
             return TeamResolveResult(team_uid=team.team_uid, enterprise_team=team)
+
+    if auth is not None or vault is not None:
+        shareable_teams = _collect_shareable_teams(auth=auth, vault=vault)
+        share_team = next(
+            (team for team in shareable_teams if team.team_uid == team_name_or_uid),
+            None,
+        )
+        if share_team is not None:
+            return TeamResolveResult(
+                team_uid=share_team.team_uid,
+                share_team=share_team,
+            )
+
+        share_matches = _shareable_teams_by_name(shareable_teams, team_name_or_uid)
+        if len(share_matches) > 1:
+            return TeamResolveResult(multiple_found=True)
+        if len(share_matches) == 1:
+            team = share_matches[0]
+            return TeamResolveResult(team_uid=team.team_uid, share_team=team)
 
     return TeamResolveResult()
 
@@ -304,12 +370,56 @@ def _build_team_roles(
     return roles
 
 
+def _user_is_team_member(
+    auth: Optional[keeper_auth.KeeperAuth],
+    members: List[TeamMemberInfo],
+) -> bool:
+    if auth is None:
+        return False
+    username = auth.auth_context.username.lower()
+    if not username:
+        return False
+    return any(
+        username in (member.email.lower(), member.enterprise_username.lower())
+        for member in members
+    )
+
+
+def _build_basic_team_info(
+    team_uid: str,
+    team_name: str,
+    *,
+    auth: Optional[keeper_auth.KeeperAuth],
+    fetch_live_members: bool,
+    access_level: str,
+    is_member: Optional[bool] = None,
+) -> EnterpriseTeamInfo:
+    members: List[TeamMemberInfo] = []
+    if auth is not None and fetch_live_members:
+        members = get_team_members(auth, team_uid)
+    if is_member is None:
+        is_member = access_level == 'full_member' or _user_is_team_member(auth, members)
+    return EnterpriseTeamInfo(
+        team_uid=team_uid,
+        team_name=team_name,
+        node_id=0,
+        node_name='',
+        restrict_edit=False,
+        restrict_share=False,
+        restrict_view=False,
+        access_level=access_level,
+        is_member=is_member,
+        members=members,
+    )
+
+
 def get_team(
     team_name_or_uid: str,
     *,
     enterprise_data: Optional[enterprise_types.IEnterpriseData] = None,
     vault_data_obj: Optional[vault_data.VaultData] = None,
     auth: Optional[keeper_auth.KeeperAuth] = None,
+    vault: Optional[vault_online.VaultOnline] = None,
     is_enterprise_admin: bool = False,
     include_roles: bool = True,
     include_users: bool = True,
@@ -328,6 +438,8 @@ def get_team(
         vault_data_obj=vault_data_obj,
         enterprise_data=enterprise_data,
         is_enterprise_admin=is_enterprise_admin,
+        auth=auth,
+        vault=vault,
     )
     if resolved.multiple_found:
         raise EnterpriseTeamManagementError(
@@ -384,6 +496,7 @@ def get_team(
             restrict_share=enterprise_team.restrict_share,
             restrict_view=enterprise_team.restrict_view,
             access_level=access_level,
+            is_member=True,
             team_roles=team_roles,
             team_users=team_users,
             queued_team_users=queued_team_users,
@@ -391,20 +504,21 @@ def get_team(
         )
 
     if resolved.vault_team is not None:
-        vault_team = resolved.vault_team
-        members: List[TeamMemberInfo] = []
-        if auth is not None and fetch_live_members:
-            members = get_team_members(auth, vault_team.team_uid)
-        return EnterpriseTeamInfo(
-            team_uid=vault_team.team_uid,
-            team_name=vault_team.name,
-            node_id=0,
-            node_name='',
-            restrict_edit=False,
-            restrict_share=False,
-            restrict_view=False,
+        return _build_basic_team_info(
+            resolved.vault_team.team_uid,
+            resolved.vault_team.name,
+            auth=auth,
+            fetch_live_members=fetch_live_members,
             access_level='full_member',
-            members=members,
+        )
+
+    if resolved.share_team is not None:
+        return _build_basic_team_info(
+            resolved.share_team.team_uid,
+            resolved.share_team.name,
+            auth=auth,
+            fetch_live_members=fetch_live_members,
+            access_level='share_reference',
         )
 
     raise EnterpriseTeamManagementError(

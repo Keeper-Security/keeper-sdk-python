@@ -1208,6 +1208,7 @@ class RecordGetCommand(base.ArgparseCommand):
                 enterprise_data=context.enterprise_data if is_admin else None,
                 vault_data_obj=context.vault.vault_data if context.vault else None,
                 auth=context.auth,
+                vault=context.vault,
                 is_enterprise_admin=is_admin,
                 fetch_live_members=True,
             )
@@ -1257,8 +1258,24 @@ class RecordGetCommand(base.ArgparseCommand):
         """Display a team in the specified format."""
         if output_format == 'json':
             self._display_team_json(team_info)
+        elif not team_info.is_member:
+            self._display_non_member_team(context, team_info)
         else:
             self._display_team_detail(team_info)
+
+    def _display_non_member_team(
+        self,
+        context: KeeperParams,
+        team_info: enterprise_team_management.EnterpriseTeamInfo,
+    ):
+        """Display team info when the logged-in user is not a team member."""
+        username = context.auth.auth_context.username if context.auth else ''
+        logger.info('')
+        logger.info('User {} does not belong to team {}'.format(username, team_info.team_name))
+        logger.info('')
+        logger.info('{0:>20s}: {1:<20s}'.format('Team UID', team_info.team_uid))
+        logger.info('{0:>20s}: {1}'.format('Name', team_info.team_name))
+        logger.info('')
     
     def _display_record_json(self, vault: vault_online.VaultOnline, uid: str, unmask: bool = False):
         """Display record information in JSON format."""

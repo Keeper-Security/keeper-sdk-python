@@ -158,6 +158,80 @@ class EnterpriseTeamManagementTests(unittest.TestCase):
         self.assertEqual(resolved.team_uid, 'vault-uid')
         self.assertIsNotNone(resolved.vault_team)
 
+    def test_resolve_team_from_share_objects(self):
+        vault = MagicMock()
+        with unittest.mock.patch(
+            'keepersdk.enterprise.enterprise_team_management.share_management_utils.get_share_objects',
+            return_value={
+                'teams': {
+                    'IuiVKCcPSjW1BZ-85o9bwA': {
+                        'name': 'Testing Team',
+                        'enterprise_id': 123,
+                    }
+                }
+            },
+        ):
+            resolved = enterprise_team_management.resolve_team(
+                'Testing Team',
+                vault=vault,
+            )
+        self.assertEqual(resolved.team_uid, 'IuiVKCcPSjW1BZ-85o9bwA')
+        self.assertIsNotNone(resolved.share_team)
+        self.assertEqual(resolved.share_team.name, 'Testing Team')
+
+    def test_get_team_marks_non_member_for_share_reference(self):
+        auth = MagicMock()
+        auth.auth_context.username = 'user@example.com'
+        auth.execute_auth_rest.return_value = MagicMock(enterpriseUser=[])
+
+        vault = MagicMock()
+        with unittest.mock.patch(
+            'keepersdk.enterprise.enterprise_team_management.share_management_utils.get_share_objects',
+            return_value={
+                'teams': {
+                    'team-uid': {'name': 'Developers', 'enterprise_id': 123},
+                }
+            },
+        ):
+            info = enterprise_team_management.get_team(
+                'Developers',
+                auth=auth,
+                vault=vault,
+                fetch_live_members=True,
+            )
+
+        self.assertFalse(info.is_member)
+        self.assertEqual(info.access_level, 'share_reference')
+
+    def test_get_team_marks_member_when_listed_in_team_members(self):
+        auth = MagicMock()
+        auth.auth_context.username = 'user@example.com'
+        member = MagicMock()
+        member.enterpriseUserId = 100
+        member.email = 'user@example.com'
+        member.enterpriseUsername = 'user@example.com'
+        member.isShareAdmin = False
+        auth.execute_auth_rest.return_value = MagicMock(enterpriseUser=[member])
+
+        vault = MagicMock()
+        with unittest.mock.patch(
+            'keepersdk.enterprise.enterprise_team_management.share_management_utils.get_share_objects',
+            return_value={
+                'teams': {
+                    'team-uid': {'name': 'Testing Team', 'enterprise_id': 123},
+                }
+            },
+        ):
+            info = enterprise_team_management.get_team(
+                'Testing Team',
+                auth=auth,
+                vault=vault,
+                fetch_live_members=True,
+            )
+
+        self.assertTrue(info.is_member)
+        self.assertEqual(len(info.members), 1)
+
 
 if __name__ == '__main__':
     unittest.main()

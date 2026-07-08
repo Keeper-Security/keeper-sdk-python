@@ -49,6 +49,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('list', vault_record.RecordListCommand(), base.CommandScope.Vault, 'l')
         commands.register_command('list-sf', vault_record.SharedFolderListCommand(), base.CommandScope.Vault, 'lsf')
         commands.register_command('list-team', vault_record.TeamListCommand(), base.CommandScope.Vault, 'lt')
+        commands.register_command('get-team', vault_record.TeamGetCommand(), base.CommandScope.Vault, 'gt')
         commands.register_command('shortcut', vault_record.ShortcutCommand(), base.CommandScope.Vault)
         commands.register_command('search', record_edit.RecordSearchCommand(), base.CommandScope.Vault, 's')
         commands.register_command('record-history', record_handling_commands.RecordHistoryCommand(), base.CommandScope.Vault, 'rh')

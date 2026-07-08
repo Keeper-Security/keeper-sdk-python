@@ -17,7 +17,6 @@ class EnterpriseTeamCommand(base.GroupCommand):
     def __init__(self):
         super().__init__('Manage an enterprise team(s)')
         self.register_command(EnterpriseTeamViewCommand(), 'view', 'v')
-        self.register_command(EnterpriseTeamGetCommand(), 'get', 'g')
         self.register_command(EnterpriseTeamAddCommand(), 'add', 'a')
         self.register_command(EnterpriseTeamEditCommand(), 'edit', 'e')
         self.register_command(EnterpriseTeamDeleteCommand(), 'delete')
@@ -54,6 +53,7 @@ class EnterpriseTeamViewCommand(base.ArgparseCommand):
                 enterprise_data=context.enterprise_data,
                 vault_data_obj=context.vault.vault_data if context.vault else None,
                 auth=context.auth,
+                vault=context.vault,
                 is_enterprise_admin=True,
                 fetch_live_members=verbose,
             )
@@ -122,10 +122,6 @@ class EnterpriseTeamViewCommand(base.ArgparseCommand):
         if verbose:
             headers.append('')
         report_utils.dump_report_data(table, headers=headers, no_header=True, right_align=[0])
-
-
-class EnterpriseTeamGetCommand(EnterpriseTeamViewCommand):
-    command_prog = 'enterprise-team get'
 
 
 class EnterpriseTeamAddCommand(base.ArgparseCommand, enterprise_management.IEnterpriseManagementLogger):

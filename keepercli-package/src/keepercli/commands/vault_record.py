@@ -321,6 +321,41 @@ class TeamListCommand(base.ArgparseCommand):
 
         return teams
 
+
+class TeamGetCommand(base.ArgparseCommand):
+    def __init__(self):
+        parser = argparse.ArgumentParser(
+            prog='get-team',
+            description='Get team details by UID or name',
+        )
+        parser.add_argument(
+            '--format',
+            dest='format',
+            action='store',
+            choices=['detail', 'json'],
+            default='detail',
+            help='output format as detail or json',
+        )
+        parser.add_argument('team', help='Team UID or name')
+        super().__init__(parser)
+
+    def execute(self, context: KeeperParams, **kwargs):
+        if context.vault is None:
+            raise base.CommandError('Vault is not initialized. Login to initialize the vault.')
+
+        team_name = kwargs.get('team')
+        output_format = kwargs.get('format', 'detail')
+
+        from .record_edit import RecordGetCommand
+
+        get_command = RecordGetCommand()
+        team_info = get_command._find_team(context, team_name)
+        if team_info is None:
+            raise base.CommandError('The given UID or title is not a valid team')
+
+        get_command._display_team(context, team_info, output_format)
+
+
 class ShortcutCommand(base.GroupCommand):
     def __init__(self):
         super(ShortcutCommand, self).__init__('Manage record shortcuts')
