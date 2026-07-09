@@ -511,32 +511,36 @@ def close_vault(vault: vault_online.VaultOnline, keeper_auth_context: keeper_aut
     keeper_auth_context.close()
 
 def nsf_record_add(vault: vault_online.VaultOnline) -> None:
-    """Add a record to NSF (nsf-record-add)."""
-    TITLE = "My NSF Login"
-    RECORD_TYPE = "login"  # e.g. login, password, general
-    FOLDER_UID_OR_NAME = "Projects"  # NSF folder name or UID; None for root
-    NOTES = "Created via SDK example"
-    FIELDS = {
-        "login": "user@example.com",
-        "password": "changeme",
-        "url": "https://example.com",
-    }
+    """Add record(s) to NSF (nsf-record-add)."""
+    RECORDS = [
+        {
+            'title': 'My NSF Login',
+            'record_type': 'login',
+            'folder': 'Projects',  # NSF folder name or UID; omit for root
+            'notes': 'Created via SDK example',
+            'fields': {
+                'login': 'user@example.com',
+                'password': 'changeme',
+                'url': 'https://example.com',
+            },
+        },
+        {
+            'title': 'My NSF Login 2',
+            'record_type': 'login',
+            'folder': 'Projects',
+            'fields': {
+                'login': 'user2@example.com',
+                'password': 'changeme2',
+            },
+        },
+    ]
 
-    folder_uid = None
-    if FOLDER_UID_OR_NAME:
-        folder_uid = nsf_management.resolve_nsf_folder_uid(vault, FOLDER_UID_OR_NAME)
-        if not folder_uid:
-            raise ValueError(f"NSF folder not found: {FOLDER_UID_OR_NAME}")
-
-    result = nsf_management.create_nsf_record(
-        vault,
-        title=TITLE,
-        record_type=RECORD_TYPE,
-        folder_uid=folder_uid,
-        fields=FIELDS,
-        notes=NOTES,
-    )
-    print(f"NSF record created: {result.record_uid} (status: {result.status})")
+    results = nsf_management.create_nsf_records(vault, RECORDS)
+    for result in results:
+        if result.success:
+            print(f"NSF record created: {result.record_uid} (status: {result.status})")
+        else:
+            print(f"NSF record failed: {result.record_uid} ({result.message or result.status})")
 
 
 def nsf_record_add_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
