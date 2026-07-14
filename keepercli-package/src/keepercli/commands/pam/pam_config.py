@@ -12,7 +12,7 @@ from ..record_edit import RecordEditMixin
 from keepersdk import utils
 from keepersdk.proto import pam_pb2, record_pb2
 from keepersdk.helpers import config_utils
-from keepersdk.vault import vault_online, vault_utils, vault_record, record_management
+from keepersdk.vault import vault_online, vault_utils, vault_record, record_management, nsf_management
 from keepersdk.helpers.pam_config_facade import PamConfigurationRecordFacade
 from keepersdk.helpers.tunnel.tunnel_graph import TunnelDAG, TriStateSetting, tunnel_utils
 from keepersdk.helpers.keeper_dag import dag_utils
@@ -21,6 +21,17 @@ from .. import record_edit
 
 
 logger = api.get_logger()
+
+
+class _PamFolderRef:
+    """Minimal folder info for list display (classic Folder/SharedFolder or NSF)."""
+
+    __slots__ = ('name', 'folder_uid', 'shared_folder_uid')
+
+    def __init__(self, name: str, uid: str):
+        self.name = name or uid
+        self.folder_uid = uid
+        self.shared_folder_uid = uid
 
 
 class PAMConfigListCommand(base.ArgparseCommand):
@@ -78,19 +89,20 @@ class PAMConfigListCommand(base.ArgparseCommand):
         if format_type == 'json' and isinstance(configuration, str):
             return configuration
         facade = self._create_facade(configuration)
-        shared_folder = self._load_shared_folder(vault, facade.folder_uid)
-        
+        shared_folder = self._load_folder_for_configuration(vault, configuration, facade)
+
         if format_type == 'json':
             return self._format_single_config_json(configuration, facade, shared_folder)
         else:
             self._format_single_config_table(configuration, facade, shared_folder)
 
     def _list_all_configurations(self, vault: vault_online.VaultOnline, is_verbose: bool, format_type: str):
-        """Lists all PAM configurations."""
+        """Lists all PAM configurations (classic shared folders and NSF / Keeper Drive)."""
         configs_data = []
         table = []
         headers = self._build_list_headers(is_verbose, format_type)
-        
+        seen_uids = set()
+
         for config_record in self._find_pam_configurations(vault):
             full_record = vault.vault_data.load_record(config_record.record_uid)
             if not full_record or not isinstance(full_record, vault_record.TypedRecord):
@@ -100,35 +112,53 @@ class PAMConfigListCommand(base.ArgparseCommand):
                 continue
 
             facade = self._create_facade(full_record)
-            shared_folder_parents = vault_utils.get_folders_for_record(vault.vault_data, config_record.record_uid)
-
-            if not shared_folder_parents:
-                logger.warning(f'Following configuration is not in the shared folder: UID: %s, Title: %s',
-                              config_record.record_uid, config_record.title)
+            shared_folder = self._load_folder_for_configuration(vault, full_record, facade)
+            if not shared_folder:
+                logger.warning(
+                    'Following configuration is not in a shared folder or NSF folder: UID: %s, Title: %s',
+                    config_record.record_uid, config_record.title)
                 continue
 
-            shared_folder = shared_folder_parents[0]
-            
+            seen_uids.add(config_record.record_uid)
             if format_type == 'json':
-                config_data = self._build_config_json_data(config_record, facade, shared_folder, full_record, is_verbose)
-                configs_data.append(config_data)
+                configs_data.append(
+                    self._build_config_json_data(config_record, facade, shared_folder, full_record, is_verbose))
             else:
-                row = self._build_config_table_row(config_record, facade, shared_folder, full_record, is_verbose)
-                table.append(row)
+                table.append(
+                    self._build_config_table_row(config_record, facade, shared_folder, full_record, is_verbose))
+
+        for full_record in self._find_nsf_pam_configurations(vault):
+            if full_record.record_uid in seen_uids:
+                continue
+            facade = self._create_facade(full_record)
+            shared_folder = self._load_folder_for_configuration(vault, full_record, facade)
+            if not shared_folder:
+                logger.warning(
+                    'Following NSF configuration is not in an NSF folder: UID: %s, Title: %s',
+                    full_record.record_uid, full_record.title)
+                continue
+            if format_type == 'json':
+                configs_data.append(
+                    self._build_config_json_data(full_record, facade, shared_folder, full_record, is_verbose))
+            else:
+                table.append(
+                    self._build_config_table_row(full_record, facade, shared_folder, full_record, is_verbose))
 
         return self._format_output(configs_data, table, headers, format_type)
 
     def _load_and_validate_configuration(self, vault: vault_online.VaultOnline, config_uid: str, format_type: str):
-        """Loads and validates a PAM configuration record."""
+        """Loads and validates a PAM configuration record (classic v6 or NSF)."""
         info = vault.vault_data.get_record(config_uid)
-        if not info or info.version != 6 or info.record_type not in PAM_CONFIGURATIONS:
-            return self._handle_error(format_type, f'Configuration {config_uid} not found')
+        if info and info.version == 6 and info.record_type in PAM_CONFIGURATIONS:
+            configuration = vault.vault_data.load_record(config_uid)
+            if configuration and isinstance(configuration, vault_record.TypedRecord):
+                return configuration
 
-        configuration = vault.vault_data.load_record(config_uid)
-        if not configuration or not isinstance(configuration, vault_record.TypedRecord):
-            return self._handle_error(format_type, f'Configuration {config_uid} not found')
+        nsf_record = self._load_nsf_pam_configuration(vault, config_uid)
+        if nsf_record:
+            return nsf_record
 
-        return configuration
+        return self._handle_error(format_type, f'Configuration {config_uid} not found')
 
     def _handle_error(self, format_type: str, error_message: str):
         """Handles errors based on output format."""
@@ -149,8 +179,101 @@ class PAMConfigListCommand(base.ArgparseCommand):
             return vault.vault_data.load_shared_folder(folder_uid)
         return None
 
+    def _load_folder_for_configuration(self, vault: vault_online.VaultOnline, configuration, facade):
+        """Resolve classic shared folder or NSF parent folder for display."""
+        folder_uid = getattr(facade, 'folder_uid', None) or ''
+        shared = self._load_shared_folder(vault, folder_uid)
+        if shared:
+            return shared
+
+        parents = vault_utils.get_folders_for_record(vault.vault_data, configuration.record_uid)
+        if parents:
+            parent = parents[0]
+            return _PamFolderRef(parent.name, parent.folder_uid)
+
+        return self._resolve_nsf_folder(vault, configuration.record_uid, folder_uid)
+
+    def _resolve_nsf_folder(self, vault: vault_online.VaultOnline, record_uid: str, preferred_folder_uid: str = ''):
+        """Build folder display info from NSF cache."""
+        if not vault.nsf_data:
+            return None
+        try:
+            folder_uids = []
+            if preferred_folder_uid and nsf_management.is_nsf_folder(vault, preferred_folder_uid):
+                folder_uids = [preferred_folder_uid]
+            if not folder_uids:
+                folder_uids = nsf_management.find_nsf_folders_for_record(vault, record_uid)
+            if not folder_uids:
+                return None
+            folder_uid = folder_uids[0]
+            if folder_uid == nsf_management.ROOT_FOLDER_UID:
+                return _PamFolderRef('My Drive', folder_uid)
+            folder = vault.nsf_data.get_folder(folder_uid)
+            name = (folder.name if folder and folder.name else None) or folder_uid
+            return _PamFolderRef(name, folder_uid)
+        except nsf_management.NsfError:
+            return None
+
+    def _load_nsf_typed_record(self, vault: vault_online.VaultOnline, record_uid: str):
+        """Load an NSF record as a TypedRecord from decrypted cache metadata."""
+        if not vault.nsf_data or not vault.nsf_data.get_record(record_uid):
+            return None
+        try:
+            meta = nsf_management.load_nsf_record_metadata(vault, record_uid)
+        except nsf_management.NsfError:
+            return None
+        typed = vault_record.TypedRecord()
+        typed.record_uid = record_uid
+        typed.load_record_data({
+            'type': meta.get('type') or '',
+            'title': meta.get('title') or record_uid,
+            'notes': meta.get('notes') or '',
+            'fields': meta.get('fields') or [],
+        })
+        return typed
+
+    def _load_nsf_pam_configuration(self, vault: vault_online.VaultOnline, identifier: str):
+        """Load a PAM configuration from NSF by UID or exact title."""
+        if not vault.nsf_data or not identifier:
+            return None
+        record_uid = identifier
+        if not vault.nsf_data.get_record(record_uid):
+            try:
+                record_uid = nsf_management.resolve_nsf_record_uid(vault, identifier)
+            except nsf_management.NsfError:
+                record_uid = None
+        if not record_uid:
+            return None
+        typed = self._load_nsf_typed_record(vault, record_uid)
+        if typed and typed.record_type in PAM_CONFIGURATIONS:
+            return typed
+        return None
+
+    def _find_nsf_pam_configurations(self, vault: vault_online.VaultOnline):
+        """Yield TypedRecord PAM configs stored under NSF / Keeper Drive."""
+        if not vault.nsf_data:
+            return
+        for entry in vault.nsf_data.records():
+            rec_type = ''
+            if entry.decrypted_data:
+                try:
+                    payload = json.loads(entry.decrypted_data)
+                    if isinstance(payload, dict):
+                        rec_type = str(payload.get('type') or '')
+                except json.JSONDecodeError:
+                    pass
+            if rec_type and rec_type not in PAM_CONFIGURATIONS:
+                if 'Configuration' in rec_type:
+                    logger.warning(
+                        'Following NSF configuration has unsupported type: UID: %s, Type: %s',
+                        entry.record_uid, rec_type)
+                continue
+            typed = self._load_nsf_typed_record(vault, entry.record_uid)
+            if typed and typed.record_type in PAM_CONFIGURATIONS:
+                yield typed
+
     def _find_pam_configurations(self, vault: vault_online.VaultOnline):
-        """Finds all PAM configuration records."""
+        """Finds all classic vault PAM configuration records (version 6)."""
         for record in vault.vault_data.find_records(criteria='', record_type=None, record_version=6):
             if record.record_type in PAM_CONFIGURATIONS:
                 yield record
@@ -213,13 +336,14 @@ class PAMConfigListCommand(base.ArgparseCommand):
 
     def _build_config_json_data(self, config_record, facade, shared_folder, full_record, is_verbose: bool):
         """Builds JSON data structure for a configuration."""
+        folder_uid = self._folder_uid(shared_folder)
         config_data = {
             "uid": config_record.record_uid,
             "config_name": config_record.title,
             "config_type": config_record.record_type,
             "shared_folder": {
-                "name": shared_folder.name,
-                "uid": shared_folder.folder_uid
+                "name": shared_folder.name if shared_folder else None,
+                "uid": folder_uid
             },
             "gateway_uid": facade.controller_uid,
             "resource_record_uids": facade.resource_ref
@@ -232,11 +356,15 @@ class PAMConfigListCommand(base.ArgparseCommand):
 
     def _build_config_table_row(self, config_record, facade, shared_folder, full_record, is_verbose: bool):
         """Builds a table row for a configuration."""
+        folder_uid = self._folder_uid(shared_folder)
+        folder_label = ''
+        if shared_folder:
+            folder_label = f'{shared_folder.name} ({folder_uid})'
         row = [
             config_record.record_uid,
             config_record.title,
             config_record.record_type,
-            f'{shared_folder.name} ({shared_folder.folder_uid})',
+            folder_label,
             facade.controller_uid,
             facade.resource_ref
         ]
@@ -246,6 +374,12 @@ class PAMConfigListCommand(base.ArgparseCommand):
             row.append(fields)
         
         return row
+
+    @staticmethod
+    def _folder_uid(folder) -> str:
+        if not folder:
+            return ''
+        return getattr(folder, 'folder_uid', None) or getattr(folder, 'shared_folder_uid', None) or ''
 
     def _format_output(self, configs_data, table, headers, format_type: str):
         """Formats and outputs the final result."""
@@ -258,13 +392,14 @@ class PAMConfigListCommand(base.ArgparseCommand):
 
     def _format_single_config_json(self, configuration, facade, shared_folder):
         """Formats a single configuration as JSON."""
+        folder_uid = self._folder_uid(shared_folder)
         config_data = {
             "uid": configuration.record_uid,
             "name": configuration.title,
             "config_type": configuration.record_type,
             "shared_folder": {
                 "name": shared_folder.name if shared_folder else None,
-                "uid": shared_folder.shared_folder_uid if shared_folder else None
+                "uid": folder_uid
             } if shared_folder else None,
             "gateway_uid": facade.controller_uid,
             "resource_record_uids": facade.resource_ref,
@@ -291,11 +426,12 @@ class PAMConfigListCommand(base.ArgparseCommand):
         """Formats a single configuration as a table."""
         table = []
         header = ['name', 'value']
+        folder_uid = self._folder_uid(shared_folder)
         
         table.append(['UID', configuration.record_uid])
         table.append(['Name', configuration.title])
         table.append(['Config Type', configuration.record_type])
-        table.append(['Shared Folder', f'{shared_folder.name} ({shared_folder.shared_folder_uid})' if shared_folder else ''])
+        table.append(['Shared Folder', f'{shared_folder.name} ({folder_uid})' if shared_folder else ''])
         table.append(['Gateway UID', facade.controller_uid])
         table.append(['Resource Record UIDs', facade.resource_ref])
 

@@ -26,5 +26,6 @@ def print_shared_secrets_info(shared_secrets: List[ksm.SharedSecretsInfo]) -> No
     rows = [
         [secrets.type, secrets.uid, secrets.name, secrets.permissions]
         for secrets in shared_secrets
+        if secrets is not None
     ]
     report_utils.dump_report_data(rows, shares_table_fields, fmt='table')
