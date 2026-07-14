@@ -548,26 +548,6 @@ def _build_record_add_message(
     return ra
 
 
-def _build_legacy_record_add_message(
-        record_uid: str,
-        record_key: bytes,
-        data: Dict[str, Any],
-        auth_data_key: bytes,
-        folder_uid: Optional[str],
-        folder_key: Optional[bytes]) -> record_pb2.RecordAdd:
-    ra = record_pb2.RecordAdd()
-    ra.record_uid = utils.base64_url_decode(record_uid)
-    ra.client_modified_time = utils.current_milli_time()
-    json_bytes = vault_extensions.get_padded_json_bytes(data)
-    if folder_uid and folder_key:
-        ra.folder_uid = utils.base64_url_decode(folder_uid)
-        ra.record_key = crypto.encrypt_aes_v2(record_key, folder_key)
-    else:
-        ra.record_key = crypto.encrypt_aes_v2(record_key, auth_data_key)
-    ra.data = crypto.encrypt_aes_v2(json_bytes, record_key)
-    return ra
-
-
 def _normalize_record_add_spec(
         spec: Union[NsfRecordAddSpec, Mapping[str, Any]]) -> NsfRecordAddSpec:
     if isinstance(spec, NsfRecordAddSpec):
@@ -629,13 +609,12 @@ def _prepare_nsf_record_add_messages(
         vault: VaultOnline,
         specs: List[NsfRecordAddSpec],
         folder_key_cache: Optional[Dict[str, bytes]] = None,
-) -> Tuple[List[str], List[record_endpoints_pb2.RecordAdd], List[record_pb2.RecordAdd]]:
+) -> Tuple[List[str], List[record_endpoints_pb2.RecordAdd]]:
     auth = vault.keeper_auth
     data_key = auth.auth_context.data_key
     cache = folder_key_cache if folder_key_cache is not None else {}
     record_uids: List[str] = []
     messages: List[record_endpoints_pb2.RecordAdd] = []
-    legacy_messages: List[record_pb2.RecordAdd] = []
 
     for spec in specs:
         folder_uid = None
@@ -652,17 +631,15 @@ def _prepare_nsf_record_add_messages(
             folder_key = cache[folder_uid]
         messages.append(_build_record_add_message(
             record_uid, record_key, data, data_key, folder_uid, folder_key))
-        legacy_messages.append(_build_legacy_record_add_message(
-            record_uid, record_key, data, data_key, folder_uid, folder_key))
         record_uids.append(record_uid)
-    return record_uids, messages, legacy_messages
+    return record_uids, messages
 
 
 def _execute_nsf_records_add(
         vault: VaultOnline,
         record_adds: List[record_endpoints_pb2.RecordAdd],
-        legacy_record_adds: Optional[List[record_pb2.RecordAdd]] = None,
 ) -> record_pb2.RecordsModifyResponse:
+    """Create NSF records via ``vault/records/v3/add`` only (same as Commander)."""
     if not record_adds or len(record_adds) > NSF_RECORD_ADD_BATCH_LIMIT:
         raise ValueError(f'Provide 1..{NSF_RECORD_ADD_BATCH_LIMIT} records')
 
@@ -672,17 +649,6 @@ def _execute_nsf_records_add(
     rq.records.extend(record_adds)
     response = auth.execute_auth_rest(
         'vault/records/v3/add', rq, response_type=record_pb2.RecordsModifyResponse)
-    if response is not None:
-        return response
-
-    if len(record_adds) != 1 or not legacy_record_adds or len(legacy_record_adds) != 1:
-        raise KeeperApiError('no_results', 'No results from NSF record batch add')
-
-    legacy_rq = record_pb2.RecordsAddRequest()
-    legacy_rq.client_time = utils.current_milli_time()
-    legacy_rq.records.append(legacy_record_adds[0])
-    response = auth.execute_auth_rest(
-        'vault/records_add', legacy_rq, response_type=record_pb2.RecordsModifyResponse)
     if response is None:
         raise KeeperApiError('no_results', 'No results from NSF record add')
     return response
@@ -692,7 +658,8 @@ def create_nsf_records_batch(
         vault: VaultOnline,
         record_specs: Iterable[Union[NsfRecordAddSpec, Mapping[str, Any]]],
         *,
-        request_sync: bool = True) -> List[NsfModifyResult]:
+        request_sync: bool = True,
+        folder_key_cache: Optional[Dict[str, bytes]] = None) -> List[NsfModifyResult]:
     """Create up to 1000 NSF records in a single ``vault/records/v3/add`` request."""
     specs = [_normalize_record_add_spec(spec) for spec in record_specs]
     if not specs:
@@ -700,8 +667,9 @@ def create_nsf_records_batch(
     if len(specs) > NSF_RECORD_ADD_BATCH_LIMIT:
         raise ValueError(f'Maximum {NSF_RECORD_ADD_BATCH_LIMIT} records at a time')
 
-    record_uids, record_adds, legacy_adds = _prepare_nsf_record_add_messages(vault, specs)
-    response = _execute_nsf_records_add(vault, record_adds, legacy_adds)
+    record_uids, record_adds = _prepare_nsf_record_add_messages(
+        vault, specs, folder_key_cache=folder_key_cache)
+    response = _execute_nsf_records_add(vault, record_adds)
     results = _parse_batch_modify_response(response, record_uids)
     if request_sync:
         vault.sync_requested = True
@@ -723,14 +691,13 @@ def create_nsf_records(
     folder_key_cache: Dict[str, bytes] = {}
     for batch_start in range(0, len(specs), NSF_RECORD_ADD_BATCH_LIMIT):
         batch = specs[batch_start:batch_start + NSF_RECORD_ADD_BATCH_LIMIT]
-        record_uids, record_adds, legacy_adds = _prepare_nsf_record_add_messages(
-            vault, batch, folder_key_cache=folder_key_cache)
-        response = _execute_nsf_records_add(vault, record_adds, legacy_adds)
-        all_results.extend(_parse_batch_modify_response(response, record_uids))
-
-    if request_sync:
-        vault.sync_requested = True
-        vault.run_pending_jobs()
+        is_last = batch_start + len(batch) >= len(specs)
+        all_results.extend(create_nsf_records_batch(
+            vault,
+            batch,
+            request_sync=request_sync and is_last,
+            folder_key_cache=folder_key_cache,
+        ))
     return all_results
 
 

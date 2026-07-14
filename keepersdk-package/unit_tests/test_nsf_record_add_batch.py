@@ -119,6 +119,24 @@ class TestNsfRecordAddBatch(unittest.TestCase):
                 request_sync=False,
             )
 
+    @patch.object(nsf_management.utils, 'generate_uid', return_value='AAAAAAAAAAAAAAAAAAAAAA')
+    def test_v3_none_response_raises_no_results(self, *_mocks):
+        vault = self._vault()
+        vault.keeper_auth.execute_auth_rest.return_value = None
+
+        with self.assertRaises(KeeperApiError) as ctx:
+            nsf_management.create_nsf_records_batch(
+                vault,
+                [{'title': 'Test', 'record_type': 'login'}],
+                request_sync=False,
+            )
+        self.assertEqual(ctx.exception.result_code, 'no_results')
+        vault.keeper_auth.execute_auth_rest.assert_called_once()
+        self.assertEqual(
+            vault.keeper_auth.execute_auth_rest.call_args.args[0],
+            'vault/records/v3/add',
+        )
+
     def test_normalize_record_add_spec_requires_title_and_type(self):
         with self.assertRaisesRegex(nsf_management.NsfError, 'title'):
             nsf_management._normalize_record_add_spec({'record_type': 'login'})
