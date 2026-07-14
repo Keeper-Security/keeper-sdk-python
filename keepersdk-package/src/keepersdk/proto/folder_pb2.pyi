@@ -1,5 +1,5 @@
-import record_pb2 as _record_pb2
-import tla_pb2 as _tla_pb2
+from . import record_pb2 as _record_pb2
+from . import tla_pb2 as _tla_pb2
 from google.protobuf.internal import containers as _containers
 from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
@@ -694,16 +694,18 @@ class FolderRecordUpdateRequest(_message.Message):
     def __init__(self, folderUid: _Optional[bytes] = ..., addRecords: _Optional[_Iterable[_Union[RecordMetadata, _Mapping]]] = ..., updateRecords: _Optional[_Iterable[_Union[RecordMetadata, _Mapping]]] = ..., removeRecords: _Optional[_Iterable[_Union[RecordMetadata, _Mapping]]] = ...) -> None: ...
 
 class RecordMetadata(_message.Message):
-    __slots__ = ("recordUid", "encryptedRecordKey", "encryptedRecordKeyType", "tlaProperties")
+    __slots__ = ("recordUid", "encryptedRecordKey", "encryptedRecordKeyType", "tlaProperties", "recordKeyEncryptedByOwnerKey")
     RECORDUID_FIELD_NUMBER: _ClassVar[int]
     ENCRYPTEDRECORDKEY_FIELD_NUMBER: _ClassVar[int]
     ENCRYPTEDRECORDKEYTYPE_FIELD_NUMBER: _ClassVar[int]
     TLAPROPERTIES_FIELD_NUMBER: _ClassVar[int]
+    RECORDKEYENCRYPTEDBYOWNERKEY_FIELD_NUMBER: _ClassVar[int]
     recordUid: bytes
     encryptedRecordKey: bytes
     encryptedRecordKeyType: EncryptedKeyType
     tlaProperties: _tla_pb2.TLAProperties
-    def __init__(self, recordUid: _Optional[bytes] = ..., encryptedRecordKey: _Optional[bytes] = ..., encryptedRecordKeyType: _Optional[_Union[EncryptedKeyType, str]] = ..., tlaProperties: _Optional[_Union[_tla_pb2.TLAProperties, _Mapping]] = ...) -> None: ...
+    recordKeyEncryptedByOwnerKey: bytes
+    def __init__(self, recordUid: _Optional[bytes] = ..., encryptedRecordKey: _Optional[bytes] = ..., encryptedRecordKeyType: _Optional[_Union[EncryptedKeyType, str]] = ..., tlaProperties: _Optional[_Union[_tla_pb2.TLAProperties, _Mapping]] = ..., recordKeyEncryptedByOwnerKey: _Optional[bytes] = ...) -> None: ...
 
 class FolderRecord(_message.Message):
     __slots__ = ("folderUid", "recordMetadata", "folderKeyEncryptionType")
