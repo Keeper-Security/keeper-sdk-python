@@ -639,7 +639,7 @@ def _execute_nsf_records_add(
         vault: VaultOnline,
         record_adds: List[record_endpoints_pb2.RecordAdd],
 ) -> record_pb2.RecordsModifyResponse:
-    """Create NSF records via ``vault/records/v3/add`` only (same as Commander)."""
+    """Create NSF records via ``vault/records/v3/add`` endpoint."""
     if not record_adds or len(record_adds) > NSF_RECORD_ADD_BATCH_LIMIT:
         raise ValueError(f'Provide 1..{NSF_RECORD_ADD_BATCH_LIMIT} records')
 
