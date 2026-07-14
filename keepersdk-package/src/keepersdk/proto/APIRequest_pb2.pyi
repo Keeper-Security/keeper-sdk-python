@@ -1,4 +1,4 @@
-import enterprise_pb2 as _enterprise_pb2
+from . import enterprise_pb2 as _enterprise_pb2
 from google.protobuf.internal import containers as _containers
 from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
@@ -651,8 +651,26 @@ class StartLoginRequest(_message.Message):
     fromSessionToken: bytes
     def __init__(self, encryptedDeviceToken: _Optional[bytes] = ..., username: _Optional[str] = ..., clientVersion: _Optional[str] = ..., messageSessionUid: _Optional[bytes] = ..., encryptedLoginToken: _Optional[bytes] = ..., loginType: _Optional[_Union[LoginType, str]] = ..., mcEnterpriseId: _Optional[int] = ..., loginMethod: _Optional[_Union[LoginMethod, str]] = ..., forceNewLogin: bool = ..., cloneCode: _Optional[bytes] = ..., v2TwoFactorToken: _Optional[str] = ..., accountUid: _Optional[bytes] = ..., fromSessionToken: _Optional[bytes] = ...) -> None: ...
 
+class KeysInfo(_message.Message):
+    __slots__ = ("encryptionParams", "encryptedDataKey", "dataKeyBackupDate", "userAuthUid", "encryptedPrivateKey", "encryptedEccPrivateKey", "eccPublicKey")
+    ENCRYPTIONPARAMS_FIELD_NUMBER: _ClassVar[int]
+    ENCRYPTEDDATAKEY_FIELD_NUMBER: _ClassVar[int]
+    DATAKEYBACKUPDATE_FIELD_NUMBER: _ClassVar[int]
+    USERAUTHUID_FIELD_NUMBER: _ClassVar[int]
+    ENCRYPTEDPRIVATEKEY_FIELD_NUMBER: _ClassVar[int]
+    ENCRYPTEDECCPRIVATEKEY_FIELD_NUMBER: _ClassVar[int]
+    ECCPUBLICKEY_FIELD_NUMBER: _ClassVar[int]
+    encryptionParams: bytes
+    encryptedDataKey: bytes
+    dataKeyBackupDate: float
+    userAuthUid: bytes
+    encryptedPrivateKey: bytes
+    encryptedEccPrivateKey: bytes
+    eccPublicKey: bytes
+    def __init__(self, encryptionParams: _Optional[bytes] = ..., encryptedDataKey: _Optional[bytes] = ..., dataKeyBackupDate: _Optional[float] = ..., userAuthUid: _Optional[bytes] = ..., encryptedPrivateKey: _Optional[bytes] = ..., encryptedEccPrivateKey: _Optional[bytes] = ..., eccPublicKey: _Optional[bytes] = ...) -> None: ...
+
 class LoginResponse(_message.Message):
-    __slots__ = ("loginState", "accountUid", "primaryUsername", "encryptedDataKey", "encryptedDataKeyType", "encryptedLoginToken", "encryptedSessionToken", "sessionTokenType", "message", "url", "channels", "salt", "cloneCode", "stateSpecificValue", "ssoClientVersion", "sessionTokenTypeModifier")
+    __slots__ = ("loginState", "accountUid", "primaryUsername", "encryptedDataKey", "encryptedDataKeyType", "encryptedLoginToken", "encryptedSessionToken", "sessionTokenType", "message", "url", "channels", "salt", "cloneCode", "stateSpecificValue", "ssoClientVersion", "sessionTokenTypeModifier", "keysInfo", "clientKey")
     LOGINSTATE_FIELD_NUMBER: _ClassVar[int]
     ACCOUNTUID_FIELD_NUMBER: _ClassVar[int]
     PRIMARYUSERNAME_FIELD_NUMBER: _ClassVar[int]
@@ -669,6 +687,8 @@ class LoginResponse(_message.Message):
     STATESPECIFICVALUE_FIELD_NUMBER: _ClassVar[int]
     SSOCLIENTVERSION_FIELD_NUMBER: _ClassVar[int]
     SESSIONTOKENTYPEMODIFIER_FIELD_NUMBER: _ClassVar[int]
+    KEYSINFO_FIELD_NUMBER: _ClassVar[int]
+    CLIENTKEY_FIELD_NUMBER: _ClassVar[int]
     loginState: LoginState
     accountUid: bytes
     primaryUsername: str
@@ -685,7 +705,9 @@ class LoginResponse(_message.Message):
     stateSpecificValue: str
     ssoClientVersion: str
     sessionTokenTypeModifier: str
-    def __init__(self, loginState: _Optional[_Union[LoginState, str]] = ..., accountUid: _Optional[bytes] = ..., primaryUsername: _Optional[str] = ..., encryptedDataKey: _Optional[bytes] = ..., encryptedDataKeyType: _Optional[_Union[EncryptedDataKeyType, str]] = ..., encryptedLoginToken: _Optional[bytes] = ..., encryptedSessionToken: _Optional[bytes] = ..., sessionTokenType: _Optional[_Union[SessionTokenType, str]] = ..., message: _Optional[str] = ..., url: _Optional[str] = ..., channels: _Optional[_Iterable[_Union[TwoFactorChannelInfo, _Mapping]]] = ..., salt: _Optional[_Iterable[_Union[Salt, _Mapping]]] = ..., cloneCode: _Optional[bytes] = ..., stateSpecificValue: _Optional[str] = ..., ssoClientVersion: _Optional[str] = ..., sessionTokenTypeModifier: _Optional[str] = ...) -> None: ...
+    keysInfo: KeysInfo
+    clientKey: bytes
+    def __init__(self, loginState: _Optional[_Union[LoginState, str]] = ..., accountUid: _Optional[bytes] = ..., primaryUsername: _Optional[str] = ..., encryptedDataKey: _Optional[bytes] = ..., encryptedDataKeyType: _Optional[_Union[EncryptedDataKeyType, str]] = ..., encryptedLoginToken: _Optional[bytes] = ..., encryptedSessionToken: _Optional[bytes] = ..., sessionTokenType: _Optional[_Union[SessionTokenType, str]] = ..., message: _Optional[str] = ..., url: _Optional[str] = ..., channels: _Optional[_Iterable[_Union[TwoFactorChannelInfo, _Mapping]]] = ..., salt: _Optional[_Iterable[_Union[Salt, _Mapping]]] = ..., cloneCode: _Optional[bytes] = ..., stateSpecificValue: _Optional[str] = ..., ssoClientVersion: _Optional[str] = ..., sessionTokenTypeModifier: _Optional[str] = ..., keysInfo: _Optional[_Union[KeysInfo, _Mapping]] = ..., clientKey: _Optional[bytes] = ...) -> None: ...
 
 class SwitchListElement(_message.Message):
     __slots__ = ("username", "fullName", "authRequired", "isLinked", "profilePicUrl")
@@ -760,7 +782,7 @@ class ValidateAuthHashRequest(_message.Message):
     def __init__(self, passwordMethod: _Optional[_Union[PasswordMethod, str]] = ..., authResponse: _Optional[bytes] = ..., encryptedLoginToken: _Optional[bytes] = ...) -> None: ...
 
 class TwoFactorChannelInfo(_message.Message):
-    __slots__ = ("channelType", "channel_uid", "channelName", "challenge", "capabilities", "phoneNumber", "maxExpiration", "createdOn", "lastFrequency")
+    __slots__ = ("channelType", "channel_uid", "channelName", "challenge", "capabilities", "phoneNumber", "maxExpiration", "createdOn", "lastFrequency", "challengeToken")
     CHANNELTYPE_FIELD_NUMBER: _ClassVar[int]
     CHANNEL_UID_FIELD_NUMBER: _ClassVar[int]
     CHANNELNAME_FIELD_NUMBER: _ClassVar[int]
@@ -770,6 +792,7 @@ class TwoFactorChannelInfo(_message.Message):
     MAXEXPIRATION_FIELD_NUMBER: _ClassVar[int]
     CREATEDON_FIELD_NUMBER: _ClassVar[int]
     LASTFREQUENCY_FIELD_NUMBER: _ClassVar[int]
+    CHALLENGETOKEN_FIELD_NUMBER: _ClassVar[int]
     channelType: TwoFactorChannelType
     channel_uid: bytes
     channelName: str
@@ -779,7 +802,8 @@ class TwoFactorChannelInfo(_message.Message):
     maxExpiration: TwoFactorExpiration
     createdOn: int
     lastFrequency: TwoFactorExpiration
-    def __init__(self, channelType: _Optional[_Union[TwoFactorChannelType, str]] = ..., channel_uid: _Optional[bytes] = ..., channelName: _Optional[str] = ..., challenge: _Optional[str] = ..., capabilities: _Optional[_Iterable[str]] = ..., phoneNumber: _Optional[str] = ..., maxExpiration: _Optional[_Union[TwoFactorExpiration, str]] = ..., createdOn: _Optional[int] = ..., lastFrequency: _Optional[_Union[TwoFactorExpiration, str]] = ...) -> None: ...
+    challengeToken: bytes
+    def __init__(self, channelType: _Optional[_Union[TwoFactorChannelType, str]] = ..., channel_uid: _Optional[bytes] = ..., channelName: _Optional[str] = ..., challenge: _Optional[str] = ..., capabilities: _Optional[_Iterable[str]] = ..., phoneNumber: _Optional[str] = ..., maxExpiration: _Optional[_Union[TwoFactorExpiration, str]] = ..., createdOn: _Optional[int] = ..., lastFrequency: _Optional[_Union[TwoFactorExpiration, str]] = ..., challengeToken: _Optional[bytes] = ...) -> None: ...
 
 class TwoFactorDuoStatus(_message.Message):
     __slots__ = ("capabilities", "phoneNumber", "enroll_url", "message")
@@ -844,18 +868,20 @@ class TwoFactorUpdateExpirationRequest(_message.Message):
     def __init__(self, expireIn: _Optional[_Union[TwoFactorExpiration, str]] = ...) -> None: ...
 
 class TwoFactorValidateRequest(_message.Message):
-    __slots__ = ("encryptedLoginToken", "valueType", "value", "channel_uid", "expireIn")
+    __slots__ = ("encryptedLoginToken", "valueType", "value", "channel_uid", "expireIn", "challengeToken")
     ENCRYPTEDLOGINTOKEN_FIELD_NUMBER: _ClassVar[int]
     VALUETYPE_FIELD_NUMBER: _ClassVar[int]
     VALUE_FIELD_NUMBER: _ClassVar[int]
     CHANNEL_UID_FIELD_NUMBER: _ClassVar[int]
     EXPIREIN_FIELD_NUMBER: _ClassVar[int]
+    CHALLENGETOKEN_FIELD_NUMBER: _ClassVar[int]
     encryptedLoginToken: bytes
     valueType: TwoFactorValueType
     value: str
     channel_uid: bytes
     expireIn: TwoFactorExpiration
-    def __init__(self, encryptedLoginToken: _Optional[bytes] = ..., valueType: _Optional[_Union[TwoFactorValueType, str]] = ..., value: _Optional[str] = ..., channel_uid: _Optional[bytes] = ..., expireIn: _Optional[_Union[TwoFactorExpiration, str]] = ...) -> None: ...
+    challengeToken: bytes
+    def __init__(self, encryptedLoginToken: _Optional[bytes] = ..., valueType: _Optional[_Union[TwoFactorValueType, str]] = ..., value: _Optional[str] = ..., channel_uid: _Optional[bytes] = ..., expireIn: _Optional[_Union[TwoFactorExpiration, str]] = ..., challengeToken: _Optional[bytes] = ...) -> None: ...
 
 class TwoFactorValidateResponse(_message.Message):
     __slots__ = ("encryptedLoginToken",)

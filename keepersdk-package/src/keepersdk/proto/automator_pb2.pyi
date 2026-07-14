@@ -1,6 +1,6 @@
-import ssocloud_pb2 as _ssocloud_pb2
-import enterprise_pb2 as _enterprise_pb2
-import version_pb2 as _version_pb2
+from . import ssocloud_pb2 as _ssocloud_pb2
+from . import enterprise_pb2 as _enterprise_pb2
+from . import version_pb2 as _version_pb2
 from google.protobuf.internal import containers as _containers
 from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
@@ -27,6 +27,7 @@ class SkillType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     DEVICE_APPROVAL: _ClassVar[SkillType]
     TEAM_APPROVAL: _ClassVar[SkillType]
     TEAM_FOR_USER_APPROVAL: _ClassVar[SkillType]
+    REPORTING: _ClassVar[SkillType]
 
 class AutomatorState(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -46,6 +47,7 @@ UNKNOWN_SKILL_TYPE: SkillType
 DEVICE_APPROVAL: SkillType
 TEAM_APPROVAL: SkillType
 TEAM_FOR_USER_APPROVAL: SkillType
+REPORTING: SkillType
 UNKNOWN_STATE: AutomatorState
 RUNNING: AutomatorState
 ERROR: AutomatorState
