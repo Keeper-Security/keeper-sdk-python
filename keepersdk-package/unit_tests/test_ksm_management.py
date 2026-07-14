@@ -64,12 +64,12 @@ class GetSecretsManagerAppTestCase(unittest.TestCase):
         self.mock_app = self.patcher_app.start()
         self.patcher_type = patch('keepersdk.proto.APIRequest_pb2.ApplicationShareType.Name', side_effect=lambda x: 'SHARE_TYPE_RECORD' if x == 1 else 'SHARE_TYPE_FOLDER' if x == 2 else 'UNKNOWN')
         self.mock_type = self.patcher_type.start()
-        self.patcher_enterprise = patch('keepersdk.vault.ksm_management.GENERAL', 1)
-        self.mock_enterprise = self.patcher_enterprise.start()
         self.patcher_short = patch('keepersdk.vault.ksm_management.shorten_client_id', return_value='shortid')
         self.mock_short = self.patcher_short.start()
         self.patcher_folders = patch('keepersdk.vault.ksm_management.vault_online.VaultOnline.vault_data', create=True)
         self.mock_folders = self.patcher_folders.start()
+        self.vault.vault_data.folders.return_value = []
+        self.vault.nsf_data = None
 
     def tearDown(self):
         self.patcher_encode.stop()
@@ -78,7 +78,6 @@ class GetSecretsManagerAppTestCase(unittest.TestCase):
         self.patcher_shared.stop()
         self.patcher_app.stop()
         self.patcher_type.stop()
-        self.patcher_enterprise.stop()
         self.patcher_short.stop()
         self.patcher_folders.stop()
 
@@ -107,6 +106,37 @@ class GetSecretsManagerAppTestCase(unittest.TestCase):
             result = ksm_management.get_secrets_manager_app(self.vault, 'uid1')
             self.assertEqual(result['folders'], 1)
             self.assertEqual(result['records'], 0)
+            self.assertEqual(result['shared_secrets'][0]['type'], 'FOLDER')
+            self.assertEqual(result['shared_secrets'][0]['name'], 'encoded_uid1')
+
+    def test_gateway_controller_client_is_included(self):
+        app_info = MagicMock()
+        client = MagicMock(
+            appClientType=2, id='DISCOVERY_AND_ROTATION_CONTROLLER',
+            createdOn=1710000000000, accessExpireOn=0, firstAccess=0, lastAccess=0,
+            lockIp=False, ipAddress='', clientId=b'gwclient',
+        )
+        app_info.clients = [client]
+        app_info.shares = []
+        with patch('keepersdk.vault.ksm_management.get_app_info', return_value=[app_info]):
+            result = ksm_management.get_secrets_manager_app(self.vault, 'uid1')
+            self.assertEqual(len(result['client_devices']), 1)
+            self.assertEqual(result['client_devices'][0]['name'], 'DISCOVERY_AND_ROTATION_CONTROLLER')
+
+    def test_nsf_folder_share_resolves_name(self):
+        from types import SimpleNamespace
+        app_info = MagicMock()
+        app_info.clients = []
+        share = MagicMock(secretUid=b'nsffolder', shareType=2, editable=True)
+        app_info.shares = [share]
+        nsf_folder = SimpleNamespace(folder_uid='encoded_uid1', name='PAM NSF Root')
+        self.vault.nsf_data = MagicMock()
+        self.vault.nsf_data.get_folder.return_value = nsf_folder
+        with patch('keepersdk.vault.ksm_management.get_app_info', return_value=[app_info]):
+            result = ksm_management.get_secrets_manager_app(self.vault, 'uid1')
+            self.assertEqual(result['folders'], 1)
+            self.assertEqual(result['shared_secrets'][0]['name'], 'PAM NSF Root')
+            self.vault.nsf_data.get_folder.assert_called_once_with('encoded_uid1')
 
     def test_app_not_found_raises(self):
         self.vault.vault_data.records.return_value = []
@@ -270,6 +300,52 @@ class RemoveSecretsManagerAppTestCase(unittest.TestCase):
         uid = ksm_management.remove_secrets_manager_app(self.vault, 'appuid', force=True)
         self.mock_delete.assert_called_once()
         self.assertEqual(uid, 'appuid')
+
+
+class ClassifyNsfSecretTestCase(unittest.TestCase):
+    def setUp(self):
+        self.vault = MagicMock()
+        self.vault.vault_data._records = {}
+        self.vault.vault_data._shared_folders = {}
+        self.vault.nsf_data = MagicMock()
+
+    def test_nsf_folder_classified_for_application_access(self):
+        self.vault.nsf_data.get_folder.return_value = MagicMock()
+        with patch(
+            'keepersdk.vault.ksm_management.nsf_management.resolve_nsf_folder_uid',
+            return_value='nsfFolderUid',
+        ):
+            result = ksm_management.KSMShareManagement._classify_secret(
+                self.vault, 'nsfFolderUid'
+            )
+        self.assertEqual(result, ('nsf_folder', 'nsfFolderUid', 'NSF Folder'))
+
+    def test_nsf_record_returns_record_share_info(self):
+        self.vault.nsf_data.get_folder.return_value = None
+        self.vault.nsf_data.get_record.return_value = MagicMock()
+        with patch(
+            'keepersdk.vault.ksm_management.nsf_management.resolve_nsf_folder_uid',
+            return_value=None,
+        ), patch(
+            'keepersdk.vault.ksm_management.nsf_management.resolve_nsf_record_uid',
+            return_value='nsfRecordUid',
+        ), patch(
+            'keepersdk.vault.ksm_management.nsf_management._get_record_key',
+            return_value=b'record-key-32-bytes!!!!!!!!!!!!!?',
+        ):
+            result = ksm_management.KSMShareManagement._get_secret_info(
+                self.vault, 'nsfRecordUid'
+            )
+        self.assertIsNotNone(result)
+        key, share_type, label, uid = result
+        self.assertEqual(key, b'record-key-32-bytes!!!!!!!!!!!!!?')
+        self.assertEqual(label, 'NSF Record')
+        self.assertEqual(uid, 'nsfRecordUid')
+
+    def test_unknown_uid_returns_none(self):
+        self.vault.nsf_data = None
+        result = ksm_management.KSMShareManagement._classify_secret(self.vault, 'missing')
+        self.assertIsNone(result)
 
 
 if __name__ == "__main__":
