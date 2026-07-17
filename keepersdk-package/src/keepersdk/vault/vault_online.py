@@ -6,6 +6,7 @@ from . import sync_down, vault_plugins
 from . import vault_data, vault_storage, nsf_data, nsf_vault_storage
 from .. import utils
 from ..authentication import keeper_auth
+from ..plugins.pam import pam_storage, pam_types
 
 
 class VaultOnline(vault_plugins.IVaultData, keeper_auth.IKeeperAuth):
@@ -24,6 +25,8 @@ class VaultOnline(vault_plugins.IVaultData, keeper_auth.IKeeperAuth):
         self._background_future: Optional[concurrent.futures.Future] = None
         self._sync_record_types = True
         self.sync_requested = False
+        self._record_rotation_cache: Dict[str, pam_types.PamRecordRotationInfo] = {}
+        self._pending_rotation_replace = False
         self.auto_sync = True    # call setter
 
     @property
@@ -45,6 +48,19 @@ class VaultOnline(vault_plugins.IVaultData, keeper_auth.IKeeperAuth):
     @property
     def lock(self)-> threading.Lock:
         return self._lock
+
+    @property
+    def record_rotation_cache(self) -> Dict[str, pam_types.PamRecordRotationInfo]:
+        return self._record_rotation_cache
+
+    def get_record_rotation(self, record_uid: str) -> Optional[pam_types.PamRecordRotationInfo]:
+        return self._record_rotation_cache.get(record_uid)
+
+    def consume_rotations_cleared(self) -> bool:
+        """Return and clear the 'last sync cleared rotations' flag for PAM sqlite replace."""
+        cleared = self._pending_rotation_replace
+        self._pending_rotation_replace = False
+        return cleared
 
     def close(self):
         self.auto_sync = False
@@ -104,9 +120,31 @@ class VaultOnline(vault_plugins.IVaultData, keeper_auth.IKeeperAuth):
             return False
         return None
 
+    def _ingest_record_rotations(self, result: sync_down.SyncDownResult) -> None:
+        if result.rotations_cleared:
+            self._record_rotation_cache.clear()
+            self._pending_rotation_replace = True
+        for rr in result.record_rotations:
+            row = pam_storage.pam_record_rotation_from_proto(rr)
+            if not row.record_uid:
+                continue
+            self._record_rotation_cache[row.record_uid] = pam_types.PamRecordRotationInfo(
+                record_uid=row.record_uid,
+                revision=row.revision,
+                configuration_uid=row.configuration_uid,
+                schedule=row.schedule,
+                pwd_complexity=row.pwd_complexity,
+                disabled=row.disabled,
+                resource_uid=row.resource_uid,
+                last_rotation=row.last_rotation,
+                last_rotation_status=row.last_rotation_status,
+            )
+
     def sync_down(self, force=False):
         if force:
             self._vault_data.storage.clear()
+            self._record_rotation_cache.clear()
+            self._pending_rotation_replace = True
 
         result = sync_down.sync_down_request(self._keeper_auth, self._vault_data.storage,
                                              sync_record_types=self._sync_record_types,
@@ -117,6 +155,7 @@ class VaultOnline(vault_plugins.IVaultData, keeper_auth.IKeeperAuth):
         self._vault_data.rebuild_data(result.vault)
         if self._nsf_data is not None:
             self._nsf_data.rebuild_nsf(self._keeper_auth.auth_context)
+        self._ingest_record_rotations(result)
 
     def _background_task(self):
         if self._keeper_auth.auth_context.enterprise_ec_public_key:
