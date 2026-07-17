@@ -4,11 +4,22 @@ import os
 import argparse
 import re
 
+from typing import Optional
+
 from keepersdk import crypto, utils
 from keepersdk.errors import KeeperApiError
 from keepersdk.helpers.tunnel.tunnel_graph import TunnelDAG
 from keepersdk.helpers.tunnel.tunnel_utils import get_keeper_tokens
-from keepersdk.vault import record_management, vault_record, vault_types, vault_utils, record_facades, attachment
+from keepersdk.vault import (
+    nsf_management,
+    record_management,
+    vault_online,
+    vault_record,
+    vault_types,
+    vault_utils,
+    record_facades,
+    attachment,
+)
 from keepersdk.proto import pam_pb2, router_pb2
 
 from .. import base
@@ -24,6 +35,86 @@ logger = api.get_logger()
 choices = ['on', 'off', 'default']
 
 PAM_DEFAULT_SPECIAL_CHAR = '''!@#$%^?();',.=+[]<>{}-_/\\*&:"`~|'''
+
+_PAM_ROTATION_RECORD_TYPES = (
+    'pamDatabase', 'pamDirectory', 'pamMachine', 'pamUser', 'pamRemoteBrowser',
+)
+
+
+def _resolve_nsf_record_uid(vault: vault_online.VaultOnline, identifier: str) -> Optional[str]:
+    """Resolve an NSF record UID from a UID or exact title."""
+    if not vault.nsf_data or not identifier:
+        return None
+    if vault.nsf_data.get_record(identifier):
+        return identifier
+    try:
+        return nsf_management.resolve_nsf_record_uid(vault, identifier)
+    except nsf_management.NsfError:
+        return None
+
+
+def _load_nsf_typed_record(
+        vault: vault_online.VaultOnline, record_uid: str) -> Optional[vault_record.TypedRecord]:
+    """Load an NSF record as TypedRecord (with record_key when available)."""
+    if not vault.nsf_data or not record_uid or not vault.nsf_data.get_record(record_uid):
+        return None
+    try:
+        meta = nsf_management.load_nsf_record_metadata(vault, record_uid)
+    except nsf_management.NsfError:
+        return None
+    typed = vault_record.TypedRecord()
+    typed.record_uid = record_uid
+    typed.load_record_data({
+        'type': meta.get('type') or '',
+        'title': meta.get('title') or record_uid,
+        'notes': meta.get('notes') or '',
+        'fields': meta.get('fields') or [],
+        'custom': meta.get('custom') or [],
+    })
+    entry = vault.nsf_data.get_record(record_uid)
+    if entry and entry.record_key:
+        typed.record_key = entry.record_key
+    return typed
+
+
+def _load_pam_typed_record(
+        vault: vault_online.VaultOnline, identifier: str) -> Optional[vault_record.TypedRecord]:
+    """Load a TypedRecord from classic vault or NSF by UID/title."""
+    if not identifier:
+        return None
+    loaded = vault.vault_data.load_record(identifier)
+    if loaded and isinstance(loaded, vault_record.TypedRecord):
+        key = vault.vault_data.get_record_key(identifier)
+        if key:
+            loaded.record_key = key
+        return loaded
+    nsf_uid = _resolve_nsf_record_uid(vault, identifier)
+    if nsf_uid:
+        return _load_nsf_typed_record(vault, nsf_uid)
+    return None
+
+
+def _iter_nsf_pam_configurations(vault: vault_online.VaultOnline):
+    """Yield NSF PAM configuration TypedRecords."""
+    if not vault.nsf_data:
+        return
+    for entry in vault.nsf_data.records():
+        typed = _load_nsf_typed_record(vault, entry.record_uid)
+        if typed and typed.record_type in PAM_CONFIGURATIONS:
+            yield typed
+
+
+def _attach_record_key(vault: vault_online.VaultOnline, record: vault_record.TypedRecord) -> None:
+    """Ensure TypedRecord has record_key from classic or NSF storage when possible."""
+    if getattr(record, 'record_key', None):
+        return
+    key = vault.vault_data.get_record_key(record.record_uid)
+    if not key and vault.nsf_data:
+        entry = vault.nsf_data.get_record(record.record_uid)
+        if entry:
+            key = entry.record_key
+    if key:
+        record.record_key = key
 
 
 class PAMListRecordRotationCommand(base.ArgparseCommand):
@@ -59,7 +150,12 @@ class PAMListRecordRotationCommand(base.ArgparseCommand):
         else:
             enterprise_controllers_connected_uids_bytes = []
 
-        all_pam_config_records = record_utils.pam_configurations_get_all(vault)
+        all_pam_config_records = list(record_utils.pam_configurations_get_all(vault))
+        seen_config_uids = {c.record_uid for c in all_pam_config_records}
+        for nsf_cfg in _iter_nsf_pam_configurations(vault):
+            if nsf_cfg.record_uid not in seen_config_uids:
+                all_pam_config_records.append(nsf_cfg)
+                seen_config_uids.add(nsf_cfg.record_uid)
         table = []
 
         headers = []
@@ -89,6 +185,10 @@ class PAMListRecordRotationCommand(base.ArgparseCommand):
                 (pam_config for pam_config in all_pam_config_records
                  if pam_config.record_uid == configuration_uid_str),
                 None)
+            if not pam_configuration and configuration_uid_str:
+                nsf_cfg = _load_nsf_typed_record(vault, configuration_uid_str)
+                if nsf_cfg and nsf_cfg.record_type in PAM_CONFIGURATIONS:
+                    pam_configuration = nsf_cfg
 
             is_controller_online = any(
                 (poc for poc in enterprise_controllers_connected_uids_bytes if poc == controller_uid))
@@ -99,8 +199,13 @@ class PAMListRecordRotationCommand(base.ArgparseCommand):
                 record_title = rec.info.title
                 record_type = rec.info.record_type
             else:
-                record_title = '[record inaccessible]'
-                record_type = '[record inaccessible]'
+                nsf_rec = _load_nsf_typed_record(vault, record_uid)
+                if nsf_rec:
+                    record_title = nsf_rec.title
+                    record_type = nsf_rec.record_type
+                else:
+                    record_title = '[record inaccessible]'
+                    record_type = '[record inaccessible]'
 
             if record_type != "pamUser":
                 continue
@@ -310,7 +415,7 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                 _dag.link_resource_to_config(target_record.record_uid)
 
             admin = kwargs.get('admin')
-            adm_rec = vault.vault_data.load_record(admin)
+            adm_rec = _load_pam_typed_record(vault, admin) if admin else None
 
             if adm_rec and isinstance(adm_rec, vault_record.TypedRecord):
                 admin = adm_rec.record_uid
@@ -428,13 +533,14 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
             if not record_config_uid:
                 if current_record_rotation:
                     record_config_uid = current_record_rotation.configuration_uid
-                    pc = vault.vault_data.load_record(record_config_uid)
+                    pc = pam_configurations.get(record_config_uid) or _load_pam_typed_record(
+                        vault, record_config_uid)
                     if pc is None:
                         skipped_records.append(
                             [target_record.record_uid, target_record.title, 'PAM Configuration was deleted',
                              'Specify a configuration UID parameter [--config]'])
                         return
-                    if not isinstance(pc, vault_record.TypedRecord) or pc.version != 6:
+                    if not isinstance(pc, vault_record.TypedRecord) or pc.record_type not in PAM_CONFIGURATIONS:
                         skipped_records.append(
                             [target_record.record_uid, target_record.title, 'PAM Configuration is invalid',
                              'Specify a configuration UID parameter [--config]'])
@@ -702,13 +808,14 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
             if not record_config_uid:
                 if current_record_rotation:
                     record_config_uid = current_record_rotation.configuration_uid
-                    pc = vault.vault_data.load_record(record_config_uid)
+                    pc = pam_configurations.get(record_config_uid) or _load_pam_typed_record(
+                        vault, record_config_uid)
                     if pc is None:
                         skipped_records.append(
                             [target_record.record_uid, target_record.title, 'PAM Configuration was deleted',
                              'Specify a configuration UID parameter [--config]'])
                         return
-                    if not isinstance(pc, vault_record.TypedRecord) or pc.version != 6:
+                    if not isinstance(pc, vault_record.TypedRecord) or pc.record_type not in PAM_CONFIGURATIONS:
                         skipped_records.append(
                             [target_record.record_uid, target_record.title, 'PAM Configuration is invalid',
                              'Specify a configuration UID parameter [--config]'])
@@ -832,19 +939,23 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
             elif vault.vault_data.load_record(record_name):
                 record_uids.add(record_name)
             else:
-                rs = folder_utils.try_resolve_path(context, record_name)
-                if rs is not None:
-                    folder, record_title = rs
-                    if record_title:
-                        record_pattern = record_title
-                        if isinstance(folder, vault_types.Folder):
-                            folder_uids.add(folder.folder_uid)
-                        elif isinstance(folder, list):
-                            for f in folder:
-                                if isinstance(f, vault_types.Folder):
-                                    folder_uids.add(f.folder_uid)
-                    else:
-                        logger.warning('Record \"%s\" not found. Skipping.', record_name)
+                nsf_uid = _resolve_nsf_record_uid(vault, record_name)
+                if nsf_uid:
+                    record_uids.add(nsf_uid)
+                else:
+                    rs = folder_utils.try_resolve_path(context, record_name)
+                    if rs is not None:
+                        folder, record_title = rs
+                        if record_title:
+                            record_pattern = record_title
+                            if isinstance(folder, vault_types.Folder):
+                                folder_uids.add(folder.folder_uid)
+                            elif isinstance(folder, list):
+                                for f in folder:
+                                    if isinstance(f, vault_types.Folder):
+                                        folder_uids.add(f.folder_uid)
+                        else:
+                            logger.warning('Record \"%s\" not found. Skipping.', record_name)
 
         folder_name = kwargs.get('folder_name')
         if folder_name:
@@ -891,10 +1002,13 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                                 record_uids.add(record_uid)
 
         pam_records = []
-        valid_record_types = ['pamDatabase', 'pamDirectory', 'pamMachine', 'pamUser', 'pamRemoteBrowser']
+        valid_record_types = list(_PAM_ROTATION_RECORD_TYPES)
         for record_uid in record_uids:
             record = vault.vault_data.load_record(record_uid)
+            if not record:
+                record = _load_nsf_typed_record(vault, record_uid)
             if record and isinstance(record, vault_record.TypedRecord) and record.record_type in valid_record_types:
+                _attach_record_key(vault, record)
                 pam_records.append(record)
 
         if len(pam_records) == 0:
@@ -909,12 +1023,17 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                 criteria=None, record_type=PAM_CONFIGURATIONS, record_version=6):
             loaded = vault.vault_data.load_record(x.record_uid)
             if loaded and isinstance(loaded, vault_record.TypedRecord):
+                _attach_record_key(vault, loaded)
                 pam_configurations[x.record_uid] = loaded
+        for nsf_cfg in _iter_nsf_pam_configurations(vault):
+            pam_configurations[nsf_cfg.record_uid] = nsf_cfg
 
         config_uid = kwargs.get('config')
-        cfg_rec = vault.vault_data.load_record(kwargs.get('config', None))
-        if cfg_rec and cfg_rec.version == 6 and cfg_rec.record_uid in pam_configurations:
-            config_uid = cfg_rec.record_uid
+        if config_uid:
+            cfg_rec = _load_pam_typed_record(vault, config_uid)
+            if cfg_rec and cfg_rec.record_type in PAM_CONFIGURATIONS:
+                pam_configurations[cfg_rec.record_uid] = cfg_rec
+                config_uid = cfg_rec.record_uid
 
         pam_config = None
         if config_uid:
@@ -954,9 +1073,12 @@ class PAMCreateRecordRotationCommand(base.ArgparseCommand):
                 pwd_complexity_rule_list = {}
 
         resource_uid = kwargs.get('resource')
-        res_rec = vault.vault_data.load_record(kwargs.get('resource', None))
-        if res_rec and isinstance(res_rec, vault_record.TypedRecord):
-            resource_uid = res_rec.record_uid
+        if resource_uid:
+            res_rec = _load_pam_typed_record(vault, resource_uid)
+            if res_rec and isinstance(res_rec, vault_record.TypedRecord):
+                resource_uid = res_rec.record_uid
+            elif not vault.vault_data.load_record(resource_uid):
+                raise base.CommandError(f'Resource "{resource_uid}" not found')
 
         skipped_header = ['record_uid', 'record_title', 'problem', 'description']
         skipped_records = []
@@ -1073,37 +1195,23 @@ class PAMRouterGetRotationInfo(base.ArgparseCommand):
             logger.info(
                 f"Gateway Uid: {(utils.base64_url_encode(rri.controllerUid) if rri.controllerUid else '-')}")
 
-            def is_resource_ok(resource_id, vault, configuration_uid):
-                if resource_id not in vault.vault_data._records:
-                    return False
-
-                configuration = vault.vault_data.load_record(configuration_uid)
-                if not isinstance(configuration, vault_record.TypedRecord):
-                    return False
-
-                field = configuration.get_typed_field('pamResources')
-                if not (field and isinstance(field.value, list) and len(field.value) == 1):
-                    return False
-
-                rv = field.value[0]
-                if not isinstance(rv, dict):
-                    return False
-
-                resources = rv.get('resourceRef')
-                return isinstance(resources, list) and resource_id in resources
-
             if rri.resourceUid:
-                resource_id = utils.base64_url_encode(rri.resourceUid)
-                resource_ok = is_resource_ok(resource_id, vault, configuration_uid)
-                logger.info(f"Admin Resource Uid: {resource_id if resource_ok else 'FAIL'}")
+                # Always print the router resource UID (Commander parity). Do not
+                # hide it behind a local pamResources check that often fails for NSF.
+                logger.info(
+                    f"Admin Resource Uid: {utils.base64_url_encode(rri.resourceUid)}")
 
             if rri.pwdComplexity:
                 logger.info(f"Password Complexity: {rri.pwdComplexity}")
                 try:
-                    record = vault.vault_data._records[record_uid]
-                    if record:
+                    record = vault.vault_data._records.get(record_uid)
+                    record_key = record.record_key if record else None
+                    if not record_key:
+                        typed = _load_pam_typed_record(vault, record_uid)
+                        record_key = getattr(typed, 'record_key', None) if typed else None
+                    if record_key:
                         complexity = crypto.decrypt_aes_v2(utils.base64_url_decode(rri.pwdComplexity),
-                                                           record.record_key)
+                                                           record_key)
                         c = json.loads(complexity.decode())
                         logger.info(f"Password Complexity Data: "
                               f"Length: {c.get('length')}; Lowercase: {c.get('lowercase')}; "
