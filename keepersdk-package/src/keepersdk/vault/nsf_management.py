@@ -465,7 +465,8 @@ def _get_folder_key(vault: VaultOnline, folder_uid: str) -> bytes:
         return folder.folder_key
 
     auth_context = vault.keeper_auth.auth_context
-    decrypted = nsf_crypto.decrypt_folder_keys(view.storage, auth_context)
+    teams = vault.vault_data.get_nsf_team_key_materials()
+    decrypted = nsf_crypto.decrypt_folder_keys(view.storage, auth_context, teams=teams)
     key = decrypted.get(folder_uid)
     if key is None:
         label = folder.name if folder and folder.name and folder.name != '(NSF Folder)' else folder_uid
