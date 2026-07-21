@@ -260,6 +260,18 @@ class VaultData:
         if t:
             return t.team_key
 
+    def get_nsf_team_key_materials(self) -> Dict[str, 'nsf_crypto.TeamKeyMaterial']:
+        """Decrypted team keys for NSF folderAccesses unwrap (team-shared folders)."""
+        from . import nsf_crypto
+        return {
+            uid: nsf_crypto.TeamKeyMaterial(
+                team_key=t.team_key,
+                rsa_private_key=t.rsa_private_key,
+                ec_private_key=t.ec_private_key,
+            )
+            for uid, t in self._teams.items()
+        }
+
     def teams(self) -> Iterable[vault_types.TeamInfo]:
         return (x.info for x in self._teams.values())
 

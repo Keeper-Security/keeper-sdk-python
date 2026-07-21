@@ -116,7 +116,12 @@ class VaultOnline(vault_plugins.IVaultData, keeper_auth.IKeeperAuth):
         self._sync_record_types = False
         self._vault_data.rebuild_data(result.vault)
         if self._nsf_data is not None:
-            self._nsf_data.rebuild_nsf(self._keeper_auth.auth_context)
+            # Teams are decrypted during vault rebuild; NSF team-shared folders
+            # need those keys to unwrap folderAccesses (ENCRYPTED_BY_TEAM_KEY).
+            self._nsf_data.rebuild_nsf(
+                self._keeper_auth.auth_context,
+                teams=self._vault_data.get_nsf_team_key_materials(),
+            )
 
     def _background_task(self):
         if self._keeper_auth.auth_context.enterprise_ec_public_key:
