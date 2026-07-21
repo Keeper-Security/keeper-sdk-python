@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Optional, Set
+from typing import Dict, Iterable, List, Mapping, Optional, Set
 
 from ..authentication import keeper_auth
 from . import nsf_crypto, nsf_storage_types as nsf
@@ -103,13 +103,17 @@ class NSFData:
         del changes
         self.rebuild_nsf(self._auth_context)
 
-    def rebuild_nsf(self, auth_context: Optional[keeper_auth.AuthContext]) -> None:
+    def rebuild_nsf(
+            self,
+            auth_context: Optional[keeper_auth.AuthContext],
+            teams: Optional[Mapping[str, nsf_crypto.TeamKeyMaterial]] = None) -> None:
         self._folders.clear()
         self._records.clear()
         if auth_context is None:
             return
 
-        decrypted_folder_keys = nsf_crypto.decrypt_folder_keys(self._storage, auth_context)
+        decrypted_folder_keys = nsf_crypto.decrypt_folder_keys(
+            self._storage, auth_context, teams=teams)
         decrypted_record_keys = nsf_crypto.decrypt_record_keys(
             self._storage, decrypted_folder_keys, auth_context)
 
