@@ -863,7 +863,7 @@ class KSMShareManagement:
         """Share secrets with a KSM application.
 
         Classic records/shared folders use vault/app_share_add.
-        NSF (Keeper Drive) folders use folders/v3/access_update with AT_APPLICATION.
+        NSF folders use folders/v3/access_update with AT_APPLICATION.
         """
         app_shares = []
         added_secret_info = []
