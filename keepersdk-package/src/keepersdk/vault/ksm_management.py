@@ -1136,7 +1136,7 @@ class KSMShareManagement:
         }
 
         updated_uids = []
-        classic_uids_to_readd = []
+        classic_uids_to_re_add = []
 
         for uid in secret_uids:
             kind = KSMShareManagement._classify_secret(vault, uid)
@@ -1158,18 +1158,18 @@ class KSMShareManagement:
                 perm = 'editable' if is_editable else 'read-only'
                 logging.info('Secret "%s" is already %s. No change needed.', uid, perm)
                 continue
-            classic_uids_to_readd.append(uid)
+            classic_uids_to_re_add.append(uid)
 
-        if classic_uids_to_readd:
+        if classic_uids_to_re_add:
             request = RemoveAppSharesRequest()
             request.appRecordUid = utils.base64_url_decode(app_uid)
             request.shares.extend(
-                utils.base64_url_decode(uid) for uid in classic_uids_to_readd)
+                utils.base64_url_decode(uid) for uid in classic_uids_to_re_add)
             vault.keeper_auth.execute_auth_rest(
                 rest_endpoint=SHARE_REMOVE_URL, request=request)
 
             app_shares = []
-            for uid in classic_uids_to_readd:
+            for uid in classic_uids_to_re_add:
                 share_info = KSMShareManagement._process_secret(
                     vault, uid, master_key, is_editable)
                 if share_info:
