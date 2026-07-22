@@ -1196,8 +1196,6 @@ class PAMRouterGetRotationInfo(base.ArgparseCommand):
                 f"Gateway Uid: {(utils.base64_url_encode(rri.controllerUid) if rri.controllerUid else '-')}")
 
             if rri.resourceUid:
-                # Always print the router resource UID (Commander parity). Do not
-                # hide it behind a local pamResources check that often fails for NSF.
                 logger.info(
                     f"Admin Resource Uid: {utils.base64_url_encode(rri.resourceUid)}")
 

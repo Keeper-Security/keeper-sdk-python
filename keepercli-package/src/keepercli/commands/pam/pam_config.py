@@ -99,7 +99,7 @@ class PAMConfigListCommand(base.ArgparseCommand):
             self._format_single_config_table(configuration, facade, shared_folder)
 
     def _list_all_configurations(self, vault: vault_online.VaultOnline, is_verbose: bool, format_type: str):
-        """Lists all PAM configurations (classic shared folders and NSF / Keeper Drive)."""
+        """Lists all PAM configurations (classic shared folders and NSF)."""
         configs_data = []
         table = []
         headers = self._build_list_headers(is_verbose, format_type)
@@ -209,7 +209,7 @@ class PAMConfigListCommand(base.ArgparseCommand):
                 return None
             folder_uid = folder_uids[0]
             if folder_uid == nsf_management.ROOT_FOLDER_UID:
-                return _PamFolderRef('My Drive', folder_uid)
+                return _PamFolderRef('My Vault', folder_uid)
             folder = vault.nsf_data.get_folder(folder_uid)
             name = (folder.name if folder and folder.name else None) or folder_uid
             return _PamFolderRef(name, folder_uid)
@@ -252,7 +252,7 @@ class PAMConfigListCommand(base.ArgparseCommand):
         return None
 
     def _find_nsf_pam_configurations(self, vault: vault_online.VaultOnline):
-        """Yield TypedRecord PAM configs stored under NSF / Keeper Drive."""
+        """Yield TypedRecord PAM configs stored under NSF."""
         if not vault.nsf_data:
             return
         for entry in vault.nsf_data.records():
@@ -858,7 +858,7 @@ common_parser.add_argument('--environment', '-env', dest='config_type', action='
 common_parser.add_argument('--title', '-t', dest='title', action='store', help='Title of the PAM Configuration')
 common_parser.add_argument('--gateway', '-g', dest='gateway_uid', action='store', help='Gateway UID or Name')
 common_parser.add_argument('--shared-folder', '-sf', dest='shared_folder_uid', action='store',
-                        help='Classic shared folder or NSF / Keeper Drive folder (UID or name) where this PAM '
+                        help='Classic shared folder or NSF folder (UID or name) where this PAM '
                                 'Configuration is stored. Should be a folder the gateway can access.')
 common_parser.add_argument('--schedule', '-sc', dest='default_schedule', action='store',
                         help='Default Schedule: Use CRON syntax')
@@ -1065,7 +1065,7 @@ class PAMConfigNewCommand(base.ArgparseCommand, PamConfigurationEditMixin):
 
     def _create_nsf_pam_configuration(self, vault: vault_online.VaultOnline, record: vault_record.TypedRecord,
                                        nsf_folder_uid: str):
-        """Create a PAM configuration record inside an NSF / Keeper Drive folder."""
+        """Create a PAM configuration record inside an NSF folder."""
         schema = vault.vault_data.get_record_type_by_name(record.record_type)
         record_data = vault_extensions.extract_typed_record_data(record, schema)
         try:

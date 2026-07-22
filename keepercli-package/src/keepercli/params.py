@@ -258,7 +258,6 @@ class KeeperParams:
         self.refresh_record_rotations()
 
     def refresh_record_rotations(self) -> None:
-        """Copy rotations from the last vault sync into :attr:`pam_plugin` sqlite (no extra sync_down)."""
         if not self._auth:
             return
         try:

@@ -264,9 +264,7 @@ def grant_nsf_folder_to_application(
         *,
         is_editable: bool = False,
         request_sync: bool = True) -> Dict[str, Any]:
-    """Share an NSF (Keeper Drive) folder with a KSM application via AT_APPLICATION.
-
-    Classic vault/app_share_add rejects Drive folders; this uses folders/v3/access_update.
+    """Share an NSF folder with a KSM application via AT_APPLICATION.
     """
     folder_uid = resolve_nsf_folder_uid(vault, folder_identifier) or folder_identifier
     if not is_nsf_folder(vault, folder_uid):
