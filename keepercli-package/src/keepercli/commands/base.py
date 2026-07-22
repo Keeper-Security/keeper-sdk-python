@@ -27,9 +27,15 @@ report_output_parser.add_argument('--output', dest='output', action='store',
 
 
 class CommandError(errors.KeeperError):
-    def __init__(self, message):
-        super().__init__(message)
-        self.command = ''
+    def __init__(self, message_or_command, message=None):
+        # Keepercli style: CommandError('message')
+        # Commander style: CommandError('command', 'message')
+        if message is None:
+            super().__init__(message_or_command)
+            self.command = ''
+        else:
+            super().__init__(message)
+            self.command = message_or_command or ''
 
     def __str__(self):
         if self.command:

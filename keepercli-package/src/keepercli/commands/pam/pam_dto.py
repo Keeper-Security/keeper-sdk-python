@@ -156,3 +156,13 @@ class GatewayActionDiscoverRuleValidate(GatewayAction):
     def toJSON(self):
         return json.dumps(self, default=lambda o: o.__dict__, sort_keys=True, indent=4)
 
+
+class GatewayActionWebRTCSession(GatewayAction):
+
+    def __init__(self, inputs: dict, conversation_id=None, message_id=None):
+        super().__init__('webrtc-session', inputs=inputs, conversation_id=conversation_id,
+                         message_id=message_id, is_scheduled=False)
+
+    def toJSON(self):
+        return json.dumps(self, default=lambda o: o.__dict__, sort_keys=True, indent=4)
+

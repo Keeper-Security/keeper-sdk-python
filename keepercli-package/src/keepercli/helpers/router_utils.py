@@ -1,4 +1,5 @@
 from datetime import datetime
+import base64
 import json
 import logging
 import os
@@ -18,6 +19,11 @@ from ..params import KeeperParams
 
 API_PATH_GET_CONTROLLERS = "get_controllers"
 VERIFY_SSL = bool(os.environ.get("VERIFY_SSL", "TRUE") == "TRUE")
+
+
+def _bytes_to_base64(data: bytes) -> str:
+    """Standard base64 (not URL-safe) for router TransmissionKey / Authorization headers."""
+    return base64.b64encode(data).decode('ascii')
 
 
 def _router_base_url(keeper_endpoint) -> str:
@@ -47,9 +53,80 @@ def router_get_connected_gateways(vault: vault_online.VaultOnline) -> Optional[p
     return None
 
 
-def router_send_action_to_gateway(context: KeeperParams, gateway_action: GatewayAction, message_type, is_streaming,
+def _router_base_url_from_params(params: KeeperParams) -> str:
+    if params.auth:
+        return _router_base_url(params.auth.keeper_endpoint)
+    if params.vault:
+        return _router_base_url(params.vault.keeper_auth.keeper_endpoint)
+    raise KeeperApiError('-1', 'Router URL unavailable: not authenticated')
+
+
+def get_router_url(params: KeeperParams) -> str:
+    if os.getenv('KROUTER_URL'):
+        url = os.getenv('KROUTER_URL', '').rstrip('/')
+        if not url.startswith('http'):
+            url = f'https://{url}'
+        return url
+    if os.getenv('ROUTER_URL'):
+        return os.environ['ROUTER_URL'].rstrip('/')
+    if params.auth:
+        return _router_base_url(params.auth.keeper_endpoint)
+    if params.vault:
+        return _router_base_url(params.vault.keeper_auth.keeper_endpoint)
+    server = params.keeper_config.server or ''
+    from ..compat.constants import get_router_host
+    return f'https://{get_router_host(server)}'
+
+
+def get_router_ws_url(params: KeeperParams) -> str:
+    router_url = get_router_url(params)
+    if router_url.startswith('https://'):
+        return 'wss://' + router_url[8:]
+    if router_url.startswith('http://'):
+        return 'ws://' + router_url[7:]
+    return router_url
+
+
+def router_get_relay_access_creds(params: KeeperParams, expire_sec=None):
+    query_params = {'expire-sec': expire_sec}
+    vault = params.vault
+    if vault is None:
+        raise KeeperApiError('-1', 'Vault is not initialized')
+    return _post_request_to_router(vault, 'relay_access_creds', query_params=query_params,
+                                   rs_type=pam_pb2.RelayAccessCreds)
+
+
+def get_dag_leafs(params: KeeperParams, encrypted_session_token, encrypted_transmission_key, record_id: str):
+    from keepersdk.helpers.tunnel.tunnel_utils import get_dag_leafs as _get_dag_leafs
+    if params.vault is None:
+        return None
+    return _get_dag_leafs(params.vault, encrypted_session_token, encrypted_transmission_key, record_id)
+
+
+def _post_request_to_router_for_params(params: KeeperParams, path, rq_proto=None, rs_type=None, method='post',
+                                       raw_without_status_check_response=False, query_params=None,
+                                       transmission_key=None, encrypted_transmission_key=None,
+                                       encrypted_session_token=None):
+    if params.vault is None:
+        raise KeeperApiError('-1', 'Vault is not initialized')
+    return _post_request_to_router(params.vault, path, rq_proto=rq_proto, rs_type=rs_type, method=method,
+                                   raw_without_status_check_response=raw_without_status_check_response,
+                                   query_params=query_params, transmission_key=transmission_key,
+                                   encrypted_transmission_key=encrypted_transmission_key,
+                                   encrypted_session_token=encrypted_session_token)
+
+
+def router_send_action_to_gateway(params: KeeperParams = None, context: KeeperParams = None, **kwargs):
+    """Commander-compatible wrapper: accepts ``params=`` or ``context=``."""
+    ctx = params or context
+    if ctx is None:
+        raise ValueError('params or context is required')
+    return router_send_action_to_gateway_impl(ctx, **kwargs)
+
+
+def router_send_action_to_gateway_impl(context: KeeperParams, gateway_action: GatewayAction, message_type, is_streaming,
                                   destination_gateway_uid_str=None, gateway_timeout=15000, transmission_key=None,
-                                  encrypted_transmission_key=None, encrypted_session_token=None):
+                                  encrypted_transmission_key=None, encrypted_session_token=None, http_session=None):
 
     krouter_url = _router_base_url(context.auth.keeper_endpoint)
 
@@ -67,7 +144,8 @@ def router_send_action_to_gateway(context: KeeperParams, gateway_action: Gateway
         destination_gateway_uid_bytes = utils.base64_url_decode(destination_gateway_uid_str)
 
         if destination_gateway_uid_bytes not in router_enterprise_controllers_connected:
-            logging.warning(f"\tThis Gateway currently is not online.")
+            # Match Commander: print so the message is visible during the spinner.
+            print("\tThis Gateway currently is not online.")
             return
     else:
         if not router_enterprise_controllers_connected or len(router_enterprise_controllers_connected) == 0:
@@ -109,7 +187,8 @@ def router_send_action_to_gateway(context: KeeperParams, gateway_action: Gateway
         transmission_key=transmission_key,
         rq_proto=rq,
         encrypted_transmission_key=encrypted_transmission_key,
-        encrypted_session_token=encrypted_session_token)
+        encrypted_session_token=encrypted_session_token,
+        http_session=http_session)
 
     rs_body = response.content
 
@@ -153,7 +232,10 @@ def router_send_action_to_gateway(context: KeeperParams, gateway_action: Gateway
 
 
 def router_send_message_to_gateway(context: KeeperParams, transmission_key, rq_proto,
-                                   encrypted_transmission_key=None, encrypted_session_token=None):
+                                   encrypted_transmission_key=None, encrypted_session_token=None,
+                                   http_session=None):
+    """Send controller message to gateway. When http_session is provided (streaming/ALB affinity),
+    the request uses that session so cookies match the WebSocket connection."""
 
     krouter_url = _router_base_url(context.auth.keeper_endpoint)
 
@@ -172,16 +254,24 @@ def router_send_message_to_gateway(context: KeeperParams, transmission_key, rq_p
     if not encrypted_session_token:
         encrypted_session_token = crypto.encrypt_aes_v2(context.auth.auth_context.session_token, transmission_key)
 
-    rs = requests.post(
-        krouter_url + "/api/user/send_controller_message",
-        verify=VERIFY_SSL,
-
-        headers={
-            'TransmissionKey': utils.base64_url_encode(encrypted_transmission_key),
-            'Authorization': f'KeeperUser {utils.base64_url_encode(encrypted_session_token)}',
-        },
-        data=encrypted_payload if rq_proto else None
-    )
+    headers = {
+        'TransmissionKey': _bytes_to_base64(encrypted_transmission_key),
+        'Authorization': f'KeeperUser {_bytes_to_base64(encrypted_session_token)}',
+    }
+    if http_session is not None:
+        rs = http_session.post(
+            krouter_url + "/api/user/send_controller_message",
+            verify=VERIFY_SSL,
+            headers=headers,
+            data=encrypted_payload if rq_proto else None
+        )
+    else:
+        rs = requests.post(
+            krouter_url + "/api/user/send_controller_message",
+            verify=VERIFY_SSL,
+            headers=headers,
+            data=encrypted_payload if rq_proto else None
+        )
 
     if rs.status_code >= 300:
         raise Exception(str(rs.status_code) + ': error: ' + rs.reason + ', message: ' + rs.text)
@@ -425,8 +515,8 @@ def _post_request_to_router(vault: vault_online.VaultOnline, path, rq_proto=None
                               params=query_params,
                               verify=VERIFY_SSL,
                               headers={
-                                'TransmissionKey': utils.base64_url_encode(encrypted_transmission_key),
-                                'Authorization': f'KeeperUser {utils.base64_url_encode(encrypted_session_token)}'
+                                'TransmissionKey': _bytes_to_base64(encrypted_transmission_key),
+                                'Authorization': f'KeeperUser {_bytes_to_base64(encrypted_session_token)}'
                               },
                               data=encrypted_payload if rq_proto else None
         )

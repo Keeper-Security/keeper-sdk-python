@@ -10,6 +10,7 @@ from .pam_gateway_action import (PAMGatewayActionServerInfoCommand, PAMGatewayAc
 from .pam_rotation import PAMCreateRecordRotationCommand, PAMListRecordRotationCommand, PAMRouterGetRotationInfo, PAMRouterScriptCommand
 from .pam_connection import PAMConnectionEditCommand
 from .pam_rbi import PAMRbiEditCommand
+from .pam_launch.launch import PAMLaunchCommand
 from .. import enterprise_utils
 from .. import base
 from ... import api
@@ -83,6 +84,7 @@ class PAMControllerCommand(base.GroupCommand):
         self.register_command(PAMRotationCommand(), 'rotation', 'r')
         self.register_command(PAMConnectionCommand(), 'connection', 'n')
         self.register_command(PAMRbiCommand(), 'rbi', 'b')
+        self.register_command(PAMLaunchCommand(), 'launch', 'l')
 
 
 class PAMGatewayCommand(base.GroupCommand):
