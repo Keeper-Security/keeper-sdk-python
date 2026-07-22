@@ -36,7 +36,7 @@ def decrypt_keeper_key(auth_context: keeper_auth.AuthContext, encrypted: bytes, 
 class SyncDownResult:
     vault: vault_data.RebuildTask
     nsf: Optional[nsf_data.NSFRebuildTask] = None
-    # Classic recordRotations + NSF keeperDriveData.recordRotationData from this sync.
+    # Classic recordRotations + NSF recordRotationData from this sync.
     record_rotations: List[SyncDown_pb2.RecordRotation] = dataclasses.field(default_factory=list)
     rotations_cleared: bool = False
 
