@@ -1,12 +1,13 @@
 import argparse
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional, Union
 
 from keepersdk.vault import nsf_folder_records, nsf_management, nsf_sharing, vault_record, nsf_common
 from keepersdk.vault.share_management_utils import parse_nsf_share_expiration
 from keepersdk.vault.nsf_management import (
     NsfError,
     NsfListRow,
+    NsfRecordAddSpec,
     NsfRemovePreviewItem,
     NsfRemoveResult,
 )
@@ -154,6 +155,77 @@ class _NsfRecordDataMixin(RecordEditMixin):
         record.title = title
         record.notes = notes
         return _typed_record_to_data(record, title, notes)
+
+
+def _build_batch_record_data(
+        mixin: _NsfRecordDataMixin,
+        context: KeeperParams,
+        record_type: str,
+        title: str,
+        notes: Optional[str],
+        raw_fields: Union[Mapping[str, Any], List[str], None],
+) -> Optional[Dict[str, Any]]:
+    if raw_fields is None:
+        return None
+    if isinstance(raw_fields, Mapping):
+        return None
+    record_fields: List[ParsedFieldValue] = []
+    for field in raw_fields:
+        if not isinstance(field, str):
+            raise base.CommandError('Batch record fields must be strings or a field object')
+        parsed = RecordEditMixin.parse_field(field)
+        if parsed.type == 'file':
+            raise base.CommandError(
+                'File attachments are not supported in nsf-record-add batch mode')
+        record_fields.append(parsed)
+    return mixin.build_nsf_record_data(context, record_type, title, notes, record_fields)
+
+
+def _load_nsf_record_add_batch_specs(
+        mixin: _NsfRecordDataMixin,
+        context: KeeperParams,
+        batch_path: str,
+) -> List[NsfRecordAddSpec]:
+    try:
+        with open(batch_path, 'r', encoding='utf-8') as handle:
+            payload = json.load(handle)
+    except OSError as exc:
+        raise base.CommandError(f'Unable to read batch file: {exc}') from exc
+    except json.JSONDecodeError as exc:
+        raise base.CommandError(f'Invalid JSON in batch file: {exc}') from exc
+
+    if not isinstance(payload, list):
+        raise base.CommandError('Batch file must contain a JSON array of record definitions')
+    if not payload:
+        raise base.CommandError('Batch file must contain at least one record definition')
+
+    specs: List[NsfRecordAddSpec] = []
+    for index, entry in enumerate(payload, start=1):
+        if not isinstance(entry, dict):
+            raise base.CommandError(f'Batch record #{index} must be a JSON object')
+        title = entry.get('title')
+        record_type = entry.get('record_type') or entry.get('type')
+        if not title:
+            raise base.CommandError(f'Batch record #{index} is missing title')
+        if not record_type:
+            raise base.CommandError(f'Batch record #{index} is missing record_type')
+
+        notes = entry.get('notes')
+        raw_fields = entry.get('fields')
+        record_data = entry.get('record_data')
+        field_map = raw_fields if isinstance(raw_fields, Mapping) else None
+        if record_data is None and isinstance(raw_fields, list):
+            record_data = _build_batch_record_data(
+                mixin, context, record_type, title, notes, raw_fields)
+        specs.append(NsfRecordAddSpec(
+            title=title,
+            record_type=record_type,
+            folder_uid=entry.get('folder_uid') or entry.get('folder'),
+            fields=field_map,
+            notes=notes,
+            record_data=record_data,
+        ))
+    return specs
 
 
 class NsfListCommand(base.ArgparseCommand):
@@ -485,6 +557,10 @@ class NsfRecordAddCommand(base.ArgparseCommand, _NsfRecordDataMixin):
         parser.add_argument('-n', '--notes', dest='notes', type=str, help='record notes')
         parser.add_argument('--folder', dest='folder_uid', metavar='FOLDER', type=str,
                         help='folder name or UID to store record')
+        parser.add_argument(
+            '--batch-file', dest='batch_file', metavar='FILE', type=str,
+            help='JSON file containing up to 1000 NSF records per API batch',
+        )
         parser.add_argument('fields', nargs='*', type=str,
                         help='load record type data from strings with dot notation')
 
@@ -493,6 +569,10 @@ class NsfRecordAddCommand(base.ArgparseCommand, _NsfRecordDataMixin):
         if kwargs.get('syntax_help'):
             prompt_utils.output_text(record_fields_description)
             return
+
+        batch_file = kwargs.get('batch_file')
+        if batch_file:
+            return self._execute_batch(context, vault, batch_file, kwargs.get('force') is True)
 
         title = kwargs.get('title')
         if not title:
@@ -546,6 +626,46 @@ class NsfRecordAddCommand(base.ArgparseCommand, _NsfRecordDataMixin):
         result = _wrap_nsf('nsf-record-add', _run)
         logger.info('NSF record created: %s', result.record_uid)
         return result.record_uid
+
+    def _execute_batch(
+            self,
+            context: KeeperParams,
+            vault,
+            batch_file: str,
+            force: bool) -> List[str]:
+        specs = _load_nsf_record_add_batch_specs(self, context, batch_file)
+        if self.warnings:
+            for w in self.warnings:
+                logger.warning(w)
+            if not force:
+                return []
+
+        def _run():
+            return nsf_management.create_nsf_records(vault, specs)
+
+        results = _wrap_nsf('nsf-record-add', _run)
+        created: List[str] = []
+        failed = 0
+        for result in results:
+            if result.success:
+                created.append(result.record_uid)
+                logger.info('NSF record created: %s (%s)', result.record_uid, result.status)
+            else:
+                failed += 1
+                logger.warning(
+                    'NSF record add failed: %s (%s)',
+                    result.record_uid,
+                    result.message or result.status,
+                )
+        logger.info(
+            'NSF batch add complete: %d created, %d failed, %d total',
+            len(created),
+            failed,
+            len(results),
+        )
+        if failed and not created:
+            raise base.CommandError('All NSF records in the batch failed to create')
+        return created
 
 
 class NsfRecordUpdateCommand(base.ArgparseCommand, _NsfRecordDataMixin):
