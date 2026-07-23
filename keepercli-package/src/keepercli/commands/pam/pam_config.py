@@ -254,6 +254,7 @@ class PAMConfigListCommand(base.ArgparseCommand):
     def _find_nsf_pam_configurations(self, vault: vault_online.VaultOnline):
         """Yield TypedRecord PAM configs stored under NSF."""
         if not vault.nsf_data:
+            logger.debug('No NSF record /folder found')
             return
         for entry in vault.nsf_data.records():
             rec_type = ''
@@ -538,6 +539,7 @@ class PamConfigurationEditMixin(record_edit.RecordEditMixin):
                 return sf_uid
 
         if vault.nsf_data is None:
+            logger.debug('No nsf data')
             return None
         try:
             nsf_uid = nsf_management.resolve_nsf_folder_uid(vault, folder_name)
@@ -1053,7 +1055,6 @@ class PAMConfigNewCommand(base.ArgparseCommand, PamConfigurationEditMixin):
             self._configure_tunneling(vault, record, admin_cred_ref, kwargs)
             vault.sync_down()
             record_management.move_vault_objects(vault, [record.record_uid], shared_folder_uid)
-            vault.sync_down()
             if gateway_uid:
                 self._set_configuration_controller(vault, record.record_uid, gateway_uid)
             return
