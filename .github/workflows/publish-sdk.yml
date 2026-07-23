@@ -20,10 +20,10 @@ jobs:
         with:
           ref: ${{ github.event.inputs.version }}
 
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v5
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v7
         with:
-          python-version: '3.13'
+          python-version: '3.14'
 
       - name: Install dependencies
         run: |
@@ -38,7 +38,7 @@ jobs:
           python3 -m build --wheel keepersdk-package
 
       - name: Archive the package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: KeeperSdkWheel
           retention-days: 1
@@ -52,15 +52,15 @@ jobs:
     environment: test
 
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: KeeperSdkWheel
           path: keepersdk-package/dist
 
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v5
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v7
         with:
-          python-version: '3.13'
+          python-version: '3.14'
 
       - name: Publish to Test PyPI
         env:
@@ -77,15 +77,15 @@ jobs:
     environment: prod
 
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: KeeperSdkWheel
           path: keepersdk-package/dist
 
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v5
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v7
         with:
-          python-version: '3.13'
+          python-version: '3.14'
 
       - name: Publish to PyPI
         env:
