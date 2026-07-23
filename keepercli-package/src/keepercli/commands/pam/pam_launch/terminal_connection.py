@@ -974,9 +974,10 @@ def _extract_user_record_credentials(
         'passphrase': None,
     }
 
-    # Load the pamUser record
+    # Load the pamUser record (classic vault or NSF; accept keepersdk + compat TypedRecord)
+    from keepersdk.vault import vault_record as _vr
     user_record = vault.KeeperRecord.load(params, user_record_uid)
-    if not isinstance(user_record, vault.TypedRecord):
+    if not isinstance(user_record, _vr.TypedRecord):
         logging.warning(f"User record {user_record_uid} is not a TypedRecord")
         return result
 

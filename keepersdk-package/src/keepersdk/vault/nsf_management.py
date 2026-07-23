@@ -356,6 +356,7 @@ def load_nsf_record_metadata(vault: VaultOnline, record_uid: str) -> Dict[str, A
         'title': str(payload.get('title') or record_uid),
         'type': str(payload.get('type') or ''),
         'fields': list(payload.get('fields') or []),
+        'custom': list(payload.get('custom') or []),
         'notes': str(payload.get('notes') or ''),
         'revision': entry.revision,
         'version': entry.version,
