@@ -701,8 +701,8 @@ def update_nsf_typed_record(
         request_sync: bool = True) -> NsfModifyResult:
     """Update an NSF typed record, including record-link adds/removes for file/script refs.
 
-    Mirrors classic ``record_management.update_record`` so PAM rotation scripts
-    (and other fileRef/script attachments) work on Keeper Drive records.
+    In sync with the classic ``record_management.update_record`` flow so PAM
+    rotation scripts (and other fileRef/script attachments) work on NSF records.
     """
     from . import vault_record as vr
 
