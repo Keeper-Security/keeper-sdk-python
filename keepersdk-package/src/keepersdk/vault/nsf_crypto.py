@@ -196,29 +196,42 @@ def _folder_needs_access_fallback(
     """True when FolderKey links require folderAccesses (TEAM_KEY or failed PARENT/USER)."""
     if folder_uid in decrypted_keys:
         return False
-    for fk in keys_by_folder.get(folder_uid, []):
+    folder_keys = keys_by_folder.get(folder_uid, [])
+    if not folder_keys:
+        # No FolderKey links — still try folderAccesses (bare sync rows).
+        return True
+    for fk in folder_keys:
         if fk.encrypted_by == int(_FOLDER_KEY_ENCRYPTION.ENCRYPTED_BY_TEAM_KEY):
             return True
         if fk.encrypted_by == int(_FOLDER_KEY_ENCRYPTION.ENCRYPTED_BY_PARENT_KEY):
             parent_uid = fk.parent_uid
             if not parent_uid or parent_uid not in decrypted_keys:
+                # Parent missing or not yet unwrapped — try accesses (Vault fallback).
                 return True
+            # Parent key already available; PARENT_KEY path will handle this folder.
+            continue
         if fk.encrypted_by == int(_FOLDER_KEY_ENCRYPTION.ENCRYPTED_BY_USER_KEY):
             return True  # USER_KEY already tried; fall back to accesses
-    return True
+    return False
 
 
 def decrypt_folder_keys(
         storage: INSFStorage,
         auth_context: keeper_auth.AuthContext,
         teams: Optional[Mapping[str, TeamKeyMaterial]] = None) -> Dict[str, bytes]:
-    """Decrypt NSF folder keys. Pass *teams* for team-shared folder unwrap."""
+    """Decrypt NSF folder keys. Pass *teams* for team-shared folder unwrap.
+
+    Mirrors Commander / Web Vault: folderAccesses unwrap runs inside the progress
+    loop so TEAM_KEY parents unlock first, then ENCRYPTED_BY_PARENT_KEY children
+    continue on the next pass (team-shared NSF sub-folders).
+    """
     teams = teams or {}
     decrypted_keys: Dict[str, bytes] = {}
     keys_by_folder: Dict[str, List[nsf.NSFFolderKey]] = {}
     for fk in storage.folder_keys.get_all_links():
         keys_by_folder.setdefault(fk.folder_uid, []).append(fk)
     folder_rows = list(storage.folders.get_all_entities())
+    candidates = set(keys_by_folder.keys()) | {row.folder_uid for row in folder_rows}
 
     progress = True
     while progress:
@@ -240,16 +253,17 @@ def decrypt_folder_keys(
                 decrypted_keys[row.folder_uid] = key
                 progress = True
 
-    # folderAccesses fallback (TEAM_KEY, PARENT without parent, USER_KEY miss, bare accesses)
-    candidates = set(keys_by_folder.keys()) | {row.folder_uid for row in folder_rows}
-    for folder_uid in candidates:
-        if folder_uid in decrypted_keys:
-            continue
-        if not _folder_needs_access_fallback(folder_uid, keys_by_folder, decrypted_keys):
-            continue
-        key = try_decrypt_from_folder_access(folder_uid, storage, auth_context, teams)
-        if key is not None:
-            decrypted_keys[folder_uid] = key
+        # folderAccesses inside the loop (TEAM_KEY / missing parent / USER miss).
+        # After a team parent unlocks here, the next iteration unwraps PARENT_KEY children.
+        for folder_uid in candidates:
+            if folder_uid in decrypted_keys:
+                continue
+            if not _folder_needs_access_fallback(folder_uid, keys_by_folder, decrypted_keys):
+                continue
+            key = try_decrypt_from_folder_access(folder_uid, storage, auth_context, teams)
+            if key is not None:
+                decrypted_keys[folder_uid] = key
+                progress = True
 
     return decrypted_keys
 

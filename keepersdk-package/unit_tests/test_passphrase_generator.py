@@ -41,7 +41,9 @@ class TestKeeperPassphraseGenerator(TestCase):
         self.assertEqual(result, 'Alpha4-Bravo-Charlie-Delta-Echo')
 
     def test_generated_words_are_unique(self):
-        gen = generator.KeeperPassphraseGenerator(word_count=9, capitalize=False, append_number=False)
+        # Use '_' so hyphenated EFF words (yo-yo, felt-tip, ...) do not inflate split().
+        gen = generator.KeeperPassphraseGenerator(
+            word_count=9, separator='_', capitalize=False, append_number=False)
         for _ in range(100):
             words = gen.generate().split(gen.separator)
             self.assertEqual(len(words), 9)
