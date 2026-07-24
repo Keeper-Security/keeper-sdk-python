@@ -1047,40 +1047,26 @@ class PAMConfigNewCommand(base.ArgparseCommand, PamConfigurationEditMixin):
 
     def _create_and_configure_record(self, vault: vault_online.VaultOnline, record: vault_record.TypedRecord,
                                       shared_folder_uid: str, gateway_uid: str, admin_cred_ref: str, kwargs: dict):
-        """Creates the record and configures tunneling, DAG, and controller."""
-        if vault.nsf_data is not None and nsf_management.is_nsf_folder(vault, shared_folder_uid):
-            self._create_nsf_pam_configuration(vault, record, shared_folder_uid)
-        else:
-            config_utils.pam_configuration_create_record_v6(vault, record, shared_folder_uid)
-            self._configure_tunneling(vault, record, admin_cred_ref, kwargs)
-            vault.sync_down()
-            record_management.move_vault_objects(vault, [record.record_uid], shared_folder_uid)
-            if gateway_uid:
-                self._set_configuration_controller(vault, record.record_uid, gateway_uid)
-            return
+        """Creates the record and configures tunneling, DAG, and controller.
+
+        NSF folders use vault/records/v3/add_pam_configuration (record is created
+        in-folder). Classic shared folders use pam/add_configuration_record then
+        move the record into the folder after sync — same as Commander.
+        """
+        from keepersdk.errors import KeeperApiError
+
+        try:
+            is_nsf = config_utils.create_pam_configuration_in_folder(
+                vault, record, shared_folder_uid)
+        except (nsf_management.NsfError, KeeperApiError) as exc:
+            raise base.CommandError(str(exc)) from exc
 
         self._configure_tunneling(vault, record, admin_cred_ref, kwargs)
         vault.sync_down()
+        if not is_nsf:
+            record_management.move_vault_objects(vault, [record.record_uid], shared_folder_uid)
         if gateway_uid:
             self._set_configuration_controller(vault, record.record_uid, gateway_uid)
-
-    def _create_nsf_pam_configuration(self, vault: vault_online.VaultOnline, record: vault_record.TypedRecord,
-                                       nsf_folder_uid: str):
-        """Create a PAM configuration record inside an NSF folder."""
-        schema = vault.vault_data.get_record_type_by_name(record.record_type)
-        record_data = vault_extensions.extract_typed_record_data(record, schema)
-        try:
-            result = nsf_management.create_nsf_record(
-                vault,
-                title=record.title,
-                record_type=record.record_type,
-                folder_uid=nsf_folder_uid,
-                record_data=record_data,
-                request_sync=True,
-            )
-        except nsf_management.NsfError as e:
-            raise base.CommandError(str(e)) from e
-        record.record_uid = result.record_uid
 
     def _set_configuration_controller(self, vault: vault_online.VaultOnline, config_uid: str, gateway_uid: str):
         """Sets the controller for the PAM configuration."""

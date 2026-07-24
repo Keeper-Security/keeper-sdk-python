@@ -1,8 +1,14 @@
+from .. import crypto, utils
+from ..errors import KeeperApiError
 from ..proto import pam_pb2
-from ..vault import vault_extensions, vault_online, vault_record
-from .. import utils, crypto
+from ..vault import nsf_management, vault_extensions, vault_online, vault_record
 
-def pam_configuration_create_record_v6(vault: vault_online.VaultOnline, record: vault_record.TypedRecord, folder_uid: str):
+
+def pam_configuration_create_record_v6(
+        vault: vault_online.VaultOnline,
+        record: vault_record.TypedRecord,
+        folder_uid: str) -> None:
+    """Create a classic PAM configuration via pam/add_configuration_record."""
     if not record.record_uid:
         record.record_uid = utils.generate_uid()
 
@@ -22,6 +28,36 @@ def pam_configuration_create_record_v6(vault: vault_online.VaultOnline, record: 
     vault.keeper_auth.execute_auth_rest('pam/add_configuration_record', car)
 
 
+def pam_configuration_create_record_nsf(
+        vault: vault_online.VaultOnline,
+        record: vault_record.TypedRecord,
+        folder_uid: str) -> None:
+    """Create a PAM configuration in an NSF folder via vault/records/v3/add_pam_configuration."""
+    try:
+        nsf_management.create_nsf_pam_configuration(
+            vault, record, folder_uid, request_sync=True)
+    except nsf_management.NsfError as exc:
+        raise KeeperApiError('nsf_error', str(exc)) from exc
+
+
+def create_pam_configuration_in_folder(
+        vault: vault_online.VaultOnline,
+        record: vault_record.TypedRecord,
+        folder_uid: str) -> bool:
+    """Create a v6 PAM configuration in *folder_uid* using NSF or classic placement.
+
+    Returns True when the config was created as an NSF record (already placed in
+    the folder). Returns False for classic configs, which still need a move into
+    the shared folder after sync.
+    """
+    if vault.nsf_data is not None and nsf_management.is_nsf_folder(vault, folder_uid):
+        pam_configuration_create_record_nsf(vault, record, folder_uid)
+        return True
+
+    pam_configuration_create_record_v6(vault, record, folder_uid)
+    return False
+
+
 def configuration_controller_get(vault: vault_online.VaultOnline, config_uid_bytes: bytes):
     """
     Get the Controller UID that has access to the configuration UID
@@ -31,7 +67,8 @@ def configuration_controller_get(vault: vault_online.VaultOnline, config_uid_byt
     rq = pam_pb2.PAMGenericUidRequest()
     rq.uid = config_uid_bytes
 
-    config_info_rs = vault.keeper_auth.execute_auth_rest('pam/get_configuration_controller', rq, response_type=pam_pb2.PAMController)
+    config_info_rs = vault.keeper_auth.execute_auth_rest(
+        'pam/get_configuration_controller', rq, response_type=pam_pb2.PAMController)
 
     if config_info_rs:
         return config_info_rs

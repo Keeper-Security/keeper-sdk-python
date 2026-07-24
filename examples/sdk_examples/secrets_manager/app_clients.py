@@ -528,6 +528,7 @@ def add_client_to_ksm_app(
     unlock_ip: bool = False,
     first_access_expires_in_minutes: int = DEFAULT_FIRST_ACCESS_EXPIRES_MINUTES,
     access_expire_in_minutes: Optional[int] = None,
+    client_type: int = ksm_management.GENERAL,
 ) -> None:
     """
     Add a client device to a KSM app using
@@ -542,6 +543,7 @@ def add_client_to_ksm_app(
         unlock_ip: If True, do not lock the client to the current IP.
         first_access_expires_in_minutes: Minutes until the one-time token expires (default 60).
         access_expire_in_minutes: Optional minutes until app access expires (None = never).
+        client_type: Type of client to add (default GENERAL).
     """
     vault, app_uid = _vault_and_app_uid(keeper_auth_context, app_uid_or_name)
     try:
@@ -571,6 +573,7 @@ def add_client_to_ksm_app(
                 access_expire_in_ms=access_expire_in_ms,
                 master_key=master_key,
                 server=server,
+                client_type=client_type,
             )
             print(result["output_string"])
             if result.get("token_info"):
@@ -641,6 +644,7 @@ def main() -> None:
         unlock_ip = False  # Set True to allow config from any IP
         first_access_expires_in_minutes = 60  # Token validity (max 1440 = 24h)
         access_expire_in_minutes = None  # None = never expire app access
+        client_type = ksm_management.GENERAL
         add_client_to_ksm_app(
             keeper_auth_context,
             app_uid_or_name,
@@ -649,6 +653,7 @@ def main() -> None:
             unlock_ip=unlock_ip,
             first_access_expires_in_minutes=first_access_expires_in_minutes,
             access_expire_in_minutes=access_expire_in_minutes,
+            client_type=client_type,
         )
     elif action == "remove":
         client_names_or_ids = ["<client_id_1>", "<client_id_2>"]  # Client ID(s)
