@@ -193,6 +193,77 @@ class TestNsfFolderKeyDecrypt(unittest.TestCase):
         )
         self.assertEqual(name, 'Access Shared')
 
+    def test_team_parent_then_parent_key_child_name(self):
+        """Team-shared root + PARENT_KEY child with no child folderAccesses key.
+
+        Regression: access unwrap must run inside the progress loop so the child
+        can unwrap on the next pass after the parent team key is available.
+        """
+        storage = memory_nsf_storage.InMemoryNSFStorage()
+        auth = _auth()
+        team_uid = utils.generate_uid()
+        team_aes = utils.generate_aes_key()
+        parent_key = utils.generate_aes_key()
+        child_key = utils.generate_aes_key()
+        teams = {team_uid: nsf_crypto.TeamKeyMaterial(team_key=team_aes)}
+
+        parent_uid = _put_folder(storage, 'Team Root', parent_key)
+        child_uid = _put_folder(storage, 'Team Child', child_key, parent_uid=parent_uid)
+
+        # Put child FolderKey first so iteration order would fail a one-shot access pass.
+        storage.folder_keys.put_links([
+            nsf.NSFFolderKey(
+                folder_uid=child_uid,
+                parent_uid=parent_uid,
+                folder_key=utils.base64_url_encode(
+                    crypto.encrypt_aes_v2(child_key, parent_key)
+                ),
+                encrypted_by=int(folder_pb2.ENCRYPTED_BY_PARENT_KEY),
+            ),
+            nsf.NSFFolderKey(
+                folder_uid=parent_uid,
+                parent_uid='',
+                folder_key='',
+                encrypted_by=int(folder_pb2.ENCRYPTED_BY_TEAM_KEY),
+            ),
+        ])
+        storage.folder_accesses.put_links([
+            nsf.NSFFolderAccess(
+                folder_uid=parent_uid,
+                access_type_uid=team_uid,
+                access_type=int(folder_pb2.AT_TEAM),
+                folder_key_encrypted=utils.base64_url_encode(
+                    crypto.encrypt_aes_v2(parent_key, team_aes)
+                ),
+                folder_key_type=int(folder_pb2.encrypted_by_data_key_gcm),
+            ),
+            # Child has inherited/empty access — no folder_key_encrypted.
+            nsf.NSFFolderAccess(
+                folder_uid=child_uid,
+                access_type_uid=team_uid,
+                access_type=int(folder_pb2.AT_TEAM),
+                folder_key_encrypted='',
+                folder_key_type=0,
+                inherited=True,
+            ),
+        ])
+
+        keys = nsf_crypto.decrypt_folder_keys(storage, auth, teams=teams)
+        self.assertIn(parent_uid, keys)
+        self.assertIn(child_uid, keys)
+        self.assertEqual(
+            nsf_crypto.decrypt_folder_name(
+                storage.folders.get_entity(parent_uid).data, keys[parent_uid]
+            ),
+            'Team Root',
+        )
+        self.assertEqual(
+            nsf_crypto.decrypt_folder_name(
+                storage.folders.get_entity(child_uid).data, keys[child_uid]
+            ),
+            'Team Child',
+        )
+
 
 if __name__ == '__main__':
     unittest.main()
