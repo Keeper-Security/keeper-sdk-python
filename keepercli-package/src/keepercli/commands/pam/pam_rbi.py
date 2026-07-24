@@ -20,68 +20,11 @@ from .. import base
 from ... import api
 from ...helpers import record_utils
 from ...params import KeeperParams
+from . import pam_utils
+
 choices = ['on', 'off', 'default']
 
 logger = api.get_logger()
-
-
-def _resolve_nsf_record_uid(vault: vault_online.VaultOnline, identifier: str) -> Optional[str]:
-    """Resolve an NSF record UID from a UID or exact title."""
-    if not vault.nsf_data or not identifier:
-        return None
-    if vault.nsf_data.get_record(identifier):
-        return identifier
-    try:
-        return nsf_management.resolve_nsf_record_uid(vault, identifier)
-    except nsf_management.NsfError:
-        return None
-
-
-def _load_nsf_typed_record(
-        vault: vault_online.VaultOnline, record_uid: str) -> Optional[vault_record.TypedRecord]:
-    """Load an NSF record as TypedRecord (with record_key when available)."""
-    if not vault.nsf_data or not record_uid or not vault.nsf_data.get_record(record_uid):
-        return None
-    try:
-        meta = nsf_management.load_nsf_record_metadata(vault, record_uid)
-    except nsf_management.NsfError:
-        return None
-    typed = vault_record.TypedRecord()
-    typed.record_uid = record_uid
-    typed.load_record_data({
-        'type': meta.get('type') or '',
-        'title': meta.get('title') or record_uid,
-        'notes': meta.get('notes') or '',
-        'fields': meta.get('fields') or [],
-        'custom': meta.get('custom') or [],
-    })
-    entry = vault.nsf_data.get_record(record_uid)
-    if entry and entry.record_key:
-        typed.record_key = entry.record_key
-    return typed
-
-
-def _is_nsf_record(vault: vault_online.VaultOnline, record_uid: str) -> bool:
-    return bool(record_uid and vault.nsf_data and vault.nsf_data.get_record(record_uid))
-
-
-def _load_typed_record(
-        vault: vault_online.VaultOnline,
-        context: KeeperParams,
-        identifier: str,
-) -> Optional[vault_record.TypedRecord]:
-    """Load a TypedRecord from classic vault or NSF by UID/path/title."""
-    if not identifier:
-        return None
-    record_info = record_utils.try_resolve_single_record(identifier, context)
-    if record_info:
-        loaded = vault.vault_data.load_record(record_info.record_uid)
-        if isinstance(loaded, vault_record.TypedRecord):
-            return loaded
-    nsf_uid = _resolve_nsf_record_uid(vault, identifier)
-    if nsf_uid:
-        return _load_nsf_typed_record(vault, nsf_uid)
-    return None
 
 
 def _bootstrap_rbi_record(record: vault_record.TypedRecord) -> bool:
@@ -114,7 +57,7 @@ def _bootstrap_rbi_record(record: vault_record.TypedRecord) -> bool:
 def _save_rbi_record(vault: vault_online.VaultOnline, record: vault_record.TypedRecord) -> None:
     """Persist RBI record body changes (classic or NSF) with sync + out-of-sync retry."""
     vault.sync_down()
-    if _is_nsf_record(vault, record.record_uid):
+    if pam_utils.is_nsf_record(vault, record.record_uid):
         schema = vault.vault_data.get_record_type_by_name(record.record_type)
         record_data = vault_extensions.extract_typed_record_data(record, schema)
         try:
@@ -162,9 +105,9 @@ def _resolve_pam_config_record(
         if isinstance(loaded, vault_record.TypedRecord):
             return loaded
 
-    nsf_uid = _resolve_nsf_record_uid(vault, config_ref)
+    nsf_uid = pam_utils.resolve_nsf_record_uid(vault, config_ref)
     if nsf_uid:
-        typed = _load_nsf_typed_record(vault, nsf_uid)
+        typed = pam_utils.load_nsf_typed_record(vault, nsf_uid)
         if typed and typed.record_type in PAM_CONFIGURATIONS:
             return typed
     return None
@@ -277,7 +220,7 @@ class PAMRbiEditCommand(base.ArgparseCommand):
 
         vault = context.vault
 
-        record = _load_typed_record(vault, context, record_name)
+        record = pam_utils.load_typed_record(context, record_name)
         if not record:
             raise base.CommandError(f'Record \"{record_name}\" not found.')
 
@@ -291,7 +234,7 @@ class PAMRbiEditCommand(base.ArgparseCommand):
         dirty = _bootstrap_rbi_record(record)
 
         if autofill:
-            af_rec = _load_typed_record(vault, context, autofill)
+            af_rec = pam_utils.load_typed_record(context, autofill)
             if not af_rec:
                 raise base.CommandError(f'Record \"{autofill}\" not found.')
             if af_rec.record_type not in ("login", "pamUser"):

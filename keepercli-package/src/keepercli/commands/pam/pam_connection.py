@@ -1,6 +1,5 @@
 import os
 import argparse
-from typing import Optional
 
 from keepersdk import utils
 from keepersdk.helpers.keeper_dag import dag_utils
@@ -14,18 +13,12 @@ from keepersdk.helpers.keeper_dag.constants import (
 )
 from keepersdk.helpers.tunnel.tunnel_graph import TunnelDAG
 from keepersdk.helpers.tunnel.tunnel_utils import get_keeper_tokens, get_config_uid
-from keepersdk.vault import (
-    nsf_management,
-    record_management,
-    vault_extensions,
-    vault_online,
-    vault_record,
-)
+from keepersdk.vault import vault_record
 
 from .. import base
 from ... import api
-from ...helpers import record_utils
 from ...params import KeeperParams
+from . import pam_utils
 
 
 logger = api.get_logger()
@@ -38,89 +31,6 @@ choices = ['on', 'off', 'default']
 _PAM_CONNECTION_RECORD_TYPES = (*PAM_RESOURCES, 'pamRemoteBrowser', *PAM_CONFIGURATIONS)
 _PAM_SEED_RECORD_TYPES = (PAM_DATABASE, PAM_DIRECTORY, PAM_MACHINE, 'pamRemoteBrowser')
 _PAM_RESOURCE_USER_LINK_TYPES = (PAM_DATABASE, PAM_DIRECTORY, PAM_MACHINE)
-
-
-def _resolve_nsf_record_uid(vault: vault_online.VaultOnline, identifier: str) -> Optional[str]:
-    """Resolve an NSF record UID from a UID or exact title."""
-    if not vault.nsf_data or not identifier:
-        return None
-    if vault.nsf_data.get_record(identifier):
-        return identifier
-    try:
-        return nsf_management.resolve_nsf_record_uid(vault, identifier)
-    except nsf_management.NsfError:
-        return None
-
-
-def _load_nsf_typed_record(
-        vault: vault_online.VaultOnline, record_uid: str) -> Optional[vault_record.TypedRecord]:
-    """Load an NSF record as TypedRecord (with record_key when available)."""
-    if not vault.nsf_data or not record_uid or not vault.nsf_data.get_record(record_uid):
-        return None
-    try:
-        meta = nsf_management.load_nsf_record_metadata(vault, record_uid)
-    except nsf_management.NsfError:
-        return None
-    typed = vault_record.TypedRecord()
-    typed.record_uid = record_uid
-    typed.load_record_data({
-        'type': meta.get('type') or '',
-        'title': meta.get('title') or record_uid,
-        'notes': meta.get('notes') or '',
-        'fields': meta.get('fields') or [],
-        'custom': meta.get('custom') or [],
-    })
-    entry = vault.nsf_data.get_record(record_uid)
-    if entry and entry.record_key:
-        typed.record_key = entry.record_key
-    return typed
-
-
-def _is_nsf_record(vault: vault_online.VaultOnline, record_uid: str) -> bool:
-    return bool(record_uid and vault.nsf_data and vault.nsf_data.get_record(record_uid))
-
-
-def _load_typed_record(
-        vault: vault_online.VaultOnline,
-        context: KeeperParams,
-        identifier: str,
-) -> Optional[vault_record.TypedRecord]:
-    """Load a TypedRecord from classic vault or NSF by UID/path/title."""
-    if not identifier:
-        return None
-    loaded = vault.vault_data.load_record(identifier)
-    if isinstance(loaded, vault_record.TypedRecord):
-        return loaded
-    record_info = record_utils.try_resolve_single_record(identifier, context)
-    if record_info:
-        loaded = vault.vault_data.load_record(record_info.record_uid)
-        if isinstance(loaded, vault_record.TypedRecord):
-            return loaded
-    nsf_uid = _resolve_nsf_record_uid(vault, identifier)
-    if nsf_uid:
-        return _load_nsf_typed_record(vault, nsf_uid)
-    return None
-
-
-def _save_typed_record(vault: vault_online.VaultOnline, record: vault_record.TypedRecord) -> None:
-    """Persist typed-record body changes via NSF or classic update."""
-    if _is_nsf_record(vault, record.record_uid):
-        schema = vault.vault_data.get_record_type_by_name(record.record_type)
-        record_data = vault_extensions.extract_typed_record_data(record, schema)
-        try:
-            nsf_management.update_nsf_record(
-                vault,
-                record.record_uid,
-                title=record.title,
-                record_type=record.record_type,
-                record_data=record_data,
-                request_sync=True,
-            )
-        except nsf_management.NsfError as err:
-            raise base.CommandError(str(err)) from err
-    else:
-        record_management.update_record(vault, record)
-    vault.sync_down()
 
 
 def _is_pam_config_record(record: vault_record.TypedRecord) -> bool:
@@ -183,7 +93,7 @@ class PAMConnectionEditCommand(base.ArgparseCommand):
         record_name = kwargs.get('record')
         if not record_name:
             raise base.CommandError(f'Record parameter is required.')
-        record = _load_typed_record(vault, context, record_name)
+        record = pam_utils.load_typed_record(context, record_name)
         if not record:
             raise base.CommandError(f'Record \"{record_name}\" not found.')
 
@@ -198,7 +108,7 @@ class PAMConnectionEditCommand(base.ArgparseCommand):
         encrypted_session_token, encrypted_transmission_key, transmission_key = get_keeper_tokens(vault)
 
         config_name = kwargs.get('config', None)
-        cfg_rec = _load_typed_record(vault, context, config_name) if config_name else None
+        cfg_rec = pam_utils.load_typed_record(context, config_name) if config_name else None
         if not cfg_rec and _is_pam_config_record(record):
             cfg_rec = record
 
@@ -209,7 +119,7 @@ class PAMConnectionEditCommand(base.ArgparseCommand):
                 vault, encrypted_session_token, encrypted_transmission_key, record_uid)
             existing_config_uid = str(existing_config_uid) if existing_config_uid else ''
             if not cfg_rec and existing_config_uid:
-                cfg_rec = _load_typed_record(vault, context, existing_config_uid)
+                cfg_rec = pam_utils.load_typed_record(context, existing_config_uid)
         config_uid = cfg_rec.record_uid if cfg_rec else None
 
         if record_type in PAM_CONFIGURATIONS:
@@ -298,7 +208,7 @@ class PAMConnectionEditCommand(base.ArgparseCommand):
                     logger.debug(f'Unexpected value for --key-events {key_events} (ignored)')
 
             if dirty:
-                _save_typed_record(vault, record)
+                pam_utils.save_typed_record(vault, record)
 
                 traffic_encryption_key = record.get_typed_field('trafficEncryptionSeed')
                 if not traffic_encryption_key:
@@ -380,14 +290,14 @@ class PAMConnectionEditCommand(base.ArgparseCommand):
 
             admin_name = kwargs.get('admin')
             if admin_name:
-                adm_rec = _load_typed_record(vault, context, admin_name)
+                adm_rec = pam_utils.load_typed_record(context, admin_name)
                 admin_uid = adm_rec.record_uid if adm_rec else None
                 if admin_uid and record_type in _PAM_RESOURCE_USER_LINK_TYPES:
                     tdag.link_user_to_resource(admin_uid, record_uid, is_admin=True, belongs_to=True)
 
             launch_user_name = kwargs.get('launch_user')
             if launch_user_name:
-                launch_rec = _load_typed_record(vault, context, launch_user_name)
+                launch_rec = pam_utils.load_typed_record(context, launch_user_name)
                 if not launch_rec:
                     raise base.CommandError(f'Launch user record "{launch_user_name}" not found.')
                 if launch_rec.record_type != PAM_USER:

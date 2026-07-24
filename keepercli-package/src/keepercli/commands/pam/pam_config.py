@@ -20,6 +20,7 @@ from keepersdk.helpers.tunnel.tunnel_graph import TunnelDAG, TriStateSetting, tu
 from keepersdk.helpers.keeper_dag import dag_utils
 from keepersdk.helpers.keeper_dag.constants import PamConfigurationRecordType, PAM_CONFIGURATIONS
 from .. import record_edit
+from . import pam_utils
 
 
 logger = api.get_logger()
@@ -216,37 +217,12 @@ class PAMConfigListCommand(base.ArgparseCommand):
         except nsf_management.NsfError:
             return None
 
-    def _load_nsf_typed_record(self, vault: vault_online.VaultOnline, record_uid: str):
-        """Load an NSF record as a TypedRecord from decrypted cache metadata."""
-        if not vault.nsf_data or not vault.nsf_data.get_record(record_uid):
-            return None
-        try:
-            meta = nsf_management.load_nsf_record_metadata(vault, record_uid)
-        except nsf_management.NsfError:
-            return None
-        typed = vault_record.TypedRecord()
-        typed.record_uid = record_uid
-        typed.load_record_data({
-            'type': meta.get('type') or '',
-            'title': meta.get('title') or record_uid,
-            'notes': meta.get('notes') or '',
-            'fields': meta.get('fields') or [],
-        })
-        return typed
-
     def _load_nsf_pam_configuration(self, vault: vault_online.VaultOnline, identifier: str):
         """Load a PAM configuration from NSF by UID or exact title."""
-        if not vault.nsf_data or not identifier:
-            return None
-        record_uid = identifier
-        if not vault.nsf_data.get_record(record_uid):
-            try:
-                record_uid = nsf_management.resolve_nsf_record_uid(vault, identifier)
-            except nsf_management.NsfError:
-                record_uid = None
+        record_uid = pam_utils.resolve_nsf_record_uid(vault, identifier)
         if not record_uid:
             return None
-        typed = self._load_nsf_typed_record(vault, record_uid)
+        typed = pam_utils.load_nsf_typed_record(vault, record_uid)
         if typed and typed.record_type in PAM_CONFIGURATIONS:
             return typed
         return None
@@ -270,7 +246,7 @@ class PAMConfigListCommand(base.ArgparseCommand):
                         'Following NSF configuration has unsupported type: UID: %s, Type: %s',
                         entry.record_uid, rec_type)
                 continue
-            typed = self._load_nsf_typed_record(vault, entry.record_uid)
+            typed = pam_utils.load_nsf_typed_record(vault, entry.record_uid)
             if typed and typed.record_type in PAM_CONFIGURATIONS:
                 yield typed
 
@@ -1194,33 +1170,7 @@ class PAMConfigEditCommand(base.ArgparseCommand, PamConfigurationEditMixin):
 
     def _load_nsf_pam_configuration_for_edit(self, vault: vault_online.VaultOnline, identifier: str):
         """Load a PAM configuration from NSF by UID or exact title."""
-        if not vault.nsf_data or not identifier:
-            return None
-        record_uid = identifier
-        if not vault.nsf_data.get_record(record_uid):
-            try:
-                record_uid = nsf_management.resolve_nsf_record_uid(vault, identifier)
-            except nsf_management.NsfError:
-                record_uid = None
-        if not record_uid:
-            return None
-        try:
-            meta = nsf_management.load_nsf_record_metadata(vault, record_uid)
-        except nsf_management.NsfError:
-            return None
-        rec_type = meta.get('type') or ''
-        if rec_type not in PAM_CONFIGURATIONS:
-            return None
-        typed = vault_record.TypedRecord()
-        typed.record_uid = record_uid
-        typed.load_record_data({
-            'type': rec_type,
-            'title': meta.get('title') or record_uid,
-            'notes': meta.get('notes') or '',
-            'fields': meta.get('fields') or [],
-            'custom': meta.get('custom') or [],
-        })
-        return typed
+        return self._load_nsf_pam_configuration(vault, identifier)
 
     def _validate_configuration(self, vault: vault_online.VaultOnline, configuration, config_name: str,
                                   *, is_nsf: bool = False):
