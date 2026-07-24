@@ -623,7 +623,8 @@ class KSMClientManagement:
             first_access_expire_duration_ms: int,
             access_expire_in_ms: Optional[int],
             master_key: bytes,
-            server: str) -> Dict:
+            server: str,
+            client_type: int) -> Dict:
         """Generate a single client device and return token info and output string."""
         
         # Generate secret and client ID
@@ -643,7 +644,8 @@ class KSMClientManagement:
             client_id=client_id,
             client_name=client_name,
             count=count,
-            index=index
+            index=index,
+            client_type=client_type
         )
         
         # Generate token with server prefix
@@ -688,7 +690,8 @@ class KSMClientManagement:
             client_id: bytes,
             client_name: str,
             count: int,
-            index: int) -> Device:
+            index: int,
+            client_type: int) -> Device:
         """Create and send client request to server."""
         
         request = AddAppClientRequest()
@@ -696,7 +699,7 @@ class KSMClientManagement:
         request.encryptedAppKey = encrypted_master_key
         request.lockIp = not unlock_ip
         request.firstAccessExpireOn = first_access_expire_duration_ms
-        request.appClientType = GENERAL
+        request.appClientType = client_type
         request.clientId = client_id
         
         if access_expire_in_ms:

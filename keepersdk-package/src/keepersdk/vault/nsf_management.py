@@ -572,6 +572,77 @@ def _parse_modify_response(
     raise KeeperApiError('no_results', f'Record {record_uid} not present in modify response')
 
 
+def create_nsf_pam_configuration(
+        vault: VaultOnline,
+        record: Any,
+        folder_uid: str,
+        *,
+        request_sync: bool = True) -> NsfModifyResult:
+    """Create a PAM configuration in an NSF folder via vault/records/v3/add_pam_configuration.
+
+    Matches Commander ``pam_configuration_create_record_nsf``: encrypts the record
+    key with the NSF folder key (and owner data key) and posts to the PAM-specific
+    v3 add endpoint instead of generic ``vault/records/v3/add``.
+    """
+    if not folder_uid:
+        raise NsfError('NSF folder UID is required to create a PAM configuration')
+
+    resolved = resolve_nsf_folder_uid(vault, folder_uid) or folder_uid
+    if not is_nsf_folder(vault, resolved):
+        raise NsfError(f'NSF folder not found: {folder_uid}')
+    folder_uid = resolved
+
+    if not getattr(record, 'record_uid', None):
+        record.record_uid = utils.generate_uid()
+    record_uid = record.record_uid
+    record_key = utils.generate_aes_key()
+
+    auth = vault.keeper_auth
+    data_key = auth.auth_context.data_key
+    folder_key = _get_folder_key(vault, folder_uid)
+
+    schema = vault.vault_data.get_record_type_by_name(record.record_type)
+    record_data = vault_extensions.extract_typed_record_data(record, schema)
+    client_time = utils.current_milli_time()
+    json_bytes = vault_extensions.get_padded_json_bytes(record_data)
+
+    ra = record_endpoints_pb2.RecordAdd()
+    ra.recordUid = utils.base64_url_decode(record_uid)
+    ra.clientModifiedTime = client_time
+    ra.folderUid = utils.base64_url_decode(folder_uid)
+    ra.recordKey = crypto.encrypt_aes_v2(record_key, folder_key)
+    ra.recordKeyEncryptedBy = folder_pb2.ENCRYPTED_BY_PARENT_KEY
+    ra.recordKeyEncryptedByOwnerKey = crypto.encrypt_aes_v2(record_key, data_key)
+    ra.recordKeyType = folder_pb2.encrypted_by_data_key_gcm
+    ra.data = crypto.encrypt_aes_v2(json_bytes, record_key)
+
+    if auth.auth_context.enterprise_ec_public_key:
+        audit_data = vault_extensions.extract_audit_data(record)
+        if audit_data:
+            ra.audit.version = 0
+            ra.audit.data = crypto.encrypt_ec(
+                json.dumps(audit_data).encode('utf-8'),
+                auth.auth_context.enterprise_ec_public_key)
+
+    rq = record_endpoints_pb2.RecordsAddRequest()
+    rq.clientTime = client_time
+    rq.records.append(ra)
+
+    response = auth.execute_auth_rest(
+        'vault/records/v3/add_pam_configuration',
+        rq,
+        response_type=record_pb2.RecordsModifyResponse)
+    assert response is not None
+
+    result = _parse_modify_response(response, record_uid)
+    if not result.success:
+        raise KeeperApiError(result.status, result.message or 'Failed to create PAM configuration record')
+    if request_sync:
+        vault.sync_requested = True
+        vault.run_pending_jobs()
+    return result
+
+
 def create_nsf_record(
         vault: VaultOnline,
         *,
