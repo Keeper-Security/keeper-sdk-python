@@ -127,7 +127,6 @@ class PamPlugin(IPamPlugin):
         self._record_rotations.put_entities(_pam_rotation_to_domain(r) for r in row_list)
 
     def sync_down(self, *, reload: bool = False) -> None:
-        """Refresh controllers from PAM API; reload rotations from local sqlite only."""
         _ = reload
         existing = [c.uid() for c in self.storage.controllers.get_all_entities()]
         if existing:

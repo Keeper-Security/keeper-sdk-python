@@ -8,12 +8,20 @@ from keepersdk.helpers.keeper_dag import dag_utils
 from keepersdk.helpers.keeper_dag.constants import PAM_CONFIGURATIONS
 from keepersdk.helpers.tunnel.tunnel_graph import TunnelDAG
 from keepersdk.helpers.tunnel.tunnel_utils import get_keeper_tokens, get_config_uid
-from keepersdk.vault import record_management, vault_online, vault_record
+from keepersdk.vault import (
+    nsf_management,
+    record_management,
+    vault_extensions,
+    vault_online,
+    vault_record,
+)
 
 from .. import base
 from ... import api
 from ...helpers import record_utils
 from ...params import KeeperParams
+from . import pam_utils
+
 choices = ['on', 'off', 'default']
 
 logger = api.get_logger()
@@ -47,8 +55,24 @@ def _bootstrap_rbi_record(record: vault_record.TypedRecord) -> bool:
 
 
 def _save_rbi_record(vault: vault_online.VaultOnline, record: vault_record.TypedRecord) -> None:
-    """Persist RBI record body changes with a fresh revision (sync + retry on out-of-sync)."""
+    """Persist RBI record body changes (classic or NSF) with sync + out-of-sync retry."""
     vault.sync_down()
+    if pam_utils.is_nsf_record(vault, record.record_uid):
+        schema = vault.vault_data.get_record_type_by_name(record.record_type)
+        record_data = vault_extensions.extract_typed_record_data(record, schema)
+        try:
+            nsf_management.update_nsf_record(
+                vault,
+                record.record_uid,
+                title=record.title,
+                record_type=record.record_type,
+                record_data=record_data,
+                request_sync=True,
+            )
+        except nsf_management.NsfError as err:
+            raise base.CommandError(str(err)) from err
+        vault.sync_down()
+        return
     try:
         record_management.update_record(vault, record)
     except KeeperApiError as err:
@@ -69,18 +93,23 @@ def _resolve_pam_config_record(
     context: KeeperParams,
     config_ref: str,
 ) -> Optional[vault_record.TypedRecord]:
-    """Resolve a PAM configuration by UID or title (vault index version 6, not TypedRecord.version)."""
+    """Resolve a PAM configuration by UID or title (classic v6 or NSF)."""
     if not config_ref or context.vault is None:
         return None
     vault = context.vault
     info = vault.vault_data.get_record(config_ref)
     if not info:
         info = record_utils.try_resolve_single_record(config_ref, context)
-    if not info or info.version != 6 or info.record_type not in PAM_CONFIGURATIONS:
-        return None
-    loaded = vault.vault_data.load_record(info.record_uid)
-    if isinstance(loaded, vault_record.TypedRecord):
-        return loaded
+    if info and info.version == 6 and info.record_type in PAM_CONFIGURATIONS:
+        loaded = vault.vault_data.load_record(info.record_uid)
+        if isinstance(loaded, vault_record.TypedRecord):
+            return loaded
+
+    nsf_uid = pam_utils.resolve_nsf_record_uid(vault, config_ref)
+    if nsf_uid:
+        typed = pam_utils.load_nsf_typed_record(vault, nsf_uid)
+        if typed and typed.record_type in PAM_CONFIGURATIONS:
+            return typed
     return None
 
 
@@ -191,14 +220,9 @@ class PAMRbiEditCommand(base.ArgparseCommand):
 
         vault = context.vault
 
-        record_info = record_utils.try_resolve_single_record(record_name, context)
-        if not record_info:
-            raise base.CommandError(f'Record \"{record_name}\" not found.')
-        record = vault.vault_data.load_record(record_info.record_uid)
+        record = pam_utils.load_typed_record(context, record_name)
         if not record:
             raise base.CommandError(f'Record \"{record_name}\" not found.')
-        if not isinstance(record, vault_record.TypedRecord):
-            raise base.CommandError(f'Record \"{record_name}\" can not be edited.')
 
         record_uid = record.record_uid
         record_type = record.record_type
@@ -210,12 +234,14 @@ class PAMRbiEditCommand(base.ArgparseCommand):
         dirty = _bootstrap_rbi_record(record)
 
         if autofill:
-            af_rec = vault.vault_data.load_record(autofill)
+            af_rec = pam_utils.load_typed_record(context, autofill)
             if not af_rec:
                 raise base.CommandError(f'Record \"{autofill}\" not found.')
-            if not isinstance(af_rec, vault_record.TypedRecord) or af_rec.version != 3 or af_rec.record_type not in ("login", "pamUser"):
-                raise base.CommandError(f'Autofill credentials record \"{af_rec.record_uid}\" can not be linked. '
-                                ' RBI autofill credential records must be of type "login" or "pamUser"')
+            if af_rec.record_type not in ("login", "pamUser"):
+                raise base.CommandError(
+                    f'Autofill credentials record \"{af_rec.record_uid}\" can not be linked. '
+                    ' RBI autofill credential records must be of type "login" or "pamUser"'
+                )
 
             rbs_fld = record.get_typed_field('pamRemoteBrowserSettings')
             val1 = rbs_fld.value[0] if isinstance(rbs_fld, vault_record.TypedField) and rbs_fld.value else {}

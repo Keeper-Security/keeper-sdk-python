@@ -20,6 +20,7 @@ from keepersdk.helpers.tunnel.tunnel_graph import TunnelDAG, TriStateSetting, tu
 from keepersdk.helpers.keeper_dag import dag_utils
 from keepersdk.helpers.keeper_dag.constants import PamConfigurationRecordType, PAM_CONFIGURATIONS
 from .. import record_edit
+from . import pam_utils
 
 
 logger = api.get_logger()
@@ -99,7 +100,7 @@ class PAMConfigListCommand(base.ArgparseCommand):
             self._format_single_config_table(configuration, facade, shared_folder)
 
     def _list_all_configurations(self, vault: vault_online.VaultOnline, is_verbose: bool, format_type: str):
-        """Lists all PAM configurations (classic shared folders and NSF / Keeper Drive)."""
+        """Lists all PAM configurations (classic shared folders and NSF)."""
         configs_data = []
         table = []
         headers = self._build_list_headers(is_verbose, format_type)
@@ -209,51 +210,27 @@ class PAMConfigListCommand(base.ArgparseCommand):
                 return None
             folder_uid = folder_uids[0]
             if folder_uid == nsf_management.ROOT_FOLDER_UID:
-                return _PamFolderRef('My Drive', folder_uid)
+                return _PamFolderRef('My Vault', folder_uid)
             folder = vault.nsf_data.get_folder(folder_uid)
             name = (folder.name if folder and folder.name else None) or folder_uid
             return _PamFolderRef(name, folder_uid)
         except nsf_management.NsfError:
             return None
 
-    def _load_nsf_typed_record(self, vault: vault_online.VaultOnline, record_uid: str):
-        """Load an NSF record as a TypedRecord from decrypted cache metadata."""
-        if not vault.nsf_data or not vault.nsf_data.get_record(record_uid):
-            return None
-        try:
-            meta = nsf_management.load_nsf_record_metadata(vault, record_uid)
-        except nsf_management.NsfError:
-            return None
-        typed = vault_record.TypedRecord()
-        typed.record_uid = record_uid
-        typed.load_record_data({
-            'type': meta.get('type') or '',
-            'title': meta.get('title') or record_uid,
-            'notes': meta.get('notes') or '',
-            'fields': meta.get('fields') or [],
-        })
-        return typed
-
     def _load_nsf_pam_configuration(self, vault: vault_online.VaultOnline, identifier: str):
         """Load a PAM configuration from NSF by UID or exact title."""
-        if not vault.nsf_data or not identifier:
-            return None
-        record_uid = identifier
-        if not vault.nsf_data.get_record(record_uid):
-            try:
-                record_uid = nsf_management.resolve_nsf_record_uid(vault, identifier)
-            except nsf_management.NsfError:
-                record_uid = None
+        record_uid = pam_utils.resolve_nsf_record_uid(vault, identifier)
         if not record_uid:
             return None
-        typed = self._load_nsf_typed_record(vault, record_uid)
+        typed = pam_utils.load_nsf_typed_record(vault, record_uid)
         if typed and typed.record_type in PAM_CONFIGURATIONS:
             return typed
         return None
 
     def _find_nsf_pam_configurations(self, vault: vault_online.VaultOnline):
-        """Yield TypedRecord PAM configs stored under NSF / Keeper Drive."""
+        """Yield TypedRecord PAM configs stored under NSF."""
         if not vault.nsf_data:
+            logger.debug('No NSF record /folder found')
             return
         for entry in vault.nsf_data.records():
             rec_type = ''
@@ -270,7 +247,7 @@ class PAMConfigListCommand(base.ArgparseCommand):
                         'Following NSF configuration has unsupported type: UID: %s, Type: %s',
                         entry.record_uid, rec_type)
                 continue
-            typed = self._load_nsf_typed_record(vault, entry.record_uid)
+            typed = pam_utils.load_nsf_typed_record(vault, entry.record_uid)
             if typed and typed.record_type in PAM_CONFIGURATIONS:
                 yield typed
 
@@ -538,6 +515,7 @@ class PamConfigurationEditMixin(record_edit.RecordEditMixin):
                 return sf_uid
 
         if vault.nsf_data is None:
+            logger.debug('No nsf data')
             return None
         try:
             nsf_uid = nsf_management.resolve_nsf_folder_uid(vault, folder_name)
@@ -858,7 +836,7 @@ common_parser.add_argument('--environment', '-env', dest='config_type', action='
 common_parser.add_argument('--title', '-t', dest='title', action='store', help='Title of the PAM Configuration')
 common_parser.add_argument('--gateway', '-g', dest='gateway_uid', action='store', help='Gateway UID or Name')
 common_parser.add_argument('--shared-folder', '-sf', dest='shared_folder_uid', action='store',
-                        help='Classic shared folder or NSF / Keeper Drive folder (UID or name) where this PAM '
+                        help='Classic shared folder or NSF folder (UID or name) where this PAM '
                                 'Configuration is stored. Should be a folder the gateway can access.')
 common_parser.add_argument('--schedule', '-sc', dest='default_schedule', action='store',
                         help='Default Schedule: Use CRON syntax')
@@ -1045,41 +1023,26 @@ class PAMConfigNewCommand(base.ArgparseCommand, PamConfigurationEditMixin):
 
     def _create_and_configure_record(self, vault: vault_online.VaultOnline, record: vault_record.TypedRecord,
                                       shared_folder_uid: str, gateway_uid: str, admin_cred_ref: str, kwargs: dict):
-        """Creates the record and configures tunneling, DAG, and controller."""
-        if vault.nsf_data is not None and nsf_management.is_nsf_folder(vault, shared_folder_uid):
-            self._create_nsf_pam_configuration(vault, record, shared_folder_uid)
-        else:
-            config_utils.pam_configuration_create_record_v6(vault, record, shared_folder_uid)
-            self._configure_tunneling(vault, record, admin_cred_ref, kwargs)
-            vault.sync_down()
-            record_management.move_vault_objects(vault, [record.record_uid], shared_folder_uid)
-            vault.sync_down()
-            if gateway_uid:
-                self._set_configuration_controller(vault, record.record_uid, gateway_uid)
-            return
+        """Creates the record and configures tunneling, DAG, and controller.
+
+        NSF folders use vault/records/v3/add_pam_configuration (record is created
+        in-folder). Classic shared folders use pam/add_configuration_record then
+        move the record into the folder after sync — same as Commander.
+        """
+        from keepersdk.errors import KeeperApiError
+
+        try:
+            is_nsf = config_utils.create_pam_configuration_in_folder(
+                vault, record, shared_folder_uid)
+        except (nsf_management.NsfError, KeeperApiError) as exc:
+            raise base.CommandError(str(exc)) from exc
 
         self._configure_tunneling(vault, record, admin_cred_ref, kwargs)
         vault.sync_down()
+        if not is_nsf:
+            record_management.move_vault_objects(vault, [record.record_uid], shared_folder_uid)
         if gateway_uid:
             self._set_configuration_controller(vault, record.record_uid, gateway_uid)
-
-    def _create_nsf_pam_configuration(self, vault: vault_online.VaultOnline, record: vault_record.TypedRecord,
-                                       nsf_folder_uid: str):
-        """Create a PAM configuration record inside an NSF / Keeper Drive folder."""
-        schema = vault.vault_data.get_record_type_by_name(record.record_type)
-        record_data = vault_extensions.extract_typed_record_data(record, schema)
-        try:
-            result = nsf_management.create_nsf_record(
-                vault,
-                title=record.title,
-                record_type=record.record_type,
-                folder_uid=nsf_folder_uid,
-                record_data=record_data,
-                request_sync=True,
-            )
-        except nsf_management.NsfError as e:
-            raise base.CommandError(str(e)) from e
-        record.record_uid = result.record_uid
 
     def _set_configuration_controller(self, vault: vault_online.VaultOnline, config_uid: str, gateway_uid: str):
         """Sets the controller for the PAM configuration."""
@@ -1194,33 +1157,7 @@ class PAMConfigEditCommand(base.ArgparseCommand, PamConfigurationEditMixin):
 
     def _load_nsf_pam_configuration_for_edit(self, vault: vault_online.VaultOnline, identifier: str):
         """Load a PAM configuration from NSF by UID or exact title."""
-        if not vault.nsf_data or not identifier:
-            return None
-        record_uid = identifier
-        if not vault.nsf_data.get_record(record_uid):
-            try:
-                record_uid = nsf_management.resolve_nsf_record_uid(vault, identifier)
-            except nsf_management.NsfError:
-                record_uid = None
-        if not record_uid:
-            return None
-        try:
-            meta = nsf_management.load_nsf_record_metadata(vault, record_uid)
-        except nsf_management.NsfError:
-            return None
-        rec_type = meta.get('type') or ''
-        if rec_type not in PAM_CONFIGURATIONS:
-            return None
-        typed = vault_record.TypedRecord()
-        typed.record_uid = record_uid
-        typed.load_record_data({
-            'type': rec_type,
-            'title': meta.get('title') or record_uid,
-            'notes': meta.get('notes') or '',
-            'fields': meta.get('fields') or [],
-            'custom': meta.get('custom') or [],
-        })
-        return typed
+        return self._load_nsf_pam_configuration(vault, identifier)
 
     def _validate_configuration(self, vault: vault_online.VaultOnline, configuration, config_name: str,
                                   *, is_nsf: bool = False):
