@@ -871,6 +871,95 @@ def update_nsf_record(
     return result
 
 
+def update_nsf_typed_record(
+        vault: VaultOnline,
+        record: 'vault_record.TypedRecord',
+        *,
+        request_sync: bool = True) -> NsfModifyResult:
+    """Update an NSF typed record, including record-link adds/removes for file/script refs.
+
+    In sync with the classic ``record_management.update_record`` flow so PAM
+    rotation scripts (and other fileRef/script attachments) work on NSF records.
+    """
+    from . import vault_record as vr
+
+    if not isinstance(record, vr.TypedRecord) or not record.record_uid:
+        raise NsfError('TypedRecord with record_uid is required')
+    record_uid = resolve_nsf_record_uid(vault, record.record_uid) or record.record_uid
+    if not is_nsf_record(vault, record_uid):
+        raise NsfError(f'NSF record not found: {record.record_uid}')
+    record.record_uid = record_uid
+
+    record_key = _get_record_key(vault, record_uid)
+    storage_row = _nsf_view(vault).storage.records.get_entity(record_uid)
+    revision = storage_row.revision if storage_row else 0
+
+    existing = vr.TypedRecord()
+    existing.record_uid = record_uid
+    try:
+        meta = load_nsf_record_metadata(vault, record_uid)
+        existing.load_record_data({
+            'type': meta.get('type') or '',
+            'title': meta.get('title') or record_uid,
+            'notes': meta.get('notes') or '',
+            'fields': meta.get('fields') or [],
+            'custom': meta.get('custom') or [],
+        })
+    except NsfError:
+        pass
+
+    data = vault_extensions.extract_typed_record_data(record, None)
+    ru = record_pb2.RecordUpdate()
+    ru.record_uid = utils.base64_url_decode(record_uid)
+    ru.client_modified_time = utils.current_milli_time()
+    ru.revision = revision
+    ru.data = crypto.encrypt_aes_v2(vault_extensions.get_padded_json_bytes(data), record_key)
+
+    existing_refs = vault_extensions.extract_typed_record_refs(existing)
+    refs = vault_extensions.extract_typed_record_refs(record)
+    for ref_uid in refs.difference(existing_refs):
+        ref_key = None
+        if record.linked_keys and ref_uid in record.linked_keys:
+            ref_key = record.linked_keys[ref_uid]
+        if not ref_key:
+            try:
+                ref_key = vault.vault_data.get_record_key(ref_uid)
+            except Exception:
+                ref_key = None
+        if not ref_key and vault.nsf_data:
+            entry = vault.nsf_data.get_record(ref_uid)
+            if entry:
+                ref_key = entry.record_key
+        if not ref_key:
+            continue
+        link = record_pb2.RecordLink()
+        link.record_uid = utils.base64_url_decode(ref_uid)
+        link.record_key = crypto.encrypt_aes_v2(ref_key, record_key)
+        ru.record_links_add.append(link)
+    for ref_uid in existing_refs.difference(refs):
+        ru.record_links_remove.append(utils.base64_url_decode(ref_uid))
+
+    rq = record_pb2.RecordsUpdateRequest()
+    rq.client_time = utils.current_milli_time()
+    rq.records.append(ru)
+
+    auth = vault.keeper_auth
+    response = auth.execute_auth_rest(
+        'vault/records/v3/update', rq, response_type=record_pb2.RecordsModifyResponse)
+    if response is None:
+        response = auth.execute_auth_rest(
+            'vault/records_update', rq, response_type=record_pb2.RecordsModifyResponse)
+    assert response is not None
+
+    result = _parse_modify_response(response, record_uid)
+    if not result.success:
+        raise KeeperApiError(result.status, result.message)
+    if request_sync:
+        vault.sync_requested = True
+        vault.run_pending_jobs()
+    return result
+
+
 def get_nsf_record_details(
         vault: VaultOnline,
         record_uids: Iterable[str]) -> Dict[str, Any]:

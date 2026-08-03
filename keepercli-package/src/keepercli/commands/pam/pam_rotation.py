@@ -40,6 +40,208 @@ _PAM_ROTATION_RECORD_TYPES = (
     'pamDatabase', 'pamDirectory', 'pamMachine', 'pamUser', 'pamRemoteBrowser',
 )
 
+_PAM_SCRIPT_RECORD_TYPES = ('pamUser', 'pamDirectory')
+
+
+def _resolve_nsf_record_uid(vault: vault_online.VaultOnline, identifier: str) -> Optional[str]:
+    """Resolve an NSF record UID from a UID or exact title."""
+    if not vault.nsf_data or not identifier:
+        return None
+    if vault.nsf_data.get_record(identifier):
+        return identifier
+    try:
+        return nsf_management.resolve_nsf_record_uid(vault, identifier)
+    except nsf_management.NsfError:
+        return None
+
+
+def _load_nsf_typed_record(
+        vault: vault_online.VaultOnline, record_uid: str) -> Optional[vault_record.TypedRecord]:
+    """Load an NSF record as TypedRecord (with record_key when available)."""
+    if not vault.nsf_data or not record_uid or not vault.nsf_data.get_record(record_uid):
+        return None
+    try:
+        meta = nsf_management.load_nsf_record_metadata(vault, record_uid)
+    except nsf_management.NsfError:
+        return None
+    typed = vault_record.TypedRecord()
+    typed.record_uid = record_uid
+    typed.load_record_data({
+        'type': meta.get('type') or '',
+        'title': meta.get('title') or record_uid,
+        'notes': meta.get('notes') or '',
+        'fields': meta.get('fields') or [],
+        'custom': meta.get('custom') or [],
+    })
+    entry = vault.nsf_data.get_record(record_uid)
+    if entry and entry.record_key:
+        typed.record_key = entry.record_key
+    return typed
+
+
+def _load_pam_typed_record(
+        vault: vault_online.VaultOnline, identifier: str) -> Optional[vault_record.TypedRecord]:
+    """Load a TypedRecord from classic vault or NSF by UID/title."""
+    if not identifier:
+        return None
+    loaded = vault.vault_data.load_record(identifier)
+    if loaded and isinstance(loaded, vault_record.TypedRecord):
+        key = vault.vault_data.get_record_key(identifier)
+        if key:
+            loaded.record_key = key
+        return loaded
+    nsf_uid = _resolve_nsf_record_uid(vault, identifier)
+    if nsf_uid:
+        return _load_nsf_typed_record(vault, nsf_uid)
+    return None
+
+
+def _is_nsf_pam_record(vault: vault_online.VaultOnline, record_uid: str) -> bool:
+    return bool(record_uid and vault.nsf_data and vault.nsf_data.get_record(record_uid))
+
+
+def _save_pam_typed_record(
+        vault: vault_online.VaultOnline, record: vault_record.TypedRecord) -> None:
+    """Persist a PAM typed record via NSF or classic update (including file/script links)."""
+    _attach_record_key(vault, record)
+    if _is_nsf_pam_record(vault, record.record_uid):
+        nsf_management.update_nsf_typed_record(vault, record)
+    else:
+        record_management.update_record(vault, record)
+    vault.sync_requested = True
+
+
+def _iter_nsf_pam_script_records(
+        vault: vault_online.VaultOnline, pattern: Optional[str] = None):
+    """Yield NSF pamUser/pamDirectory records optionally filtered by UID/title pattern."""
+    if not vault.nsf_data:
+        return
+    pattern_cf = pattern.casefold() if pattern else None
+    for entry in vault.nsf_data.records():
+        typed = _load_nsf_typed_record(vault, entry.record_uid)
+        if not typed or typed.record_type not in _PAM_SCRIPT_RECORD_TYPES:
+            continue
+        if pattern_cf:
+            title = (typed.title or '').casefold()
+            if typed.record_uid != pattern and pattern_cf not in title and not fnmatch.fnmatch(title, pattern_cf):
+                continue
+        yield typed
+
+
+def _find_pam_script_records(
+        vault: vault_online.VaultOnline, pattern: Optional[str] = None):
+    """Find pamUser/pamDirectory TypedRecords in classic vault and NSF."""
+    found = []
+    seen = set()
+    for rec in vault.vault_data.find_records(
+            criteria=pattern, record_version=3, record_type=_PAM_SCRIPT_RECORD_TYPES):
+        loaded = vault.vault_data.load_record(rec.record_uid)
+        if not isinstance(loaded, vault_record.TypedRecord):
+            continue
+        found.append(loaded)
+        seen.add(loaded.record_uid)
+
+    if pattern:
+        nsf_uid = _resolve_nsf_record_uid(vault, pattern)
+        if nsf_uid and nsf_uid not in seen:
+            typed = _load_nsf_typed_record(vault, nsf_uid)
+            if typed and typed.record_type in _PAM_SCRIPT_RECORD_TYPES:
+                found.append(typed)
+                seen.add(typed.record_uid)
+        else:
+            for typed in _iter_nsf_pam_script_records(vault, pattern):
+                if typed.record_uid not in seen:
+                    found.append(typed)
+                    seen.add(typed.record_uid)
+    else:
+        for typed in _iter_nsf_pam_script_records(vault):
+            if typed.record_uid not in seen:
+                found.append(typed)
+                seen.add(typed.record_uid)
+    return found
+
+
+def _get_unique_pam_script_record(
+        vault: vault_online.VaultOnline, record_name: str) -> vault_record.TypedRecord:
+    """Resolve a single pamUser/pamDirectory for script commands (classic or NSF)."""
+    records = _find_pam_script_records(vault, record_name)
+    if len(records) == 0:
+        raise base.CommandError(f'Record "{record_name}" not found')
+    if len(records) > 1:
+        raise base.CommandError(f'Record "{record_name}" is not unique. Use record UID.')
+    return records[0]
+
+
+def _load_script_file_record(vault: vault_online.VaultOnline, file_ref: str):
+    """Load a script file attachment record from classic vault or NSF."""
+    if not file_ref:
+        return None
+    file_record = vault.vault_data.load_record(file_ref)
+    if file_record:
+        return file_record
+    return _load_nsf_typed_record(vault, file_ref)
+
+
+def _find_script_value(vault, script_field, script_name):
+    """Find a script value by fileRef UID or file title/name."""
+    if not script_field or not script_name:
+        return None
+    script_value = next(
+        (x for x in script_field.value if isinstance(x, dict) and x.get('fileRef') == script_name),
+        None)
+    if script_value is not None:
+        return script_value
+    s_name = script_name.casefold()
+    for x in script_field.value:
+        if not isinstance(x, dict):
+            continue
+        file_uid = x.get('fileRef')
+        file_record = _load_script_file_record(vault, file_uid)
+        if not file_record:
+            continue
+        if getattr(file_record, 'record_uid', None) == script_name:
+            return x
+        title = (getattr(file_record, 'title', None) or '').casefold()
+        name = (getattr(file_record, 'name', None) or '').casefold()
+        if title == s_name or name == s_name:
+            return x
+    return None
+
+
+def _resolve_script_credential_uid(vault: vault_online.VaultOnline, ref: str) -> Optional[str]:
+    """Resolve a credential UID for script recordRef (classic or NSF)."""
+    if not ref:
+        return None
+    loaded = _load_pam_typed_record(vault, ref)
+    if loaded:
+        return loaded.record_uid
+    if vault.vault_data.get_record_key(ref) or vault.vault_data.load_record(ref):
+        return ref
+    return None
+
+
+def _iter_nsf_pam_configurations(vault: vault_online.VaultOnline):
+    """Yield NSF PAM configuration TypedRecords."""
+    if not vault.nsf_data:
+        return
+    for entry in vault.nsf_data.records():
+        typed = _load_nsf_typed_record(vault, entry.record_uid)
+        if typed and typed.record_type in PAM_CONFIGURATIONS:
+            yield typed
+
+
+def _attach_record_key(vault: vault_online.VaultOnline, record: vault_record.TypedRecord) -> None:
+    """Ensure TypedRecord has record_key from classic or NSF storage when possible."""
+    if getattr(record, 'record_key', None):
+        return
+    key = vault.vault_data.get_record_key(record.record_uid)
+    if not key and vault.nsf_data:
+        entry = vault.nsf_data.get_record(record.record_uid)
+        if entry:
+            key = entry.record_key
+    if key:
+        record.record_key = key
+
 
 class PAMListRecordRotationCommand(base.ArgparseCommand):
     def __init__(self):
@@ -1197,25 +1399,22 @@ class PAMScriptListCommand(base.ArgparseCommand):
 
         table = []
         header = ['record_uid', 'title', 'record_type', 'script_uid', 'script_name', 'records', 'command']
-        for rec in vault.vault_data.find_records(criteria=pattern, record_version=3,
-                                                    record_type=('pamUser', 'pamDirectory')):
-            record = vault.vault_data.load_record(rec.record_uid)
-            if not isinstance(record, vault_record.TypedRecord):
-                continue
+        for record in _find_pam_script_records(vault, pattern):
             for field in (x for x in record.fields if x.type == 'script'):
-                value = field.get_default_value(dict)
-                if not value:
-                    continue
-                file_ref = value.get('fileRef')
-                if not file_ref:
-                    continue
-                file_record = vault.vault_data.load_record(file_ref)
-                if not file_record:
-                    continue
-                records = value.get('recordRef')
-                command = value.get('command')
-                table.append([record.record_uid, record.title, record.record_type, file_record.record_uid,
-                              file_record.title, records, command])
+                for value in (field.value or []):
+                    if not isinstance(value, dict):
+                        continue
+                    file_ref = value.get('fileRef')
+                    if not file_ref:
+                        continue
+                    file_record = _load_script_file_record(vault, file_ref)
+                    if not file_record:
+                        continue
+                    records = value.get('recordRef')
+                    command = value.get('command')
+                    table.append([record.record_uid, record.title, record.record_type,
+                                  getattr(file_record, 'record_uid', file_ref),
+                                  getattr(file_record, 'title', file_ref), records, command])
         fmt = kwargs.get('format')
         if fmt != 'json':
             header = [report_utils.field_to_title(x) for x in header]
@@ -1245,12 +1444,7 @@ class PAMScriptAddCommand(base.ArgparseCommand):
         record_name = kwargs.get('record')
         if not record_name:
             raise base.CommandError('"record" argument is required')
-        records = list(vault.vault_data.find_records(criteria=record_name, record_version=3, record_type=('pamUser', 'pamDirectory')))
-        if len(records) == 0:
-            raise base.CommandError(f'Record "{record_name}" not found')
-        if len(records) > 1:
-            raise base.CommandError(f'Record "{record_name}" is not unique. Use record UID.')
-        record = vault.vault_data.load_record(records[0].record_uid)
+        record = _get_unique_pam_script_record(vault, record_name)
         if not isinstance(record, vault_record.TypedRecord):
             raise base.CommandError(f'Record "{record.title}" is not a rotation record.')
 
@@ -1283,14 +1477,14 @@ class PAMScriptAddCommand(base.ArgparseCommand):
             record_refs = kwargs.get('add_credential')
             if isinstance(record_refs, list):
                 for ref in record_refs:
-                    if ref in vault.vault_data._records:
-                        script_value['recordRef'].append(ref)
+                    resolved = _resolve_script_credential_uid(vault, ref)
+                    if resolved:
+                        script_value['recordRef'].append(resolved)
             cmd = kwargs.get('script_command')
             if cmd:
                 script_value['command'] = cmd
 
-        record_management.update_record(vault, record)
-        vault.sync_data = True
+        _save_pam_typed_record(vault, record)
 
 
 class PAMScriptEditCommand(base.ArgparseCommand):
@@ -1323,31 +1517,14 @@ class PAMScriptEditCommand(base.ArgparseCommand):
         if not script_name:
             raise base.CommandError('"script" argument is required')
 
-        records = list(vault.vault_data.find_records(criteria=record_name, record_version=3, record_type=('pamUser', 'pamDirectory')))
-        if len(records) == 0:
-            raise base.CommandError(f'Record "{record_name}" not found')
-        if len(records) > 1:
-            raise base.CommandError(f'Record "{record_name}" is not unique. Use record UID.')
-        record = vault.vault_data.load_record(records[0].record_uid)
+        record = _get_unique_pam_script_record(vault, record_name)
         if not isinstance(record, vault_record.TypedRecord):
             raise base.CommandError(f'Record "{record.title}" is not a rotation record.')
 
         script_field = next((x for x in record.fields if x.type == 'script'), None)
         if script_field is None:
             raise base.CommandError(f'Record "{record.title}" has no rotation scripts.')
-        script_value = next((x for x in script_field.value if x.get('fileRef') == script_name), None)
-        if script_value is None:
-            s_name = script_name.casefold()
-            for x in script_field.value:
-                file_uid = x.get('fileRef')
-                file_record = vault.vault_data.load_record(file_uid)
-                if isinstance(file_record, vault_record.FileRecord):
-                    if file_record.record_uid == s_name:
-                        script_value = x
-                        break
-                    elif file_record.title.casefold() == s_name:
-                        script_value = x
-                        break
+        script_value = _find_script_value(vault, script_field, script_name)
 
         if not isinstance(script_value, dict):
             raise base.CommandError(f'Record "{record.title}" does not have script "{script_name}"')
@@ -1359,11 +1536,17 @@ class PAMScriptEditCommand(base.ArgparseCommand):
             refs.update(record_refs)
         remove_credential = kwargs.get('remove_credential')
         if isinstance(remove_credential, list) and remove_credential:
-            refs.difference_update(remove_credential)
+            for ref in remove_credential:
+                resolved = _resolve_script_credential_uid(vault, ref) or ref
+                refs.discard(resolved)
+                refs.discard(ref)
             modified = True
         add_credential = kwargs.get('add_credential')
         if isinstance(add_credential, list) and add_credential:
-            refs.update(add_credential)
+            for ref in add_credential:
+                resolved = _resolve_script_credential_uid(vault, ref)
+                if resolved:
+                    refs.add(resolved)
             modified = True
         if modified:
             script_value['recordRef'] = list(refs)
@@ -1375,8 +1558,7 @@ class PAMScriptEditCommand(base.ArgparseCommand):
         if not modified:
             raise base.CommandError('Nothing to do')
 
-        record_management.update_record(vault, record)
-        vault.sync_data = True
+        _save_pam_typed_record(vault, record)
 
 
 class PAMScriptDeleteCommand(base.ArgparseCommand):
@@ -1402,35 +1584,17 @@ class PAMScriptDeleteCommand(base.ArgparseCommand):
         if not script_name:
             raise base.CommandError('"script" argument is required')
 
-        records = list(vault.vault_data.find_records(criteria=record_name, record_version=3, record_type=('pamUser', 'pamDirectory')))
-        if len(records) == 0:
-            raise base.CommandError(f'Record "{record_name}" not found')
-        if len(records) > 1:
-            raise base.CommandError(f'Record "{record_name}" is not unique. Use record UID.')
-        record = vault.vault_data.load_record(records[0].record_uid)
+        record = _get_unique_pam_script_record(vault, record_name)
         if not isinstance(record, vault_record.TypedRecord):
             raise base.CommandError(f'Record "{record.title}" is not a rotation record.')
 
         script_field = next((x for x in record.fields if x.type == 'script'), None)
         if script_field is None:
             raise base.CommandError(f'Record "{record.title}" has no rotation scripts.')
-        script_value = next((x for x in script_field.value if x.get('fileRef') == script_name), None)
-        if script_value is None:
-            s_name = script_name.casefold()
-            for x in script_field.value:
-                file_uid = x.get('fileRef')
-                file_record = vault.vault_data.load_record(file_uid)
-                if isinstance(file_record, vault_record.FileRecord):
-                    if file_record.record_uid == s_name:
-                        script_value = x
-                        break
-                    elif file_record.title.casefold() == s_name:
-                        script_value = x
-                        break
+        script_value = _find_script_value(vault, script_field, script_name)
 
         if not isinstance(script_value, dict):
             raise base.CommandError(f'Record "{record.title}" does not have script "{script_name}"')
 
         script_field.value.remove(script_value)
-        record_management.update_record(vault, record)
-        vault.sync_data = True
+        _save_pam_typed_record(vault, record)
