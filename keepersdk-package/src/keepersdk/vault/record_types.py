@@ -44,7 +44,8 @@ FieldTypes: Dict[str, FieldType] = {x.name: x for x in (
     FieldType('recordRef', '', 'reference to other record'),
 
     FieldType('pamResources', {'controllerUid': '', 'folderUid': '', 'resourceRef': []}, 'PAM resources'),
-    FieldType('schedule', {'type': '', 'utcTime': '', 'month': '', }, 'schedule information'),
+    FieldType('schedule', {'type': '', 'utcTime': '', 'month': '', 'cron': '', 'tz': ''},
+              'schedule information'),
     FieldType('passkey', {'privateKey': {}, 'credentialId': '', 'signCount': 0, 'userId': '', 'relyingParty': '',
                           'username': '', 'createdDate': 0}, 'passwordless login passkey'),
     FieldType('script', {'fileRef': '', 'command': '', 'recordRef': [], }, 'Post rotation script'),
@@ -87,7 +88,7 @@ RecordFields: Dict[str, RecordField] = {x.name: x for x in (
 def coly_field_types():
     for ft in FieldTypes.values():
         if ft.name not in RecordFields:
-            RecordFields[ft.name] = RecordField(ft.name, ft.name, Multiple.Never)
+            RecordFields[ft.name] = RecordField(ft.name, ft.name, Multiple.Optional)
 coly_field_types()
 
 class ITypedField(abc.ABC):

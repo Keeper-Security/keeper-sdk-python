@@ -597,9 +597,15 @@ class PamConfigurationEditMixin(record_edit.RecordEditMixin):
             valid, err = validate_cron_expression(schedule, for_rotation=True)
             if not valid:
                 raise base.CommandError(f'Invalid CRON "{schedule}" Error: {err}')
-            extra_properties.append(f'schedule.defaultRotationSchedule=$JSON:{{"type": "CRON", "cron": "{schedule}", "tz": "Etc/UTC"}}')
-        else:
-            extra_properties.append('schedule.defaultRotationSchedule=On-Demand')
+            schedule_json = json.dumps({"type": "CRON", "cron": schedule, "tz": "Etc/UTC"})
+            extra_properties.append(f'schedule.defaultRotationSchedule=$JSON:{schedule_json}')
+        elif not kwargs.get('config_edit'):
+            # New configs default to On-Demand. On edit, omit --schedule to leave existing value.
+            extra_properties.append('schedule.defaultRotationSchedule=$JSON:{"type": "ON_DEMAND"}')
+
+        identity_provider_uid = kwargs.get('identity_provider_uid')
+        if identity_provider_uid:
+            extra_properties.append(f'text.identityProviderUid={identity_provider_uid}')
 
     def _parse_type_specific_properties(self, vault: vault_online.VaultOnline, record: vault_record.TypedRecord,
                                          extra_properties: list, kwargs: dict):
@@ -810,7 +816,9 @@ class PamConfigurationEditMixin(record_edit.RecordEditMixin):
             kwargs.get('rotation'),
             kwargs.get('recording'),
             kwargs.get('typescriptrecording'),
-            kwargs.get('remotebrowserisolation')
+            kwargs.get('remotebrowserisolation'),
+            kwargs.get('ai_threat_detection'),
+            kwargs.get('ai_terminate_session_on_detection'),
         )
 
         if admin_cred_ref:
@@ -1082,6 +1090,11 @@ class PAMConfigEditCommand(base.ArgparseCommand, PamConfigurationEditMixin):
                             help='Set recording connections permissions for the resource')
         parser.add_argument('--typescript-recording', '-tr', dest='typescriptrecording', choices=choices,
                             help='Set TypeScript recording permissions for the resource')
+        parser.add_argument('--ai-threat-detection', dest='ai_threat_detection', choices=choices,
+                            help='Set AI threat detection permissions')
+        parser.add_argument('--ai-terminate-session-on-detection', dest='ai_terminate_session_on_detection',
+                            choices=choices,
+                            help='Set AI session termination on threat detection permissions')
     
     def execute(self, context: KeeperParams, **kwargs):
         self.warnings.clear()
@@ -1095,7 +1108,7 @@ class PAMConfigEditCommand(base.ArgparseCommand, PamConfigurationEditMixin):
         self._update_title_if_provided(configuration, kwargs)
         
         orig_gateway_uid, orig_shared_folder_uid = self._get_original_values(configuration)
-        self.parse_properties(vault, configuration, **kwargs)
+        self.parse_properties(vault, configuration, config_edit=True, **kwargs)
         self.verify_required(configuration)
         
         if is_nsf:
@@ -1105,11 +1118,19 @@ class PAMConfigEditCommand(base.ArgparseCommand, PamConfigurationEditMixin):
         self._update_controller_and_folder_if_changed(
             vault, configuration, orig_gateway_uid, orig_shared_folder_uid, is_nsf=is_nsf)
 
-        target_keys = {
-            'connections', 'tunneling', 'rotation', 'recording', 
-            'typescriptrecording', 'remotebrowserisolation'
-        }
-        if target_keys.isdisjoint(kwargs):
+        # Apply DAG permission changes when any flag is explicitly set (Commander parity).
+        connections = kwargs.get('connections')
+        tunneling = kwargs.get('tunneling')
+        rotation = kwargs.get('rotation')
+        recording = kwargs.get('recording')
+        typescriptrecording = kwargs.get('typescriptrecording')
+        remotebrowserisolation = kwargs.get('remotebrowserisolation')
+        ai_threat_detection = kwargs.get('ai_threat_detection')
+        ai_terminate = kwargs.get('ai_terminate_session_on_detection')
+        if any(v is not None for v in (
+                connections, tunneling, rotation, recording,
+                typescriptrecording, remotebrowserisolation,
+                ai_threat_detection, ai_terminate)):
             admin_cred_ref = None
             if configuration.record_type == PamConfigurationRecordType.DOMAIN and not kwargs.get('force_domain_admin'):
                 pam_field = configuration.get_typed_field('pamResources')
