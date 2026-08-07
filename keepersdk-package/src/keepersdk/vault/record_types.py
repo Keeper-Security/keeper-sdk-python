@@ -1,5 +1,4 @@
 import abc
-import enum
 from typing import Dict, Union, Optional
 from dataclasses import dataclass
 
@@ -15,6 +14,7 @@ FieldTypes: Dict[str, FieldType] = {x.name: x for x in (
     FieldType('text', '', 'plain text'),
     FieldType('url', '', 'url string, can be clicked'),
     FieldType('multiline', '', 'multiline text'),
+    FieldType('json', '', 'json text; only validated data persisted'),
     FieldType('email', '', 'valid email address plus tag'),
     FieldType('secret', '', 'the field value is masked'),
     FieldType('otp', '', 'captures the seed, displays QR code'),
@@ -33,7 +33,7 @@ FieldTypes: Dict[str, FieldType] = {x.name: x for x in (
     FieldType('securityQuestion', {'question': '', 'answer': ''}, 'Security Question and Answer'),
     FieldType('paymentCard', {'cardNumber': '', 'cardExpirationDate': '', 'cardSecurityCode': ''},
               'Field consisting of validated card number, expiration date and security code.'),
-    FieldType('bankAccount', {'accountType': '', 'routingNumber': '', 'accountNumber': ''},
+    FieldType('bankAccount', {'accountType': '', 'routingNumber': '', 'accountNumber': '', 'otherType': ''},
               'bank account information'),
     FieldType('privateKey', {'publicKey': '', 'privateKey': ''},
               'private and/or public keys in ASN.1 format'),
@@ -43,8 +43,14 @@ FieldTypes: Dict[str, FieldType] = {x.name: x for x in (
     FieldType('cardRef', '', 'reference to the card record type'),
     FieldType('recordRef', '', 'reference to other record'),
 
+    FieldType('appFiller', {'macroSequence': '', 'applicationTitle': '', 'contentFilter': ''},
+              'Native Application Filler'),
     FieldType('pamResources', {'controllerUid': '', 'folderUid': '', 'resourceRef': []}, 'PAM resources'),
-    FieldType('schedule', {'type': '', 'utcTime': '', 'month': '', 'cron': '', 'tz': ''},
+    FieldType('pamSettings', {'allowSupplyHost': False, 'connection': {}, 'portForward': {}}, 'PAM Settings'),
+    FieldType('pamRemoteBrowserSettings', {'connection': {}}, 'RBI Settings'),
+    FieldType('rbiUrl', '', 'RBI URL'),
+    # cron/tz used by PAM CRON schedules;
+    FieldType('schedule', {'type': '', 'time': '', 'utcTime': '', 'month': '', 'cron': '', 'tz': ''},
               'schedule information'),
     FieldType('passkey', {'privateKey': {}, 'credentialId': '', 'signCount': 0, 'userId': '', 'relyingParty': '',
                           'username': '', 'createdDate': 0}, 'passwordless login passkey'),
@@ -52,9 +58,15 @@ FieldTypes: Dict[str, FieldType] = {x.name: x for x in (
 )}
 
 
-class Multiple(enum.Enum):
+class Multiple:
+    """Field multiplicity. Matches Commander (plain ints, not Enum).
+
+    Generic FieldTypes (text, multiline, schedule, ...) are registered as
+    Optional so assign_typed_fields matches by label and updates record.fields
+    instead of appending to record.custom.
+    """
     Never = 0
-    Optional = 1    # ??? is not used
+    Optional = 1
     Always = 2
 
 
@@ -62,13 +74,16 @@ class Multiple(enum.Enum):
 class RecordField:
     name: str
     type: str
-    multiple: Multiple
+    multiple: int
 
 
 RecordFields: Dict[str, RecordField] = {x.name: x for x in (
+    RecordField('login', 'login', Multiple.Never),
+    RecordField('password', 'password', Multiple.Never),
     RecordField('company', 'text', Multiple.Never),
     RecordField('licenseNumber', 'multiline', Multiple.Never),
     RecordField('accountNumber', 'text', Multiple.Never),
+    RecordField('bankAccount', 'bankAccount', Multiple.Never),
     RecordField('note', 'multiline', Multiple.Never),
     RecordField('oneTimeCode', 'otp', Multiple.Never),
     RecordField('keyPair', 'privateKey', Multiple.Never),
@@ -83,13 +98,20 @@ RecordFields: Dict[str, RecordField] = {x.name: x for x in (
     RecordField('pamHostname', 'host', Multiple.Never),
     RecordField('databaseType', 'dropdown', Multiple.Never),
     RecordField('directoryType', 'dropdown', Multiple.Never),
+    RecordField('pamSettings', 'pamSettings', Multiple.Never),
+    RecordField('pamRemoteBrowserSettings', 'pamRemoteBrowserSettings', Multiple.Never),
+    RecordField('rbiUrl', 'rbiUrl', Multiple.Never),
 )}
+
 
 def coly_field_types():
     for ft in FieldTypes.values():
         if ft.name not in RecordFields:
             RecordFields[ft.name] = RecordField(ft.name, ft.name, Multiple.Optional)
+
+
 coly_field_types()
+
 
 class ITypedField(abc.ABC):
     @abc.abstractmethod
@@ -107,4 +129,3 @@ class ITypedField(abc.ABC):
             return f'${self.field_type()}'
         else:
             return self.field_label() or ''
-
