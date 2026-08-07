@@ -517,6 +517,7 @@ def nsf_share_folder(vault: vault_online.VaultOnline) -> None:
     ACTION = "grant"  # grant or remove
     ROLE = "viewer"  # viewer, share-manager, content-manager, content-share-manager, full-manager
     EXPIRATION_TIMESTAMP = None  # Unix ms; optional for grant
+    AS_TEAM = True  # True to share with a team, False to share with a user
 
     if ACTION == "remove":
         result = nsf_sharing.revoke_nsf_folder_access(
@@ -529,6 +530,7 @@ def nsf_share_folder(vault: vault_online.VaultOnline) -> None:
             RECIPIENT_EMAIL,
             role=ROLE,
             expiration_timestamp=EXPIRATION_TIMESTAMP,
+            as_team=AS_TEAM,
         )
     print(f"{RECIPIENT_EMAIL}: {result.get('message', result.get('status'))}")
 
