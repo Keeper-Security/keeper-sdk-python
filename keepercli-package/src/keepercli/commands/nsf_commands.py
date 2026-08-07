@@ -1241,6 +1241,9 @@ class NsfShareFolderCommand(base.ArgparseCommand):
 
         for folder_arg in folders:
             targets = self._collect_targets(vault, recipients, folder_arg, context)
+            if not targets:
+                logger.info('Nothing to do')
+                continue
             for recipient, is_team in targets:
                 def _run(rec=recipient, team=is_team, f=folder_arg):
                     if action == 'remove':
@@ -1273,18 +1276,32 @@ class NsfShareFolderCommand(base.ArgparseCommand):
                                 targets.append((username, False))
                 continue
             if '@' in raw:
-                is_team = False
-            else:
-                teams = share_management_utils.get_share_objects(vault).get('teams', {})
-                is_team = (
-                    raw in teams
-                    or any((info.get('name') or '').casefold() == raw.casefold()
-                           for info in teams.values())
-                )
-            key = ('team' if is_team else 'user', raw.casefold())
-            if key not in seen:
-                seen.add(key)
-                targets.append((raw, is_team))
+                key = ('user', raw.casefold())
+                if key not in seen:
+                    seen.add(key)
+                    targets.append((raw, False))
+                continue
+
+            # Classic share-folder parity: resolve team by UID/name; do not treat
+            # unresolved display names as users (and never send them to team_get_keys).
+            resolved_team = nsf_common.resolve_team_identifier(vault, raw)
+            if resolved_team:
+                team_uid_b64, _ = resolved_team
+                key = ('team', team_uid_b64.casefold())
+                if key not in seen:
+                    seen.add(key)
+                    targets.append((team_uid_b64, True))
+                continue
+
+            if nsf_common.is_keeper_uid(raw):
+                # Account UID (non-email user identifier)
+                key = ('user', raw.casefold())
+                if key not in seen:
+                    seen.add(key)
+                    targets.append((raw, False))
+                continue
+
+            logger.warning('User "%s" could not be resolved as email or team', raw)
         return targets
 
 

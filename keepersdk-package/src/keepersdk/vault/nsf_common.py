@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from .. import crypto, utils
 from ..proto import folder_pb2, record_pb2, record_sharing_pb2
 from .vault_online import VaultOnline
+
+# Keeper UIDs are 16 random bytes encoded as unpadded base64url (22 chars).
+_KEEPER_UID_RE = re.compile(r'^[A-Za-z0-9_-]{22}$')
 
 ROLE_NAME_MAP: Dict[str, int] = {
     'contributor': 1,
@@ -183,6 +187,11 @@ def load_user_public_key(vault: VaultOnline, user_email: str):
     raise ValueError(f'No valid public key for user {user_email}')
 
 
+def is_keeper_uid(value: str) -> bool:
+    """True when *value* looks like a Keeper UID (not a display name)."""
+    return bool(value and _KEEPER_UID_RE.match(value))
+
+
 def resolve_user_uid_bytes(vault: VaultOnline, identifier: str) -> Optional[bytes]:
     if '@' in identifier:
         lower = identifier.casefold()
@@ -198,10 +207,13 @@ def resolve_user_uid_bytes(vault: VaultOnline, identifier: str) -> Optional[byte
                         uid = su.userAccountUid
                         return uid if isinstance(uid, bytes) else utils.base64_url_decode(uid)
         return None
-    try:
-        return utils.base64_url_decode(identifier)
-    except Exception:
-        return None
+    # Only treat UID-shaped strings as account UIDs — never decode display names.
+    if is_keeper_uid(identifier):
+        try:
+            return utils.base64_url_decode(identifier)
+        except Exception:
+            return None
+    return None
 
 
 def get_user_public_key(
@@ -238,26 +250,54 @@ def get_user_public_key(
 
 
 def resolve_team_uid_bytes(vault: VaultOnline, team_identifier: str) -> Optional[bytes]:
-    from . import share_management_utils
+    """Resolve team UID or display name to team UID bytes.
+
+    Matches classic share-folder resolution: look up shareable teams by UID or
+    exact name. Does **not** base64-decode arbitrary strings — that produced
+    garbage UIDs (e.g. truncated names) and ``bad_inputs_invalid_uid_string``
+    on ``team_get_keys``.
+    """
+    from . import share_management_utils, vault_utils
+
+    identifier = (team_identifier or '').strip()
+    if not identifier:
+        return None
 
     share_objects = share_management_utils.get_share_objects(vault)
-    teams = share_objects.get('teams') or {}
-    if team_identifier in teams:
-        return utils.base64_url_decode(team_identifier)
-    lower = team_identifier.casefold()
+    teams = dict(share_objects.get('teams') or {})
+
+    if identifier in teams:
+        return utils.base64_url_decode(identifier)
+
+    lower = identifier.casefold()
     for uid, team in teams.items():
         name = team.get('name') if isinstance(team, dict) else ''
         if name and name.casefold() == lower:
             return utils.base64_url_decode(uid)
+
+    # Enterprise teams not always present in get_share_objects — same as classic
+    # share-folder when the share-objects list is large / incomplete.
     try:
-        return utils.base64_url_decode(team_identifier)
-    except Exception:
-        return None
+        for team_info in vault_utils.load_available_teams(vault.keeper_auth):
+            if team_info.team_uid == identifier or (team_info.name or '').casefold() == lower:
+                return utils.base64_url_decode(team_info.team_uid)
+    except Exception as exc:
+        utils.get_logger().debug('load_available_teams failed: %s', exc)
+
+    if is_keeper_uid(identifier):
+        try:
+            return utils.base64_url_decode(identifier)
+        except Exception:
+            return None
+    return None
 
 
 def get_team_keys(vault: VaultOnline, team_uid_b64: str):
     """Return cached team keys, loading asymmetric public keys if needed."""
     from ..authentication.keeper_auth import UserKeys, parse_team_asymmetric_key_entry
+
+    if not is_keeper_uid(team_uid_b64):
+        raise ValueError(f'Invalid team UID: {team_uid_b64}')
 
     auth = vault.keeper_auth
     auth.load_team_keys([team_uid_b64])
