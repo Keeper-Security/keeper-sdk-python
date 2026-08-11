@@ -187,6 +187,7 @@ class KeeperAuth:
         sleep_interval = 0
         chunk_size = 200
         queue = requests.copy()
+        throttle_retries = 0
         while len(queue) > 0:
             if sleep_interval > 0:
                 time.sleep(sleep_interval)
@@ -200,16 +201,30 @@ class KeeperAuth:
             }
             rs = self.execute_auth_command(rq)
             results = rs.get('results')
-            if isinstance(results, list) and len(results) > 0:
-                error_status = results[-1]
-                throttled = error_status.get('result') != 'success' and error_status.get('result_code') == 'throttled'
-                if throttled:
-                    sleep_interval = 10
-                    results.pop()
-                responses.extend(results)
+            if not isinstance(results, list) or len(results) == 0:
+                # No result for any queued request: re-queueing would spin forever
+                raise errors.KeeperApiError('server_error', 'Batch execution returned no results')
 
-                if len(results) < len(chunk):
-                    queue = chunk[len(results):] + queue
+            error_status = results[-1]
+            throttled = error_status.get('result') != 'success' and error_status.get('result_code') == 'throttled'
+            if throttled:
+                throttle_retries += 1
+                if self.keeper_endpoint.fail_on_throttle or throttle_retries > endpoint.MAX_THROTTLE_RETRIES:
+                    raise errors.KeeperApiError(
+                        error_status.get('result_code') or 'throttled',
+                        error_status.get('message') or 'Request was throttled')
+                wait_seconds = endpoint.parse_throttle_wait_seconds(error_status.get('message') or '')
+                sleep_interval = endpoint.throttle_backoff_seconds(throttle_retries, wait_seconds)
+                utils.get_logger().warning(
+                    'Batch throttled (attempt %d/%d), retrying in %d seconds',
+                    throttle_retries, endpoint.MAX_THROTTLE_RETRIES, sleep_interval)
+                results.pop()
+            else:
+                throttle_retries = 0
+            responses.extend(results)
+
+            if len(results) < len(chunk):
+                queue = chunk[len(results):] + queue
         return responses
 
     def execute_router(self, path: str,  request: Optional[endpoint.TRQ], *,
