@@ -1,4 +1,4 @@
-import folder_pb2 as _folder_pb2
+from . import folder_pb2 as _folder_pb2
 from google.protobuf.internal import containers as _containers
 from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
@@ -612,3 +612,27 @@ class GetAgentDailyCountResponse(_message.Message):
     ENTERPRISECOUNTS_FIELD_NUMBER: _ClassVar[int]
     enterpriseCounts: _containers.RepeatedCompositeFieldContainer[AgentCountForEnterprise]
     def __init__(self, enterpriseCounts: _Optional[_Iterable[_Union[AgentCountForEnterprise, _Mapping]]] = ...) -> None: ...
+
+class GetAgenticWorkloadCountRequest(_message.Message):
+    __slots__ = ("enterpriseId", "preset", "range")
+    ENTERPRISEID_FIELD_NUMBER: _ClassVar[int]
+    PRESET_FIELD_NUMBER: _ClassVar[int]
+    RANGE_FIELD_NUMBER: _ClassVar[int]
+    enterpriseId: _containers.RepeatedScalarFieldContainer[int]
+    preset: str
+    range: DateRange
+    def __init__(self, enterpriseId: _Optional[_Iterable[int]] = ..., preset: _Optional[str] = ..., range: _Optional[_Union[DateRange, _Mapping]] = ...) -> None: ...
+
+class EnterpriseWorkloadCount(_message.Message):
+    __slots__ = ("enterpriseId", "workloadCount")
+    ENTERPRISEID_FIELD_NUMBER: _ClassVar[int]
+    WORKLOADCOUNT_FIELD_NUMBER: _ClassVar[int]
+    enterpriseId: int
+    workloadCount: int
+    def __init__(self, enterpriseId: _Optional[int] = ..., workloadCount: _Optional[int] = ...) -> None: ...
+
+class GetAgenticWorkloadCountResponse(_message.Message):
+    __slots__ = ("counts",)
+    COUNTS_FIELD_NUMBER: _ClassVar[int]
+    counts: _containers.RepeatedCompositeFieldContainer[EnterpriseWorkloadCount]
+    def __init__(self, counts: _Optional[_Iterable[_Union[EnterpriseWorkloadCount, _Mapping]]] = ...) -> None: ...

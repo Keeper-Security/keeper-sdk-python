@@ -231,14 +231,16 @@ class Record(_message.Message):
     def __init__(self, record_uid: _Optional[bytes] = ..., record_key: _Optional[bytes] = ..., record_key_type: _Optional[_Union[RecordKeyType, str]] = ..., data: _Optional[bytes] = ..., extra: _Optional[bytes] = ..., version: _Optional[int] = ..., client_modified_time: _Optional[int] = ..., revision: _Optional[int] = ..., file_ids: _Optional[_Iterable[bytes]] = ...) -> None: ...
 
 class FolderRecordKey(_message.Message):
-    __slots__ = ("folder_uid", "record_uid", "record_key")
+    __slots__ = ("folder_uid", "record_uid", "record_key", "record_key_type")
     FOLDER_UID_FIELD_NUMBER: _ClassVar[int]
     RECORD_UID_FIELD_NUMBER: _ClassVar[int]
     RECORD_KEY_FIELD_NUMBER: _ClassVar[int]
+    RECORD_KEY_TYPE_FIELD_NUMBER: _ClassVar[int]
     folder_uid: bytes
     record_uid: bytes
     record_key: bytes
-    def __init__(self, folder_uid: _Optional[bytes] = ..., record_uid: _Optional[bytes] = ..., record_key: _Optional[bytes] = ...) -> None: ...
+    record_key_type: RecordKeyType
+    def __init__(self, folder_uid: _Optional[bytes] = ..., record_uid: _Optional[bytes] = ..., record_key: _Optional[bytes] = ..., record_key_type: _Optional[_Union[RecordKeyType, str]] = ...) -> None: ...
 
 class Folder(_message.Message):
     __slots__ = ("folder_uid", "folder_key", "folder_key_type")

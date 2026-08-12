@@ -236,11 +236,20 @@ def extract_audit_data(record: Union[vault_record.KeeperRecord, vault_record.Typ
 def extract_typed_record_refs(record: vault_record.TypedRecord) -> Set[str]:
     refs = set()
     for field in itertools.chain(record.fields, record.custom):
-        if field.type in {'fileRef', 'addressRef', 'cardRef'}:
+        if field.type in {'fileRef', 'addressRef', 'cardRef', 'recordRef'}:
             if isinstance(field.value, list):
                 for ref in field.value:
                     if isinstance(ref, str):
                         refs.add(ref)
+        elif field.type == 'script':
+            if not isinstance(field.value, list):
+                continue
+            for script in field.value:
+                if not isinstance(script, dict):
+                    continue
+                file_ref = script.get('fileRef')
+                if isinstance(file_ref, str) and file_ref:
+                    refs.add(file_ref)
     return refs
 
 
