@@ -319,16 +319,19 @@ def _store_optional_extras_proto(
         storage.breach_watch_security_data.put_entities(bws)
         if task:
             task.add_records((r.record_uid for r in bws))
-    chunk_payload: Dict[str, Any] = {
-        CHUNK_RECORD_ROTATION: list(nsf_msg.recordRotationData),
-        CHUNK_RAW_DAG: list(nsf_msg.rawDagData),
-    }
-    _replace_json_lists(storage, chunk_payload)
+    # Only replace when the sync page includes data. Proto3 repeated fields cannot
+    # distinguish "omitted" from "empty", and wiping on empty drops NSF rotations.
+    if nsf_msg.recordRotationData:
+        _replace_chunk_group(storage, CHUNK_RECORD_ROTATION, list(nsf_msg.recordRotationData))
+    if nsf_msg.rawDagData:
+        _replace_chunk_group(storage, CHUNK_RAW_DAG, list(nsf_msg.rawDagData))
 
 
 def _replace_json_lists(storage: INSFStorage, d: Mapping[str, Any]) -> None:
-    _replace_chunk_group(storage, CHUNK_RECORD_ROTATION, d.get(CHUNK_RECORD_ROTATION))
-    _replace_chunk_group(storage, CHUNK_RAW_DAG, d.get(CHUNK_RAW_DAG))
+    if CHUNK_RECORD_ROTATION in d and d.get(CHUNK_RECORD_ROTATION):
+        _replace_chunk_group(storage, CHUNK_RECORD_ROTATION, d.get(CHUNK_RECORD_ROTATION))
+    if CHUNK_RAW_DAG in d and d.get(CHUNK_RAW_DAG):
+        _replace_chunk_group(storage, CHUNK_RAW_DAG, d.get(CHUNK_RAW_DAG))
 
 
 def _replace_chunk_group(storage: INSFStorage, group: str, items: Any) -> None:

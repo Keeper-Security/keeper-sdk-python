@@ -1339,6 +1339,8 @@ class BatchManagement(enterprise_management.IEnterpriseManagement):
         rt_rq.standard = True
         rt_rq.user = True
         rt_rq.enterprise = True
+        rt_rq.pam = True
+        
         record_types_rs = self.loader.keeper_auth.execute_auth_rest('vault/get_record_types', rt_rq,
                                                                     response_type=record_pb2.RecordTypesResponse)
         self._record_types = {}

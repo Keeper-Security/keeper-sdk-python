@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from .. import utils
+from .. import crypto, utils
 from ..errors import KeeperApiError
 from ..proto import folder_pb2, record_pb2, record_sharing_pb2
 from . import nsf_common
@@ -246,6 +246,141 @@ def grant_nsf_folder_access(
         response, folder_uid, label, 'Access granted successfully')
     result['access_type'] = access_type_label
     result.setdefault('action_taken', 'granted' if result['success'] else 'grant_failed')
+    if not result['success']:
+        raise KeeperApiError(result['status'], result['message'])
+    _request_sync(vault, request_sync)
+    return result
+
+
+def _nsf_app_role_for_editable(is_editable: bool) -> str:
+    """Map KSM editable flag to NSF folder role used for AT_APPLICATION shares."""
+    return 'content-manager' if is_editable else 'viewer'
+
+
+def grant_nsf_folder_to_application(
+        vault: VaultOnline,
+        folder_identifier: str,
+        app_uid: str,
+        *,
+        is_editable: bool = False,
+        request_sync: bool = True) -> Dict[str, Any]:
+    """Share an NSF folder with a KSM application via AT_APPLICATION.
+    """
+    folder_uid = resolve_nsf_folder_uid(vault, folder_identifier) or folder_identifier
+    if not is_nsf_folder(vault, folder_uid):
+        raise NsfError(f'NSF folder not found: {folder_identifier}')
+    _ensure_folder_share_permission(vault, folder_uid)
+    _prepare_folder_for_access_change(vault, folder_uid)
+
+    app_key = vault.vault_data.get_record_key(app_uid)
+    if not app_key:
+        raise NsfError(f'Could not resolve record key for application {app_uid}')
+
+    role = _nsf_app_role_for_editable(is_editable)
+    access_role = nsf_common.resolve_nsf_role(role)
+    target_role_name = folder_pb2.AccessRoleType.Name(access_role)
+    app_uid_bytes = utils.base64_url_decode(app_uid)
+
+    existing_role = _check_existing_nsf_folder_access(
+        vault, folder_uid, app_uid_bytes, 'AT_APPLICATION')
+    if existing_role is not None:
+        if existing_role == target_role_name:
+            return {
+                'folder_uid': folder_uid,
+                'accessor': app_uid,
+                'access_type': 'AT_APPLICATION',
+                'status': 'SUCCESS',
+                'message': f'Application already has {role} access',
+                'success': True,
+                'action_taken': 'already_had_access',
+            }
+        return update_nsf_folder_application_access(
+            vault, folder_uid, app_uid, is_editable=is_editable, request_sync=request_sync)
+
+    ad = folder_pb2.FolderAccessData()
+    ad.folderUid = utils.base64_url_decode(folder_uid)
+    ad.accessTypeUid = app_uid_bytes
+    ad.accessType = folder_pb2.AT_APPLICATION
+    ad.accessRoleType = access_role
+    ad.permissions.CopyFrom(nsf_common.get_folder_permissions_for_role(access_role))
+
+    folder_key = _get_folder_key(vault, folder_uid)
+    ek = folder_pb2.EncryptedDataKey()
+    ek.encryptedKey = crypto.encrypt_aes_v2(folder_key, app_key)
+    ek.encryptedKeyType = folder_pb2.encrypted_by_data_key_gcm
+    ad.folderKey.CopyFrom(ek)
+
+    response = _folder_access_update(vault, adds=[ad])
+    result = nsf_common.parse_folder_access_result(
+        response, folder_uid, app_uid, 'Application access granted successfully')
+    result['access_type'] = 'AT_APPLICATION'
+    result.setdefault(
+        'action_taken', 'granted' if result['success'] else 'grant_failed')
+    if not result['success']:
+        raise KeeperApiError(result['status'], result['message'])
+    _request_sync(vault, request_sync)
+    return result
+
+
+def update_nsf_folder_application_access(
+        vault: VaultOnline,
+        folder_identifier: str,
+        app_uid: str,
+        *,
+        is_editable: bool = False,
+        request_sync: bool = True) -> Dict[str, Any]:
+    """Update AT_APPLICATION role for an NSF folder already shared with a KSM app."""
+    folder_uid = resolve_nsf_folder_uid(vault, folder_identifier) or folder_identifier
+    if not is_nsf_folder(vault, folder_uid):
+        raise NsfError(f'NSF folder not found: {folder_identifier}')
+    _ensure_folder_share_permission(vault, folder_uid)
+    _prepare_folder_for_access_change(vault, folder_uid)
+
+    role = _nsf_app_role_for_editable(is_editable)
+    access_role = nsf_common.resolve_nsf_role(role)
+    app_uid_bytes = utils.base64_url_decode(app_uid)
+
+    ad = folder_pb2.FolderAccessData()
+    ad.folderUid = utils.base64_url_decode(folder_uid)
+    ad.accessTypeUid = app_uid_bytes
+    ad.accessType = folder_pb2.AT_APPLICATION
+    ad.accessRoleType = access_role
+    ad.permissions.CopyFrom(nsf_common.get_folder_permissions_for_role(access_role))
+
+    response = _folder_access_update(vault, updates=[ad])
+    result = nsf_common.parse_folder_access_result(
+        response, folder_uid, app_uid, 'Application access updated successfully')
+    result['access_type'] = 'AT_APPLICATION'
+    result.setdefault(
+        'action_taken', 'updated' if result['success'] else 'update_failed')
+    if not result['success']:
+        raise KeeperApiError(result['status'], result['message'])
+    _request_sync(vault, request_sync)
+    return result
+
+
+def revoke_nsf_folder_from_application(
+        vault: VaultOnline,
+        folder_identifier: str,
+        app_uid: str,
+        *,
+        request_sync: bool = True) -> Dict[str, Any]:
+    """Revoke AT_APPLICATION access for a KSM app on an NSF folder."""
+    folder_uid = resolve_nsf_folder_uid(vault, folder_identifier) or folder_identifier
+    if not is_nsf_folder(vault, folder_uid):
+        raise NsfError(f'NSF folder not found: {folder_identifier}')
+    _ensure_folder_share_permission(vault, folder_uid)
+    _prepare_folder_for_access_change(vault, folder_uid)
+
+    ad = folder_pb2.FolderAccessData()
+    ad.folderUid = utils.base64_url_decode(folder_uid)
+    ad.accessTypeUid = utils.base64_url_decode(app_uid)
+    ad.accessType = folder_pb2.AT_APPLICATION
+
+    response = _folder_access_update(vault, removes=[ad])
+    result = nsf_common.parse_folder_access_result(
+        response, folder_uid, app_uid, 'Application access revoked successfully')
+    result['access_type'] = 'AT_APPLICATION'
     if not result['success']:
         raise KeeperApiError(result['status'], result['message'])
     _request_sync(vault, request_sync)

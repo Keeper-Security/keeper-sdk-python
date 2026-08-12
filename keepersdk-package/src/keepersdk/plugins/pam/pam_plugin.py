@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import abc
-from typing import Dict, List, Tuple
+from typing import Iterable, List, Tuple
 
 from . import pam_storage, pam_types
 from ... import utils
 from ...authentication.keeper_auth import KeeperAuth
 from ...enterprise import enterprise_loader, sqlite_enterprise_storage
-from ...proto import SyncDown_pb2, pam_pb2
+from ...proto import pam_pb2
 from ...storage import in_memory, storage_types
 
 
@@ -50,6 +50,12 @@ class IPamPlugin(abc.ABC):
     def sync_record_rotations_from_vault(self) -> None:
         pass
 
+    @abc.abstractmethod
+    def merge_record_rotations(
+            self, rows: Iterable[pam_storage.PamRecordRotation], *,
+            replace_all: bool = False) -> None:
+        pass
+
     @property
     @abc.abstractmethod
     def controllers(self) -> storage_types.IEntityReader[pam_types.PamController, str]:
@@ -77,6 +83,8 @@ class PamPlugin(IPamPlugin):
         self._controllers = in_memory.InMemoryEntityStorage[pam_types.PamController, str]()
         self._record_rotations = in_memory.InMemoryEntityStorage[pam_types.PamRecordRotationInfo, str]()
         self.logger = utils.get_logger()
+        # Load any rotations already persisted from a prior vault sync.
+        self.sync_record_rotations_from_vault()
 
     @property
     def controllers(self) -> storage_types.IEntityReader[pam_types.PamController, str]:
@@ -97,38 +105,33 @@ class PamPlugin(IPamPlugin):
         return []
 
     def sync_record_rotations_from_vault(self) -> None:
+        """Reload rotations from PAM sqlite into memory (no vault/sync_down)."""
+        self._record_rotations.clear()
+        rows = list(self.storage.record_rotations.get_all_entities())
+        if rows:
+            self._record_rotations.put_entities(_pam_rotation_to_domain(r) for r in rows)
 
-        self._sync_record_rotations_from_vault_auth(self.loader.keeper_auth)
-
-    def _sync_record_rotations_from_vault_auth(self, auth: KeeperAuth) -> None:
-
-        merged: Dict[str, pam_storage.PamRecordRotation] = {}
-        rq = SyncDown_pb2.SyncDownRequest()
-        token = b''
-        done = False
-        while not done:
-            rq.continuationToken = token
-            response = auth.execute_auth_rest(
-                'vault/sync_down', rq, response_type=SyncDown_pb2.SyncDownResponse)
-            if response is None:
-                break
-            done = not response.hasMore
-            token = response.continuationToken or b''
-            for rr in response.recordRotations:
-                row = pam_storage.pam_record_rotation_from_proto(rr)
-                if row.record_uid:
-                    merged[row.record_uid] = row
-        if not merged:
+    def merge_record_rotations(
+            self, rows: Iterable[pam_storage.PamRecordRotation], *,
+            replace_all: bool = False) -> None:
+        """Upsert rotation rows into PAM sqlite + memory (from normal vault sync)."""
+        row_list = [r for r in rows if r and r.record_uid]
+        if replace_all:
+            existing = [r.uid() for r in self.storage.record_rotations.get_all_entities()]
+            if existing:
+                self.storage.record_rotations.delete_uids(existing)
+            self._record_rotations.clear()
+        if not row_list:
             return
-        rows = list(merged.values())
-        self.storage.record_rotations.put_entities(rows)
-        self._record_rotations.put_entities(_pam_rotation_to_domain(r) for r in rows)
+        self.storage.record_rotations.put_entities(row_list)
+        self._record_rotations.put_entities(_pam_rotation_to_domain(r) for r in row_list)
 
     def sync_down(self, *, reload: bool = False) -> None:
         _ = reload
-        self.storage.reset()
+        existing = [c.uid() for c in self.storage.controllers.get_all_entities()]
+        if existing:
+            self.storage.controllers.delete_uids(existing)
         self._controllers.clear()
-        self._record_rotations.clear()
 
         auth = self.loader.keeper_auth
         all_controllers = self._get_all_gateways(auth)
@@ -143,7 +146,4 @@ class PamPlugin(IPamPlugin):
         if domain_rows:
             self._controllers.put_entities(domain_rows)
 
-        try:
-            self._sync_record_rotations_from_vault_auth(auth)
-        except Exception as e:
-            self.logger.warning('PAM: loading record rotations from vault/sync_down failed: %s', e)
+        self.sync_record_rotations_from_vault()

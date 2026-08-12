@@ -8,6 +8,8 @@ from typing import Callable, Optional, List, Union, Tuple, Set, Dict
 from urllib import parse
 
 from . import ksm, record_management, shares_management, share_management_utils, vault_online, vault_record, vault_types
+from . import nsf_management, nsf_sharing, vault_extensions
+from .nsf_management import NsfError
 from .. import utils, crypto, constants
 from ..enterprise import enterprise_data
 from ..proto.APIRequest_pb2 import (
@@ -16,10 +18,13 @@ from ..proto.APIRequest_pb2 import (
     AppShareAdd, AddAppSharesRequest, RemoveAppSharesRequest
 )
 from ..errors import KeeperApiError
-from ..proto.enterprise_pb2 import GENERAL
+from ..proto.enterprise_pb2 import (
+    GENERAL,
+    DISCOVERY_AND_ROTATION_CONTROLLER,
+    KCM_CONTROLLER,
+)
 from ..proto import record_pb2
 from ..proto.record_pb2 import ApplicationAddRequest, RecordUpdate, RecordsUpdateRequest
-from . import vault_extensions
 
 URL_GET_SUMMARY_API = 'vault/get_applications_summary'
 URL_GET_APP_INFO_API = 'vault/get_app_info'
@@ -33,6 +38,13 @@ SHARE_REMOVE_URL = 'vault/app_share_remove'
 RECORDS_UPDATE_URL = 'vault/records_update'
 
 CLIENT_SHORT_ID_LENGTH = 8
+
+# Client types shown by secrets-manager-app get (GENERAL KSM + PAM/KCM gateways).
+_DISPLAY_APP_CLIENT_TYPES = frozenset({
+    GENERAL,
+    DISCOVERY_AND_ROTATION_CONTROLLER,
+    KCM_CONTROLLER,
+})
 
 MILLISECONDS_PER_SECOND = 1000
 
@@ -78,7 +90,9 @@ def get_secrets_manager_app(vault: vault_online.VaultOnline, uid_or_name: str) -
         raise ValueError('No Secrets Manager Applications returned.')
 
     app_info = app_infos[0]
-    client_devices = [x for x in app_info.clients if x.appClientType == GENERAL]
+    client_devices = [
+        x for x in app_info.clients if x.appClientType in _DISPLAY_APP_CLIENT_TYPES
+    ]
     client_list = []
     for c in client_devices:
         client_id = utils.base64_url_encode(c.clientId)
@@ -97,13 +111,18 @@ def get_secrets_manager_app(vault: vault_online.VaultOnline, uid_or_name: str) -
 
     shared_secrets = []
     for share in getattr(app_info, 'shares', []):
-        shared_secrets.append(handle_share_type(share, ksm_app, vault))
+        info = handle_share_type(share, ksm_app, vault)
+        if info is not None:
+            shared_secrets.append(info)
 
     records_count = len([
         s for s in getattr(app_info, 'shares', [])
         if ApplicationShareType.Name(s.shareType) == 'SHARE_TYPE_RECORD'
     ])
-    folders_count = len(shared_secrets) - records_count
+    folders_count = len([
+        s for s in getattr(app_info, 'shares', [])
+        if ApplicationShareType.Name(s.shareType) == 'SHARE_TYPE_FOLDER'
+    ])
 
     return ksm.SecretsManagerApp(
         name=ksm_app.title,
@@ -298,26 +317,32 @@ def _get_app_user_permissions(vault: vault_online.VaultOnline, uid: str) -> List
 
 
 def _separate_shared_items(vault: vault_online.VaultOnline, shared_secrets):
-    """Separate shared secrets into records and folders."""
+    """Separate shared secrets into classic records and shared folders.
+
+    NSF folder/record shares are skipped here: cascading user-permission
+    updates use classic share APIs that do not apply to NSF.
+    """
     shared_recs = []
     shared_folders = []
-    
+
     for share in shared_secrets:
         uid_str = utils.base64_url_encode(share.secretUid)
         share_type = ApplicationShareType.Name(share.shareType)
-        
-        if share_type == ApplicationShareType.SHARE_TYPE_RECORD:
-            shared_recs.append(uid_str)
-        elif share_type == ApplicationShareType.SHARE_TYPE_FOLDER:
-            shared_folders.append(uid_str)
-    
+
+        if share_type == 'SHARE_TYPE_RECORD':
+            if uid_str in vault.vault_data._records:
+                shared_recs.append(uid_str)
+        elif share_type == 'SHARE_TYPE_FOLDER':
+            if uid_str in vault.vault_data._shared_folders:
+                shared_folders.append(uid_str)
+
     if shared_recs:
         share_management_utils.get_record_shares(
-            vault=vault, 
-            record_uids=shared_recs, 
+            vault=vault,
+            record_uids=shared_recs,
             is_share_admin=False
         )
-        
+
     return shared_recs, shared_folders
 
 
@@ -561,15 +586,28 @@ def handle_share_type(share, ksm_app, vault: vault_online.VaultOnline):
     editable_status = share.editable
 
     if share_type == 'SHARE_TYPE_RECORD':
-        return ksm.SharedSecretsInfo(type='RECORD', uid=uid_str, name=ksm_app.title, permissions=editable_status)
-    
-    elif share_type == 'SHARE_TYPE_FOLDER':
-        cached_sf = next((f for f in vault.vault_data.folders() if f.folder_uid == uid_str), None)
-        if cached_sf:
-            return ksm.SharedSecretsInfo(type='FOLDER', uid=uid_str, name=cached_sf.name, permissions=editable_status)
-        
-    else:
-        return None
+        return ksm.SharedSecretsInfo(
+            type='RECORD', uid=uid_str, name=ksm_app.title, permissions=editable_status
+        )
+
+    if share_type == 'SHARE_TYPE_FOLDER':
+        folder_name = uid_str
+        cached_sf = next(
+            (f for f in vault.vault_data.folders() if f.folder_uid == uid_str), None
+        )
+        if cached_sf is not None:
+            folder_name = cached_sf.name or uid_str
+        else:
+            nsf = vault.nsf_data
+            if nsf is not None:
+                nsf_folder = nsf.get_folder(uid_str)
+                if nsf_folder is not None:
+                    folder_name = nsf_folder.name or uid_str
+        return ksm.SharedSecretsInfo(
+            type='FOLDER', uid=uid_str, name=folder_name, permissions=editable_status
+        )
+
+    return None
 
 
 class KSMClientManagement:
@@ -585,7 +623,8 @@ class KSMClientManagement:
             first_access_expire_duration_ms: int,
             access_expire_in_ms: Optional[int],
             master_key: bytes,
-            server: str) -> Dict:
+            server: str,
+            client_type: int) -> Dict:
         """Generate a single client device and return token info and output string."""
         
         # Generate secret and client ID
@@ -605,7 +644,8 @@ class KSMClientManagement:
             client_id=client_id,
             client_name=client_name,
             count=count,
-            index=index
+            index=index,
+            client_type=client_type
         )
         
         # Generate token with server prefix
@@ -650,7 +690,8 @@ class KSMClientManagement:
             client_id: bytes,
             client_name: str,
             count: int,
-            index: int) -> Device:
+            index: int,
+            client_type: int) -> Device:
         """Create and send client request to server."""
         
         request = AddAppClientRequest()
@@ -658,7 +699,7 @@ class KSMClientManagement:
         request.encryptedAppKey = encrypted_master_key
         request.lockIp = not unlock_ip
         request.firstAccessExpireOn = first_access_expire_duration_ms
-        request.appClientType = GENERAL
+        request.appClientType = client_type
         request.clientId = client_id
         
         if access_expire_in_ms:
@@ -822,24 +863,79 @@ class KSMShareManagement:
     @staticmethod
     def add_secrets_to_ksm_app(vault: vault_online.VaultOnline, enterprise:enterprise_data.EnterpriseData, app_uid: str, master_key: bytes,
                     secret_uids: List[str], is_editable: bool = False) -> List:
-        """Share secrets with a KSM application."""
+        """Share secrets with a KSM application.
 
-        app_shares, added_secret_info = KSMShareManagement._process_all_secrets(
-            vault, secret_uids, master_key, is_editable
-        )
+        Classic records/shared folders use vault/app_share_add.
+        NSF folders use folders/v3/access_update with AT_APPLICATION.
+        """
+        app_shares = []
+        added_secret_info = []
+        nsf_folder_uids = []
+
+        for secret_uid in secret_uids:
+            kind = KSMShareManagement._classify_secret(vault, secret_uid)
+            if kind is None:
+                KSMShareManagement._log_invalid_secret_warning(secret_uid)
+                continue
+
+            channel, resolved_uid, type_label = kind
+            if channel == 'nsf_folder':
+                nsf_sharing.grant_nsf_folder_to_application(
+                    vault, resolved_uid, app_uid,
+                    is_editable=is_editable, request_sync=False)
+                added_secret_info.append((resolved_uid, type_label))
+                nsf_folder_uids.append(resolved_uid)
+                continue
+
+            share_info = KSMShareManagement._process_secret(
+                vault, resolved_uid, master_key, is_editable
+            )
+            if share_info:
+                app_shares.append(share_info['app_share'])
+                added_secret_info.append(share_info['secret_info'])
 
         if not added_secret_info:
             raise ValueError("No valid secrets found to share.")
 
-        KSMShareManagement._send_share_request(
-            vault, app_uid, app_shares
-        )
+        if app_shares:
+            KSMShareManagement._send_share_request(vault, app_uid, app_shares)
 
         vault.sync_down()
 
-        _update_shares_user_permissions(vault, enterprise, app_uid, removed=False)
+        if app_shares:
+            _update_shares_user_permissions(vault, enterprise, app_uid, removed=False)
 
         return added_secret_info
+
+    @staticmethod
+    def _classify_secret(
+            vault: vault_online.VaultOnline, secret_uid: str
+    ) -> Optional[Tuple[str, str, str]]:
+        """Return (channel, resolved_uid, type_label) or None.
+
+        channel is one of: 'classic', 'nsf_folder', 'nsf_record'.
+        """
+        if secret_uid in vault.vault_data._records:
+            return 'classic', secret_uid, 'Record'
+        if secret_uid in vault.vault_data._shared_folders:
+            return 'classic', secret_uid, 'Shared Folder'
+
+        if vault.nsf_data is None:
+            return None
+
+        folder_uid = nsf_management.resolve_nsf_folder_uid(vault, secret_uid)
+        if folder_uid is None and vault.nsf_data.get_folder(secret_uid) is not None:
+            folder_uid = secret_uid
+        if folder_uid:
+            return 'nsf_folder', folder_uid, 'NSF Folder'
+
+        record_uid = nsf_management.resolve_nsf_record_uid(vault, secret_uid)
+        if record_uid is None and vault.nsf_data.get_record(secret_uid) is not None:
+            record_uid = secret_uid
+        if record_uid:
+            return 'nsf_record', record_uid, 'NSF Record'
+
+        return None
 
     @staticmethod
     def _process_all_secrets(vault: vault_online.VaultOnline, secret_uids: List[str],
@@ -862,40 +958,83 @@ class KSMShareManagement:
     @staticmethod
     def _process_secret(vault: vault_online.VaultOnline, secret_uid: str, 
                               master_key: bytes, is_editable: bool) -> Optional[Dict]:
-        """Process a single secret and create share request."""
+        """Process a single classic/NSF-record secret into an app_share_add payload."""
         secret_info = KSMShareManagement._get_secret_info(vault, secret_uid)
         
         if not secret_info:
             return None
 
-        share_key_decrypted, share_type, secret_type_name = secret_info
+        share_key_decrypted, share_type, secret_type_name, resolved_uid = secret_info
         
         if not share_key_decrypted:
             logging.warning(f"Could not retrieve key for secret {secret_uid}")
             return None
 
         app_share = KSMShareManagement._build_app_share(
-            secret_uid, share_key_decrypted, master_key, share_type, is_editable
+            resolved_uid, share_key_decrypted, master_key, share_type, is_editable
         )
 
         return {
             'app_share': app_share,
-            'secret_info': (secret_uid, secret_type_name)
+            'secret_info': (resolved_uid, secret_type_name)
         }
 
     @staticmethod
     def _get_secret_info(vault: vault_online.VaultOnline, secret_uid: str) -> Optional[Tuple]:
-        """Get secret information (key, type, name) for a given UID."""
+        """Resolve secret key/type for classic or NSF record UID (or NSF name).
+
+        NSF folders are not handled here — they use AT_APPLICATION access_update.
+        Returns (share_key, share_type, type_label, resolved_uid) or None.
+        """
         is_record = secret_uid in vault.vault_data._records
         is_shared_folder = secret_uid in vault.vault_data._shared_folders
 
         if is_record:
-            return KSMShareManagement._get_record_secret_info(vault, secret_uid)
-        elif is_shared_folder:
-            return KSMShareManagement._get_folder_secret_info(vault, secret_uid)
-        else:
-            KSMShareManagement._log_invalid_secret_warning(secret_uid)
+            info = KSMShareManagement._get_record_secret_info(vault, secret_uid)
+            return (*info, secret_uid) if info else None
+        if is_shared_folder:
+            info = KSMShareManagement._get_folder_secret_info(vault, secret_uid)
+            return (*info, secret_uid)
+
+        nsf_info = KSMShareManagement._get_nsf_record_secret_info(vault, secret_uid)
+        if nsf_info:
+            return nsf_info
+
+        KSMShareManagement._log_invalid_secret_warning(secret_uid)
+        return None
+
+    @staticmethod
+    def _get_nsf_record_secret_info(
+            vault: vault_online.VaultOnline, secret_uid: str
+    ) -> Optional[Tuple]:
+        """Resolve an NSF record (by UID or exact name) for app_share_add."""
+        if vault.nsf_data is None:
             return None
+
+        # Skip NSF folders here — those must use AT_APPLICATION.
+        folder_uid = nsf_management.resolve_nsf_folder_uid(vault, secret_uid)
+        if folder_uid is None and vault.nsf_data.get_folder(secret_uid) is not None:
+            folder_uid = secret_uid
+        if folder_uid:
+            return None
+
+        record_uid = nsf_management.resolve_nsf_record_uid(vault, secret_uid)
+        if record_uid is None and vault.nsf_data.get_record(secret_uid) is not None:
+            record_uid = secret_uid
+        if not record_uid:
+            return None
+
+        try:
+            record_key = nsf_management._get_record_key(vault, record_uid)
+        except NsfError as e:
+            logging.warning('Could not resolve NSF record key for %s: %s', secret_uid, e)
+            return None
+        return (
+            record_key,
+            ApplicationShareType.SHARE_TYPE_RECORD,
+            'NSF Record',
+            record_uid,
+        )
 
     @staticmethod
     def _get_record_secret_info(vault: vault_online.VaultOnline, secret_uid: str) -> Optional[Tuple]:
@@ -923,8 +1062,10 @@ class KSMShareManagement:
     def _log_invalid_secret_warning(secret_uid: str) -> None:
         """Log warning for invalid secret UID."""
         logging.warning(
-            f"UID='{secret_uid}' is not a Record nor Shared Folder. "
-            "Only individual records or Shared Folders can be added to the application. "
+            "UID='%s' is not a classic/NSF record or folder. "
+            "Share individual records, classic Shared Folders, or NSF folders/records. "
+            "Run sync-down (or sync-down --force) and try again.",
+            secret_uid,
         )
 
     @staticmethod
@@ -958,16 +1099,29 @@ class KSMShareManagement:
     @staticmethod
     def remove_secrets_from_ksm_app(vault: vault_online.VaultOnline, app_uid: str, 
                     secret_uids: List[str]) -> None:
-        """Send remove share request to server."""
-        request = RemoveAppSharesRequest()
-        request.appRecordUid = utils.base64_url_decode(app_uid)
-        request.shares.extend(utils.base64_url_decode(uid) for uid in secret_uids)
-        vault.keeper_auth.execute_auth_rest(rest_endpoint=SHARE_REMOVE_URL, request=request)
+        """Remove classic app shares and/or NSF AT_APPLICATION folder access."""
+        classic_uids = []
+        for uid in secret_uids:
+            kind = KSMShareManagement._classify_secret(vault, uid)
+            if kind and kind[0] == 'nsf_folder':
+                nsf_sharing.revoke_nsf_folder_from_application(
+                    vault, kind[1], app_uid, request_sync=False)
+            else:
+                classic_uids.append(uid)
+
+        if classic_uids:
+            request = RemoveAppSharesRequest()
+            request.appRecordUid = utils.base64_url_decode(app_uid)
+            request.shares.extend(utils.base64_url_decode(uid) for uid in classic_uids)
+            vault.keeper_auth.execute_auth_rest(
+                rest_endpoint=SHARE_REMOVE_URL, request=request)
+
+        vault.sync_down()
 
     @staticmethod
     def update_secrets_in_ksm_app(vault: vault_online.VaultOnline, app_uid: str, secret_uids: List[str],
                                   is_editable: bool) -> List[str]:
-        """Update editable vs read-only on secrets already shared with the app (remove + re-add)."""
+        """Update editable vs read-only on secrets already shared with the app."""
         if not secret_uids:
             raise ValueError('At least one secret UID is required')
 
@@ -984,8 +1138,19 @@ class KSMShareManagement:
             for share in getattr(app_infos[0], 'shares', [])
         }
 
-        uids_to_update = []
+        updated_uids = []
+        classic_uids_to_re_add = []
+
         for uid in secret_uids:
+            kind = KSMShareManagement._classify_secret(vault, uid)
+            if kind and kind[0] == 'nsf_folder':
+                folder_uid = kind[1]
+                nsf_sharing.update_nsf_folder_application_access(
+                    vault, folder_uid, app_uid,
+                    is_editable=is_editable, request_sync=False)
+                updated_uids.append(folder_uid)
+                continue
+
             if uid not in existing_shares:
                 logging.warning(
                     'Secret "%s" is not currently shared with this application. '
@@ -996,23 +1161,33 @@ class KSMShareManagement:
                 perm = 'editable' if is_editable else 'read-only'
                 logging.info('Secret "%s" is already %s. No change needed.', uid, perm)
                 continue
-            uids_to_update.append(uid)
+            classic_uids_to_re_add.append(uid)
 
-        if not uids_to_update:
+        if classic_uids_to_re_add:
+            request = RemoveAppSharesRequest()
+            request.appRecordUid = utils.base64_url_decode(app_uid)
+            request.shares.extend(
+                utils.base64_url_decode(uid) for uid in classic_uids_to_re_add)
+            vault.keeper_auth.execute_auth_rest(
+                rest_endpoint=SHARE_REMOVE_URL, request=request)
+
+            app_shares = []
+            for uid in classic_uids_to_re_add:
+                share_info = KSMShareManagement._process_secret(
+                    vault, uid, master_key, is_editable)
+                if share_info:
+                    app_shares.append(share_info['app_share'])
+                    updated_uids.append(uid)
+
+            if not app_shares and not updated_uids:
+                raise ValueError(
+                    'No valid secrets found to update. Run sync-down and try again.')
+            if app_shares:
+                KSMShareManagement._send_share_request(vault, app_uid, app_shares)
+
+        if not updated_uids:
             logging.warning('No share permissions to update.')
             return []
 
-        KSMShareManagement.remove_secrets_from_ksm_app(vault, app_uid, uids_to_update)
-
-        app_shares = []
-        for uid in uids_to_update:
-            share_info = KSMShareManagement._process_secret(vault, uid, master_key, is_editable)
-            if share_info:
-                app_shares.append(share_info['app_share'])
-
-        if not app_shares:
-            raise ValueError('No valid secrets found to update. Run sync-down and try again.')
-
-        KSMShareManagement._send_share_request(vault, app_uid, app_shares)
         vault.sync_down()
-        return uids_to_update
+        return updated_uids
