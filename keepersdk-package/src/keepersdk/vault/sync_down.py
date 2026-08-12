@@ -36,6 +36,9 @@ def decrypt_keeper_key(auth_context: keeper_auth.AuthContext, encrypted: bytes, 
 class SyncDownResult:
     vault: vault_data.RebuildTask
     nsf: Optional[nsf_data.NSFRebuildTask] = None
+    # Classic recordRotations + NSF recordRotationData from this sync.
+    record_rotations: List[SyncDown_pb2.RecordRotation] = dataclasses.field(default_factory=list)
+    rotations_cleared: bool = False
 
 
 def sync_down_request(auth: keeper_auth.KeeperAuth,
@@ -53,6 +56,8 @@ def sync_down_request(auth: keeper_auth.KeeperAuth,
     token = user_settings.continuation_token
     task: Optional[vault_data.RebuildTask] = None
     nsf_task: Optional[nsf_data.NSFRebuildTask] = None
+    record_rotations: List[SyncDown_pb2.RecordRotation] = []
+    rotations_cleared = False
     done = False
     rq = SyncDown_pb2.SyncDownRequest()
     while not done:
@@ -65,15 +70,22 @@ def sync_down_request(auth: keeper_auth.KeeperAuth,
             sync_record_types = True
             storage.clear()
             nsf_task = nsf_data.NSFRebuildTask(True)
+            rotations_cleared = True
+            record_rotations.clear()
             logger.info('Syncing...')
         if task is None:
             task = vault_data.RebuildTask(response.cacheStatus == SyncDown_pb2.CLEAR)
+
+        if len(response.recordRotations) > 0:
+            record_rotations.extend(response.recordRotations)
 
         nsf_storage = storage.nsf
         if nsf_storage is not None:
             if nsf_task is None:
                 nsf_task = nsf_data.NSFRebuildTask(False)
             nsf_sync.try_apply_nsf_from_sync_down_proto(response, nsf_storage, nsf_task)
+        if response.HasField('keeperDriveData') and response.keeperDriveData.recordRotationData:
+            record_rotations.extend(response.keeperDriveData.recordRotationData)
 
         if len(response.removedRecords) > 0:
             record_uids = [utils.base64_url_encode(x) for x in response.removedRecords]
@@ -599,4 +611,9 @@ def sync_down_request(auth: keeper_auth.KeeperAuth,
             old_notifications = old_notifications[:to_delete]
             storage.notifications.delete_uids([x[0] for x in old_notifications])
 
-    return SyncDownResult(vault=task, nsf=nsf_task)
+    return SyncDownResult(
+        vault=task,
+        nsf=nsf_task,
+        record_rotations=record_rotations,
+        rotations_cleared=rotations_cleared,
+    )

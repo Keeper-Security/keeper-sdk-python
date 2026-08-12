@@ -227,6 +227,8 @@ class KeeperParams:
                     self._keeper_config.get_connection, enterprise_id)
                 self._enterprise_loader = enterprise_loader.EnterpriseLoader(self._auth, enterprise_storage, tree_key=tree_key)
                 self.enterprise_down()
+                # Persist rotations from the vault sync into PAM sqlite now that the plugin exists.
+                self.refresh_record_rotations()
 
     @property
     def enterprise_loader(self) -> enterprise_types.IEnterpriseLoader:
@@ -256,21 +258,80 @@ class KeeperParams:
         self.refresh_record_rotations()
 
     def refresh_record_rotations(self) -> None:
-        """Reload vault ``recordRotations`` into :attr:`pam_plugin` after a vault sync (enterprise admins only)."""
-        if not self._auth or not self._auth.auth_context.is_enterprise_admin:
-            return
-        if self._enterprise_loader is None:
+        if not self._auth:
             return
         try:
-            self.pam_plugin.sync_record_rotations_from_vault()
+            if self._vault is not None:
+                self._merge_nsf_rotation_chunks_into_vault_cache()
+            if (not self._auth.auth_context.is_enterprise_admin
+                    or self._enterprise_loader is None):
+                return
+            replace_all = False
+            rows = []
+            if self._vault is not None:
+                replace_all = self._vault.consume_rotations_cleared()
+                from keepersdk.plugins.pam import pam_storage as pam_stor
+                rows = [
+                    pam_stor.PamRecordRotation(
+                        record_uid=info.record_uid,
+                        revision=info.revision,
+                        configuration_uid=info.configuration_uid,
+                        schedule=info.schedule,
+                        pwd_complexity=info.pwd_complexity,
+                        disabled=info.disabled,
+                        resource_uid=info.resource_uid,
+                        last_rotation=info.last_rotation,
+                        last_rotation_status=info.last_rotation_status,
+                    )
+                    for info in self._vault.record_rotation_cache.values()
+                ]
+            self.pam_plugin.merge_record_rotations(rows, replace_all=replace_all)
         except Exception as e:
             keepersdk_utils.get_logger().warning('refresh_record_rotations failed: %s', e)
 
+    def _merge_nsf_rotation_chunks_into_vault_cache(self) -> None:
+        """Secondary source: NSF list_chunks for recordRotationData (already written by sync)."""
+        if not self._vault:
+            return
+        try:
+            nsf_storage = self._vault.nsf
+        except Exception:
+            return
+        if nsf_storage is None:
+            return
+        from keepersdk.vault import nsf_sync
+        from keepersdk.plugins.pam import pam_storage as pam_stor
+
+        for item in nsf_sync.load_list_chunks(nsf_storage, nsf_sync.CHUNK_RECORD_ROTATION):
+            if not isinstance(item, dict):
+                continue
+            row = pam_stor.pam_record_rotation_from_nsf_dict(item)
+            if not row or not row.record_uid:
+                continue
+            if row.record_uid in self._vault.record_rotation_cache:
+                continue
+            self._vault.record_rotation_cache[row.record_uid] = pam_types.PamRecordRotationInfo(
+                record_uid=row.record_uid,
+                revision=row.revision,
+                configuration_uid=row.configuration_uid,
+                schedule=row.schedule,
+                pwd_complexity=row.pwd_complexity,
+                disabled=row.disabled,
+                resource_uid=row.resource_uid,
+                last_rotation=row.last_rotation,
+                last_rotation_status=row.last_rotation_status,
+            )
+
     def get_record_rotation(self, record_uid: str) -> Optional[pam_types.PamRecordRotationInfo]:
-        """Rotation metadata for ``record_uid`` from the last vault / PAM rotation sync (or ``None``)."""
-        if not self._auth or not self._auth.auth_context.is_enterprise_admin:
+        """Rotation metadata for ``record_uid`` from vault sync cache / PAM sqlite (or ``None``)."""
+        if not self._auth or not record_uid:
             return None
-        if self._enterprise_loader is None:
+        if self._vault is not None:
+            info = self._vault.get_record_rotation(record_uid)
+            if info is not None:
+                return info
+        if (not self._auth.auth_context.is_enterprise_admin
+                or self._enterprise_loader is None):
             return None
         return self.pam_plugin.record_rotations.get_entity(record_uid)
 

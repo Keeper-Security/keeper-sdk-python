@@ -48,6 +48,7 @@ class PurchaseProductType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     addSilverSupport: _ClassVar[PurchaseProductType]
     addPlatinumSupport: _ClassVar[PurchaseProductType]
     addKEPM: _ClassVar[PurchaseProductType]
+    addNhi: _ClassVar[PurchaseProductType]
 
 class IdentifierType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -90,6 +91,7 @@ addPAM: PurchaseProductType
 addSilverSupport: PurchaseProductType
 addPlatinumSupport: PurchaseProductType
 addKEPM: PurchaseProductType
+addNhi: PurchaseProductType
 UNKNOWN_IDENTIFIER_TYPE: IdentifierType
 IOS_ID: IdentifierType
 ANDROID_GOOGLE_PLAY_ID: IdentifierType
@@ -147,7 +149,7 @@ class SubscriptionStatusRequest(_message.Message):
     def __init__(self) -> None: ...
 
 class SubscriptionStatusResponse(_message.Message):
-    __slots__ = ("autoRenewal", "currentPaymentMethod", "checkoutLink", "licenseCreateDate", "isDistributor", "isLegacyMsp", "licenseStats", "gradientStatus", "hideTrialBanner", "gradientLastSyncDate", "gradientNextSyncDate", "isGradientMappingPending", "nhi", "freeKsmApiCallsCount")
+    __slots__ = ("autoRenewal", "currentPaymentMethod", "checkoutLink", "licenseCreateDate", "isDistributor", "isLegacyMsp", "licenseStats", "gradientStatus", "hideTrialBanner", "gradientLastSyncDate", "gradientNextSyncDate", "isGradientMappingPending", "nhi", "freeKsmApiCallsCount", "ksm", "epm")
     AUTORENEWAL_FIELD_NUMBER: _ClassVar[int]
     CURRENTPAYMENTMETHOD_FIELD_NUMBER: _ClassVar[int]
     CHECKOUTLINK_FIELD_NUMBER: _ClassVar[int]
@@ -162,6 +164,8 @@ class SubscriptionStatusResponse(_message.Message):
     ISGRADIENTMAPPINGPENDING_FIELD_NUMBER: _ClassVar[int]
     NHI_FIELD_NUMBER: _ClassVar[int]
     FREEKSMAPICALLSCOUNT_FIELD_NUMBER: _ClassVar[int]
+    KSM_FIELD_NUMBER: _ClassVar[int]
+    EPM_FIELD_NUMBER: _ClassVar[int]
     autoRenewal: AutoRenewal
     currentPaymentMethod: PaymentMethod
     checkoutLink: str
@@ -176,9 +180,11 @@ class SubscriptionStatusResponse(_message.Message):
     isGradientMappingPending: bool
     nhi: NhiBilling
     freeKsmApiCallsCount: int
-    def __init__(self, autoRenewal: _Optional[_Union[AutoRenewal, _Mapping]] = ..., currentPaymentMethod: _Optional[_Union[PaymentMethod, _Mapping]] = ..., checkoutLink: _Optional[str] = ..., licenseCreateDate: _Optional[int] = ..., isDistributor: bool = ..., isLegacyMsp: bool = ..., licenseStats: _Optional[_Iterable[_Union[LicenseStats, _Mapping]]] = ..., gradientStatus: _Optional[_Union[GradientIntegrationStatus, str]] = ..., hideTrialBanner: bool = ..., gradientLastSyncDate: _Optional[str] = ..., gradientNextSyncDate: _Optional[str] = ..., isGradientMappingPending: bool = ..., nhi: _Optional[_Union[NhiBilling, _Mapping]] = ..., freeKsmApiCallsCount: _Optional[int] = ...) -> None: ...
+    ksm: KsmBilling
+    epm: EpmBilling
+    def __init__(self, autoRenewal: _Optional[_Union[AutoRenewal, _Mapping]] = ..., currentPaymentMethod: _Optional[_Union[PaymentMethod, _Mapping]] = ..., checkoutLink: _Optional[str] = ..., licenseCreateDate: _Optional[int] = ..., isDistributor: bool = ..., isLegacyMsp: bool = ..., licenseStats: _Optional[_Iterable[_Union[LicenseStats, _Mapping]]] = ..., gradientStatus: _Optional[_Union[GradientIntegrationStatus, str]] = ..., hideTrialBanner: bool = ..., gradientLastSyncDate: _Optional[str] = ..., gradientNextSyncDate: _Optional[str] = ..., isGradientMappingPending: bool = ..., nhi: _Optional[_Union[NhiBilling, _Mapping]] = ..., freeKsmApiCallsCount: _Optional[int] = ..., ksm: _Optional[_Union[KsmBilling, _Mapping]] = ..., epm: _Optional[_Union[EpmBilling, _Mapping]] = ...) -> None: ...
 
-class NhiBilling(_message.Message):
+class KsmBilling(_message.Message):
     __slots__ = ("billingStartTimestamp", "billingEndTimestamp", "currentTierId", "enterpriseBlocks", "currentTierCeiling")
     BILLINGSTARTTIMESTAMP_FIELD_NUMBER: _ClassVar[int]
     BILLINGENDTIMESTAMP_FIELD_NUMBER: _ClassVar[int]
@@ -191,6 +197,44 @@ class NhiBilling(_message.Message):
     enterpriseBlocks: int
     currentTierCeiling: int
     def __init__(self, billingStartTimestamp: _Optional[int] = ..., billingEndTimestamp: _Optional[int] = ..., currentTierId: _Optional[int] = ..., enterpriseBlocks: _Optional[int] = ..., currentTierCeiling: _Optional[int] = ...) -> None: ...
+
+class EpmBilling(_message.Message):
+    __slots__ = ("billingStartTimestamp", "billingEndTimestamp", "currentTierId", "enterpriseBlocks", "currentTierCeiling")
+    BILLINGSTARTTIMESTAMP_FIELD_NUMBER: _ClassVar[int]
+    BILLINGENDTIMESTAMP_FIELD_NUMBER: _ClassVar[int]
+    CURRENTTIERID_FIELD_NUMBER: _ClassVar[int]
+    ENTERPRISEBLOCKS_FIELD_NUMBER: _ClassVar[int]
+    CURRENTTIERCEILING_FIELD_NUMBER: _ClassVar[int]
+    billingStartTimestamp: int
+    billingEndTimestamp: int
+    currentTierId: int
+    enterpriseBlocks: int
+    currentTierCeiling: int
+    def __init__(self, billingStartTimestamp: _Optional[int] = ..., billingEndTimestamp: _Optional[int] = ..., currentTierId: _Optional[int] = ..., enterpriseBlocks: _Optional[int] = ..., currentTierCeiling: _Optional[int] = ...) -> None: ...
+
+class NhiBilling(_message.Message):
+    __slots__ = ("billingStartTimestamp", "billingEndTimestamp", "currentTierId", "enterpriseBlocks", "currentTierCeiling", "billingPeriods")
+    BILLINGSTARTTIMESTAMP_FIELD_NUMBER: _ClassVar[int]
+    BILLINGENDTIMESTAMP_FIELD_NUMBER: _ClassVar[int]
+    CURRENTTIERID_FIELD_NUMBER: _ClassVar[int]
+    ENTERPRISEBLOCKS_FIELD_NUMBER: _ClassVar[int]
+    CURRENTTIERCEILING_FIELD_NUMBER: _ClassVar[int]
+    BILLINGPERIODS_FIELD_NUMBER: _ClassVar[int]
+    billingStartTimestamp: int
+    billingEndTimestamp: int
+    currentTierId: int
+    enterpriseBlocks: int
+    currentTierCeiling: int
+    billingPeriods: _containers.RepeatedCompositeFieldContainer[NhiBillingPeriod]
+    def __init__(self, billingStartTimestamp: _Optional[int] = ..., billingEndTimestamp: _Optional[int] = ..., currentTierId: _Optional[int] = ..., enterpriseBlocks: _Optional[int] = ..., currentTierCeiling: _Optional[int] = ..., billingPeriods: _Optional[_Iterable[_Union[NhiBillingPeriod, _Mapping]]] = ...) -> None: ...
+
+class NhiBillingPeriod(_message.Message):
+    __slots__ = ("startTimestamp", "endTimestamp")
+    STARTTIMESTAMP_FIELD_NUMBER: _ClassVar[int]
+    ENDTIMESTAMP_FIELD_NUMBER: _ClassVar[int]
+    startTimestamp: int
+    endTimestamp: int
+    def __init__(self, startTimestamp: _Optional[int] = ..., endTimestamp: _Optional[int] = ...) -> None: ...
 
 class LicenseStats(_message.Message):
     __slots__ = ("type", "available", "used")
@@ -344,7 +388,7 @@ class FilePlan(_message.Message):
     def __init__(self, id: _Optional[int] = ..., cost: _Optional[_Union[Cost, _Mapping]] = ...) -> None: ...
 
 class Cost(_message.Message):
-    __slots__ = ("amount", "amountPer", "currency")
+    __slots__ = ("amount", "amountPer", "currency", "contactSales")
     class AmountPer(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
         __slots__ = ()
         UNKNOWN: _ClassVar[Cost.AmountPer]
@@ -368,10 +412,12 @@ class Cost(_message.Message):
     AMOUNT_FIELD_NUMBER: _ClassVar[int]
     AMOUNTPER_FIELD_NUMBER: _ClassVar[int]
     CURRENCY_FIELD_NUMBER: _ClassVar[int]
+    CONTACTSALES_FIELD_NUMBER: _ClassVar[int]
     amount: float
     amountPer: Cost.AmountPer
     currency: Currency
-    def __init__(self, amount: _Optional[float] = ..., amountPer: _Optional[_Union[Cost.AmountPer, str]] = ..., currency: _Optional[_Union[Currency, str]] = ...) -> None: ...
+    contactSales: bool
+    def __init__(self, amount: _Optional[float] = ..., amountPer: _Optional[_Union[Cost.AmountPer, str]] = ..., currency: _Optional[_Union[Currency, str]] = ..., contactSales: bool = ...) -> None: ...
 
 class InvoiceSearchRequest(_message.Message):
     __slots__ = ("size", "startingAfterId", "allInvoicesUnfiltered")
@@ -684,7 +730,7 @@ class EventsResponse(_message.Message):
     def __init__(self, response: _Optional[_Iterable[_Union[EventResponse, _Mapping]]] = ...) -> None: ...
 
 class CustomerCaptureRequest(_message.Message):
-    __slots__ = ("pageUrl", "tree", "hash", "image", "pageLoadTime", "keyId", "test", "issueType", "notes")
+    __slots__ = ("pageUrl", "tree", "hash", "image", "pageLoadTime", "keyId", "test", "issueType", "notes", "extensionVersion", "aiAutofillStatus", "mlLabels")
     PAGEURL_FIELD_NUMBER: _ClassVar[int]
     TREE_FIELD_NUMBER: _ClassVar[int]
     HASH_FIELD_NUMBER: _ClassVar[int]
@@ -694,6 +740,9 @@ class CustomerCaptureRequest(_message.Message):
     TEST_FIELD_NUMBER: _ClassVar[int]
     ISSUETYPE_FIELD_NUMBER: _ClassVar[int]
     NOTES_FIELD_NUMBER: _ClassVar[int]
+    EXTENSIONVERSION_FIELD_NUMBER: _ClassVar[int]
+    AIAUTOFILLSTATUS_FIELD_NUMBER: _ClassVar[int]
+    MLLABELS_FIELD_NUMBER: _ClassVar[int]
     pageUrl: str
     tree: str
     hash: str
@@ -703,7 +752,10 @@ class CustomerCaptureRequest(_message.Message):
     test: bool
     issueType: str
     notes: str
-    def __init__(self, pageUrl: _Optional[str] = ..., tree: _Optional[str] = ..., hash: _Optional[str] = ..., image: _Optional[str] = ..., pageLoadTime: _Optional[str] = ..., keyId: _Optional[str] = ..., test: bool = ..., issueType: _Optional[str] = ..., notes: _Optional[str] = ...) -> None: ...
+    extensionVersion: str
+    aiAutofillStatus: str
+    mlLabels: str
+    def __init__(self, pageUrl: _Optional[str] = ..., tree: _Optional[str] = ..., hash: _Optional[str] = ..., image: _Optional[str] = ..., pageLoadTime: _Optional[str] = ..., keyId: _Optional[str] = ..., test: bool = ..., issueType: _Optional[str] = ..., notes: _Optional[str] = ..., extensionVersion: _Optional[str] = ..., aiAutofillStatus: _Optional[str] = ..., mlLabels: _Optional[str] = ...) -> None: ...
 
 class CustomerCaptureResponse(_message.Message):
     __slots__ = ()
@@ -751,7 +803,7 @@ class PurchaseOptions(_message.Message):
     def __init__(self, inConsole: bool = ..., externalCheckout: bool = ...) -> None: ...
 
 class AddonPurchaseOptions(_message.Message):
-    __slots__ = ("storage", "audit", "breachwatch", "chat", "compliance", "professionalServicesSilver", "professionalServicesPlatinum", "pam", "epm", "secretsManager", "connectionManager", "remoteBrowserIsolation")
+    __slots__ = ("storage", "audit", "breachwatch", "chat", "compliance", "professionalServicesSilver", "professionalServicesPlatinum", "pam", "epm", "secretsManager", "connectionManager", "remoteBrowserIsolation", "nhiTier")
     STORAGE_FIELD_NUMBER: _ClassVar[int]
     AUDIT_FIELD_NUMBER: _ClassVar[int]
     BREACHWATCH_FIELD_NUMBER: _ClassVar[int]
@@ -764,6 +816,7 @@ class AddonPurchaseOptions(_message.Message):
     SECRETSMANAGER_FIELD_NUMBER: _ClassVar[int]
     CONNECTIONMANAGER_FIELD_NUMBER: _ClassVar[int]
     REMOTEBROWSERISOLATION_FIELD_NUMBER: _ClassVar[int]
+    NHITIER_FIELD_NUMBER: _ClassVar[int]
     storage: PurchaseOptions
     audit: PurchaseOptions
     breachwatch: PurchaseOptions
@@ -776,7 +829,8 @@ class AddonPurchaseOptions(_message.Message):
     secretsManager: PurchaseOptions
     connectionManager: PurchaseOptions
     remoteBrowserIsolation: PurchaseOptions
-    def __init__(self, storage: _Optional[_Union[PurchaseOptions, _Mapping]] = ..., audit: _Optional[_Union[PurchaseOptions, _Mapping]] = ..., breachwatch: _Optional[_Union[PurchaseOptions, _Mapping]] = ..., chat: _Optional[_Union[PurchaseOptions, _Mapping]] = ..., compliance: _Optional[_Union[PurchaseOptions, _Mapping]] = ..., professionalServicesSilver: _Optional[_Union[PurchaseOptions, _Mapping]] = ..., professionalServicesPlatinum: _Optional[_Union[PurchaseOptions, _Mapping]] = ..., pam: _Optional[_Union[PurchaseOptions, _Mapping]] = ..., epm: _Optional[_Union[PurchaseOptions, _Mapping]] = ..., secretsManager: _Optional[_Union[PurchaseOptions, _Mapping]] = ..., connectionManager: _Optional[_Union[PurchaseOptions, _Mapping]] = ..., remoteBrowserIsolation: _Optional[_Union[PurchaseOptions, _Mapping]] = ...) -> None: ...
+    nhiTier: PurchaseOptions
+    def __init__(self, storage: _Optional[_Union[PurchaseOptions, _Mapping]] = ..., audit: _Optional[_Union[PurchaseOptions, _Mapping]] = ..., breachwatch: _Optional[_Union[PurchaseOptions, _Mapping]] = ..., chat: _Optional[_Union[PurchaseOptions, _Mapping]] = ..., compliance: _Optional[_Union[PurchaseOptions, _Mapping]] = ..., professionalServicesSilver: _Optional[_Union[PurchaseOptions, _Mapping]] = ..., professionalServicesPlatinum: _Optional[_Union[PurchaseOptions, _Mapping]] = ..., pam: _Optional[_Union[PurchaseOptions, _Mapping]] = ..., epm: _Optional[_Union[PurchaseOptions, _Mapping]] = ..., secretsManager: _Optional[_Union[PurchaseOptions, _Mapping]] = ..., connectionManager: _Optional[_Union[PurchaseOptions, _Mapping]] = ..., remoteBrowserIsolation: _Optional[_Union[PurchaseOptions, _Mapping]] = ..., nhiTier: _Optional[_Union[PurchaseOptions, _Mapping]] = ...) -> None: ...
 
 class AvailablePurchaseOptions(_message.Message):
     __slots__ = ("basePlan", "users", "addons")
@@ -870,15 +924,31 @@ class SubscriptionEnterprisePricingRequest(_message.Message):
     __slots__ = ()
     def __init__(self) -> None: ...
 
+class NhiTierPlan(_message.Message):
+    __slots__ = ("tierId", "nhiCeiling", "cost", "productId", "nhiFloor")
+    TIERID_FIELD_NUMBER: _ClassVar[int]
+    NHICEILING_FIELD_NUMBER: _ClassVar[int]
+    COST_FIELD_NUMBER: _ClassVar[int]
+    PRODUCTID_FIELD_NUMBER: _ClassVar[int]
+    NHIFLOOR_FIELD_NUMBER: _ClassVar[int]
+    tierId: int
+    nhiCeiling: int
+    cost: Cost
+    productId: int
+    nhiFloor: int
+    def __init__(self, tierId: _Optional[int] = ..., nhiCeiling: _Optional[int] = ..., cost: _Optional[_Union[Cost, _Mapping]] = ..., productId: _Optional[int] = ..., nhiFloor: _Optional[int] = ...) -> None: ...
+
 class SubscriptionEnterprisePricingResponse(_message.Message):
-    __slots__ = ("basePlans", "addons", "filePlans")
+    __slots__ = ("basePlans", "addons", "filePlans", "nhiTierPlans")
     BASEPLANS_FIELD_NUMBER: _ClassVar[int]
     ADDONS_FIELD_NUMBER: _ClassVar[int]
     FILEPLANS_FIELD_NUMBER: _ClassVar[int]
+    NHITIERPLANS_FIELD_NUMBER: _ClassVar[int]
     basePlans: _containers.RepeatedCompositeFieldContainer[EnterpriseBasePlan]
     addons: _containers.RepeatedCompositeFieldContainer[Addon]
     filePlans: _containers.RepeatedCompositeFieldContainer[FilePlan]
-    def __init__(self, basePlans: _Optional[_Iterable[_Union[EnterpriseBasePlan, _Mapping]]] = ..., addons: _Optional[_Iterable[_Union[Addon, _Mapping]]] = ..., filePlans: _Optional[_Iterable[_Union[FilePlan, _Mapping]]] = ...) -> None: ...
+    nhiTierPlans: _containers.RepeatedCompositeFieldContainer[NhiTierPlan]
+    def __init__(self, basePlans: _Optional[_Iterable[_Union[EnterpriseBasePlan, _Mapping]]] = ..., addons: _Optional[_Iterable[_Union[Addon, _Mapping]]] = ..., filePlans: _Optional[_Iterable[_Union[FilePlan, _Mapping]]] = ..., nhiTierPlans: _Optional[_Iterable[_Union[NhiTierPlan, _Mapping]]] = ...) -> None: ...
 
 class SingularDeviceIdentifier(_message.Message):
     __slots__ = ("id", "idType")

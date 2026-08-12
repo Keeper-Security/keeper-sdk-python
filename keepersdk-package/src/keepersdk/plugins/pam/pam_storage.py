@@ -1,6 +1,6 @@
 import abc
 import sqlite3
-from typing import Callable
+from typing import Any, Callable, Dict, Optional
 
 import attrs
 
@@ -56,6 +56,39 @@ def pam_record_rotation_from_proto(rr: SyncDown_pb2.RecordRotation) -> PamRecord
         resource_uid=utils.base64_url_encode(rr.resourceUid) if rr.resourceUid else '',
         last_rotation=int(rr.lastRotation),
         last_rotation_status=int(rr.lastRotationStatus),
+    )
+
+
+def pam_record_rotation_from_nsf_dict(data: Dict[str, Any]) -> Optional[PamRecordRotation]:
+    """Build a rotation row from NSF ``recordRotationData`` JSON (MessageToDict shape)."""
+    if not isinstance(data, dict):
+        return None
+    record_uid = data.get('recordUid') or data.get('record_uid') or ''
+    if not record_uid:
+        return None
+    revision = data.get('revision', 0)
+    try:
+        revision = int(revision)
+    except (TypeError, ValueError):
+        revision = 0
+    pwd = data.get('pwdComplexity') or data.get('pwd_complexity') or b''
+    if isinstance(pwd, str):
+        try:
+            pwd = utils.base64_url_decode(pwd)
+        except Exception:
+            pwd = b''
+    return PamRecordRotation(
+        record_uid=str(record_uid),
+        revision=revision,
+        configuration_uid=str(
+            data.get('configurationUid') or data.get('configuration_uid') or ''),
+        schedule=str(data.get('schedule') or ''),
+        pwd_complexity=pwd if isinstance(pwd, (bytes, bytearray)) else b'',
+        disabled=bool(data.get('disabled', False)),
+        resource_uid=str(data.get('resourceUid') or data.get('resource_uid') or ''),
+        last_rotation=int(data.get('lastRotation') or data.get('last_rotation') or 0),
+        last_rotation_status=int(
+            data.get('lastRotationStatus') or data.get('last_rotation_status') or 0),
     )
 
 

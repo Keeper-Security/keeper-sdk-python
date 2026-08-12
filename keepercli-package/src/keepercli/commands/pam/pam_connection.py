@@ -3,13 +3,22 @@ import argparse
 
 from keepersdk import utils
 from keepersdk.helpers.keeper_dag import dag_utils
+from keepersdk.helpers.keeper_dag.constants import (
+    PAM_CONFIGURATIONS,
+    PAM_DATABASE,
+    PAM_DIRECTORY,
+    PAM_MACHINE,
+    PAM_RESOURCES,
+    PAM_USER,
+)
 from keepersdk.helpers.tunnel.tunnel_graph import TunnelDAG
 from keepersdk.helpers.tunnel.tunnel_utils import get_keeper_tokens, get_config_uid
-from keepersdk.vault import record_management, vault_record
+from keepersdk.vault import vault_record
 
 from .. import base
 from ... import api
 from ...params import KeeperParams
+from . import pam_utils
 
 
 logger = api.get_logger()
@@ -17,6 +26,15 @@ logger = api.get_logger()
 
 protocols = ['', 'http', 'kubernetes', 'mysql', 'postgresql', 'rdp', 'sql-server', 'ssh', 'telnet', 'vnc']
 choices = ['on', 'off', 'default']
+
+# Resource + RBI + PAM configs (reuse keeper_dag constants where they exist).
+_PAM_CONNECTION_RECORD_TYPES = (*PAM_RESOURCES, 'pamRemoteBrowser', *PAM_CONFIGURATIONS)
+_PAM_SEED_RECORD_TYPES = (PAM_DATABASE, PAM_DIRECTORY, PAM_MACHINE, 'pamRemoteBrowser')
+_PAM_RESOURCE_USER_LINK_TYPES = (PAM_DATABASE, PAM_DIRECTORY, PAM_MACHINE)
+
+
+def _is_pam_config_record(record: vault_record.TypedRecord) -> bool:
+    return record.record_type in PAM_CONFIGURATIONS
 
 
 class PAMConnectionEditCommand(base.ArgparseCommand):
@@ -75,29 +93,36 @@ class PAMConnectionEditCommand(base.ArgparseCommand):
         record_name = kwargs.get('record')
         if not record_name:
             raise base.CommandError(f'Record parameter is required.')
-        record = vault.vault_data.load_record(record_name)
+        record = pam_utils.load_typed_record(context, record_name)
         if not record:
             raise base.CommandError(f'Record \"{record_name}\" not found.')
-        if not isinstance(record, vault_record.TypedRecord):
-            raise base.CommandError(f'Record \"{record_name}\" can not be edited.')
-
-        config_name = kwargs.get('config', None)
-        cfg_rec = vault.vault_data.load_record(config_name)
-        if not cfg_rec and record.version == 6:
-            cfg_rec = record
-        config_uid = cfg_rec.record_uid if cfg_rec else None
 
         record_uid = record.record_uid
         record_type = record.record_type
-        if record_type not in ("pamMachine pamDatabase pamDirectory pamNetworkConfiguration pamAwsConfiguration "
-                               "pamRemoteBrowser pamAzureConfiguration").split():
+        if record_type not in _PAM_CONNECTION_RECORD_TYPES:
             raise base.CommandError(f"This record's type is not supported for connections. "
                                    f"Connections are only supported on pamMachine, pamDatabase, pamDirectory, "
                                    f"pamRemoteBrowser, pamNetworkConfiguration pamAwsConfiguration, and "
                                    f"pamAzureConfiguration records")
 
         encrypted_session_token, encrypted_transmission_key, transmission_key = get_keeper_tokens(vault)
-        if record_type in "pamNetworkConfiguration pamAwsConfiguration pamAzureConfiguration".split():
+
+        config_name = kwargs.get('config', None)
+        cfg_rec = pam_utils.load_typed_record(context, config_name) if config_name else None
+        if not cfg_rec and _is_pam_config_record(record):
+            cfg_rec = record
+
+        # For resource records, fall back to the PAM config already linked in the DAG.
+        existing_config_uid = None
+        if not _is_pam_config_record(record):
+            existing_config_uid = get_config_uid(
+                vault, encrypted_session_token, encrypted_transmission_key, record_uid)
+            existing_config_uid = str(existing_config_uid) if existing_config_uid else ''
+            if not cfg_rec and existing_config_uid:
+                cfg_rec = pam_utils.load_typed_record(context, existing_config_uid)
+        config_uid = cfg_rec.record_uid if cfg_rec else None
+
+        if record_type in PAM_CONFIGURATIONS:
             tdag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, record_uid,
                              is_config=True, transmission_key=transmission_key)
             tdag.edit_tunneling_config(connections=_connections, session_recording=_recording, typescript_recording=_typescript_recording)
@@ -111,7 +136,7 @@ class PAMConnectionEditCommand(base.ArgparseCommand):
                 base64_seed = utils.base64_url_encode(seed)
                 record_seed = vault_record.TypedField.create_field('trafficEncryptionSeed', base64_seed, required=False)
 
-                record_types_with_seed = ("pamDatabase", "pamDirectory", "pamMachine", "pamRemoteBrowser")
+                record_types_with_seed = _PAM_SEED_RECORD_TYPES
                 if traffic_encryption_key:
                     traffic_encryption_key.value = [base64_seed]
                 elif record.record_type in record_types_with_seed:
@@ -183,8 +208,7 @@ class PAMConnectionEditCommand(base.ArgparseCommand):
                     logger.debug(f'Unexpected value for --key-events {key_events} (ignored)')
 
             if dirty:
-                record_management.update_record(vault, record)
-                vault.sync_down()
+                pam_utils.save_typed_record(vault, record)
 
                 traffic_encryption_key = record.get_typed_field('trafficEncryptionSeed')
                 if not traffic_encryption_key:
@@ -192,23 +216,33 @@ class PAMConnectionEditCommand(base.ArgparseCommand):
                                        f"Please make sure you have edit rights to record {record_uid}")
             dirty = False
 
-            existing_config_uid = get_config_uid(vault, encrypted_session_token, encrypted_transmission_key, record_uid)
+            if not config_uid:
+                raise base.CommandError(
+                    "No PAM Configuration UID set. "
+                    "This must be set or supplied for connections to work. "
+                    "Pass --config [ConfigUID] (see `pam config list`)."
+                )
 
             tdag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, config_uid,
-                             transmission_key=transmission_key)
-            old_dag = TunnelDAG(vault, encrypted_session_token, encrypted_transmission_key, existing_config_uid,
-                                transmission_key=transmission_key)
+                             is_config=True, transmission_key=transmission_key)
 
-            if config_uid and existing_config_uid != config_uid:
+            if existing_config_uid and existing_config_uid != config_uid:
+                old_dag = TunnelDAG(
+                    vault, encrypted_session_token, encrypted_transmission_key, existing_config_uid,
+                    is_config=True, transmission_key=transmission_key,
+                )
                 old_dag.remove_from_dag(record_uid)
                 tdag.link_resource_to_config(record_uid)
+            elif not tdag.is_tunneling_config_set_up(record_uid):
+                tdag.link_resource_to_config(record_uid)
 
-            if tdag is None or not tdag.linking_dag.has_graph:
-                raise base.CommandError(f"No PAM Configuration UID set. "
-                                   f"This must be set or supplied for connections to work. This can be done by adding "
-                                   f"' --config [ConfigUID] "
-                                   f" The ConfigUID can be found by running "
-                                   f"'pam config list'")
+            if not tdag.linking_dag.has_graph:
+                raise base.CommandError(
+                    f"No PAM Configuration DAG found for {config_uid}. "
+                    "Initialize tunnel settings on the config first, e.g.\n"
+                    f"  pam connection edit {config_uid} --connections on "
+                    "--connections-recording on"
+                )
 
             if not tdag.check_tunneling_enabled_config(enable_connections=_connections,
                                                        enable_session_recording=_recording,
@@ -255,20 +289,21 @@ class PAMConnectionEditCommand(base.ArgparseCommand):
                                           typescript_recording=kwargs.get('typescriptrecording', None))
 
             admin_name = kwargs.get('admin')
-            adm_rec = vault.vault_data.load_record(admin_name)
-            admin_uid = adm_rec.record_uid if adm_rec else None
-            if admin_uid and record_type in ("pamDatabase", "pamDirectory", "pamMachine"):
-                tdag.link_user_to_resource(admin_uid, record_uid, is_admin=True, belongs_to=True)
+            if admin_name:
+                adm_rec = pam_utils.load_typed_record(context, admin_name)
+                admin_uid = adm_rec.record_uid if adm_rec else None
+                if admin_uid and record_type in _PAM_RESOURCE_USER_LINK_TYPES:
+                    tdag.link_user_to_resource(admin_uid, record_uid, is_admin=True, belongs_to=True)
 
             launch_user_name = kwargs.get('launch_user')
             if launch_user_name:
-                launch_rec = vault.vault_data.load_record(launch_user_name)
+                launch_rec = pam_utils.load_typed_record(context, launch_user_name)
                 if not launch_rec:
                     raise base.CommandError(f'Launch user record "{launch_user_name}" not found.')
-                if not isinstance(launch_rec, vault_record.TypedRecord) or launch_rec.record_type != 'pamUser':
+                if launch_rec.record_type != PAM_USER:
                     raise base.CommandError(f'Launch user record must be a pamUser record type.')
                 launch_uid = launch_rec.record_uid
-                if record_type in ("pamDatabase", "pamDirectory", "pamMachine"):
+                if record_type in _PAM_RESOURCE_USER_LINK_TYPES:
                     tdag.clear_launch_credential_for_resource(record_uid, exclude_user_uid=launch_uid)
                     tdag.link_user_to_resource(launch_uid, record_uid, is_admin=True, belongs_to=True)
                     tdag.upgrade_resource_meta_to_v1(record_uid)

@@ -531,7 +531,8 @@ class SecretsManagerShareCommand(base.ArgparseCommand):
         )
         parser.add_argument(
             '--secret', '-s', type=str, required=False,
-            help='Record UID(s) - space separated (e.g., "uid1 uid2 uid3")'
+            help='Record/folder UID(s) or NSF folder/record name — space separated '
+                 '(classic records, classic shared folders, NSF folders, NSF records)'
         )
 
     def execute(self, context: KeeperParams, **kwargs) -> None:

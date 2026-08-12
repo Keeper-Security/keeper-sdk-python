@@ -514,15 +514,25 @@ class RecordEditMixin(typed_field_utils.TypedFieldMixin):
                     if len(action_params) > 0:
                         value = self.validate_json_value(record_field.type, action_params[0])
                 else:
-                    rf = record_types.RecordFields[record_field.type]
-                    ft = record_types.FieldTypes.get(rf.type)
+                    rf = record_types.RecordFields.get(record_field.type)
+                    ft = record_types.FieldTypes.get(rf.type) if rf else None
                     if ft is None:
-                        self.on_warning(f'Unsupported field type: {rf.type}')
+                        self.on_warning(f'Unsupported field type: {record_field.type}')
                     else:
                         if isinstance(ft.value, str):
                             value = parsed_field.value
                             if ft.name == 'multiline':
                                 value = self.validate_notes(value)
+                        # bool before int: isinstance(True, int) is True in Python
+                        elif isinstance(ft.value, bool):
+                            lv = parsed_field.value.lower()
+                            if lv in ('1', 'y', 'yes', 't', 'true'):
+                                value = True
+                            elif lv in ('0', 'n', 'no', 'f', 'false'):
+                                value = False
+                            else:
+                                self.on_warning(
+                                    f'Incorrect boolean value \"{parsed_field.value}\": [t]rue or [f]alse')
                         elif isinstance(ft.value, int):
                             if parsed_field.value.isdigit():
                                 value = int(parsed_field.value)
@@ -531,17 +541,11 @@ class RecordEditMixin(typed_field_utils.TypedFieldMixin):
                             else:
                                 if len(parsed_field.value) <= 10:
                                     dt = datetime.datetime.strptime(parsed_field.value, '%Y-%m-%d')
+                                    dt += datetime.timedelta(hours=12)
                                 else:
-                                    dt = datetime.datetime.strptime(parsed_field.value, '%Y-%m-%dT%H:%M:%SZ')
+                                    dt = datetime.datetime.strptime(
+                                        parsed_field.value, '%Y-%m-%dT%H:%M:%SZ')
                                 value = int(dt.timestamp() * 1000)
-                        elif isinstance(ft.value, bool):
-                            lv = parsed_field.value.lower()
-                            if lv in ('1', 'y', 'yes', 't', 'true'):
-                                value = True
-                            elif lv in ('0', 'n', 'no', 'f', 'false'):
-                                value = False
-                            else:
-                                self.on_warning(f'Incorrect boolean value \"{parsed_field.value}\": [t]rue or [f]alse')
                         elif isinstance(ft.value, dict):
                             if ft.name == 'name':
                                 value = RecordEditMixin.import_name_field(parsed_field.value)
@@ -568,7 +572,7 @@ class RecordEditMixin(typed_field_utils.TypedFieldMixin):
                                 value = RecordEditMixin.import_schedule_field(parsed_field.value)
                             else:
                                 self.on_warning(f'Unsupported field type: {record_field.type}')
-                if value:
+                if value is not None:
                     if isinstance(value, list):
                         record_field.value.clear()
                         record_field.value.extend(value)
@@ -578,6 +582,9 @@ class RecordEditMixin(typed_field_utils.TypedFieldMixin):
                         else:
                             if isinstance(value, dict) and isinstance(record_field.value[0], dict):
                                 record_field.value[0].update(value)
+                                none_keys = [k for k, v in record_field.value[0].items() if v is None]
+                                for k in none_keys:
+                                    del record_field.value[0][k]
                             else:
                                 record_field.value[0] = value
             else:
