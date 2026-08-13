@@ -25,7 +25,7 @@ from ..proto import APIRequest_pb2, router_pb2, push_pb2
 TRQ = TypeVar('TRQ', bound=Message)
 TRS = TypeVar('TRS', bound=Message)
 
-DEFAULT_TIMEOUT = (15, 120)
+DEFAULT_TIMEOUT = (15, 300)
 MAX_THROTTLE_RETRIES = 3
 MAX_KEY_RETRIES = 3
 MAX_THROTTLE_WAIT_SECONDS = 300
