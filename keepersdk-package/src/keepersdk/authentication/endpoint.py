@@ -3,9 +3,12 @@ import json
 import locale
 import logging
 import os
+import re
 import time
 import warnings
-from typing import Optional, Dict, Any, Type, TypeVar
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
+from typing import Optional, Dict, Any, Type, TypeVar, Mapping, Tuple
 from urllib.parse import urlunparse, urlparse
 
 import requests
@@ -21,6 +24,90 @@ from ..proto import APIRequest_pb2, router_pb2, push_pb2
 
 TRQ = TypeVar('TRQ', bound=Message)
 TRS = TypeVar('TRS', bound=Message)
+
+DEFAULT_TIMEOUT = (15, 300)
+MAX_THROTTLE_RETRIES = 3
+MAX_KEY_RETRIES = 3
+MAX_THROTTLE_WAIT_SECONDS = 300
+DEFAULT_THROTTLE_WAIT_SECONDS = 60
+
+
+def _parse_retry_after(value: str) -> Optional[int]:
+    """Parse a ``Retry-After`` value: delta-seconds or an HTTP date."""
+    value = (value or '').strip()
+    if not value:
+        return None
+    try:
+        return max(int(value), 0)
+    except ValueError:
+        pass
+    try:
+        retry_at = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return None
+    if retry_at is None:
+        return None
+    if retry_at.tzinfo is None:
+        retry_at = retry_at.replace(tzinfo=timezone.utc)
+    return max(int((retry_at - datetime.now(timezone.utc)).total_seconds()), 0)
+
+
+def parse_throttle_wait_seconds(message: str = '',
+                                headers: Optional[Mapping[str, str]] = None) -> int:
+    """Resolve how long to wait after a throttle / rate-limit response.
+
+    Prefers the ``Retry-After`` header when present, otherwise parses a
+    human-readable duration from the server message. Result is capped at
+    ``MAX_THROTTLE_WAIT_SECONDS``.
+    """
+    if headers:
+        retry_after = _parse_retry_after(headers.get('Retry-After') or '')
+        if retry_after is not None:
+            return min(retry_after, MAX_THROTTLE_WAIT_SECONDS)
+
+    wait_seconds = DEFAULT_THROTTLE_WAIT_SECONDS
+    wait_match = re.search(r'(\d+)\s*(second|minute)', message or '', re.IGNORECASE)
+    if wait_match:
+        wait_val = int(wait_match.group(1))
+        if 'minute' in wait_match.group(2).lower():
+            wait_seconds = wait_val * 60
+        else:
+            wait_seconds = wait_val
+    return min(wait_seconds, MAX_THROTTLE_WAIT_SECONDS)
+
+
+def throttle_backoff_seconds(throttle_retries: int, wait_seconds: int) -> int:
+    """Exponential backoff floored at the server-suggested wait."""
+    return max(wait_seconds, 30 * (2 ** (throttle_retries - 1)))
+
+
+def parse_error_response(response: requests.Response) -> Tuple[Optional[Dict[str, Any]], str, str]:
+    """Extract ``(body, error_code, message)`` from a failed Keeper response.
+
+    The body is ``None`` unless the server returned parsable JSON, so callers can
+    tell a structured API failure apart from a gateway/proxy error page.
+    """
+    content_type = response.headers.get('Content-Type') or ''
+    if not content_type.startswith('application/json'):
+        return None, '', ''
+    try:
+        body = response.json()
+    except ValueError:
+        return None, '', ''
+    if not isinstance(body, dict):
+        return None, '', ''
+
+    error_code = body.get('error') or ''
+    message = body.get('message') or ''
+    additional_info = body.get('additional_info')
+    if additional_info:
+        message += f'({additional_info})'
+    return body, error_code, message
+
+
+def is_throttle_response(status_code: int, error_code: str) -> bool:
+    """Keeper signals throttling as 403 + ``error=throttled``; 429 is the HTTP standard."""
+    return status_code == 429 or error_code == 'throttled'
 
 
 _proxies: Optional[Dict] = None
@@ -150,29 +237,44 @@ class KeeperEndpoint(object):
         logger.debug('>>> [ROUTER] POST Request: [%s]', url)
         if payload is not None:
             payload = crypto.encrypt_aes_v2(payload, transmission_key)
-        response = requests.post(url, headers=headers, data=payload, verify=get_certificate_check())
-        logger.debug('<<<  [ROUTER] Response Code: [%d]', response.status_code)
 
-        if response.status_code == 200:
-            rs_body = response.content
-            if rs_body:
-                router_response = router_pb2.RouterResponse()
-                router_response.ParseFromString(rs_body)
-                if router_response.responseCode == router_pb2.RouterResponseCode.RRC_OK:
-                    if router_response.encryptedPayload:
-                        return crypto.decrypt_aes_v2(router_response.encryptedPayload, transmission_key)
-                else:
-                    if router_response.responseCode == router_pb2.RouterResponseCode.RRC_BAD_REQUEST:
-                        code = 'bad_request'
-                    elif router_response.responseCode == router_pb2.RouterResponseCode.RRC_NOT_ALLOWED:
-                        code = 'not_allowed'
+        throttle_retries = 0
+        while True:
+            response = requests.post(url, headers=headers, data=payload, verify=get_certificate_check(),
+                                     timeout=DEFAULT_TIMEOUT)
+            logger.debug('<<<  [ROUTER] Response Code: [%d]', response.status_code)
+
+            if response.status_code == 200:
+                rs_body = response.content
+                if rs_body:
+                    router_response = router_pb2.RouterResponse()
+                    router_response.ParseFromString(rs_body)
+                    if router_response.responseCode == router_pb2.RouterResponseCode.RRC_OK:
+                        if router_response.encryptedPayload:
+                            return crypto.decrypt_aes_v2(router_response.encryptedPayload, transmission_key)
                     else:
-                        code = 'router_error'
-                    raise errors.KeeperApiError(code, router_response.errorMessage)
-            return None
-        else:
-            message = response.reason
-            raise errors.KeeperApiError('router_error', f'{message}: {response.status_code}')
+                        if router_response.responseCode == router_pb2.RouterResponseCode.RRC_BAD_REQUEST:
+                            code = 'bad_request'
+                        elif router_response.responseCode == router_pb2.RouterResponseCode.RRC_NOT_ALLOWED:
+                            code = 'not_allowed'
+                        else:
+                            code = 'router_error'
+                        raise errors.KeeperApiError(code, router_response.errorMessage)
+                return None
+
+            _, error_code, error_message = parse_error_response(response)
+            if is_throttle_response(response.status_code, error_code):
+                throttle_retries = self._handle_throttle_and_retry(
+                    status_code=response.status_code,
+                    error_code=error_code,
+                    error_message=error_message or response.reason or '',
+                    headers=response.headers,
+                    throttle_retries=throttle_retries)
+                continue
+
+            raise errors.KeeperApiError(
+                error_code or 'router_error',
+                error_message or f'{response.reason}: {response.status_code}')
 
     def execute_router_bi(self, encryption_key: bytes, endpoint: str, request: Optional[TRQ], *,
                        response_type: Type[TRS]) -> Optional[TRS]:
@@ -196,21 +298,62 @@ class KeeperEndpoint(object):
             payload = crypto.encrypt_aes_v2(request.SerializeToString(), encryption_key)
             rq.payload = payload
 
-        response = requests.post(url, data=rq.SerializeToString())
-        if response.status_code == 200:
-            rs_body = response.content
-            payload = crypto.decrypt_aes_v2(rs_body, encryption_key)
-            router_response = response_type()
-            router_response.ParseFromString(payload)
-            if logger.level <= logging.DEBUG:
-                js = MessageToJson(router_response) if router_response else ''
-                logger.debug('>>> [RS] \"%s\": %s', endpoint, js)
+        throttle_retries = 0
+        while True:
+            response = requests.post(url, data=rq.SerializeToString(), timeout=DEFAULT_TIMEOUT)
+            if response.status_code == 200:
+                rs_body = response.content
+                payload = crypto.decrypt_aes_v2(rs_body, encryption_key)
+                router_response = response_type()
+                router_response.ParseFromString(payload)
+                if logger.level <= logging.DEBUG:
+                    js = MessageToJson(router_response) if router_response else ''
+                    logger.debug('>>> [RS] \"%s\": %s', endpoint, js)
 
-            return router_response
-        else:
-            message = response.reason
-            raise errors.KeeperApiError('router_error', f'{message}: {response.status_code}')
+                return router_response
 
+            _, error_code, error_message = parse_error_response(response)
+            if is_throttle_response(response.status_code, error_code):
+                throttle_retries = self._handle_throttle_and_retry(
+                    status_code=response.status_code,
+                    error_code=error_code,
+                    error_message=error_message or response.reason or '',
+                    headers=response.headers,
+                    throttle_retries=throttle_retries)
+                continue
+
+            raise errors.KeeperApiError(
+                error_code or 'router_error',
+                error_message or f'{response.reason}: {response.status_code}')
+
+
+    def _handle_throttle_and_retry(self, *,
+                                   status_code: int,
+                                   error_code: str,
+                                   error_message: str,
+                                   headers: Mapping[str, str],
+                                   throttle_retries: int) -> int:
+        """Sleep with backoff for a throttle / rate-limit response.
+
+        Returns the updated retry count. Raises ``KeeperApiError`` when
+        ``fail_on_throttle`` is set or ``MAX_THROTTLE_RETRIES`` is exhausted.
+        """
+        logger = utils.get_logger()
+        error_code = error_code or 'throttled'
+        error_message = error_message or 'Request was throttled'
+        if self.fail_on_throttle:
+            raise errors.KeeperApiError(error_code, error_message)
+
+        throttle_retries += 1
+        if throttle_retries > MAX_THROTTLE_RETRIES:
+            raise errors.KeeperApiError(error_code, error_message)
+        wait_seconds = parse_throttle_wait_seconds(error_message, headers)
+        backoff = throttle_backoff_seconds(throttle_retries, wait_seconds)
+        logger.warning(
+            'Throttled (HTTP %d, attempt %d/%d), retrying in %d seconds: %s',
+            status_code, throttle_retries, MAX_THROTTLE_RETRIES, backoff, error_message)
+        time.sleep(backoff)
+        return throttle_retries
 
     def _communicate_keeper(self, endpoint: str,
                             payload: Optional[bytes],
@@ -219,10 +362,9 @@ class KeeperEndpoint(object):
         logger = utils.get_logger()
         transmission_key = utils.generate_aes_key()
         key_id = self.server_key_id
-        attempt = 0
-        while attempt < 3:
-            attempt += 1
-
+        throttle_retries = 0
+        key_retries = 0
+        while True:
             api_request = prepare_api_request(key_id, transmission_key, payload,
                                               session_token=session_token,
                                               keeper_locale=self.locale,
@@ -240,10 +382,9 @@ class KeeperEndpoint(object):
                 'User-Agent': 'KeeperSDK.Python/' + self.client_version
             }
             rs = requests.post(url, data=api_request.SerializeToString(), headers=headers, proxies=get_proxies(),
-                               verify=get_certificate_check())
+                               verify=get_certificate_check(), timeout=DEFAULT_TIMEOUT)
             logger.debug('<<< Response Code: [%d]', rs.status_code)
 
-            content_type = rs.headers.get('Content-Type') or ''
             if rs.status_code == 200:
                 if key_id != self._server_key_id:
                     self._server_key_id = key_id
@@ -255,31 +396,39 @@ class KeeperEndpoint(object):
 
                 rs_body = rs.content
                 return crypto.decrypt_aes_v2(rs_body, transmission_key) if rs_body else None
-            elif content_type.startswith('application/json'):
-                error_rs = rs.json()
-                if 'error' in error_rs:
-                    error_code = error_rs['error']
-                    error_message = error_rs.get('message') or ''
-                    additional_info = error_rs.get('additional_info')
-                    if additional_info:
-                        error_message += f'({additional_info})'
-                    if error_code == 'key':
-                        if 'key_id' in error_rs:
-                            key_id = error_rs['key_id']
-                            continue
-                    elif error_code == 'region_redirect':
-                        raise errors.RegionRedirectError(error_rs['region_host'], error_message)
-                    elif error_code == 'device_not_registered':
-                        raise errors.InvalidDeviceTokenError(error_message)
-                    elif error_code == 'throttled' and not self.fail_on_throttle:
-                        logger.info('Throttled. sleeping for 10 seconds')
-                        time.sleep(10)
-                        continue
-                    raise errors.KeeperApiError(error_code, error_message)
 
+            error_rs, error_code, error_message = parse_error_response(rs)
+            if error_rs is not None:
+                logger.debug('<<< Response Error: [%s]', error_rs)
+                if error_code == 'key' and 'key_id' in error_rs:
+                    key_retries += 1
+                    if key_retries > MAX_KEY_RETRIES:
+                        raise errors.KeeperApiError(error_code, error_message or 'Invalid server public key')
+                    key_id = error_rs['key_id']
+                    continue
+                if error_code == 'region_redirect':
+                    raise errors.RegionRedirectError(error_rs.get('region_host') or '', error_message)
+                if error_code == 'device_not_registered':
+                    raise errors.InvalidDeviceTokenError(error_message)
+
+            if is_throttle_response(rs.status_code, error_code):
+                throttle_retries = self._handle_throttle_and_retry(
+                    status_code=rs.status_code,
+                    error_code=error_code,
+                    error_message=error_message or rs.reason or '',
+                    headers=rs.headers,
+                    throttle_retries=throttle_retries)
+                continue
+
+            if error_code:
+                raise errors.KeeperApiError(error_code, error_message)
+
+            if logger.level <= logging.DEBUG:
+                if rs.text:
+                    logger.debug('<<< Response Content: [%s]', rs.text)
+                else:
+                    logger.debug('<<< HTTP Status: [%s]  Reason: [%s]', rs.status_code, rs.reason)
             raise errors.KeeperApiError('http_error', f'{rs.reason}: {rs.status_code}')
-
-        raise errors.KeeperError('Failed to execute Keeper API request')
 
     def execute_rest(self, rest_endpoint: str,
                      request: Optional[TRQ],
