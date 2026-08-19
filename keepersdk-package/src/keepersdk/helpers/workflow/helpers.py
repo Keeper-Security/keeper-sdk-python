@@ -13,11 +13,15 @@ from __future__ import annotations
 
 import os
 import re
+import time
 from datetime import datetime
 from typing import Any, Iterable, List, Optional, Sequence, Tuple
 
+import requests
+
 from ... import crypto, utils
 from ...authentication import keeper_auth
+from ...enterprise import enterprise_types
 from ...errors import KeeperApiError, KeeperError
 from ...proto import GraphSync_pb2, workflow_pb2
 from ...vault import nsf_management, vault_online, vault_record
@@ -28,6 +32,16 @@ WORKFLOW_SETTINGS_ENFORCEMENT_KEY = 'allow_configure_workflow_settings'
 WORKFLOW_RECORD_TYPES = {
     'pamCloudResource', 'pamMachine', 'pamDirectory', 'pamDatabase', 'pamRemoteBrowser',
 }
+
+# Operational failures that are expected to surface as WorkflowError. Anything else
+# (AttributeError, TypeError, KeyError, etc.) indicates a real bug and is left to
+# propagate with its original type/traceback instead of being disguised as a router failure.
+ROUTER_TRANSPORT_ERRORS: Tuple[type, ...] = (KeeperApiError, requests.exceptions.RequestException)
+
+# Debounce window for re-fetching enforcements. Both the CLI's admin-verb gate and the SDK's
+# ensure_can_configure_workflow_settings() call refresh(refresh=True); without this a single
+# admin command could trigger two full account-summary round trips.
+_ENFORCEMENT_REFRESH_TTL_SEC = 2.0
 
 _PROTO_DUMP_RE = re.compile(
     r'\s*(?:type|value|name|stage|conditions|flowUid|resource)\s*:\s*(?:"[^"]*"|\S+)\s*',
@@ -65,16 +79,28 @@ def sanitize_router_error(error: Exception) -> str:
     return msg or 'Unknown error'
 
 
-def refresh_enforcements(vault: vault_online.VaultOnline) -> None:
-    """Reload account summary so role enforcements take effect without re-login."""
+def refresh_enforcements(vault: vault_online.VaultOnline, *, force: bool = False) -> None:
+    """Reload account summary so role enforcements take effect without re-login.
+
+    Debounced with a short TTL: callers such as the CLI's admin-verb gate and
+    ensure_can_configure_workflow_settings() both request a refresh for the same
+    command, and without debouncing that means two account-summary round trips
+    per admin command. Pass force=True to bypass the debounce.
+    """
+    ctx = vault.keeper_auth.auth_context
+    now = time.monotonic()
+    last_refresh = getattr(ctx, '_workflow_enforcement_refreshed_at', None)
+    if not force and last_refresh is not None and (now - last_refresh) < _ENFORCEMENT_REFRESH_TTL_SEC:
+        return
     from google.protobuf.json_format import MessageToDict
     try:
         rs = keeper_auth.load_account_summary(vault.keeper_auth)
         enf = MessageToDict(rs.Enforcements)
         bools = {x['key']: x.get('value', False) for x in enf.get('booleans', []) if 'key' in x}
-        vault.keeper_auth.auth_context.enforcements.update(bools)
+        ctx.enforcements.update(bools)
         if WORKFLOW_SETTINGS_ENFORCEMENT_KEY not in bools:
-            vault.keeper_auth.auth_context.enforcements[WORKFLOW_SETTINGS_ENFORCEMENT_KEY] = False
+            ctx.enforcements[WORKFLOW_SETTINGS_ENFORCEMENT_KEY] = False
+        ctx._workflow_enforcement_refreshed_at = now
     except Exception as e:
         logger.error('Failed to refresh enforcements: %s', e, exc_info=True)
 
@@ -264,24 +290,69 @@ class RecordResolver:
         return rec_uid or 'Unknown'
 
     @staticmethod
-    def resolve_user(vault: vault_online.VaultOnline, user_id: int) -> str:
-        for u in vault.vault_data.user_emails():
-            if u.account_uid and u.account_uid == str(user_id):
-                return u.username or f'User ID {user_id}'
+    def resolve_user(
+            vault: vault_online.VaultOnline,
+            user_id: int,
+            enterprise_data: Optional[enterprise_types.IEnterpriseData] = None) -> str:
+        """Resolve an enterprise numeric user ID (workflow proto `userId`) to an email.
+
+        `vault.vault_data` only carries `account_uid` (a base64 UID), which is a different
+        identifier than the enterprise numeric user ID, so it cannot be used for this lookup.
+        Resolving requires enterprise directory access; pass `enterprise_data` (e.g. from
+        `EnterpriseLoader.enterprise_data`) when available, otherwise a placeholder is returned.
+        """
+        if enterprise_data is not None:
+            try:
+                user = enterprise_data.users().get_entity(user_id)
+                if user and user.username:
+                    return user.username
+            except Exception as e:
+                logger.debug('Failed to resolve enterprise user %s: %s', user_id, e)
         return f'User ID {user_id}'
 
     @staticmethod
-    def resolve_team_name(vault: vault_online.VaultOnline, team_uid: str) -> str:
+    def resolve_team_name(
+            vault: vault_online.VaultOnline,
+            team_uid: str,
+            enterprise_data: Optional[enterprise_types.IEnterpriseData] = None) -> str:
         team = vault.vault_data.get_team(team_uid)
-        return team.name if team else ''
+        if team:
+            return team.name
+        if enterprise_data is not None:
+            try:
+                ent_team = enterprise_data.teams().get_entity(team_uid)
+                if ent_team:
+                    return ent_team.name
+            except Exception as e:
+                logger.debug('Failed to resolve enterprise team %s: %s', team_uid, e)
+        return ''
 
     @staticmethod
-    def validate_team(vault: vault_online.VaultOnline, team_input: str) -> str:
+    def validate_team(
+            vault: vault_online.VaultOnline,
+            team_input: str,
+            enterprise_data: Optional[enterprise_types.IEnterpriseData] = None) -> str:
+        """Resolve a team UID or name to a team UID.
+
+        Checks the current user's team-membership cache first (cheap, always available), then
+        falls back to the full enterprise team directory when `enterprise_data` is supplied —
+        needed because a workflow admin managing approvers may add a team they don't personally
+        belong to.
+        """
         if vault.vault_data.get_team(team_input):
             return team_input
         for team in vault.vault_data.teams():
             if team.name.casefold() == team_input.casefold():
                 return team.team_uid
+        if enterprise_data is not None:
+            try:
+                if enterprise_data.teams().get_entity(team_input):
+                    return team_input
+                for ent_team in enterprise_data.teams().get_all_entities():
+                    if ent_team.name.casefold() == team_input.casefold():
+                        return ent_team.team_uid
+            except Exception as e:
+                logger.debug('Enterprise team lookup failed for "%s": %s', team_input, e)
         raise WorkflowError(f'Team "{team_input}" not found. Use a valid team UID or team name.')
 
 
@@ -519,7 +590,8 @@ def add_approvers_to_workflow(
         users: Optional[Iterable[str]] = None,
         teams: Optional[Iterable[str]] = None,
         is_escalation: bool = False,
-        escalation_after_ms: int = 0) -> None:
+        escalation_after_ms: int = 0,
+        enterprise_data: Optional[enterprise_types.IEnterpriseData] = None) -> None:
     record_uid_bytes = utils.base64_url_decode(record_uid)
     config = workflow_pb2.WorkflowConfig()
     config.parameters.resource.CopyFrom(ProtobufRefBuilder.record_ref(record_uid_bytes, record_name))
@@ -531,7 +603,7 @@ def add_approvers_to_workflow(
             approver.escalationAfterMs = escalation_after_ms
         config.approvers.append(approver)
     for team_input in (teams or []):
-        resolved_team_uid = RecordResolver.validate_team(vault, team_input)
+        resolved_team_uid = RecordResolver.validate_team(vault, team_input, enterprise_data)
         approver = workflow_pb2.WorkflowApprover()
         approver.teamUid = utils.base64_url_decode(resolved_team_uid)
         approver.escalation = is_escalation
@@ -541,7 +613,10 @@ def add_approvers_to_workflow(
     post_to_router(vault, 'add_workflow_approvers', request=config)
 
 
-def workflow_state_to_dict(vault: vault_online.VaultOnline, wf) -> dict:
+def workflow_state_to_dict(
+        vault: vault_online.VaultOnline,
+        wf,
+        enterprise_data: Optional[enterprise_types.IEnterpriseData] = None) -> dict:
     st = wf.status
     return {
         'flow_uid': utils.base64_url_encode(wf.flowUid) if wf.flowUid else None,
@@ -558,7 +633,7 @@ def workflow_state_to_dict(vault: vault_online.VaultOnline, wf) -> dict:
         'expires_on': (st.expiresOn or None) if st else None,
         'approved_by': [
             {
-                'user': a.user if a.user else RecordResolver.resolve_user(vault, a.userId),
+                'user': a.user if a.user else RecordResolver.resolve_user(vault, a.userId, enterprise_data),
                 'approved_on': a.approvedOn or None,
             }
             for a in (st.approvedBy if st else [])

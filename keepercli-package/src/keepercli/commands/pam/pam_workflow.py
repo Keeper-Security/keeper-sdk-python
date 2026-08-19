@@ -40,6 +40,19 @@ def _require_vault(context: KeeperParams):
         raise base.CommandError('Vault is not initialized, login to initialize the vault.')
 
 
+def _get_enterprise_data(context: KeeperParams):
+    """Best-effort enterprise directory access, used to resolve numeric user IDs and
+    teams the current user doesn't personally belong to. Returns None for non-admin
+    sessions (e.g. --skip-enterprise) where only vault-local resolution is possible."""
+    try:
+        auth = context.auth
+        if auth is not None and auth.auth_context.is_enterprise_admin:
+            return context.enterprise_loader.enterprise_data
+    except AssertionError:
+        pass
+    return None
+
+
 def _run_sdk(fn, *args, **kwargs):
     try:
         return fn(*args, **kwargs)
@@ -264,7 +277,10 @@ class WorkflowReadCommand(_WorkflowCommand):
         parser.add_argument('record', help='Record UID or name')
 
     def execute_workflow(self, context: KeeperParams, **kwargs):
-        result = _run_sdk(read_workflow, context.vault, kwargs.get('record'))
+        result = _run_sdk(
+            read_workflow, context.vault, kwargs.get('record'),
+            enterprise_data=_get_enterprise_data(context),
+        )
         if _is_json(kwargs):
             return _emit_json(result)
         if result.get('status') == 'no_workflow':
@@ -431,6 +447,7 @@ class WorkflowAddApproversCommand(_WorkflowCommand):
             teams=kwargs.get('team'),
             escalation=bool(kwargs.get('escalation')),
             escalation_after=kwargs.get('escalation_after'),
+            enterprise_data=_get_enterprise_data(context),
         )
         if _is_json(kwargs):
             return _emit_json(result)
@@ -465,6 +482,7 @@ class WorkflowDeleteApproversCommand(_WorkflowCommand):
             kwargs.get('record'),
             users=kwargs.get('user'),
             teams=kwargs.get('team'),
+            enterprise_data=_get_enterprise_data(context),
         )
         if _is_json(kwargs):
             return _emit_json(result)
@@ -483,7 +501,7 @@ class WorkflowGetApprovalRequestsCommand(_WorkflowCommand):
         super().__init__(parser)
 
     def execute_workflow(self, context: KeeperParams, **kwargs):
-        result = _run_sdk(get_pending_approvals, context.vault)
+        result = _run_sdk(get_pending_approvals, context.vault, enterprise_data=_get_enterprise_data(context))
         requests = result.get('requests') or []
         if _is_json(kwargs):
             return _emit_json(result)
@@ -546,7 +564,10 @@ class WorkflowDenyCommand(DashUidArgsMixin, _WorkflowCommand):
         parser.add_argument('-r', '--reason', help='Reason for denial')
 
     def execute_workflow(self, context: KeeperParams, **kwargs):
-        result = _run_sdk(deny_workflow, context.vault, kwargs.get('flow_uid'), reason=kwargs.get('reason'))
+        result = _run_sdk(
+            deny_workflow, context.vault, kwargs.get('flow_uid'), reason=kwargs.get('reason'),
+            enterprise_data=_get_enterprise_data(context),
+        )
         if _is_json(kwargs):
             return _emit_json(result)
         logger.info('Access request denied')
@@ -683,7 +704,10 @@ class WorkflowGetStateCommand(_WorkflowCommand):
         parser.add_argument('record', help='Record UID or name')
 
     def execute_workflow(self, context: KeeperParams, **kwargs):
-        result = _run_sdk(get_workflow_state, context.vault, kwargs.get('record'))
+        result = _run_sdk(
+            get_workflow_state, context.vault, kwargs.get('record'),
+            enterprise_data=_get_enterprise_data(context),
+        )
         if _is_json(kwargs):
             return _emit_json(result)
         if result.get('status') == 'exempt':
@@ -735,7 +759,7 @@ class WorkflowGetUserAccessStateCommand(_WorkflowCommand):
         super().__init__(parser)
 
     def execute_workflow(self, context: KeeperParams, **kwargs):
-        result = _run_sdk(get_user_access_state, context.vault)
+        result = _run_sdk(get_user_access_state, context.vault, enterprise_data=_get_enterprise_data(context))
         workflows = result.get('workflows') or []
         if _is_json(kwargs):
             return _emit_json(result)

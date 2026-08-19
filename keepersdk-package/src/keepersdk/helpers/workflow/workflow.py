@@ -14,10 +14,12 @@ from __future__ import annotations
 from typing import Iterable, List, Optional
 
 from ... import crypto, utils
+from ...enterprise import enterprise_types
 from ...proto import GraphSync_pb2, workflow_pb2
 from ...vault import vault_online, vault_record
 
 from .helpers import (
+    ROUTER_TRANSPORT_ERRORS,
     ProtobufRefBuilder,
     RecordResolver,
     WorkflowError,
@@ -133,11 +135,14 @@ def create_workflow(
         return result
     except WorkflowError:
         raise
-    except Exception as e:
+    except ROUTER_TRANSPORT_ERRORS as e:
         raise WorkflowError(f'Failed to create workflow: {sanitize_router_error(e)}') from e
 
 
-def read_workflow(vault: vault_online.VaultOnline, record: str) -> dict:
+def read_workflow(
+        vault: vault_online.VaultOnline,
+        record: str,
+        enterprise_data: Optional[enterprise_types.IEnterpriseData] = None) -> dict:
     """Read workflow configuration (`pam workflow read`)."""
     record_uid, rec = RecordResolver.resolve(vault, record)
     record_uid_bytes = utils.base64_url_decode(record_uid)
@@ -181,12 +186,12 @@ def read_workflow(vault: vault_online.VaultOnline, record: str) -> dict:
             elif approver.HasField('userId'):
                 approver_info['type'] = 'user_id'
                 approver_info['user_id'] = approver.userId
-                approver_info['email'] = RecordResolver.resolve_user(vault, approver.userId)
+                approver_info['email'] = RecordResolver.resolve_user(vault, approver.userId, enterprise_data)
             elif approver.HasField('teamUid'):
                 team_uid = utils.base64_url_encode(approver.teamUid)
                 approver_info['type'] = 'team'
                 approver_info['team_uid'] = team_uid
-                approver_info['team_name'] = RecordResolver.resolve_team_name(vault, team_uid)
+                approver_info['team_name'] = RecordResolver.resolve_team_name(vault, team_uid, enterprise_data)
             result['approvers'].append(approver_info)
         if not result['approvers']:
             logger.warning('No approvers configured for record %s', record_uid)
@@ -194,7 +199,7 @@ def read_workflow(vault: vault_online.VaultOnline, record: str) -> dict:
         return result
     except WorkflowError:
         raise
-    except Exception as e:
+    except ROUTER_TRANSPORT_ERRORS as e:
         raise WorkflowError(f'Failed to read workflow: {sanitize_router_error(e)}') from e
 
 
@@ -257,7 +262,7 @@ def update_workflow(
         return {'status': 'success', 'record_uid': record_uid, 'record_name': rec.title}
     except WorkflowError:
         raise
-    except Exception as e:
+    except ROUTER_TRANSPORT_ERRORS as e:
         raise WorkflowError(f'Failed to update workflow: {sanitize_router_error(e)}') from e
 
 
@@ -283,7 +288,7 @@ def delete_workflow(vault: vault_online.VaultOnline, record: str) -> dict:
         return {'status': 'success', 'record_uid': record_uid, 'record_name': rec.title}
     except WorkflowError:
         raise
-    except Exception as e:
+    except ROUTER_TRANSPORT_ERRORS as e:
         raise WorkflowError(f'Failed to delete workflow: {sanitize_router_error(e)}') from e
 
 
@@ -294,7 +299,8 @@ def add_workflow_approvers(
         users: Optional[Iterable[str]] = None,
         teams: Optional[Iterable[str]] = None,
         escalation: bool = False,
-        escalation_after: Optional[str] = None) -> dict:
+        escalation_after: Optional[str] = None,
+        enterprise_data: Optional[enterprise_types.IEnterpriseData] = None) -> dict:
     """Add approvers to a workflow (`pam workflow add-approver`)."""
     ensure_can_configure_workflow_settings(vault, refresh=True, action='add-approver')
     user_list = list(dict.fromkeys(u.strip() for u in (users or []) if u and u.strip()))
@@ -310,6 +316,7 @@ def add_workflow_approvers(
             vault, record_uid, rec.title,
             users=user_list, teams=team_list,
             is_escalation=escalation, escalation_after_ms=escalation_after_ms,
+            enterprise_data=enterprise_data,
         )
         total = len(user_list) + len(team_list)
         result = {
@@ -327,7 +334,7 @@ def add_workflow_approvers(
         return result
     except WorkflowError:
         raise
-    except Exception as e:
+    except ROUTER_TRANSPORT_ERRORS as e:
         raise WorkflowError(f'Failed to add approvers: {sanitize_router_error(e)}') from e
 
 
@@ -336,11 +343,12 @@ def remove_workflow_approvers(
         record: str,
         *,
         users: Optional[Iterable[str]] = None,
-        teams: Optional[Iterable[str]] = None) -> dict:
+        teams: Optional[Iterable[str]] = None,
+        enterprise_data: Optional[enterprise_types.IEnterpriseData] = None) -> dict:
     """Remove approvers from a workflow (`pam workflow remove-approver`)."""
     ensure_can_configure_workflow_settings(vault, refresh=True, action='remove-approver')
-    user_list = list(users or [])
-    team_list = list(teams or [])
+    user_list = list(dict.fromkeys(u.strip() for u in (users or []) if u and u.strip()))
+    team_list = list(dict.fromkeys(t.strip() for t in (teams or []) if t and t.strip()))
     if not user_list and not team_list:
         raise WorkflowError('Must specify at least one user or team')
     record_uid, rec = RecordResolver.resolve(vault, record)
@@ -352,7 +360,7 @@ def remove_workflow_approvers(
         approver.user = user_email
         config.approvers.append(approver)
     for team_input in team_list:
-        resolved_team_uid = RecordResolver.validate_team(vault, team_input)
+        resolved_team_uid = RecordResolver.validate_team(vault, team_input, enterprise_data)
         approver = workflow_pb2.WorkflowApprover()
         approver.teamUid = utils.base64_url_decode(resolved_team_uid)
         config.approvers.append(approver)
@@ -368,11 +376,13 @@ def remove_workflow_approvers(
         }
     except WorkflowError:
         raise
-    except Exception as e:
+    except ROUTER_TRANSPORT_ERRORS as e:
         raise WorkflowError(f'Failed to remove approvers: {sanitize_router_error(e)}') from e
 
 
-def get_pending_approvals(vault: vault_online.VaultOnline) -> dict:
+def get_pending_approvals(
+        vault: vault_online.VaultOnline,
+        enterprise_data: Optional[enterprise_types.IEnterpriseData] = None) -> dict:
     """Get pending approval requests (`pam workflow pending`)."""
     try:
         response = post_to_router(
@@ -398,7 +408,7 @@ def get_pending_approvals(vault: vault_online.VaultOnline) -> dict:
         requests = []
         for wf in pending:
             rec_uid = utils.base64_url_encode(wf.resource.value) if wf.resource.value else ''
-            requested_by = wf.user or RecordResolver.resolve_user(vault, wf.userId)
+            requested_by = wf.user or RecordResolver.resolve_user(vault, wf.userId, enterprise_data)
             requests.append({
                 'flow_uid': utils.base64_url_encode(wf.flowUid),
                 'requested_by': requested_by,
@@ -418,7 +428,7 @@ def get_pending_approvals(vault: vault_online.VaultOnline) -> dict:
         return {'status': 'success', 'requests': requests}
     except WorkflowError:
         raise
-    except Exception as e:
+    except ROUTER_TRANSPORT_ERRORS as e:
         raise WorkflowError(f'Failed to get approval requests: {sanitize_router_error(e)}') from e
 
 
@@ -441,7 +451,7 @@ def approve_workflow(vault: vault_online.VaultOnline, flow_uid: str) -> dict:
     """Approve a workflow access request (`pam workflow approve`)."""
     try:
         flow_uid_bytes = utils.base64_url_decode(flow_uid)
-    except Exception as e:
+    except (ValueError, TypeError) as e:
         raise WorkflowError(f'Invalid flow UID: "{flow_uid}"') from e
     approval = workflow_pb2.WorkflowApprovalOrDenial()
     approval.flowUid = flow_uid_bytes
@@ -452,23 +462,27 @@ def approve_workflow(vault: vault_online.VaultOnline, flow_uid: str) -> dict:
         return {'status': 'success', 'flow_uid': flow_uid, 'action': 'approved'}
     except WorkflowError:
         raise
-    except Exception as e:
+    except ROUTER_TRANSPORT_ERRORS as e:
         raise WorkflowError(f'Failed to approve request: {sanitize_router_error(e)}') from e
 
 
 def deny_workflow(
-        vault: vault_online.VaultOnline, flow_uid: str, *, reason: Optional[str] = None) -> dict:
+        vault: vault_online.VaultOnline,
+        flow_uid: str,
+        *,
+        reason: Optional[str] = None,
+        enterprise_data: Optional[enterprise_types.IEnterpriseData] = None) -> dict:
     """Deny a workflow access request (`pam workflow deny`)."""
     reason = reason or ''
     try:
         flow_uid_bytes = utils.base64_url_decode(flow_uid)
-    except Exception as e:
+    except (ValueError, TypeError) as e:
         raise WorkflowError(f'Invalid flow UID: "{flow_uid}"') from e
     denial = workflow_pb2.WorkflowApprovalOrDenial()
     denial.flowUid = flow_uid_bytes
     denial.deny = True
     if reason:
-        encrypted = _encrypt_denial_reason(vault, flow_uid_bytes, reason.encode('utf-8'))
+        encrypted = _encrypt_denial_reason(vault, flow_uid_bytes, reason.encode('utf-8'), enterprise_data)
         if encrypted:
             denial.denialReason = encrypted
         else:
@@ -486,11 +500,15 @@ def deny_workflow(
         return result
     except WorkflowError:
         raise
-    except Exception as e:
+    except ROUTER_TRANSPORT_ERRORS as e:
         raise WorkflowError(f'Failed to deny request: {sanitize_router_error(e)}') from e
 
 
-def _encrypt_denial_reason(vault: vault_online.VaultOnline, flow_uid_bytes: bytes, reason_bytes: bytes):
+def _encrypt_denial_reason(
+        vault: vault_online.VaultOnline,
+        flow_uid_bytes: bytes,
+        reason_bytes: bytes,
+        enterprise_data: Optional[enterprise_types.IEnterpriseData] = None):
     try:
         response = post_to_router(
             vault, 'get_approval_requests', response_type=workflow_pb2.ApprovalRequests)
@@ -499,7 +517,7 @@ def _encrypt_denial_reason(vault: vault_online.VaultOnline, flow_uid_bytes: byte
         requester_email = None
         for wf in response.workflows:
             if wf.flowUid == flow_uid_bytes:
-                requester_email = wf.user or RecordResolver.resolve_user(vault, wf.userId)
+                requester_email = wf.user or RecordResolver.resolve_user(vault, wf.userId, enterprise_data)
                 break
         if not requester_email or requester_email.startswith('User ID '):
             logger.debug('Could not resolve requester email for flow UID')
@@ -564,7 +582,7 @@ def _submit_access_request(
         return result
     except WorkflowError:
         raise
-    except Exception as e:
+    except ROUTER_TRANSPORT_ERRORS as e:
         raise WorkflowError(f'Failed to request access: {sanitize_router_error(e)}') from e
 
 
@@ -590,7 +608,7 @@ def _escalate_access_request(vault: vault_online.VaultOnline, record: str) -> di
         }
     except WorkflowError:
         raise
-    except Exception as e:
+    except ROUTER_TRANSPORT_ERRORS as e:
         raise WorkflowError(f'Failed to escalate request: {sanitize_router_error(e)}') from e
 
 
@@ -621,7 +639,7 @@ def _cancel_access_request(vault: vault_online.VaultOnline, record: str) -> dict
         }
     except WorkflowError:
         raise
-    except Exception as e:
+    except ROUTER_TRANSPORT_ERRORS as e:
         raise WorkflowError(f'Failed to cancel request: {sanitize_router_error(e)}') from e
 
 
@@ -635,7 +653,7 @@ def start_workflow(vault: vault_online.VaultOnline, uid: str) -> dict:
     else:
         try:
             uid_bytes = utils.base64_url_decode(uid)
-        except Exception as e:
+        except (ValueError, TypeError) as e:
             raise WorkflowError(f'"{uid}" is not a valid record UID/name or flow UID') from e
         state.flowUid = uid_bytes
         state.resource.CopyFrom(ProtobufRefBuilder.workflow_ref(uid_bytes))
@@ -652,7 +670,7 @@ def start_workflow(vault: vault_online.VaultOnline, uid: str) -> dict:
         return result
     except WorkflowError:
         raise
-    except Exception as e:
+    except ROUTER_TRANSPORT_ERRORS as e:
         raise WorkflowError(f'Failed to start workflow: {sanitize_router_error(e)}') from e
 
 
@@ -679,7 +697,7 @@ def _force_checkin(vault: vault_online.VaultOnline, uid: str) -> dict:
     else:
         try:
             uid_bytes = utils.base64_url_decode(uid)
-        except Exception as e:
+        except (ValueError, TypeError) as e:
             raise WorkflowError(f'"{uid}" is not a valid record UID/name or flow UID') from e
         ref = GraphSync_pb2.GraphSyncRef()
         ref.type = GraphSync_pb2.RFT_WORKFLOW
@@ -697,7 +715,7 @@ def _force_checkin(vault: vault_online.VaultOnline, uid: str) -> dict:
         return result
     except WorkflowError:
         raise
-    except Exception as e:
+    except ROUTER_TRANSPORT_ERRORS as e:
         raise WorkflowError(f'Failed to force check-in: {sanitize_router_error(e)}') from e
 
 
@@ -736,7 +754,7 @@ def _end_by_record(
         }
     except WorkflowError:
         raise
-    except Exception as e:
+    except ROUTER_TRANSPORT_ERRORS as e:
         raise WorkflowError(f'Failed to end workflow: {sanitize_router_error(e)}') from e
 
 
@@ -749,11 +767,16 @@ def _end_by_flow_uid(vault: vault_online.VaultOnline, uid: str) -> dict:
         return {'status': 'success', 'flow_uid': uid, 'action': 'ended'}
     except WorkflowError:
         raise
-    except Exception as e:
+    except (ValueError, TypeError) as e:
+        raise WorkflowError(f'"{uid}" is not a valid flow UID') from e
+    except ROUTER_TRANSPORT_ERRORS as e:
         raise WorkflowError(f'Failed to end workflow: {sanitize_router_error(e)}') from e
 
 
-def get_workflow_state(vault: vault_online.VaultOnline, record: str) -> dict:
+def get_workflow_state(
+        vault: vault_online.VaultOnline,
+        record: str,
+        enterprise_data: Optional[enterprise_types.IEnterpriseData] = None) -> dict:
     """Get workflow state for a record (`pam workflow state`)."""
     record_uid, rec = RecordResolver.resolve(vault, record)
     if is_workflow_exempt(vault, record_uid):
@@ -772,17 +795,19 @@ def get_workflow_state(vault: vault_online.VaultOnline, record: str) -> dict:
         if response is None:
             logger.warning('No workflow found for record %s (%s)', rec.title, record_uid)
             return {'status': 'no_workflow', 'message': 'No workflow found', 'record_uid': record_uid}
-        result = workflow_state_to_dict(vault, response)
+        result = workflow_state_to_dict(vault, response, enterprise_data)
         result['status'] = 'success'
         logger.info('Workflow state for %s (%s): %s', rec.title, record_uid, result.get('stage'))
         return result
     except WorkflowError:
         raise
-    except Exception as e:
+    except ROUTER_TRANSPORT_ERRORS as e:
         raise WorkflowError(f'Failed to get workflow state: {sanitize_router_error(e)}') from e
 
 
-def get_user_access_state(vault: vault_online.VaultOnline) -> dict:
+def get_user_access_state(
+        vault: vault_online.VaultOnline,
+        enterprise_data: Optional[enterprise_types.IEnterpriseData] = None) -> dict:
     """Get all workflow states for the current user (`pam workflow my-access`)."""
     try:
         response = post_to_router(
@@ -790,10 +815,10 @@ def get_user_access_state(vault: vault_online.VaultOnline) -> dict:
         if not response or not response.workflows:
             logger.info('No active workflows')
             return {'status': 'success', 'workflows': []}
-        workflows = [workflow_state_to_dict(vault, wf) for wf in response.workflows]
+        workflows = [workflow_state_to_dict(vault, wf, enterprise_data) for wf in response.workflows]
         logger.info('Found %s active workflow(s) for current user', len(workflows))
         return {'status': 'success', 'workflows': workflows}
     except WorkflowError:
         raise
-    except Exception as e:
+    except ROUTER_TRANSPORT_ERRORS as e:
         raise WorkflowError(f'Failed to get user access state: {sanitize_router_error(e)}') from e
