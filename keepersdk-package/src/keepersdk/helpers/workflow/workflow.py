@@ -26,6 +26,7 @@ from .helpers import (
     WorkflowFormatter,
     add_approvers_to_workflow,
     decrypt_workflow_param,
+    dedupe_approver_items,
     ensure_can_configure_workflow_settings,
     extract_workflow_param,
     is_workflow_exempt,
@@ -76,9 +77,7 @@ def create_workflow(
     if approvals_needed < 0:
         raise WorkflowError('Approvals needed must be 0 or greater')
 
-    approver_list = list(dict.fromkeys(
-        a.strip() for a in (approvers or []) if a and a.strip()
-    ))
+    approver_list = dedupe_approver_items(approvers, label='approver')
     if approvals_needed > 0 and not approver_list:
         raise WorkflowError(
             'At least one approver is required when approvals_needed > 0. '
@@ -303,8 +302,8 @@ def add_workflow_approvers(
         enterprise_data: Optional[enterprise_types.IEnterpriseData] = None) -> dict:
     """Add approvers to a workflow (`pam workflow add-approver`)."""
     ensure_can_configure_workflow_settings(vault, refresh=True, action='add-approver')
-    user_list = list(dict.fromkeys(u.strip() for u in (users or []) if u and u.strip()))
-    team_list = list(dict.fromkeys(t.strip() for t in (teams or []) if t and t.strip()))
+    user_list = dedupe_approver_items(users, label='user approver')
+    team_list = dedupe_approver_items(teams, label='team approver')
     if not user_list and not team_list:
         raise WorkflowError('Must specify at least one user or team')
     if escalation_after and not escalation:
@@ -347,8 +346,8 @@ def remove_workflow_approvers(
         enterprise_data: Optional[enterprise_types.IEnterpriseData] = None) -> dict:
     """Remove approvers from a workflow (`pam workflow remove-approver`)."""
     ensure_can_configure_workflow_settings(vault, refresh=True, action='remove-approver')
-    user_list = list(dict.fromkeys(u.strip() for u in (users or []) if u and u.strip()))
-    team_list = list(dict.fromkeys(t.strip() for t in (teams or []) if t and t.strip()))
+    user_list = dedupe_approver_items(users, label='user approver')
+    team_list = dedupe_approver_items(teams, label='team approver')
     if not user_list and not team_list:
         raise WorkflowError('Must specify at least one user or team')
     record_uid, rec = RecordResolver.resolve(vault, record)

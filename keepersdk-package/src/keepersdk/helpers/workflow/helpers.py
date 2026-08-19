@@ -489,6 +489,11 @@ class WorkflowFormatter:
             start_str, end_str = time_range_str.split('-', 1)
             start_hhmm = WorkflowFormatter._parse_time_to_hhmm(start_str.strip())
             end_hhmm = WorkflowFormatter._parse_time_to_hhmm(end_str.strip())
+            if start_hhmm >= end_hhmm:
+                raise WorkflowError(
+                    f'Time range start must be before end (got "{start_str.strip()}-{end_str.strip()}"). '
+                    'Use HH:MM-HH:MM with start earlier than end (e.g., "09:00-17:00").'
+                )
             time_range = workflow_pb2.TimeOfDayRange()
             time_range.startTime = start_hhmm
             time_range.endTime = end_hhmm
@@ -498,6 +503,17 @@ class WorkflowFormatter:
 
     @staticmethod
     def _get_local_iana_timezone() -> str:
+        """Return the local IANA timezone name for temporal access filters.
+
+        Resolution order:
+        1. ``TZ`` environment variable (must contain ``/``, e.g. ``America/New_York``).
+        2. ``tzlocal`` (declared dependency in ``requirements.txt`` / ``setup.cfg``).
+        3. ``datetime.now().astimezone().tzinfo.key`` when present (often unavailable on Windows).
+
+        Raises ``WorkflowError`` if none succeed. On Windows, or when ``tzlocal`` is missing
+        or broken, set ``TZ`` explicitly (e.g. ``TZ=Asia/Kolkata``) before creating or
+        updating workflows with ``--allowed-days`` or ``--time-range``.
+        """
         tz = os.environ.get('TZ')
         if tz and '/' in tz:
             return tz
@@ -546,6 +562,16 @@ class WorkflowFormatter:
         if at.timeZone:
             result['timezone'] = at.timeZone
         return result or None
+
+
+def dedupe_approver_items(items: Optional[Iterable[str]], *, label: str = 'approver') -> List[str]:
+    """Strip, drop blanks, and de-duplicate approver entries preserving order."""
+    raw = [x.strip() for x in (items or []) if x and x.strip()]
+    deduped = list(dict.fromkeys(raw))
+    removed = len(raw) - len(deduped)
+    if removed:
+        logger.info('Removed %s duplicate %s(s)', removed, label)
+    return deduped
 
 
 def submit_access_request(

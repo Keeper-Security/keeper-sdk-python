@@ -57,6 +57,11 @@ class WorkflowFormatterTestCase(unittest.TestCase):
         with self.assertRaises(WorkflowError):
             WorkflowFormatter.build_temporal_filter('funday', None)
 
+    def test_build_temporal_filter_invalid_time_range(self):
+        os.environ['TZ'] = 'UTC'
+        with self.assertRaises(WorkflowError):
+            WorkflowFormatter.build_temporal_filter(None, '17:00-09:00')
+
     def test_format_temporal_filter(self):
         temporal = workflow_pb2.TemporalAccessFilter()
         temporal.allowedDays.append(workflow_pb2.MONDAY)
