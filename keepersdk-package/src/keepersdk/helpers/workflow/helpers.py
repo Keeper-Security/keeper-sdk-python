@@ -16,6 +16,7 @@ import re
 import time
 from datetime import datetime
 from typing import Any, Iterable, List, Optional, Sequence, Tuple
+from zoneinfo import ZoneInfo, available_timezones
 
 import requests
 
@@ -201,6 +202,34 @@ def _load_nsf_typed_record(
     return typed
 
 
+def _validate_iana_timezone(tz: str) -> str:
+    if tz not in available_timezones():
+        raise WorkflowError(
+            f'Invalid IANA timezone: "{tz}". '
+            'Set TZ to a valid value (e.g., TZ=America/New_York).'
+        )
+    # Confirm ZoneInfo accepts it (available_timezones can lag on some platforms).
+    ZoneInfo(tz)
+    return tz
+
+
+def _record_uids_by_title(vault: vault_online.VaultOnline, title: str) -> List[str]:
+    """Return record UIDs whose title matches exactly (case-insensitive).
+
+    Builds a title index lazily and rebuilds when the vault record count changes.
+    """
+    title_cf = title.casefold()
+    record_count = len(vault.vault_data)
+    cached = getattr(vault, '_workflow_title_lookup', None)
+    if cached is None or cached[0] != record_count:
+        index: dict[str, List[str]] = {}
+        for info in vault.vault_data.records():
+            index.setdefault(info.title.casefold(), []).append(info.record_uid)
+        cached = (record_count, index)
+        vault._workflow_title_lookup = cached
+    return list(cached[1].get(title_cf, []))
+
+
 def load_typed_record(
         vault: vault_online.VaultOnline, identifier: str) -> Optional[vault_record.TypedRecord]:
     """Load a TypedRecord from classic vault or NSF by UID or exact title."""
@@ -213,16 +242,15 @@ def load_typed_record(
             loaded.record_key = key
         return loaded
 
-    identifier_cf = identifier.casefold()
+    matching_uids = _record_uids_by_title(vault, identifier)
     matches: List[vault_record.TypedRecord] = []
-    for info in vault.vault_data.records():
-        if info.title.casefold() == identifier_cf:
-            rec = vault.vault_data.load_record(info.record_uid)
-            if isinstance(rec, vault_record.TypedRecord):
-                key = vault.vault_data.get_record_key(info.record_uid)
-                if key:
-                    rec.record_key = key
-                matches.append(rec)
+    for record_uid in matching_uids:
+        rec = vault.vault_data.load_record(record_uid)
+        if isinstance(rec, vault_record.TypedRecord):
+            key = vault.vault_data.get_record_key(record_uid)
+            if key:
+                rec.record_key = key
+            matches.append(rec)
     if len(matches) == 1:
         return matches[0]
     if len(matches) > 1:
@@ -516,18 +544,18 @@ class WorkflowFormatter:
         """
         tz = os.environ.get('TZ')
         if tz and '/' in tz:
-            return tz
+            return _validate_iana_timezone(tz)
         try:
             from tzlocal import get_localzone_name
             zone = get_localzone_name()
             if zone:
-                return zone
+                return _validate_iana_timezone(zone)
         except Exception as e:
             logger.debug('tzlocal lookup failed: %s', e)
         now = datetime.now().astimezone()
         key = getattr(now.tzinfo, 'key', None)
         if isinstance(key, str) and '/' in key:
-            return key
+            return _validate_iana_timezone(key)
         raise WorkflowError(
             'Could not detect local IANA timezone. '
             'Set the TZ environment variable (e.g., TZ=Asia/Kolkata).'

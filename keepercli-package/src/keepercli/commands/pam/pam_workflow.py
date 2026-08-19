@@ -71,7 +71,9 @@ def _emit_json(payload: dict):
 def _fmt_ts(ts_ms) -> str:
     if not ts_ms:
         return ''
-    return datetime.fromtimestamp(ts_ms / 1000).strftime('%Y-%m-%d %H:%M:%S')
+    dt = datetime.fromtimestamp(ts_ms / 1000).astimezone()
+    tz_label = dt.strftime('%Z') or dt.tzname() or 'local'
+    return dt.strftime(f'%Y-%m-%d %H:%M:%S {tz_label}')
 
 
 def _fix_dash_uid_args(parser: argparse.ArgumentParser, args: str) -> str:
@@ -90,7 +92,7 @@ def _fix_dash_uid_args(parser: argparse.ArgumentParser, args: str) -> str:
     for action in parser._actions:
         for opt in action.option_strings:
             known_opts.add(opt)
-            if action.nargs != 0:
+            if action.nargs not in (0, '?'):
                 consumes_value.add(opt)
 
     result = []
@@ -155,19 +157,6 @@ class PAMWorkflowCommand(base.GroupCommand):
     def execute_args(self, context: KeeperParams, args, **kwargs):
         self._current_context = context
         _require_vault(context)
-
-        pos = args.find(' ') if args else -1
-        verb = (args[:pos].strip() if pos > 0 else args.strip()).lower() if args else ''
-        if verb.startswith('-'):
-            verb = ''
-        resolved_verb = self.aliases.get(verb, verb)
-
-        if resolved_verb in _ADMIN_VERBS and not can_configure_workflow_settings(context.vault, refresh=True):
-            raise base.CommandError(
-                f'You do not have permission to manage workflow settings. '
-                f'The "{resolved_verb}" command requires the "Can manage workflow settings" '
-                f'enforcement policy. Contact your Keeper administrator to enable this for your role.'
-            )
         return super().execute_args(context, args, **kwargs)
 
     def print_help(self, **kwargs):

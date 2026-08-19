@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from typing import Iterable, List, Optional
 
 from ... import crypto, utils
@@ -58,15 +59,11 @@ def create_workflow(
     RecordResolver.validate_workflow_record_type(rec)
     record_uid_bytes = utils.base64_url_decode(record_uid)
 
-    try:
-        existing = post_to_router(
-            vault, 'read_workflow_config',
-            request=ProtobufRefBuilder.record_ref(record_uid_bytes, rec.title),
-            response_type=workflow_pb2.WorkflowConfig,
-        )
-    except Exception as e:
-        logger.debug('Pre-check read_workflow_config failed: %s', e)
-        existing = None
+    existing = post_to_router(
+        vault, 'read_workflow_config',
+        request=ProtobufRefBuilder.record_ref(record_uid_bytes, rec.title),
+        response_type=workflow_pb2.WorkflowConfig,
+    )
     if existing:
         raise WorkflowError(
             f'Workflow already configured for "{rec.title}" ({record_uid}). '
@@ -271,12 +268,8 @@ def delete_workflow(vault: vault_online.VaultOnline, record: str) -> dict:
     record_uid, rec = RecordResolver.resolve(vault, record)
     record_uid_bytes = utils.base64_url_decode(record_uid)
     ref = ProtobufRefBuilder.record_ref(record_uid_bytes, rec.title)
-    try:
-        existing = post_to_router(
-            vault, 'read_workflow_config', request=ref, response_type=workflow_pb2.WorkflowConfig)
-    except Exception as e:
-        logger.debug('Pre-check read_workflow_config failed: %s', e)
-        existing = None
+    existing = post_to_router(
+        vault, 'read_workflow_config', request=ref, response_type=workflow_pb2.WorkflowConfig)
     if not existing:
         raise WorkflowError(
             f'No workflow configured for "{rec.title}" ({record_uid}). Nothing to delete.'
@@ -352,6 +345,11 @@ def remove_workflow_approvers(
         raise WorkflowError('Must specify at least one user or team')
     record_uid, rec = RecordResolver.resolve(vault, record)
     record_uid_bytes = utils.base64_url_decode(record_uid)
+    ref = ProtobufRefBuilder.record_ref(record_uid_bytes, rec.title)
+    existing = post_to_router(
+        vault, 'read_workflow_config', request=ref, response_type=workflow_pb2.WorkflowConfig)
+    if not existing:
+        raise WorkflowError('No workflow found for record. Create one first with create_workflow.')
     config = workflow_pb2.WorkflowConfig()
     config.parameters.resource.CopyFrom(ProtobufRefBuilder.record_ref(record_uid_bytes, rec.title))
     for user_email in user_list:
@@ -399,7 +397,7 @@ def get_pending_approvals(
                 unique.append(wf)
 
         current_user = vault.keeper_auth.auth_context.username
-        pending = [wf for wf in unique if not _already_approved_by_me(vault, wf, current_user)]
+        pending = _filter_already_approved(vault, unique, current_user)
         if not pending:
             logger.info('No pending approval requests')
             return {'status': 'success', 'requests': []}
@@ -432,18 +430,42 @@ def get_pending_approvals(
 
 
 def _already_approved_by_me(vault: vault_online.VaultOnline, wf, current_user: str) -> bool:
-    try:
-        st = workflow_pb2.WorkflowState()
-        st.flowUid = wf.flowUid
-        ws = post_to_router(
-            vault, 'get_workflow_state', request=st, response_type=workflow_pb2.WorkflowState)
-        if ws and ws.status and ws.status.approvedBy:
-            for a in ws.status.approvedBy:
-                if a.user == current_user:
-                    return True
-    except Exception:
-        logger.debug('Failed to check approval status for flow', exc_info=True)
+    st = workflow_pb2.WorkflowState()
+    st.flowUid = wf.flowUid
+    ws = post_to_router(
+        vault, 'get_workflow_state', request=st, response_type=workflow_pb2.WorkflowState)
+    if ws and ws.status and ws.status.approvedBy:
+        for a in ws.status.approvedBy:
+            if a.user == current_user:
+                return True
     return False
+
+
+def _filter_already_approved(
+        vault: vault_online.VaultOnline,
+        workflows: List,
+        current_user: str) -> List:
+    """Drop requests the current user has already approved.
+
+    Issues one ``get_workflow_state`` call per candidate. Parallelized when there
+    are multiple requests so large pending queues do not stall sequentially.
+    """
+    if not workflows:
+        return []
+    if len(workflows) == 1:
+        wf = workflows[0]
+        return [] if _already_approved_by_me(vault, wf, current_user) else [wf]
+
+    approved: dict[int, bool] = {}
+    max_workers = min(10, len(workflows))
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = {
+            pool.submit(_already_approved_by_me, vault, wf, current_user): wf
+            for wf in workflows
+        }
+        for future, wf in futures.items():
+            approved[id(wf)] = future.result()
+    return [wf for wf in workflows if not approved[id(wf)]]
 
 
 def approve_workflow(vault: vault_online.VaultOnline, flow_uid: str) -> dict:
