@@ -36,6 +36,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
                                record_type, secrets_manager, shares, password_report, trash, record_file_report,
                                record_handling_commands, register, password_generate, verify_records,
                                shared_records_report, share_report, nsf_commands)
+        from .commands.pam.pam_workflow import PAMWorkflowCommand
         
         commands.register_command('sync-down', vault.SyncDownCommand(), base.CommandScope.Vault, 'd')
         commands.register_command('cd', vault_folder.FolderCdCommand(), base.CommandScope.Vault)
@@ -104,6 +105,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('nsf-record-permission', nsf_commands.NsfRecordPermissionCommand(), base.CommandScope.Vault)
         commands.register_command('nsf-transfer-record', nsf_commands.NsfTransferRecordCommand(), base.CommandScope.Vault)
         commands.register_command('nsf-shortcut', nsf_commands.NsfShortcutCommand(), base.CommandScope.Vault)
+        commands.register_command('workflow', PAMWorkflowCommand(), base.CommandScope.Vault)
 
 
     if not scopes or bool(scopes & base.CommandScope.Enterprise):
