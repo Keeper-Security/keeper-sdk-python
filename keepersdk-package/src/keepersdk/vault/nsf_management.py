@@ -408,6 +408,18 @@ def get_nsf_folder_detail(
         result['owner_username'] = row.owner_username
         result['owner_account_uid'] = row.owner_account_uid
 
+    if folder.parent_uid:
+        parent_uid = folder.parent_uid
+        root_folder_uid = vault.vault_data.root_folder.folder_uid
+        if parent_uid == root_folder_uid or parent_uid == ROOT_FOLDER_UID:
+            result['parent_uid'] = root_folder_uid
+            result['parent_name'] = 'root'
+        else:
+            result['parent_uid'] = parent_uid
+            parent_folder = _nsf_view(vault).get_folder(parent_uid)
+            if parent_folder:
+                result['parent_name'] = parent_folder.name or parent_uid
+
     if include_access:
         try:
             access = get_nsf_folder_access(vault, [folder_uid])
