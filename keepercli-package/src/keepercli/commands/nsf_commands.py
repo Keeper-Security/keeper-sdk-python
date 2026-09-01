@@ -355,7 +355,11 @@ class NsfGetCommand(base.ArgparseCommand):
         logger.info('')
         logger.info('{0:>25s}: {1}'.format('NSF Folder UID', detail.get('nsf_folder_uid', '')))
         logger.info('{0:>25s}: {1}'.format('Name', detail.get('name', '')))
-        logger.info('{0:>25s}: {1}'.format('Parent', detail.get('parent_uid', '')))
+        if detail.get('parent_uid'):
+            parent_display = detail.get('parent_uid', '')
+            if detail.get('parent_name'):
+                parent_display = f"{detail['parent_name']} ({detail['parent_uid']})"
+            logger.info('{0:>25s}: {1}'.format('Parent', parent_display))
         NsfGetCommand._print_folder_access(
             detail.get('access') or {},
             verbose,
@@ -368,8 +372,11 @@ class NsfGetCommand(base.ArgparseCommand):
         fo = {
             'nsf_folder_uid': detail.get('nsf_folder_uid'),
             'name': detail.get('name'),
-            'parent_uid': detail.get('parent_uid'),
         }
+        if detail.get('parent_uid'):
+            fo['parent_uid'] = detail.get('parent_uid')
+            if detail.get('parent_name'):
+                fo['parent_name'] = detail.get('parent_name')
         if detail.get('owner_username'):
             fo['owner'] = detail['owner_username']
         access = detail.get('access') or {}

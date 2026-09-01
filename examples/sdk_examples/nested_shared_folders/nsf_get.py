@@ -514,7 +514,10 @@ def close_vault(vault: vault_online.VaultOnline, keeper_auth_context: keeper_aut
 
 
 def nsf_get(vault: vault_online.VaultOnline) -> None:
-    """Get NSF record or folder details by UID or title (nsf-get)."""
+    """Get NSF record or folder details by UID or title (nsf-get).
+
+    For folders, the response includes parent_uid and parent_name (when available).
+    """
     ITEM_UID_OR_TITLE = "<record_uid_or_title>"  # Record/folder UID or title
 
     detail = nsf_management.get_nsf_item(vault, ITEM_UID_OR_TITLE)
