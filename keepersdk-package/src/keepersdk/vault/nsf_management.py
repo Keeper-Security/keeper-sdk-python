@@ -411,7 +411,7 @@ def get_nsf_folder_detail(
     if folder.parent_uid:
         parent_uid = folder.parent_uid
         root_folder_uid = vault.vault_data.root_folder.folder_uid
-        if parent_uid == root_folder_uid or parent_uid == ROOT_FOLDER_UID:
+        if parent_uid == root_folder_uid or parent_uid.startswith('AAAAAA'):
             result['parent_uid'] = root_folder_uid
             result['parent_name'] = 'root'
         else:
