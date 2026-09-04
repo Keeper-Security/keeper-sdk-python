@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Mapping, Optional, Set
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Set
 
 from ..authentication import keeper_auth
 from . import nsf_crypto, nsf_storage_types as nsf
@@ -71,6 +71,8 @@ class NSFData:
         self._auth_context = auth_context
         self._folders: Dict[str, NSFFolderNode] = {}
         self._records: Dict[str, NSFRecordEntry] = {}
+        self._folder_access_details: Dict[str, Dict[str, Any]] = {}
+        self._record_access_details: Dict[str, List[Dict[str, Any]]] = {}
         if auth_context is not None:
             self.rebuild_nsf(auth_context)
 
@@ -89,6 +91,30 @@ class NSFData:
 
     def get_record(self, record_uid: str) -> Optional[NSFRecordEntry]:
         return self._records.get(record_uid)
+
+    def nsf_folder_access_details(self) -> Iterable[Dict[str, Any]]:
+        yield from self._folder_access_details.values()
+
+    def get_nsf_folder_access_detail(self, folder_uid: str) -> Optional[Dict[str, Any]]:
+        return self._folder_access_details.get(folder_uid)
+
+    def set_nsf_folder_access_detail(self, folder_uid: str, detail: Dict[str, Any]) -> None:
+        self._folder_access_details[folder_uid] = detail
+
+    def clear_nsf_folder_access_details(self) -> None:
+        self._folder_access_details.clear()
+
+    def nsf_record_access_details(self) -> Iterable[List[Dict[str, Any]]]:
+        yield from self._record_access_details.values()
+
+    def get_nsf_record_access_detail(self, record_uid: str) -> Optional[List[Dict[str, Any]]]:
+        return self._record_access_details.get(record_uid)
+
+    def set_nsf_record_access_detail(self, record_uid: str, detail: List[Dict[str, Any]]) -> None:
+        self._record_access_details[record_uid] = detail
+
+    def clear_nsf_record_access_details(self) -> None:
+        self._record_access_details.clear()
 
     @property
     def folder_count(self) -> int:

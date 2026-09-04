@@ -1021,45 +1021,50 @@ def get_nsf_record_details(
     return {'data': out_data, 'forbidden_records': forbidden}
 
 
+_RECORD_ACCESS_CHUNK = 100
+
+
 def get_nsf_record_accesses(
         vault: VaultOnline,
         record_uids: Iterable[str]) -> Dict[str, Any]:
-    """``vault/records/v3/details/access``."""
+    """``vault/records/v3/details/access``, chunked at 100 UIDs per request."""
     uids = [resolve_nsf_record_uid(vault, u) or u for u in record_uids]
     uids = [u for u in uids if u]
     if not uids:
         raise NsfError('At least one record UID is required')
 
-    rq = record_details_pb2.RecordAccessRequest()
-    for uid in uids:
-        rq.recordUids.append(utils.base64_url_decode(uid))
-    rs = vault.keeper_auth.execute_auth_rest('vault/records/v3/details/access', rq, response_type=record_details_pb2.RecordAccessResponse)
-    if rs is None:
-        return {'record_accesses': [], 'forbidden_records': []}
+    result: Dict[str, Any] = {'record_accesses': [], 'forbidden_records': []}
+    for i in range(0, len(uids), _RECORD_ACCESS_CHUNK):
+        chunk = uids[i:i + _RECORD_ACCESS_CHUNK]
+        rq = record_details_pb2.RecordAccessRequest()
+        for uid in chunk:
+            rq.recordUids.append(utils.base64_url_decode(uid))
+        rs = vault.keeper_auth.execute_auth_rest('vault/records/v3/details/access', rq, response_type=record_details_pb2.RecordAccessResponse)
+        if rs is None:
+            continue
 
-    result = {'record_accesses': [], 'forbidden_records': []}
-    for ra in rs.recordAccesses:
-        d = ra.data
-        ai = ra.accessorInfo
-        ao = {
-            'record_uid': utils.base64_url_encode(d.recordUid),
-            'accessor_name': ai.name,
-            'access_type': folder_pb2.AccessType.Name(d.accessType) if hasattr(d, 'accessType') else 'UNKNOWN',
-            'access_type_uid': utils.base64_url_encode(d.accessTypeUid),
-            'owner': getattr(d, 'owner', False),
-            'inherited': bool(getattr(d, 'inherited', False)),
-            'access_role_type': int(getattr(d, 'accessRoleType', 0) or 0),
-        }
-        for flag in ('can_view_title', 'can_edit', 'can_view', 'can_list_access',
-                     'can_update_access', 'can_delete', 'can_change_ownership',
-                     'can_request_access', 'can_approve_access', 'denied_access'):
-            if flag == 'denied_access':
-                ao[flag] = getattr(d, 'deniedAccess', False)
-            else:
-                ao[flag] = getattr(d, flag, False)
-        result['record_accesses'].append(ao)
-    for fu in rs.forbiddenRecords:
-        result['forbidden_records'].append(utils.base64_url_encode(fu))
+        for ra in rs.recordAccesses:
+            d = ra.data
+            ai = ra.accessorInfo
+            ao = {
+                'record_uid': utils.base64_url_encode(d.recordUid),
+                'accessor_name': ai.name,
+                'access_type': folder_pb2.AccessType.Name(d.accessType) if hasattr(d, 'accessType') else 'UNKNOWN',
+                'access_type_uid': utils.base64_url_encode(d.accessTypeUid),
+                'owner': getattr(d, 'owner', False),
+                'inherited': bool(getattr(d, 'inherited', False)),
+                'access_role_type': int(getattr(d, 'accessRoleType', 0) or 0),
+            }
+            for flag in ('can_view_title', 'can_edit', 'can_view', 'can_list_access',
+                         'can_update_access', 'can_delete', 'can_change_ownership',
+                         'can_request_access', 'can_approve_access', 'denied_access'):
+                if flag == 'denied_access':
+                    ao[flag] = getattr(d, 'deniedAccess', False)
+                else:
+                    ao[flag] = getattr(d, flag, False)
+            result['record_accesses'].append(ao)
+        for fu in rs.forbiddenRecords:
+            result['forbidden_records'].append(utils.base64_url_encode(fu))
     return result
 
 
@@ -1079,10 +1084,13 @@ def _resolve_uid_to_username(vault: VaultOnline, uid_b64: str) -> Optional[str]:
         pass
 
 
+_FOLDER_ACCESS_CHUNK = 500
+
+
 def get_nsf_folder_access(
         vault: VaultOnline,
         folder_uids: Iterable[str]) -> Dict[str, Any]:
-    """``vault/folders/v3/access``."""
+    """``vault/folders/v3/access``, chunked at 500 UIDs per request."""
     uids: List[str] = []
     for raw in folder_uids:
         resolved = resolve_nsf_folder_uid(vault, raw) or raw
@@ -1091,62 +1099,107 @@ def get_nsf_folder_access(
     if not uids:
         raise NsfError('At least one folder UID is required')
 
-    rq = folder_access_pb2.GetFolderAccessRequest()
-    for uid in uids:
-        rq.folderUid.append(utils.base64_url_decode(uid))
-    rs = vault.keeper_auth.execute_auth_rest('vault/folders/v3/access', rq, response_type=folder_access_pb2.GetFolderAccessResponse)
-    results = []
-    for fr in rs.folderAccessResults:
-        fuid = utils.base64_url_encode(fr.folderUid)
-        if fr.HasField('error'):
-            err = fr.error
-            results.append({
-                'folder_uid': fuid,
-                'error': {'status': folder_pb2.FolderModifyStatus.Name(err.status),
-                          'message': err.message},
-                'success': False})
-        else:
-            accessors = []
-            for a in fr.accessors:
-                auid = utils.base64_url_encode(a.accessTypeUid)
-                at = folder_pb2.AccessType.Name(a.accessType)
-                rt = folder_pb2.AccessRoleType.Name(a.accessRoleType)
-                username = None
-                if at == 'AT_USER':
-                    username = _resolve_uid_to_username(vault, auid)
-                ai = {
-                    'accessor_uid': auid, 'access_type': at, 'role': rt,
-                    'access_role_type': int(a.accessRoleType),
-                    'inherited': bool(a.inherited), 'hidden': bool(a.hidden),
-                    'username': username,
-                    'date_created': a.dateCreated or None,
-                    'last_modified': a.lastModified or None,
-                }
-                if at == 'AT_OWNER':
-                    ai['owner'] = True
-                if a.HasField('permissions'):
-                    p = a.permissions
-                    ai['permissions'] = {
-                        'can_add': bool(p.canAdd), 'can_remove': bool(p.canRemove),
-                        'can_delete': bool(p.canDelete),
-                        'can_list_access': bool(p.canListAccess),
-                        'can_update_access': bool(p.canUpdateAccess),
-                        'can_change_ownership': bool(p.canChangeOwnership),
-                        'can_edit_records': bool(p.canEditRecords),
-                        'can_view_records': bool(p.canViewRecords),
-                        'can_approve_access': bool(p.canApproveAccess),
-                        'can_request_access': bool(p.canRequestAccess),
-                        'can_update_setting': bool(p.canUpdateSetting),
-                        'can_list_records': bool(p.canListRecords),
-                        'can_list_folders': bool(p.canListFolders),
-                    }
-                accessors.append(ai)
-            results.append({'folder_uid': fuid, 'accessors': accessors, 'success': True})
+    results: List[Dict[str, Any]] = []
+    rd: Dict[str, Any] = {'results': results, 'has_more': False}
+    for i in range(0, len(uids), _FOLDER_ACCESS_CHUNK):
+        chunk = uids[i:i + _FOLDER_ACCESS_CHUNK]
+        rq = folder_access_pb2.GetFolderAccessRequest()
+        for uid in chunk:
+            rq.folderUid.append(utils.base64_url_decode(uid))
+        rs = vault.keeper_auth.execute_auth_rest('vault/folders/v3/access', rq, response_type=folder_access_pb2.GetFolderAccessResponse)
+        if rs is None:
+            continue
 
-    rd = {'results': results, 'has_more': bool(rs.hasMore)}
-    if rs.HasField('continuationToken'):
-        rd['continuation_token'] = rs.continuationToken.lastModified
+        for fr in rs.folderAccessResults:
+            fuid = utils.base64_url_encode(fr.folderUid)
+            if fr.HasField('error'):
+                err = fr.error
+                results.append({
+                    'folder_uid': fuid,
+                    'error': {'status': folder_pb2.FolderModifyStatus.Name(err.status),
+                              'message': err.message},
+                    'success': False})
+            else:
+                accessors = []
+                for a in fr.accessors:
+                    auid = utils.base64_url_encode(a.accessTypeUid)
+                    at = folder_pb2.AccessType.Name(a.accessType)
+                    rt = folder_pb2.AccessRoleType.Name(a.accessRoleType)
+                    username = None
+                    if at == 'AT_USER':
+                        username = _resolve_uid_to_username(vault, auid)
+                    ai = {
+                        'accessor_uid': auid, 'access_type': at, 'role': rt,
+                        'access_role_type': int(a.accessRoleType),
+                        'inherited': bool(a.inherited), 'hidden': bool(a.hidden),
+                        'username': username,
+                        'date_created': a.dateCreated or None,
+                        'last_modified': a.lastModified or None,
+                    }
+                    if at == 'AT_OWNER':
+                        ai['owner'] = True
+                    if a.HasField('permissions'):
+                        p = a.permissions
+                        ai['permissions'] = {
+                            'can_add': bool(p.canAdd), 'can_remove': bool(p.canRemove),
+                            'can_delete': bool(p.canDelete),
+                            'can_list_access': bool(p.canListAccess),
+                            'can_update_access': bool(p.canUpdateAccess),
+                            'can_change_ownership': bool(p.canChangeOwnership),
+                            'can_edit_records': bool(p.canEditRecords),
+                            'can_view_records': bool(p.canViewRecords),
+                            'can_approve_access': bool(p.canApproveAccess),
+                            'can_request_access': bool(p.canRequestAccess),
+                            'can_update_setting': bool(p.canUpdateSetting),
+                            'can_list_records': bool(p.canListRecords),
+                            'can_list_folders': bool(p.canListFolders),
+                        }
+                    accessors.append(ai)
+                results.append({'folder_uid': fuid, 'accessors': accessors, 'success': True})
+
+        rd['has_more'] = bool(rs.hasMore)
+        if rs.HasField('continuationToken'):
+            rd['continuation_token'] = rs.continuationToken.lastModified
     return rd
+
+
+def load_nsf_access_details(vault: VaultOnline) -> Dict[str, int]:
+    """Fetch access details for every NSF folder/record and cache them on ``vault.nsf_data``.
+
+    Scans all folder and record UIDs currently known to the NSF cache
+    (``vault.nsf_data``), fetches their access details via
+    :func:`get_nsf_folder_access` / :func:`get_nsf_record_accesses`, and stores
+    the results back onto ``vault.nsf_data`` — folders keyed by folder UID (the
+    full result entry returned by :func:`get_nsf_folder_access`), records keyed
+    by record UID (the list of accessor rows for that record).
+    """
+    view = _nsf_view(vault)
+    folder_uid_list = [f.folder_uid for f in view.folders()]
+    record_uid_list = [r.record_uid for r in view.records()]
+    if not folder_uid_list and not record_uid_list:
+        raise NsfError('NSF cache has no folders or records to load access details for')
+
+    loaded = {'folders': 0, 'records': 0}
+
+    if folder_uid_list:
+        access = get_nsf_folder_access(vault, folder_uid_list)
+        for fr in access.get('results') or []:
+            fuid = fr.get('folder_uid')
+            if not fuid:
+                continue
+            view.set_nsf_folder_access_detail(fuid, fr)
+            loaded['folders'] += 1
+
+    if record_uid_list:
+        access = get_nsf_record_accesses(vault, record_uid_list)
+        by_uid: Dict[str, List[Dict[str, Any]]] = {}
+        for ao in access.get('record_accesses') or []:
+            by_uid.setdefault(ao['record_uid'], []).append(ao)
+        for uid in record_uid_list:
+            view.set_nsf_record_access_detail(uid, by_uid.get(uid, []))
+            loaded['records'] += 1
+
+    return loaded
 
 
 def _request_sync(vault: VaultOnline, request_sync: bool) -> None:
