@@ -92,6 +92,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('share-report', share_report.ShareReportCommand(), base.CommandScope.Vault) 
         commands.register_command('nsf-list', nsf_commands.NsfListCommand(), base.CommandScope.Vault)
         commands.register_command('nsf-get', nsf_commands.NsfGetCommand(), base.CommandScope.Vault)
+        commands.register_command('nsf-load-access', nsf_commands.NsfLoadAccessCacheCommand(), base.CommandScope.Vault)
         commands.register_command('nsf-record-add', nsf_commands.NsfRecordAddCommand(), base.CommandScope.Vault)
         commands.register_command('nsf-record-update', nsf_commands.NsfRecordUpdateCommand(), base.CommandScope.Vault)
         commands.register_command('nsf-record-details', nsf_commands.NsfRecordDetailsCommand(), base.CommandScope.Vault)

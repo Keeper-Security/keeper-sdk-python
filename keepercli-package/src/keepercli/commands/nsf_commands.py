@@ -1600,3 +1600,24 @@ class NsfShortcutCommand(base.GroupCommand):
         self.register_command(NsfShortcutKeepCommand(), 'keep')
         self.default_verb = 'list'
 
+
+class NsfLoadAccessCacheCommand(base.ArgparseCommand):
+
+    def __init__(self):
+        parser = argparse.ArgumentParser(
+            prog='nsf-load-access',
+            description='Load access details for every NSF folder and record into the in-memory vault cache',
+        )
+        super().__init__(parser)
+
+    def execute(self, context: KeeperParams, **kwargs):
+        vault = _require_vault(context)
+
+        def _run():
+            return nsf_management.load_nsf_access_details(vault)
+
+        loaded = _wrap_nsf('nsf-load-access', _run)
+        logger.info(
+            'Loaded access details for %d folder(s) and %d record(s) into the NSF cache',
+            loaded.get('folders', 0), loaded.get('records', 0))
+
