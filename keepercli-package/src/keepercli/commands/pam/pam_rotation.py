@@ -18,6 +18,7 @@ from keepersdk.vault import (
     vault_utils,
     record_facades,
     attachment,
+    nsf_management
 )
 from keepersdk.proto import pam_pb2, router_pb2
 
