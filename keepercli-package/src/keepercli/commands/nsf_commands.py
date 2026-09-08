@@ -1600,3 +1600,34 @@ class NsfShortcutCommand(base.GroupCommand):
         self.register_command(NsfShortcutKeepCommand(), 'keep')
         self.default_verb = 'list'
 
+
+class NsfLoadAccessCacheCommand(base.ArgparseCommand):
+
+    def __init__(self):
+        parser = argparse.ArgumentParser(
+            prog='nsf-load-access',
+            description='Load access details for every NSF folder and record into the in-memory vault cache',
+        )
+        super().__init__(parser)
+
+    def add_arguments_to_parser(parser: argparse.ArgumentParser) -> None:
+        parser.add_argument('--folders', dest='load_folder', action='store_true',
+                            help='Load access details for folders')
+        parser.add_argument('--records', dest='load_record', action='store_true',
+                            help='Load access details for records')
+
+    def execute(self, context: KeeperParams, **kwargs):
+        vault = _require_vault(context)
+        load_folder = kwargs.get('load_folder', False)
+        load_record = kwargs.get('load_record', False)
+        if not load_folder and not load_record:
+            raise base.CommandError('At least one of --folders or --records is required')
+
+        def _run():
+            return nsf_management.load_nsf_access_details(vault)
+
+        loaded = _wrap_nsf('nsf-load-access', _run)
+        logger.info(
+            'Loaded access details for %d folder(s) and %d record(s) into the NSF cache',
+            loaded.get('folders', 0), loaded.get('records', 0))
+
