@@ -1610,8 +1610,18 @@ class NsfLoadAccessCacheCommand(base.ArgparseCommand):
         )
         super().__init__(parser)
 
+    def add_arguments_to_parser(parser: argparse.ArgumentParser) -> None:
+        parser.add_argument('--folders', dest='load_folder', action='store_true',
+                            help='Load access details for folders')
+        parser.add_argument('--records', dest='load_record', action='store_true',
+                            help='Load access details for records')
+
     def execute(self, context: KeeperParams, **kwargs):
         vault = _require_vault(context)
+        load_folder = kwargs.get('load_folder', False)
+        load_record = kwargs.get('load_record', False)
+        if not load_folder and not load_record:
+            raise base.CommandError('At least one of --folders or --records is required')
 
         def _run():
             return nsf_management.load_nsf_access_details(vault)

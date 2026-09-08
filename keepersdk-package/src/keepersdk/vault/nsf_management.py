@@ -1087,10 +1087,92 @@ def _resolve_uid_to_username(vault: VaultOnline, uid_b64: str) -> Optional[str]:
 _FOLDER_ACCESS_CHUNK = 500
 
 
+_FOLDER_ACCESS_MAX_PAGES = 50
+"""Safety cap on continuation-token pages consumed per UID chunk."""
+
+
+def _parse_folder_accessor(vault: VaultOnline, a: Any) -> Dict[str, Any]:
+    auid = utils.base64_url_encode(a.accessTypeUid)
+    at = folder_pb2.AccessType.Name(a.accessType)
+    rt = folder_pb2.AccessRoleType.Name(a.accessRoleType)
+    username = None
+    if at == 'AT_USER':
+        username = _resolve_uid_to_username(vault, auid)
+    ai = {
+        'accessor_uid': auid, 'access_type': at, 'role': rt,
+        'access_role_type': int(a.accessRoleType),
+        'inherited': bool(a.inherited), 'hidden': bool(a.hidden),
+        'username': username,
+        'date_created': a.dateCreated or None,
+        'last_modified': a.lastModified or None,
+    }
+    if at == 'AT_OWNER':
+        ai['owner'] = True
+    if a.HasField('permissions'):
+        p = a.permissions
+        ai['permissions'] = {
+            'can_add': bool(p.canAdd), 'can_remove': bool(p.canRemove),
+            'can_delete': bool(p.canDelete),
+            'can_list_access': bool(p.canListAccess),
+            'can_update_access': bool(p.canUpdateAccess),
+            'can_change_ownership': bool(p.canChangeOwnership),
+            'can_edit_records': bool(p.canEditRecords),
+            'can_view_records': bool(p.canViewRecords),
+            'can_approve_access': bool(p.canApproveAccess),
+            'can_request_access': bool(p.canRequestAccess),
+            'can_update_setting': bool(p.canUpdateSetting),
+            'can_list_records': bool(p.canListRecords),
+            'can_list_folders': bool(p.canListFolders),
+        }
+    return ai
+
+
+def _fetch_nsf_folder_access_chunk(
+        vault: VaultOnline, chunk: List[str]) -> Dict[str, Dict[str, Any]]:
+    """Fetch access details for one <=500-UID chunk, fully draining continuation pages."""
+    accumulated: Dict[str, Dict[str, Any]] = {}
+    continuation_token = None
+    for _ in range(_FOLDER_ACCESS_MAX_PAGES):
+        rq = folder_access_pb2.GetFolderAccessRequest()
+        for uid in chunk:
+            rq.folderUid.append(utils.base64_url_decode(uid))
+        if continuation_token is not None:
+            rq.continuationToken.lastModified = continuation_token
+        rs = vault.keeper_auth.execute_auth_rest(
+            'vault/folders/v3/access', rq, response_type=folder_access_pb2.GetFolderAccessResponse)
+        if rs is None:
+            break
+
+        for fr in rs.folderAccessResults:
+            fuid = utils.base64_url_encode(fr.folderUid)
+            if fr.HasField('error'):
+                err = fr.error
+                accumulated[fuid] = {
+                    'folder_uid': fuid,
+                    'error': {'status': folder_pb2.FolderModifyStatus.Name(err.status),
+                              'message': err.message},
+                    'success': False}
+            else:
+                accessors = [_parse_folder_accessor(vault, a) for a in fr.accessors]
+                entry = accumulated.setdefault(
+                    fuid, {'folder_uid': fuid, 'accessors': [], 'success': True})
+                entry['accessors'].extend(accessors)
+
+        if not rs.hasMore or not rs.HasField('continuationToken'):
+            break
+        continuation_token = rs.continuationToken.lastModified
+    return accumulated
+
+
 def get_nsf_folder_access(
         vault: VaultOnline,
         folder_uids: Iterable[str]) -> Dict[str, Any]:
-    """``vault/folders/v3/access``, chunked at 500 UIDs per request."""
+    """``vault/folders/v3/access``, chunked at 500 UIDs per request.
+
+    Fully drains continuation-token pagination within each chunk before
+    moving to the next, so the returned ``results`` are always complete —
+    there is no caller-facing ``has_more``/``continuation_token`` to track.
+    """
     uids: List[str] = []
     for raw in folder_uids:
         resolved = resolve_nsf_folder_uid(vault, raw) or raw
@@ -1100,70 +1182,14 @@ def get_nsf_folder_access(
         raise NsfError('At least one folder UID is required')
 
     results: List[Dict[str, Any]] = []
-    rd: Dict[str, Any] = {'results': results, 'has_more': False}
     for i in range(0, len(uids), _FOLDER_ACCESS_CHUNK):
         chunk = uids[i:i + _FOLDER_ACCESS_CHUNK]
-        rq = folder_access_pb2.GetFolderAccessRequest()
-        for uid in chunk:
-            rq.folderUid.append(utils.base64_url_decode(uid))
-        rs = vault.keeper_auth.execute_auth_rest('vault/folders/v3/access', rq, response_type=folder_access_pb2.GetFolderAccessResponse)
-        if rs is None:
-            continue
-
-        for fr in rs.folderAccessResults:
-            fuid = utils.base64_url_encode(fr.folderUid)
-            if fr.HasField('error'):
-                err = fr.error
-                results.append({
-                    'folder_uid': fuid,
-                    'error': {'status': folder_pb2.FolderModifyStatus.Name(err.status),
-                              'message': err.message},
-                    'success': False})
-            else:
-                accessors = []
-                for a in fr.accessors:
-                    auid = utils.base64_url_encode(a.accessTypeUid)
-                    at = folder_pb2.AccessType.Name(a.accessType)
-                    rt = folder_pb2.AccessRoleType.Name(a.accessRoleType)
-                    username = None
-                    if at == 'AT_USER':
-                        username = _resolve_uid_to_username(vault, auid)
-                    ai = {
-                        'accessor_uid': auid, 'access_type': at, 'role': rt,
-                        'access_role_type': int(a.accessRoleType),
-                        'inherited': bool(a.inherited), 'hidden': bool(a.hidden),
-                        'username': username,
-                        'date_created': a.dateCreated or None,
-                        'last_modified': a.lastModified or None,
-                    }
-                    if at == 'AT_OWNER':
-                        ai['owner'] = True
-                    if a.HasField('permissions'):
-                        p = a.permissions
-                        ai['permissions'] = {
-                            'can_add': bool(p.canAdd), 'can_remove': bool(p.canRemove),
-                            'can_delete': bool(p.canDelete),
-                            'can_list_access': bool(p.canListAccess),
-                            'can_update_access': bool(p.canUpdateAccess),
-                            'can_change_ownership': bool(p.canChangeOwnership),
-                            'can_edit_records': bool(p.canEditRecords),
-                            'can_view_records': bool(p.canViewRecords),
-                            'can_approve_access': bool(p.canApproveAccess),
-                            'can_request_access': bool(p.canRequestAccess),
-                            'can_update_setting': bool(p.canUpdateSetting),
-                            'can_list_records': bool(p.canListRecords),
-                            'can_list_folders': bool(p.canListFolders),
-                        }
-                    accessors.append(ai)
-                results.append({'folder_uid': fuid, 'accessors': accessors, 'success': True})
-
-        rd['has_more'] = bool(rs.hasMore)
-        if rs.HasField('continuationToken'):
-            rd['continuation_token'] = rs.continuationToken.lastModified
-    return rd
+        accumulated = _fetch_nsf_folder_access_chunk(vault, chunk)
+        results.extend(accumulated.values())
+    return {'results': results}
 
 
-def load_nsf_access_details(vault: VaultOnline) -> Dict[str, int]:
+def load_nsf_access_details(vault: VaultOnline, load_folder: bool = False, load_record: bool = False) -> Dict[str, int]:
     """Fetch access details for every NSF folder/record and cache them on ``vault.nsf_data``.
 
     Scans all folder and record UIDs currently known to the NSF cache
@@ -1174,8 +1200,10 @@ def load_nsf_access_details(vault: VaultOnline) -> Dict[str, int]:
     by record UID (the list of accessor rows for that record).
     """
     view = _nsf_view(vault)
-    folder_uid_list = [f.folder_uid for f in view.folders()]
-    record_uid_list = [r.record_uid for r in view.records()]
+    if not view.folders() and not view.records():
+        raise NsfError('Pass at least one of load_folder or load_record to load access details for NSF cache')
+    folder_uid_list = [f.folder_uid for f in view.folders()] if load_folder else []
+    record_uid_list = [r.record_uid for r in view.records()] if load_record else []
     if not folder_uid_list and not record_uid_list:
         raise NsfError('NSF cache has no folders or records to load access details for')
 
