@@ -1212,7 +1212,7 @@ def load_nsf_access_details(vault: VaultOnline, load_folder: bool = False, load_
     by record UID (the list of accessor rows for that record).
     """
     view = _nsf_view(vault)
-    if not view.folders() and not view.records():
+    if not load_folder and not load_record:
         raise NsfError('Pass at least one of load_folder or load_record to load access details for NSF cache')
     folder_uid_list = [f.folder_uid for f in view.folders()] if load_folder else []
     record_uid_list = [r.record_uid for r in view.records()] if load_record else []
