@@ -11,7 +11,6 @@ from keepersdk.vault.nsf_management import (
     NsfRemovePreviewItem,
     NsfRemoveResult,
 )
-from keepersdk.vault import share_management_utils
 
 from . import base
 from .record_edit import RecordEditMixin, record_fields_description, ParsedFieldValue
@@ -1615,9 +1614,10 @@ class NsfLoadAccessCacheCommand(base.ArgparseCommand):
             prog='nsf-load-access',
             description='Load access details for every NSF folder and record into the in-memory vault cache',
         )
+        self.add_arguments_to_parser(parser)
         super().__init__(parser)
 
-    def add_arguments_to_parser(parser: argparse.ArgumentParser) -> None:
+    def add_arguments_to_parser(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument('--folders', dest='load_folder', action='store_true',
                             help='Load access details for folders')
         parser.add_argument('--records', dest='load_record', action='store_true',
@@ -1631,7 +1631,7 @@ class NsfLoadAccessCacheCommand(base.ArgparseCommand):
             raise base.CommandError('At least one of --folders or --records is required')
 
         def _run():
-            return nsf_management.load_nsf_access_details(vault)
+            return nsf_management.load_nsf_access_details(vault, load_folder=load_folder, load_record=load_record)
 
         loaded = _wrap_nsf('nsf-load-access', _run)
         logger.info(
