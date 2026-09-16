@@ -2,7 +2,7 @@ import getpass
 import json
 import logging
 import sqlite3
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 import fido2
 import webbrowser
@@ -511,21 +511,117 @@ def close_vault(vault: vault_online.VaultOnline, keeper_auth_context: keeper_aut
     keeper_auth_context.close()
 
 
-def nsf_get(vault: vault_online.VaultOnline) -> None:
-    """Get NSF record or folder details by UID or title (nsf-get).
-
-    For folders, the response includes parent_uid and parent_name (when available).
+def nsf_access_list(
+        vault: vault_online.VaultOnline,
+        folder_uids: List[str],
+        record_uids: List[str]) -> None:
     """
-    ITEM_UID_OR_TITLE = "<record_uid_or_title>"  # Record/folder UID or title
+    Print access details for a caller-supplied list of NSF folder and
+    record UIDs.
 
-    detail = nsf_management.get_nsf_item(vault, ITEM_UID_OR_TITLE)
-    print(json.dumps(detail, indent=2, default=str))
+    Access details are not pre-populated in the NSF in-memory cache, so
+    this fetches them for exactly the requested UIDs via
+    ``get_nsf_folder_access()`` / ``get_nsf_record_accesses()``, caches
+    them onto ``vault.nsf_data``, and then prints only those entries.
+    """
+    view = vault.nsf_data
+    if view is None:
+        print("NSF storage is not available on this vault.")
+        return
+
+    print("\nNSF FOLDERS")
+    print("=" * 100)
+
+    if not folder_uids:
+        print("No NSF folder UIDs requested.")
+    else:
+        access = nsf_management.get_nsf_folder_access(vault, folder_uids)
+        for fr in access.get("results") or []:
+            fuid = fr.get("folder_uid")
+            if fuid:
+                view.set_nsf_folder_access_detail(fuid, fr)
+
+        for folder_uid in folder_uids:
+            folder = view.get_folder(folder_uid)
+            access_detail = view.get_nsf_folder_access_detail(folder_uid)
+
+            print(f"\nFolder: {folder.name if folder else '(NSF Folder)'}")
+            print(f"UID:    {folder_uid}")
+
+            accessors = (access_detail or {}).get("accessors")
+            if not accessors:
+                print("Access: No cached access details found.")
+                continue
+
+            print("Access:")
+            for access in accessors:
+                print(
+                    f"  - accessor_uid={access.get('accessor_uid')}"
+                    f" | access_type={access.get('access_type')}"
+                    f" | role={access.get('role')}"
+                    f" | inherited={access.get('inherited')}"
+                    f" | hidden={access.get('hidden')}"
+                    f" | owner={access.get('owner', False)}"
+                )
+
+                permissions = access.get("permissions")
+                if permissions:
+                    print(f"    permissions={json.dumps(permissions)}")
+
+    print("\nNSF RECORDS")
+    print("=" * 100)
+
+    if not record_uids:
+        print("No NSF record UIDs requested.")
+    else:
+        access = nsf_management.get_nsf_record_accesses(vault, record_uids)
+        by_uid: Dict[str, List] = {}
+        for ao in access.get("record_accesses") or []:
+            by_uid.setdefault(ao["record_uid"], []).append(ao)
+        for record_uid in record_uids:
+            view.set_nsf_record_access_detail(record_uid, by_uid.get(record_uid, []))
+
+        for record_uid in record_uids:
+            access_details = view.get_nsf_record_access_detail(record_uid)
+            print(f"\nRecord UID: {record_uid}")
+
+            if not access_details:
+                print("Access: No cached access details found.")
+                continue
+
+            print("Access:")
+            for access in access_details:
+                print(
+                    f"  - accessor_uid={access.get('access_type_uid')}"
+                    f" | access_type={access.get('access_type')}"
+                    f" | role={access.get('access_role_type')}"
+                    f" | owner={access.get('owner')}"
+                    f" | inherited={access.get('inherited')}"
+                    f" | denied={access.get('denied_access')}"
+                )
+
+                permissions = {
+                    "can_view_title": access.get("can_view_title"),
+                    "can_view": access.get("can_view"),
+                    "can_edit": access.get("can_edit"),
+                    "can_list_access": access.get("can_list_access"),
+                    "can_update_access": access.get("can_update_access"),
+                    "can_delete": access.get("can_delete"),
+                    "can_change_ownership": access.get("can_change_ownership"),
+                    "can_request_access": access.get("can_request_access"),
+                    "can_approve_access": access.get("can_approve_access"),
+                }
+                print(f"    permissions={json.dumps(permissions)}")
 
 
-def nsf_get_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
+def nsf_access_list_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
+    # Sample UIDs — replace with the NSF folder/record UIDs you want to inspect.
+    folder_uids = ["6q8fGc0yG4A9Pu6SQ-mpRg", "CkprfzBZ2T54rQQdtqyZnQ"]
+    record_uids = ["ucmjpdswDPIUNw3YMU2kLQ", "meAReawEiZJ_gtES-y7-nQ"]
+
     vault = open_vault(keeper_auth_context)
     try:
-        nsf_get(vault)
+        nsf_access_list(vault, folder_uids, record_uids)
     except Exception as e:
         print(f"Error: {e}")
     finally:
@@ -535,7 +631,7 @@ def nsf_get_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
 def main() -> None:
     keeper_auth_context, _ = login()
     if keeper_auth_context:
-        nsf_get_run(keeper_auth_context)
+        nsf_access_list_run(keeper_auth_context)
     else:
         print("Login failed.")
 
