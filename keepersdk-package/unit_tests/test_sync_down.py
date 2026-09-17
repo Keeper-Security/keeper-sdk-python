@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import data_vault
 from keepersdk import crypto, utils
 from keepersdk.proto import record_pb2
-from keepersdk.vault import vault_online, sync_down, memory_storage, record_type_management
+from keepersdk.vault import vault_online, sync_down, memory_storage, record_type_management, vault_types
 from keepersdk.proto import SyncDown_pb2
 
 
@@ -107,6 +107,71 @@ class VaultTestCase(unittest.TestCase):
         self.assertTrue(vault.vault_data.team_count < orig_team_count)
         self.assertIsNone(vault.vault_data.get_team(team_uid))
         self.assertTrue(vault.vault_data.shared_folder_count < orig_sf_count)
+
+    def test_team_shared_folder_keys_resolve_per_team_not_last_team(self):
+        # Regression: to_team stored every team-delivered shared-folder key under
+        # the LAST team's uid (a stale closure variable) while encrypting the
+        # bytes with the CURRENT team's key, so a folder owned by a non-last team
+        # failed to decrypt at rebuild. With two teams each owning a distinct
+        # folder, both keys must resolve correctly.
+        sf1 = vault_types.SharedFolder()
+        sf1.shared_folder_uid = utils.generate_uid()
+        sf1.name = 'Team1 Folder'
+        sf2 = vault_types.SharedFolder()
+        sf2.shared_folder_uid = utils.generate_uid()
+        sf2.name = 'Team2 Folder'
+
+        sfd1, sfk1 = data_vault.generate_shared_folder(sf1, False)
+        sfd2, sfk2 = data_vault.generate_shared_folder(sf2, False)
+
+        team1 = vault_types.Team()
+        team1.team_uid = utils.generate_uid()
+        team1.name = 'Team1'
+        team1.rsa_private_key = crypto.load_rsa_private_key(utils.base64_url_decode(data_vault.TeamPrivateKey))
+        team2 = vault_types.Team()
+        team2.team_uid = utils.generate_uid()
+        team2.name = 'Team2'
+        team2.rsa_private_key = crypto.load_rsa_private_key(utils.base64_url_decode(data_vault.TeamPrivateKey))
+
+        t1, sft1, _ = data_vault.generate_team(team1, [(sfd1, sfk1)])
+        t2, sft2, _ = data_vault.generate_team(team2, [(sfd2, sfk2)])
+
+        rs = SyncDown_pb2.SyncDownResponse()
+        rs.continuationToken = crypto.get_random_bytes(64)
+        rs.hasMore = False
+        rs.cacheStatus = SyncDown_pb2.CLEAR
+        rs.sharedFolders.extend([sfd1, sfd2])
+        rs.sharedFolderTeams.extend([*sft1, *sft2])
+        rs.teams.extend([t1, t2])
+        user = SyncDown_pb2.User()
+        user.username = data_vault.UserName
+        user.accountUid = data_vault.AccountUid
+        rs.users.append(user)
+
+        def execute_auth_rest(endpoint, request, response_type):
+            if endpoint == 'vault/sync_down':
+                return rs
+            if endpoint == 'vault/get_record_types':
+                rts = record_pb2.RecordTypesResponse()
+                rts.standardCounter = 1
+                rt = record_pb2.RecordType()
+                rt.scope = record_pb2.RecordTypeScope.RT_STANDARD
+                rt.recordTypeId = 1
+                rt.content = data_vault.RecordTypes
+                rts.recordTypes.append(rt)
+                return rts
+            raise Exception(f'Endpoint "{endpoint}" not supported')
+
+        auth = data_vault.get_connected_auth()
+        mock = MagicMock()
+        mock.side_effect = execute_auth_rest
+        auth.execute_auth_rest = mock
+
+        vault = vault_online.VaultOnline(auth, memory_storage.InMemoryVaultStorage())
+        vault.sync_down()
+
+        self.assertEqual(vault.vault_data.get_shared_folder_key(sf1.shared_folder_uid), sfk1)
+        self.assertEqual(vault.vault_data.get_shared_folder_key(sf2.shared_folder_uid), sfk2)
 
     def test_delete_shared_folder(self):
         vault = get_populated_vault()
