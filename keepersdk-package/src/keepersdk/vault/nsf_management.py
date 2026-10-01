@@ -7,12 +7,15 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple, Union
 
 from .. import crypto, utils
 from ..errors import KeeperApiError
-from ..proto import folder_pb2, record_endpoints_pb2, record_pb2, remove_pb2, record_details_pb2, folder_access_pb2
+from ..proto import folder_pb2, record_endpoints_pb2, record_pb2, remove_pb2, record_details_pb2, folder_access_pb2, keeperdrive_move_pb2
 from . import nsf_crypto, nsf_data, nsf_common, sync_down, vault_extensions, vault_record
 from .vault_online import VaultOnline
 
 ROOT_FOLDER_UID = 'AAAAAAAAAAAAAAAAAPmtNA'
 """Sentinel UID the server uses for the NSF root folder."""
+
+MAX_NSF_FOLDER_DEPTH = 5
+"""Maximum number of NSF folder levels below the NSF root."""
 
 NSF_RECORD_ADD_BATCH_LIMIT = 1000
 """Maximum number of NSF records per ``vault/records/v3/add`` request."""
@@ -54,6 +57,17 @@ class NsfRecordAddSpec:
 @dataclass
 class NsfFolderModifyResult:
     folder_uid: str
+    success: bool
+    status: str = ''
+    message: str = ''
+
+
+@dataclass
+class NsfMoveResult:
+    item_uid: str
+    item_type: str
+    source_folder_uid: Optional[str]
+    destination_folder_uid: str
     success: bool
     status: str = ''
     message: str = ''
@@ -1508,6 +1522,253 @@ def _parse_record_remove_preview(response: remove_pb2.RemoveResponse) -> List[Ns
             error=_parse_remove_error(res.error if res.HasField('error') else None),
         ))
     return items
+
+
+_SUCCESSFUL_NSF_MOVE_RESULTS = {
+    keeperdrive_move_pb2.MOVED,
+    keeperdrive_move_pb2.TARGET_ALREADY_PRESENT_SOURCE_REMOVED,
+}
+
+
+def _normalize_nsf_move_destination(
+        vault: VaultOnline,
+        identifier: str) -> str:
+    resolved = resolve_nsf_folder_uid(vault, identifier)
+    if resolved:
+        return resolved
+    if identifier and identifier.casefold() in ('root', 'my drive'):
+        return ROOT_FOLDER_UID
+    if identifier and is_nsf_folder(vault, identifier):
+        return identifier
+    raise NsfError(f'NSF destination folder not found: {identifier}')
+
+
+def _get_nsf_record_key_type(vault: VaultOnline, record_uid: str) -> int:
+    """Return the stored NSF record-key encryption type."""
+    links = _nsf_view(vault).storage.record_keys.get_links_by_subject(record_uid)
+    for link in links:
+        if link.record_key_type:
+            return int(link.record_key_type)
+    return folder_pb2.encrypted_by_data_key_gcm
+
+
+def _parse_nsf_move_result(
+        result: Any,
+        *,
+        item_uid: str,
+        item_type: str,
+        source_folder_uid: Optional[str],
+        destination_folder_uid: str) -> NsfMoveResult:
+    status = folder_pb2.FolderModifyStatus.Name(result.status)
+    move_status = keeperdrive_move_pb2.MoveResultStatus.Name(result.move_result_status)
+    success = (
+        result.status == folder_pb2.SUCCESS
+        and result.move_result_status in _SUCCESSFUL_NSF_MOVE_RESULTS
+    )
+    message = result.message or move_status
+    return NsfMoveResult(
+        item_uid=item_uid,
+        item_type=item_type,
+        source_folder_uid=source_folder_uid,
+        destination_folder_uid=destination_folder_uid,
+        success=success,
+        status=status,
+        message=message,
+    )
+
+
+def _validate_nsf_folder_move_destination(
+        vault: VaultOnline,
+        source_uid: str,
+        destination_uid: str) -> None:
+    if source_uid == ROOT_FOLDER_UID:
+        raise NsfError('The NSF root folder cannot be moved')
+    if source_uid == destination_uid:
+        raise NsfError('Source and destination folders are the same')
+
+    current_uid = destination_uid
+    visited: set[str] = set()
+    while current_uid and current_uid != ROOT_FOLDER_UID:
+        if current_uid == source_uid:
+            raise NsfError('Cannot move an NSF folder into itself or one of its descendants')
+        if current_uid in visited:
+            break
+        visited.add(current_uid)
+        folder = _nsf_view(vault).get_folder(current_uid)
+        if folder is None:
+            break
+        current_uid = folder.parent_uid or ROOT_FOLDER_UID
+
+
+def move_nsf_record(
+        vault: VaultOnline,
+        record_identifier: str,
+        destination_folder_identifier: str,
+        *,
+        request_sync: bool = True) -> NsfMoveResult:
+    """Move one NSF record using the Keeper folder-record move API."""
+    record_uid = resolve_nsf_record_uid(vault, record_identifier) or record_identifier
+    if not is_nsf_record(vault, record_uid):
+        raise NsfError(f'NSF record not found: {record_identifier}')
+
+    destination_uid = _normalize_nsf_move_destination(vault, destination_folder_identifier)
+
+    source_uids = find_nsf_folders_for_record(vault, record_uid)
+    if not source_uids:
+        raise NsfError(f'No NSF folder location was found for record {record_identifier}')
+    if len(source_uids) > 1:
+        raise NsfError(
+            f'NSF record {record_identifier} has multiple folder locations '
+            f'({", ".join(source_uids)}); use nsf-shortcut keep to reduce it to one '
+            'location before moving')
+    source_uid = source_uids[0]
+
+    if source_uid == destination_uid:
+        raise NsfError('Source and destination folders are the same')
+
+    record_key = _get_record_key(vault, record_uid)
+    record_key_type = _get_nsf_record_key_type(vault, record_uid)
+
+    if destination_uid == ROOT_FOLDER_UID:
+        destination_key = vault.keeper_auth.auth_context.data_key
+        target_bytes = b''
+    else:
+        destination_key = _get_folder_key(vault, destination_uid)
+        target_bytes = utils.base64_url_decode(destination_uid)
+
+    if source_uid == ROOT_FOLDER_UID:
+        source_bytes = b''
+    else:
+        source_bytes = utils.base64_url_decode(source_uid)
+
+    encrypted_record_key, _ = nsf_common.encrypt_record_key_for_folder(
+        record_key, destination_key, record_key_type)
+
+    move = keeperdrive_move_pb2.FolderRecordMove()
+    move.source_folder_uid = source_bytes
+    move.target_folder_uid = target_bytes
+    move.record_uid = utils.base64_url_decode(record_uid)
+    move.encrypted_record_key = encrypted_record_key
+
+    request = keeperdrive_move_pb2.FolderRecordMoveRequest()
+    request.moves.append(move)
+
+    response = vault.keeper_auth.execute_auth_rest(
+        'vault/folders/v3/record_move',
+        request,
+        response_type=keeperdrive_move_pb2.FolderRecordMoveResponse)
+    if response is None or not response.results:
+        raise KeeperApiError('no_results', 'No results from NSF record move response')
+
+    result = _parse_nsf_move_result(
+        response.results[0],
+        item_uid=record_uid,
+        item_type='record',
+        source_folder_uid=source_uid,
+        destination_folder_uid=destination_uid,
+    )
+    if not result.success:
+        raise KeeperApiError(result.status, result.message or 'Failed to move NSF record')
+
+    _request_sync(vault, request_sync)
+    return result
+
+
+def _nsf_folder_depth(vault: VaultOnline, folder_uid: str) -> int:
+    """Nesting depth of ``folder_uid`` (root's direct children are depth 1)."""
+    depth = 0
+    current = folder_uid
+    visited: set[str] = set()
+    while current and current != ROOT_FOLDER_UID and current not in visited:
+        visited.add(current)
+        folder = _nsf_view(vault).get_folder(current)
+        if folder is None:
+            break
+        depth += 1
+        current = folder.parent_uid or ROOT_FOLDER_UID
+    return depth
+
+
+def _nsf_folder_subtree_height(
+        vault: VaultOnline,
+        folder_uid: str,
+        visited: Optional[set[str]] = None) -> int:
+    """Number of additional folder levels below ``folder_uid`` (0 if it has no sub-folders)."""
+    visited = visited if visited is not None else set()
+    if folder_uid in visited:
+        return 0
+    visited.add(folder_uid)
+    folder = _nsf_view(vault).get_folder(folder_uid)
+    children = list(folder.subfolder_uids) if folder else []
+    if not children:
+        return 0
+    return 1 + max(_nsf_folder_subtree_height(vault, child, visited) for child in children)
+
+
+def _validate_nsf_folder_move_depth(
+        vault: VaultOnline,
+        source_uid: str,
+        destination_uid: str) -> None:
+    dest_depth = _nsf_folder_depth(vault, destination_uid)
+    subtree_height = _nsf_folder_subtree_height(vault, source_uid)
+    new_depth = dest_depth + 1 + subtree_height
+    if new_depth > MAX_NSF_FOLDER_DEPTH:
+        raise NsfError(
+            f'Cannot move folder: resulting nesting depth ({new_depth}) would '
+            f'exceed the maximum of {MAX_NSF_FOLDER_DEPTH} levels.')
+
+
+def move_nsf_folder(
+        vault: VaultOnline,
+        folder_identifier: str,
+        destination_folder_identifier: str,
+        *,
+        request_sync: bool = True) -> NsfMoveResult:
+    """Move one NSF folder using the Keeper folder move API."""
+    source_uid = resolve_nsf_folder_uid(vault, folder_identifier) or folder_identifier
+    if not is_nsf_folder(vault, source_uid):
+        raise NsfError(f'NSF source folder not found: {folder_identifier}')
+
+    destination_uid = _normalize_nsf_move_destination(vault, destination_folder_identifier)
+    _validate_nsf_folder_move_destination(vault, source_uid, destination_uid)
+
+    _validate_nsf_folder_move_depth(vault, source_uid, destination_uid)
+
+    folder_key = _get_folder_key(vault, source_uid)
+    if destination_uid == ROOT_FOLDER_UID:
+        parent_key = vault.keeper_auth.auth_context.data_key
+        target_parent_bytes = b''
+    else:
+        parent_key = _get_folder_key(vault, destination_uid)
+        target_parent_bytes = utils.base64_url_decode(destination_uid)
+
+    move = keeperdrive_move_pb2.FolderMove()
+    move.folder_uid = utils.base64_url_decode(source_uid)
+    move.target_parent_uid = target_parent_bytes
+    move.encrypted_folder_key = crypto.encrypt_aes_v2(folder_key, parent_key)
+
+    request = keeperdrive_move_pb2.FolderMoveRequest()
+    request.moves.append(move)
+
+    response = vault.keeper_auth.execute_auth_rest(
+        'vault/folders/v3/folder_move',
+        request,
+        response_type=keeperdrive_move_pb2.FolderMoveResponse)
+    if response is None or not response.results:
+        raise KeeperApiError('no_results', 'No results from NSF folder move response')
+
+    result = _parse_nsf_move_result(
+        response.results[0],
+        item_uid=source_uid,
+        item_type='folder',
+        source_folder_uid=source_uid,
+        destination_folder_uid=destination_uid,
+    )
+    if not result.success:
+        raise KeeperApiError(result.status, result.message or 'Failed to move NSF folder')
+
+    _request_sync(vault, request_sync)
+    return result
 
 
 def remove_nsf_records(

@@ -994,6 +994,85 @@ class NsfRndirCommand(base.ArgparseCommand):
                 logger.info('Folder "%s" has been updated', display)
 
 
+class NsfMvCommand(base.ArgparseCommand):
+    def __init__(self):
+        parser = argparse.ArgumentParser(
+            prog='nsf-move',
+            description='Move an NSF record or folder to another NSF folder',
+        )
+        NsfMvCommand.add_arguments_to_parser(parser)
+        super().__init__(parser)
+
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser) -> None:
+        parser.add_argument(
+            'source',
+            type=str,
+            help='NSF record UID/title or folder UID/name to move',
+        )
+        parser.add_argument(
+            'destination',
+            type=str,
+            help='Destination NSF folder UID/name, or root / My Drive',
+        )
+
+    def execute(self, context: KeeperParams, **kwargs):
+        vault = _require_vault(context)
+        source = (kwargs.get('source') or '').strip()
+        destination = (kwargs.get('destination') or '').strip()
+
+        if not source:
+            raise base.CommandError('Source record/folder is required')
+        if not destination:
+            raise base.CommandError('Destination folder is required')
+
+        folder_uid = nsf_management.resolve_nsf_folder_uid(vault, source)
+        record_uid = nsf_management.resolve_nsf_record_uid(vault, source)
+        if folder_uid and record_uid:
+            raise base.CommandError(
+                f'Source "{source}" matches both an NSF folder and record. '
+                'Use the UID directly to disambiguate.'
+            )
+        if folder_uid:
+            item_type = 'folder'
+        elif record_uid:
+            item_type = 'record'
+        else:
+            raise base.CommandError(f'NSF record or folder not found: {source}')
+
+        if item_type == 'folder':
+            result = _wrap_nsf(
+                'nsf-move',
+                lambda: nsf_management.move_nsf_folder(
+                    vault,
+                    source,
+                    destination,
+                ),
+            )
+            logger.info(
+                "Moved NSF folder '%s' to '%s'",
+                result.item_uid,
+                result.destination_folder_uid,
+            )
+            return result
+
+        result = _wrap_nsf(
+            'nsf-move',
+            lambda: nsf_management.move_nsf_record(
+                vault,
+                source,
+                destination,
+            ),
+        )
+        logger.info(
+            "Moved NSF record '%s' from '%s' to '%s'",
+            result.item_uid,
+            result.source_folder_uid,
+            result.destination_folder_uid,
+        )
+        return result
+
+
 class NsfRmCommand(base.ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(
