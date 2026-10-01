@@ -2,7 +2,7 @@ import getpass
 import json
 import logging
 import sqlite3
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 import fido2
 import webbrowser
@@ -19,7 +19,12 @@ from keepersdk.authentication.yubikey import (
     yubikey_authenticate,
 )
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
-from keepersdk.vault import nsf_management, sqlite_storage, vault_online
+from keepersdk.helpers.workflow import (
+    WorkflowError,
+    get_workflow_state,
+    start_workflow,
+)
+from keepersdk.vault import sqlite_storage, vault_online
 
 try:
     import pyperclip
@@ -511,82 +516,77 @@ def close_vault(vault: vault_online.VaultOnline, keeper_auth_context: keeper_aut
     keeper_auth_context.close()
 
 
-def nsf_access_list(
-    vault: vault_online.VaultOnline,
-    folder_uids: List[str],
-    record_uids: List[str],
-) -> None:
-    load_folder = bool(folder_uids)
-    load_record = bool(record_uids)
-    view = vault.nsf_data
-    if view is None:
-        print("NSF storage is not available on this vault.")
+def print_current_state(state_result: dict) -> None:
+    """
+    Best-effort context only -- get_workflow_state() only resolves record
+    identifiers (UID or title), not flow UIDs, unlike start_workflow()
+    itself. If the identifier is actually a flow UID this lookup fails
+    and the failure is swallowed by the caller; it only skips this
+    preview, it does not affect the check-out itself.
+    """
+    status = state_result.get("status")
+    if status == "no_workflow":
+        print(
+            "\nNo workflow is configured for this record. start_workflow() "
+            "will still be attempted, but is expected to fail unless the "
+            "identifier is actually a flow UID."
+        )
         return
-    nsf_management.load_nsf_access_details(vault, load_folder=load_folder, load_record=load_record)
-
-    for folder_uid in folder_uids:
-        folder = view.get_folder(folder_uid)
-        print(f"\nFolder: {folder.name if folder else '(NSF Folder)'}")
-        print(f"UID:    {folder_uid}")
-        folder_access_detail = view.get_nsf_folder_access_detail(folder_uid)
-        accessors = (folder_access_detail or {}).get("accessors")
-        if not accessors:
-            print("Access: No cached access details found.")
-            continue
-        print("Access:")
-        for access in accessors:
-            print(
-                f"  - accessor_uid={access.get('accessor_uid')}"
-                f" | access_type={access.get('access_type')}"
-                f" | role={access.get('role')}"
-                f" | inherited={access.get('inherited')}"
-                f" | hidden={access.get('hidden')}"
-                f" | owner={access.get('owner', False)}"
-            )
-            permissions = access.get("permissions")
-            if permissions:
-                print(f"    permissions={json.dumps(permissions)}")
-
-    for record_uid in record_uids:
-        print(f"\nRecord UID: {record_uid}")
-        record_access_detail = view.get_nsf_record_access_detail(record_uid)
-        if not record_access_detail:
-            print("Access: No cached access details found.")
-            continue
-        print("Access:")
-        for access in record_access_detail:
-            print(
-                f"  - accessor_uid={access.get('access_type_uid')}"
-                f" | access_type={access.get('access_type')}"
-                f" | role={access.get('access_role_type')}"
-                f" | owner={access.get('owner')}"
-                f" | inherited={access.get('inherited')}"
-                f" | denied={access.get('denied_access')}"
-            )
-            permissions = {
-                "can_view_title": access.get("can_view_title"),
-                "can_view": access.get("can_view"),
-                "can_edit": access.get("can_edit"),
-                "can_list_access": access.get("can_list_access"),
-                "can_update_access": access.get("can_update_access"),
-                "can_delete": access.get("can_delete"),
-                "can_change_ownership": access.get("can_change_ownership"),
-                "can_request_access": access.get("can_request_access"),
-                "can_approve_access": access.get("can_approve_access"),
-            }
-            print(f"    permissions={json.dumps(permissions)}")
+    if status != "success":
+        return
+    print(f"\nCurrent stage : {state_result.get('stage')}")
+    conditions = state_result.get("conditions") or []
+    if conditions:
+        print(f"Conditions    : {', '.join(conditions)}")
+    checked_out_by = state_result.get("checked_out_by")
+    if checked_out_by:
+        print(f"Checked out by: {checked_out_by}")
 
 
-def nsf_access_list_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
-    # Sample UIDs — replace with the NSF folder/record UIDs you want to inspect.
-    folder_uids = ["<FOLDER_UID_1>", "<FOLDER_UID_2>"]
-    record_uids = ["<RECORD_UID_1>", "<RECORD_UID_2>"]
+def print_workflow_started(result: dict) -> None:
+    print("\nWorkflow started (checked out)")
+    if result.get("record_uid"):
+        print(f"  Record : {result.get('record_name')} ({result.get('record_uid')})")
+    else:
+        print(f"  Flow UID : {result.get('flow_uid')}")
+    print(
+        "\nYou may now connect via `pam tunnel` or `pam launch`. Remember to "
+        "check in when finished with end_workflow.py -- especially important "
+        "if the workflow uses single-user check-in/check-out, which blocks "
+        "every other user from checking out the same resource until you do."
+    )
+
+
+def start_workflow_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
+    # Record UID, record name, or Flow UID to check out.
+    # start_workflow() accepts either form -- if it resolves as a record
+    # (UID or name), the check-out applies to that record's active
+    # workflow; otherwise the value is sent as a flow UID directly.
+    workflow_uid = "<PAM_RECORD_UID_OR_TITLE_OR_FLOW_UID>"
 
     vault = open_vault(keeper_auth_context)
     try:
-        nsf_access_list(vault, folder_uids, record_uids)
-    except Exception as e:
-        print(f"Error: {e}")
+        try:
+            current_state = get_workflow_state(vault, workflow_uid, enterprise_data=None)
+            print_current_state(current_state)
+        except WorkflowError:
+            logger.debug(
+                "Skipping current-state preview: %r did not resolve as a "
+                "record identifier (it may be a flow UID instead).",
+                workflow_uid,
+            )
+
+        print("\nStarting workflow (checking out)...")
+        result = start_workflow(vault, workflow_uid)
+        print_workflow_started(result)
+    except WorkflowError as exc:
+        print(f"Workflow error: {exc}")
+    except errors.KeeperApiError as exc:
+        print(f"Keeper API error: ({exc.result_code}) {exc.message}")
+    except KeyboardInterrupt:
+        print("\nCancelled.")
+    except Exception as exc:
+        print(f"Unexpected error: {exc}")
     finally:
         close_vault(vault, keeper_auth_context)
 
@@ -594,7 +594,7 @@ def nsf_access_list_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
 def main() -> None:
     keeper_auth_context, _ = login()
     if keeper_auth_context:
-        nsf_access_list_run(keeper_auth_context)
+        start_workflow_run(keeper_auth_context)
     else:
         print("Login failed.")
 

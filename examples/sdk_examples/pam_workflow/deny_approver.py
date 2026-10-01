@@ -2,7 +2,7 @@ import getpass
 import json
 import logging
 import sqlite3
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 import fido2
 import webbrowser
@@ -19,7 +19,12 @@ from keepersdk.authentication.yubikey import (
     yubikey_authenticate,
 )
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
-from keepersdk.vault import nsf_management, sqlite_storage, vault_online
+from keepersdk.helpers.workflow import (
+    WorkflowError,
+    deny_workflow,
+    get_pending_approvals,
+)
+from keepersdk.vault import sqlite_storage, vault_online
 
 try:
     import pyperclip
@@ -511,82 +516,65 @@ def close_vault(vault: vault_online.VaultOnline, keeper_auth_context: keeper_aut
     keeper_auth_context.close()
 
 
-def nsf_access_list(
-    vault: vault_online.VaultOnline,
-    folder_uids: List[str],
-    record_uids: List[str],
-) -> None:
-    load_folder = bool(folder_uids)
-    load_record = bool(record_uids)
-    view = vault.nsf_data
-    if view is None:
-        print("NSF storage is not available on this vault.")
-        return
-    nsf_management.load_nsf_access_details(vault, load_folder=load_folder, load_record=load_record)
-
-    for folder_uid in folder_uids:
-        folder = view.get_folder(folder_uid)
-        print(f"\nFolder: {folder.name if folder else '(NSF Folder)'}")
-        print(f"UID:    {folder_uid}")
-        folder_access_detail = view.get_nsf_folder_access_detail(folder_uid)
-        accessors = (folder_access_detail or {}).get("accessors")
-        if not accessors:
-            print("Access: No cached access details found.")
-            continue
-        print("Access:")
-        for access in accessors:
-            print(
-                f"  - accessor_uid={access.get('accessor_uid')}"
-                f" | access_type={access.get('access_type')}"
-                f" | role={access.get('role')}"
-                f" | inherited={access.get('inherited')}"
-                f" | hidden={access.get('hidden')}"
-                f" | owner={access.get('owner', False)}"
-            )
-            permissions = access.get("permissions")
-            if permissions:
-                print(f"    permissions={json.dumps(permissions)}")
-
-    for record_uid in record_uids:
-        print(f"\nRecord UID: {record_uid}")
-        record_access_detail = view.get_nsf_record_access_detail(record_uid)
-        if not record_access_detail:
-            print("Access: No cached access details found.")
-            continue
-        print("Access:")
-        for access in record_access_detail:
-            print(
-                f"  - accessor_uid={access.get('access_type_uid')}"
-                f" | access_type={access.get('access_type')}"
-                f" | role={access.get('access_role_type')}"
-                f" | owner={access.get('owner')}"
-                f" | inherited={access.get('inherited')}"
-                f" | denied={access.get('denied_access')}"
-            )
-            permissions = {
-                "can_view_title": access.get("can_view_title"),
-                "can_view": access.get("can_view"),
-                "can_edit": access.get("can_edit"),
-                "can_list_access": access.get("can_list_access"),
-                "can_update_access": access.get("can_update_access"),
-                "can_delete": access.get("can_delete"),
-                "can_change_ownership": access.get("can_change_ownership"),
-                "can_request_access": access.get("can_request_access"),
-                "can_approve_access": access.get("can_approve_access"),
-            }
-            print(f"    permissions={json.dumps(permissions)}")
+def find_pending_request(vault: vault_online.VaultOnline, flow_uid: str) -> Optional[dict]:
+    """
+    Look up a single pending approval request by flow UID. Uses
+    get_pending_approvals() and filters for a matching flow_uid. Returns
+    the request dict, or None if the flow UID is not currently pending
+    for this user.
+    """
+    pending = get_pending_approvals(vault, enterprise_data=None)
+    for request in pending.get("requests") or []:
+        if request.get("flow_uid") == flow_uid:
+            return request
+    return None
 
 
-def nsf_access_list_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
-    # Sample UIDs — replace with the NSF folder/record UIDs you want to inspect.
-    folder_uids = ["<FOLDER_UID_1>", "<FOLDER_UID_2>"]
-    record_uids = ["<RECORD_UID_1>", "<RECORD_UID_2>"]
+def print_workflow_denied(result: dict) -> None:
+    print("\nAccess request denied")
+    print(f"  Flow UID : {result.get('flow_uid')}")
+    if result.get("reason"):
+        print(f"  Reason   : {result['reason']}")
+    else:
+        print("  Reason   : (none sent -- either none was configured, or the requester's public key could not be resolved)")
+
+
+def deny_approver_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
+    # Flow UID of the pending access request to deny. Get this from the
+    # "Flow UID" column of the pending-requests listing.
+    flow_uid = "<PENDING_FLOW_UID>"
+
+    # Optional reason for the denial. Set to None to send no reason.
+    denial_reason: Optional[str] = "<DENIAL_REASON>"
 
     vault = open_vault(keeper_auth_context)
     try:
-        nsf_access_list(vault, folder_uids, record_uids)
-    except Exception as e:
-        print(f"Error: {e}")
+        # deny_workflow() does not itself verify the flow UID is currently
+        # pending, so look it up first to show who requested access and
+        # fail with a clear message if it's no longer pending.
+        pending_request = find_pending_request(vault, flow_uid)
+        if pending_request is None:
+            print(f"Flow UID {flow_uid!r} is not currently pending approval for this user.")
+            print("It may have already been approved, denied, or cancelled, or it may belong to a different approver.")
+            return
+
+        print(f"\n  Requested by : {pending_request.get('requested_by')}")
+        print(f"  Resource     : {pending_request.get('record_name')} ({pending_request.get('record_uid')})")
+        if pending_request.get("reason"):
+            print(f"  Reason given : {pending_request['reason']}")
+        if pending_request.get("ticket"):
+            print(f"  Ticket       : {pending_request['ticket']}")
+
+        result = deny_workflow(vault, flow_uid, reason=denial_reason, enterprise_data=None)
+        print_workflow_denied(result)
+    except WorkflowError as exc:
+        print(f"Workflow error: {exc}")
+    except errors.KeeperApiError as exc:
+        print(f"Keeper API error: ({exc.result_code}) {exc.message}")
+    except KeyboardInterrupt:
+        print("\nCancelled.")
+    except Exception as exc:
+        print(f"Unexpected error: {exc}")
     finally:
         close_vault(vault, keeper_auth_context)
 
@@ -594,7 +582,7 @@ def nsf_access_list_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
 def main() -> None:
     keeper_auth_context, _ = login()
     if keeper_auth_context:
-        nsf_access_list_run(keeper_auth_context)
+        deny_approver_run(keeper_auth_context)
     else:
         print("Login failed.")
 

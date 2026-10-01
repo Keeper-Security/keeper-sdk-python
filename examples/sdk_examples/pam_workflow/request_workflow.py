@@ -2,7 +2,7 @@ import getpass
 import json
 import logging
 import sqlite3
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 import fido2
 import webbrowser
@@ -19,7 +19,11 @@ from keepersdk.authentication.yubikey import (
     yubikey_authenticate,
 )
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
-from keepersdk.vault import nsf_management, sqlite_storage, vault_online
+from keepersdk.helpers.workflow import (
+    WorkflowError,
+    request_workflow_access,
+)
+from keepersdk.vault import sqlite_storage, vault_online
 
 try:
     import pyperclip
@@ -511,82 +515,84 @@ def close_vault(vault: vault_online.VaultOnline, keeper_auth_context: keeper_aut
     keeper_auth_context.close()
 
 
-def nsf_access_list(
-    vault: vault_online.VaultOnline,
-    folder_uids: List[str],
-    record_uids: List[str],
-) -> None:
-    load_folder = bool(folder_uids)
-    load_record = bool(record_uids)
-    view = vault.nsf_data
-    if view is None:
-        print("NSF storage is not available on this vault.")
+def print_request_result(result: dict) -> None:
+    status = result.get("status")
+    action = result.get("action")
+
+    if status == "exempt":
+        # NOTE: the exempt result only carries 'record_uid', not 'record_name' --
+        # is_workflow_exempt() short-circuits before the SDK resolves the record's title.
+        print("\nNo request was sent.")
+        print(f"  {result.get('message')}")
+        print(f"  Record UID : {result.get('record_uid')}")
+        print(
+            "\nYou are a record owner or approver on this resource, so you can "
+            "access it directly without going through the workflow."
+        )
         return
-    nsf_management.load_nsf_access_details(vault, load_folder=load_folder, load_record=load_record)
 
-    for folder_uid in folder_uids:
-        folder = view.get_folder(folder_uid)
-        print(f"\nFolder: {folder.name if folder else '(NSF Folder)'}")
-        print(f"UID:    {folder_uid}")
-        folder_access_detail = view.get_nsf_folder_access_detail(folder_uid)
-        accessors = (folder_access_detail or {}).get("accessors")
-        if not accessors:
-            print("Access: No cached access details found.")
-            continue
-        print("Access:")
-        for access in accessors:
-            print(
-                f"  - accessor_uid={access.get('accessor_uid')}"
-                f" | access_type={access.get('access_type')}"
-                f" | role={access.get('role')}"
-                f" | inherited={access.get('inherited')}"
-                f" | hidden={access.get('hidden')}"
-                f" | owner={access.get('owner', False)}"
-            )
-            permissions = access.get("permissions")
-            if permissions:
-                print(f"    permissions={json.dumps(permissions)}")
+    if action == "escalated":
+        print("\nRequest escalated")
+        print(f"  Record : {result.get('record_name')} ({result.get('record_uid')})")
+        print("\nEscalation approvers have been notified.")
+        return
 
-    for record_uid in record_uids:
-        print(f"\nRecord UID: {record_uid}")
-        record_access_detail = view.get_nsf_record_access_detail(record_uid)
-        if not record_access_detail:
-            print("Access: No cached access details found.")
-            continue
-        print("Access:")
-        for access in record_access_detail:
-            print(
-                f"  - accessor_uid={access.get('access_type_uid')}"
-                f" | access_type={access.get('access_type')}"
-                f" | role={access.get('access_role_type')}"
-                f" | owner={access.get('owner')}"
-                f" | inherited={access.get('inherited')}"
-                f" | denied={access.get('denied_access')}"
-            )
-            permissions = {
-                "can_view_title": access.get("can_view_title"),
-                "can_view": access.get("can_view"),
-                "can_edit": access.get("can_edit"),
-                "can_list_access": access.get("can_list_access"),
-                "can_update_access": access.get("can_update_access"),
-                "can_delete": access.get("can_delete"),
-                "can_change_ownership": access.get("can_change_ownership"),
-                "can_request_access": access.get("can_request_access"),
-                "can_approve_access": access.get("can_approve_access"),
-            }
-            print(f"    permissions={json.dumps(permissions)}")
+    if action == "cancelled":
+        print("\nRequest cancelled")
+        print(f"  Flow UID : {result.get('flow_uid')}")
+        print(f"  Record   : {result.get('record_name')} ({result.get('record_uid')})")
+        return
+
+    print("\nAccess request submitted")
+    print(f"  Record : {result.get('record_name')} ({result.get('record_uid')})")
+    print(f"  {result.get('message')}")
+    if result.get("reason"):
+        print(f"  Reason : {result['reason']}")
+    if result.get("ticket"):
+        print(f"  Ticket : {result['ticket']}")
+    print(
+        "\nRun pending_workflow.py as an approver to see this request, or "
+        "check on it yourself against this record."
+    )
 
 
-def nsf_access_list_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
-    # Sample UIDs — replace with the NSF folder/record UIDs you want to inspect.
-    folder_uids = ["<FOLDER_UID_1>", "<FOLDER_UID_2>"]
-    record_uids = ["<RECORD_UID_1>", "<RECORD_UID_2>"]
+def request_workflow_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
+    # Record identifier accepts either the record's UID (base64url) or its title.
+    record_identifier = "<PAM_RECORD_UID_OR_TITLE>"
+
+    # request_workflow_access() supports three mutually exclusive modes:
+    #   1. Submit a new request      -- escalate=False, cancel=False
+    #   2. Escalate a pending request -- escalate=True,  cancel=False
+    #   3. Cancel a pending/active request -- escalate=False, cancel=True
+    # Setting both True raises WorkflowError before any network call. Cancel
+    # takes no reason or ticket -- clear them below if cancelling.
+    escalate = False
+    cancel = False
+
+    # Reason/ticket for the access request. Only used in submit mode --
+    # must be empty when cancel is True.
+    reason = "<REQUEST_REASON>"
+    ticket = "<TICKET_NUMBER>"
 
     vault = open_vault(keeper_auth_context)
     try:
-        nsf_access_list(vault, folder_uids, record_uids)
-    except Exception as e:
-        print(f"Error: {e}")
+        result = request_workflow_access(
+            vault,
+            record_identifier,
+            reason=reason,
+            ticket=ticket,
+            escalate=escalate,
+            cancel=cancel,
+        )
+        print_request_result(result)
+    except WorkflowError as exc:
+        print(f"Workflow error: {exc}")
+    except errors.KeeperApiError as exc:
+        print(f"Keeper API error: ({exc.result_code}) {exc.message}")
+    except KeyboardInterrupt:
+        print("\nCancelled.")
+    except Exception as exc:
+        print(f"Unexpected error: {exc}")
     finally:
         close_vault(vault, keeper_auth_context)
 
@@ -594,7 +600,7 @@ def nsf_access_list_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
 def main() -> None:
     keeper_auth_context, _ = login()
     if keeper_auth_context:
-        nsf_access_list_run(keeper_auth_context)
+        request_workflow_run(keeper_auth_context)
     else:
         print("Login failed.")
 

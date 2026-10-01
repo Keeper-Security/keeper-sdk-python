@@ -2,7 +2,7 @@ import getpass
 import json
 import logging
 import sqlite3
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 import fido2
 import webbrowser
@@ -19,7 +19,8 @@ from keepersdk.authentication.yubikey import (
     yubikey_authenticate,
 )
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
-from keepersdk.vault import nsf_management, sqlite_storage, vault_online
+from keepersdk.helpers.workflow import WorkflowError, read_workflow
+from keepersdk.vault import sqlite_storage, vault_online
 
 try:
     import pyperclip
@@ -511,82 +512,78 @@ def close_vault(vault: vault_online.VaultOnline, keeper_auth_context: keeper_aut
     keeper_auth_context.close()
 
 
-def nsf_access_list(
-    vault: vault_online.VaultOnline,
-    folder_uids: List[str],
-    record_uids: List[str],
-) -> None:
-    load_folder = bool(folder_uids)
-    load_record = bool(record_uids)
-    view = vault.nsf_data
-    if view is None:
-        print("NSF storage is not available on this vault.")
+def print_workflow(result: dict) -> None:
+    if result.get("status") == "no_workflow":
+        print(
+            f"\nNo workflow configured for record: "
+            f"{result.get('record_name')} ({result.get('record_uid')})"
+        )
+        print(
+            f"\nTo create one, see create_workflow.py against record "
+            f"{result.get('record_uid')}."
+        )
         return
-    nsf_management.load_nsf_access_details(vault, load_folder=load_folder, load_record=load_record)
 
-    for folder_uid in folder_uids:
-        folder = view.get_folder(folder_uid)
-        print(f"\nFolder: {folder.name if folder else '(NSF Folder)'}")
-        print(f"UID:    {folder_uid}")
-        folder_access_detail = view.get_nsf_folder_access_detail(folder_uid)
-        accessors = (folder_access_detail or {}).get("accessors")
-        if not accessors:
-            print("Access: No cached access details found.")
-            continue
-        print("Access:")
-        for access in accessors:
-            print(
-                f"  - accessor_uid={access.get('accessor_uid')}"
-                f" | access_type={access.get('access_type')}"
-                f" | role={access.get('role')}"
-                f" | inherited={access.get('inherited')}"
-                f" | hidden={access.get('hidden')}"
-                f" | owner={access.get('owner', False)}"
-            )
-            permissions = access.get("permissions")
-            if permissions:
-                print(f"    permissions={json.dumps(permissions)}")
+    print("\nWorkflow Configuration")
+    print(f"  Record        : {result.get('record_name')} ({result.get('record_uid')})")
+    if result.get("created_on"):
+        print(f"  Created on    : {result['created_on']}")
 
-    for record_uid in record_uids:
-        print(f"\nRecord UID: {record_uid}")
-        record_access_detail = view.get_nsf_record_access_detail(record_uid)
-        if not record_access_detail:
-            print("Access: No cached access details found.")
-            continue
-        print("Access:")
-        for access in record_access_detail:
-            print(
-                f"  - accessor_uid={access.get('access_type_uid')}"
-                f" | access_type={access.get('access_type')}"
-                f" | role={access.get('access_role_type')}"
-                f" | owner={access.get('owner')}"
-                f" | inherited={access.get('inherited')}"
-                f" | denied={access.get('denied_access')}"
-            )
-            permissions = {
-                "can_view_title": access.get("can_view_title"),
-                "can_view": access.get("can_view"),
-                "can_edit": access.get("can_edit"),
-                "can_list_access": access.get("can_list_access"),
-                "can_update_access": access.get("can_update_access"),
-                "can_delete": access.get("can_delete"),
-                "can_change_ownership": access.get("can_change_ownership"),
-                "can_request_access": access.get("can_request_access"),
-                "can_approve_access": access.get("can_approve_access"),
-            }
-            print(f"    permissions={json.dumps(permissions)}")
+    params = result.get("parameters") or {}
+    print("\nAccess Parameters:")
+    print(f"  Approvals needed        : {params.get('approvals_needed')}")
+    print(f"  Check-in/out required   : {'Yes' if params.get('checkout_needed') else 'No'}")
+    print(f"  Access duration         : {params.get('access_duration')}")
+    print(
+        f"  Timer starts            : "
+        f"{'On approval' if params.get('start_access_on_approval') else 'On check-out'}"
+    )
+
+    print("\nRequirements:")
+    print(f"  Reason required : {'Yes' if params.get('require_reason') else 'No'}")
+    print(f"  Ticket required : {'Yes' if params.get('require_ticket') else 'No'}")
+    print(f"  MFA required    : {'Yes' if params.get('require_mfa') else 'No'}")
+
+    allowed_times = params.get("allowed_times") or {}
+    if allowed_times:
+        print("\nAllowed Times:")
+        if allowed_times.get("allowed_days"):
+            print(f"  Days : {', '.join(allowed_times['allowed_days'])}")
+        if allowed_times.get("time_range"):
+            print(f"  Time : {allowed_times['time_range']}")
+
+    approvers = result.get("approvers") or []
+    print(f"\nApprovers ({len(approvers)}):")
+    if not approvers:
+        print("  (none)")
+    for approver in approvers:
+        if approver.get("type") == "user":
+            identity = approver.get("email", "")
+        else:
+            identity = f"team ({approver.get('type')})"
+        escalation_note = ""
+        if approver.get("escalation"):
+            escalation_note = f"  [escalation, after {approver.get('escalation_after')}]"
+        print(f"  - {identity}{escalation_note}")
 
 
-def nsf_access_list_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
-    # Sample UIDs — replace with the NSF folder/record UIDs you want to inspect.
-    folder_uids = ["<FOLDER_UID_1>", "<FOLDER_UID_2>"]
-    record_uids = ["<RECORD_UID_1>", "<RECORD_UID_2>"]
+def read_workflow_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
+    # Identifier of the PAM record whose workflow configuration should be
+    # read. Accepts either the record's UID (base64url) or its title.
+    record_identifier = "<PAM_RECORD_UID_OR_TITLE>"
 
     vault = open_vault(keeper_auth_context)
     try:
-        nsf_access_list(vault, folder_uids, record_uids)
-    except Exception as e:
-        print(f"Error: {e}")
+        result = read_workflow(vault, record_identifier, enterprise_data=None)
+        print_workflow(result)
+    except WorkflowError as exc:
+        print(f"Workflow error: {exc}")
+    except errors.KeeperApiError as exc:
+        print(f"Keeper API error: ({exc.result_code}) {exc.message}")
+    except KeyboardInterrupt:
+        print("\nCancelled.")
+    except Exception as exc:
+        print(f"Unexpected error: {exc}")
     finally:
         close_vault(vault, keeper_auth_context)
 
@@ -594,7 +591,7 @@ def nsf_access_list_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
 def main() -> None:
     keeper_auth_context, _ = login()
     if keeper_auth_context:
-        nsf_access_list_run(keeper_auth_context)
+        read_workflow_run(keeper_auth_context)
     else:
         print("Login failed.")
 
