@@ -2,7 +2,7 @@ import getpass
 import json
 import logging
 import sqlite3
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 import fido2
 import webbrowser
@@ -19,7 +19,8 @@ from keepersdk.authentication.yubikey import (
     yubikey_authenticate,
 )
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
-from keepersdk.vault import nsf_management, sqlite_storage, vault_online
+from keepersdk.helpers.workflow import WorkflowError, read_workflow, update_workflow
+from keepersdk.vault import sqlite_storage, vault_online
 
 try:
     import pyperclip
@@ -511,82 +512,177 @@ def close_vault(vault: vault_online.VaultOnline, keeper_auth_context: keeper_aut
     keeper_auth_context.close()
 
 
-def nsf_access_list(
-    vault: vault_online.VaultOnline,
-    folder_uids: List[str],
-    record_uids: List[str],
+def print_parameters(label: str, params: dict) -> None:
+    print(f"\n{label}:")
+    print(f"  Approvals needed        : {params.get('approvals_needed')}")
+    print(f"  Check-in/out required   : {'Yes' if params.get('checkout_needed') else 'No'}")
+    print(
+        f"  Timer starts            : "
+        f"{'On approval' if params.get('start_access_on_approval') else 'On check-out'}"
+    )
+    print(f"  Access duration         : {params.get('access_duration')}")
+    print(f"  Reason required         : {'Yes' if params.get('require_reason') else 'No'}")
+    print(f"  Ticket required         : {'Yes' if params.get('require_ticket') else 'No'}")
+    print(f"  MFA required            : {'Yes' if params.get('require_mfa') else 'No'}")
+
+    allowed_times = params.get("allowed_times") or {}
+    if allowed_times:
+        print(f"  Allowed days             : {', '.join(allowed_times.get('allowed_days') or []) or '(any)'}")
+        print(f"  Allowed time range(s)    : {', '.join(allowed_times.get('time_ranges') or []) or '(any)'}")
+    else:
+        print("  Allowed days/time range  : (unrestricted)")
+
+
+def warn_if_revert_to_default_will_be_ignored(
+    current_params: dict,
+    checkout_needed: Optional[bool],
+    start_on_approval: Optional[bool],
+    require_reason: Optional[bool],
+    require_ticket: Optional[bool],
+    require_mfa: Optional[bool],
+    approvals_needed: Optional[int],
 ) -> None:
-    load_folder = bool(folder_uids)
-    load_record = bool(record_uids)
-    view = vault.nsf_data
-    if view is None:
-        print("NSF storage is not available on this vault.")
+    checks = [
+        ("checkout_needed", checkout_needed, "checkout_needed"),
+        ("start_on_approval", start_on_approval, "start_access_on_approval"),
+        ("require_reason", require_reason, "require_reason"),
+        ("require_ticket", require_ticket, "require_ticket"),
+        ("require_mfa", require_mfa, "require_mfa"),
+    ]
+    for name, new_value, current_key in checks:
+        if new_value is False and current_params.get(current_key):
+            print(
+                f"\nWARNING: {name} is set to False, and the record currently "
+                f"has it as True. This revert will very likely be silently "
+                f"ignored -- use delete + create instead to actually turn it off."
+            )
+
+    if approvals_needed == 0 and (current_params.get("approvals_needed") or 0) > 0:
+        print(
+            "\nWARNING: approvals_needed is set to 0, and the record currently "
+            "requires approvals. This revert will very likely be silently "
+            "ignored -- use delete + create instead."
+        )
+
+
+def warn_if_temporal_update_is_destructive(
+    current_params: dict,
+    allowed_days: Optional[str],
+    time_range: Optional[str],
+) -> None:
+    """
+    update_workflow() rebuilds the record's entire temporal filter from
+    whichever of allowed_days/time_range is passed to *this call* -- it
+    does not merge with what's already on the record. So setting only one
+    of the two while the record currently has the other configured will
+    silently drop it. This checks the record's current state and warns
+    before sending the update if that's about to happen.
+    """
+    if allowed_days is None and time_range is None:
         return
-    nsf_management.load_nsf_access_details(vault, load_folder=load_folder, load_record=load_record)
 
-    for folder_uid in folder_uids:
-        folder = view.get_folder(folder_uid)
-        print(f"\nFolder: {folder.name if folder else '(NSF Folder)'}")
-        print(f"UID:    {folder_uid}")
-        folder_access_detail = view.get_nsf_folder_access_detail(folder_uid)
-        accessors = (folder_access_detail or {}).get("accessors")
-        if not accessors:
-            print("Access: No cached access details found.")
-            continue
-        print("Access:")
-        for access in accessors:
-            print(
-                f"  - accessor_uid={access.get('accessor_uid')}"
-                f" | access_type={access.get('access_type')}"
-                f" | role={access.get('role')}"
-                f" | inherited={access.get('inherited')}"
-                f" | hidden={access.get('hidden')}"
-                f" | owner={access.get('owner', False)}"
-            )
-            permissions = access.get("permissions")
-            if permissions:
-                print(f"    permissions={json.dumps(permissions)}")
+    current_allowed_times = current_params.get("allowed_times") or {}
+    current_has_days = bool(current_allowed_times.get("allowed_days"))
+    current_has_range = bool(current_allowed_times.get("time_ranges"))
 
-    for record_uid in record_uids:
-        print(f"\nRecord UID: {record_uid}")
-        record_access_detail = view.get_nsf_record_access_detail(record_uid)
-        if not record_access_detail:
-            print("Access: No cached access details found.")
-            continue
-        print("Access:")
-        for access in record_access_detail:
-            print(
-                f"  - accessor_uid={access.get('access_type_uid')}"
-                f" | access_type={access.get('access_type')}"
-                f" | role={access.get('access_role_type')}"
-                f" | owner={access.get('owner')}"
-                f" | inherited={access.get('inherited')}"
-                f" | denied={access.get('denied_access')}"
-            )
-            permissions = {
-                "can_view_title": access.get("can_view_title"),
-                "can_view": access.get("can_view"),
-                "can_edit": access.get("can_edit"),
-                "can_list_access": access.get("can_list_access"),
-                "can_update_access": access.get("can_update_access"),
-                "can_delete": access.get("can_delete"),
-                "can_change_ownership": access.get("can_change_ownership"),
-                "can_request_access": access.get("can_request_access"),
-                "can_approve_access": access.get("can_approve_access"),
-            }
-            print(f"    permissions={json.dumps(permissions)}")
+    if allowed_days is not None and time_range is None and current_has_range:
+        print(
+            "\nWARNING: allowed_days is set but time_range is not, and this "
+            "record currently has a time range configured. Sending this "
+            "update will DROP the existing time range -- set time_range "
+            "explicitly to the current value if you want to keep it."
+        )
+
+    if time_range is not None and allowed_days is None and current_has_days:
+        print(
+            "\nWARNING: time_range is set but allowed_days is not, and this "
+            "record currently has allowed days configured. Sending this "
+            "update will DROP the existing allowed days -- set allowed_days "
+            "explicitly to the current value if you want to keep them."
+        )
 
 
-def nsf_access_list_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
-    # Sample UIDs — replace with the NSF folder/record UIDs you want to inspect.
-    folder_uids = ["<FOLDER_UID_1>", "<FOLDER_UID_2>"]
-    record_uids = ["<RECORD_UID_1>", "<RECORD_UID_2>"]
+def update_workflow_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
+    # Record identifier accepts either the record's UID or its title.
+    # A workflow must already exist on this record.
+    record_identifier = "<PAM_RECORD_UID_OR_TITLE>"
+
+    # Sparse update: every field below defaults to None, which means
+    # "leave this field exactly as it currently is." update_workflow()
+    # fetches the existing config first and only overwrites fields set to
+    # a non-None value here. At least one field must be non-None.
+    approvals_needed: Optional[int] = 1
+    checkout_needed: Optional[bool] = None
+    start_on_approval: Optional[bool] = None
+    require_reason: Optional[bool] = None
+    require_ticket: Optional[bool] = None
+    require_mfa: Optional[bool] = False
+
+    # Same "<n>d"/"<n>h"/"<n>m" format as create. None leaves the existing
+    # duration untouched.
+    duration: Optional[str] = None
+
+    # NOTE: unlike every other field above, these two are not
+    # independently sparse -- setting either one overwrites the record's
+    # entire allowed-times filter rather than merging with the existing
+    # allowed_days/time_range. warn_if_temporal_update_is_destructive()
+    # below checks the record's current state and warns if this would
+    # silently drop the other one.
+    allowed_days: Optional[str] = None
+    time_range: Optional[str] = None
 
     vault = open_vault(keeper_auth_context)
     try:
-        nsf_access_list(vault, folder_uids, record_uids)
-    except Exception as e:
-        print(f"Error: {e}")
+        # Read the current configuration first: it lets us print a real
+        # before/after diff (update_workflow() doesn't echo the resulting
+        # config back), and lets us check the temporal-filter landmine
+        # above against the record's actual current state.
+        before = read_workflow(vault, record_identifier, enterprise_data=None)
+        if before.get("status") == "no_workflow":
+            print(
+                f"No workflow configured for record {before.get('record_name')} "
+                f"({before.get('record_uid')}). Create one first with create_workflow.py."
+            )
+            return
+
+        print_parameters("Current configuration", before.get("parameters") or {})
+        warn_if_temporal_update_is_destructive(
+            before.get("parameters") or {}, allowed_days, time_range
+        )
+        warn_if_revert_to_default_will_be_ignored(
+            before.get("parameters") or {},
+            checkout_needed,
+            start_on_approval,
+            require_reason,
+            require_ticket,
+            require_mfa,
+            approvals_needed,
+        )
+
+        update_workflow(
+            vault,
+            record_identifier,
+            approvals_needed=approvals_needed,
+            checkout=checkout_needed,
+            start_on_approval=start_on_approval,
+            require_reason=require_reason,
+            require_ticket=require_ticket,
+            require_mfa=require_mfa,
+            duration=duration,
+            allowed_days=allowed_days,
+            time_range=time_range,
+        )
+
+        after = read_workflow(vault, record_identifier, enterprise_data=None)
+        print_parameters("Configuration after update", after.get("parameters") or {})
+    except WorkflowError as exc:
+        print(f"Workflow error: {exc}")
+    except errors.KeeperApiError as exc:
+        print(f"Keeper API error: ({exc.result_code}) {exc.message}")
+    except KeyboardInterrupt:
+        print("\nCancelled.")
+    except Exception as exc:
+        print(f"Unexpected error: {exc}")
     finally:
         close_vault(vault, keeper_auth_context)
 
@@ -594,7 +690,7 @@ def nsf_access_list_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
 def main() -> None:
     keeper_auth_context, _ = login()
     if keeper_auth_context:
-        nsf_access_list_run(keeper_auth_context)
+        update_workflow_run(keeper_auth_context)
     else:
         print("Login failed.")
 

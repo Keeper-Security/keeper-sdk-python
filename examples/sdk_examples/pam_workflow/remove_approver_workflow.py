@@ -19,7 +19,12 @@ from keepersdk.authentication.yubikey import (
     yubikey_authenticate,
 )
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
-from keepersdk.vault import nsf_management, sqlite_storage, vault_online
+from keepersdk.helpers.workflow import (
+    WorkflowError,
+    read_workflow,
+    remove_workflow_approvers,
+)
+from keepersdk.vault import sqlite_storage, vault_online
 
 try:
     import pyperclip
@@ -511,82 +516,99 @@ def close_vault(vault: vault_online.VaultOnline, keeper_auth_context: keeper_aut
     keeper_auth_context.close()
 
 
-def nsf_access_list(
-    vault: vault_online.VaultOnline,
-    folder_uids: List[str],
-    record_uids: List[str],
-) -> None:
-    load_folder = bool(folder_uids)
-    load_record = bool(record_uids)
-    view = vault.nsf_data
-    if view is None:
-        print("NSF storage is not available on this vault.")
+def print_current_approvers(approvers: list) -> None:
+    print(f"\nCurrent approvers ({len(approvers)}):")
+    if not approvers:
+        print("  (none)")
         return
-    nsf_management.load_nsf_access_details(vault, load_folder=load_folder, load_record=load_record)
 
-    for folder_uid in folder_uids:
-        folder = view.get_folder(folder_uid)
-        print(f"\nFolder: {folder.name if folder else '(NSF Folder)'}")
-        print(f"UID:    {folder_uid}")
-        folder_access_detail = view.get_nsf_folder_access_detail(folder_uid)
-        accessors = (folder_access_detail or {}).get("accessors")
-        if not accessors:
-            print("Access: No cached access details found.")
-            continue
-        print("Access:")
-        for access in accessors:
-            print(
-                f"  - accessor_uid={access.get('accessor_uid')}"
-                f" | access_type={access.get('access_type')}"
-                f" | role={access.get('role')}"
-                f" | inherited={access.get('inherited')}"
-                f" | hidden={access.get('hidden')}"
-                f" | owner={access.get('owner', False)}"
-            )
-            permissions = access.get("permissions")
-            if permissions:
-                print(f"    permissions={json.dumps(permissions)}")
-
-    for record_uid in record_uids:
-        print(f"\nRecord UID: {record_uid}")
-        record_access_detail = view.get_nsf_record_access_detail(record_uid)
-        if not record_access_detail:
-            print("Access: No cached access details found.")
-            continue
-        print("Access:")
-        for access in record_access_detail:
-            print(
-                f"  - accessor_uid={access.get('access_type_uid')}"
-                f" | access_type={access.get('access_type')}"
-                f" | role={access.get('access_role_type')}"
-                f" | owner={access.get('owner')}"
-                f" | inherited={access.get('inherited')}"
-                f" | denied={access.get('denied_access')}"
-            )
-            permissions = {
-                "can_view_title": access.get("can_view_title"),
-                "can_view": access.get("can_view"),
-                "can_edit": access.get("can_edit"),
-                "can_list_access": access.get("can_list_access"),
-                "can_update_access": access.get("can_update_access"),
-                "can_delete": access.get("can_delete"),
-                "can_change_ownership": access.get("can_change_ownership"),
-                "can_request_access": access.get("can_request_access"),
-                "can_approve_access": access.get("can_approve_access"),
-            }
-            print(f"    permissions={json.dumps(permissions)}")
+    for approver in approvers:
+        if approver.get("type") == "team":
+            identity = f"team: {approver.get('team_name')} ({approver.get('team_uid')})"
+        else:
+            identity = approver.get("email", "(unresolved)")
+        escalation_note = "  [escalation]" if approver.get("escalation") else ""
+        print(f"  - {identity}{escalation_note}")
 
 
-def nsf_access_list_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
-    # Sample UIDs — replace with the NSF folder/record UIDs you want to inspect.
-    folder_uids = ["<FOLDER_UID_1>", "<FOLDER_UID_2>"]
-    record_uids = ["<RECORD_UID_1>", "<RECORD_UID_2>"]
+def warn_if_removal_makes_workflow_unsatisfiable(
+    current_params: dict,
+    current_approvers: list,
+    users_to_remove: List[str],
+) -> None:
+    """
+    remove_workflow_approvers() does not check this itself -- it will
+    happily remove approvers below the approvals_needed threshold, leaving
+    a workflow that can never collect enough approvals. This is an
+    addition on top of the SDK function's own behavior, not something it
+    enforces internally.
+    """
+    approvals_needed = current_params.get("approvals_needed") or 0
+    if approvals_needed <= 0:
+        return
+
+    current_user_count = sum(1 for a in current_approvers if a.get("type") != "team")
+    requested_removals = len(
+        set(users_to_remove) & {a.get("email") for a in current_approvers}
+    )
+    remaining = current_user_count - requested_removals
+
+    if remaining < approvals_needed:
+        print(
+            f"\nWARNING: this workflow requires {approvals_needed} approval(s), "
+            f"but removing the requested user approver(s) would leave only "
+            f"{remaining} user approver(s) on the record (team approvers are not "
+            f"counted here since a team's effective approver count isn't known "
+            f"from this data). A workflow with fewer approvers than "
+            f"approvals_needed can never be satisfied. Consider adding "
+            f"replacement approvers first (add_approver_workflow.py) or lowering "
+            f"approvals_needed before removing."
+        )
+
+
+def remove_approver_workflow_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
+    # Record identifier accepts either the record's UID or its title.
+    record_identifier = "<PAM_RECORD_UID_OR_TITLE>"
+
+    # Users/teams to remove as approvers. Must exactly match how the
+    # approver is currently stored -- if the API rejects an entry here,
+    # read the workflow first to see the exact identifiers currently set.
+    approver_users_to_remove: List[str] = ["<APPROVER_EMAIL>"]
+    approver_teams_to_remove: List[str] = []
 
     vault = open_vault(keeper_auth_context)
     try:
-        nsf_access_list(vault, folder_uids, record_uids)
-    except Exception as e:
-        print(f"Error: {e}")
+        current = read_workflow(vault, record_identifier, enterprise_data=None)
+        if current.get("status") == "no_workflow":
+            print(f"No workflow configured for record {current.get('record_name')} ({current.get('record_uid')}). Nothing to remove approvers from.")
+            return
+
+        print_current_approvers(current.get("approvers") or [])
+        warn_if_removal_makes_workflow_unsatisfiable(
+            current.get("parameters") or {},
+            current.get("approvers") or [],
+            approver_users_to_remove,
+        )
+
+        result = remove_workflow_approvers(
+            vault,
+            record_identifier,
+            users=approver_users_to_remove,
+            teams=approver_teams_to_remove,
+            enterprise_data=None,
+        )
+        print(f"\nRemoved {result.get('approvers_removed')} approver(s) from {result.get('record_name')} ({result.get('record_uid')}).")
+
+        after = read_workflow(vault, record_identifier, enterprise_data=None)
+        print_current_approvers(after.get("approvers") or [])
+    except WorkflowError as exc:
+        print(f"Workflow error: {exc}")
+    except errors.KeeperApiError as exc:
+        print(f"Keeper API error: ({exc.result_code}) {exc.message}")
+    except KeyboardInterrupt:
+        print("\nCancelled.")
+    except Exception as exc:
+        print(f"Unexpected error: {exc}")
     finally:
         close_vault(vault, keeper_auth_context)
 
@@ -594,7 +616,7 @@ def nsf_access_list_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
 def main() -> None:
     keeper_auth_context, _ = login()
     if keeper_auth_context:
-        nsf_access_list_run(keeper_auth_context)
+        remove_approver_workflow_run(keeper_auth_context)
     else:
         print("Login failed.")
 

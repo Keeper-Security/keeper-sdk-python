@@ -2,7 +2,7 @@ import getpass
 import json
 import logging
 import sqlite3
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 import fido2
 import webbrowser
@@ -19,7 +19,11 @@ from keepersdk.authentication.yubikey import (
     yubikey_authenticate,
 )
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
-from keepersdk.vault import nsf_management, sqlite_storage, vault_online
+from keepersdk.helpers.workflow import (
+    WorkflowError,
+    get_user_access_state,
+)
+from keepersdk.vault import sqlite_storage, vault_online
 
 try:
     import pyperclip
@@ -511,82 +515,51 @@ def close_vault(vault: vault_online.VaultOnline, keeper_auth_context: keeper_aut
     keeper_auth_context.close()
 
 
-def nsf_access_list(
-    vault: vault_online.VaultOnline,
-    folder_uids: List[str],
-    record_uids: List[str],
-) -> None:
-    load_folder = bool(folder_uids)
-    load_record = bool(record_uids)
-    view = vault.nsf_data
-    if view is None:
-        print("NSF storage is not available on this vault.")
+def print_user_access(result: dict) -> None:
+    """
+    Each entry in 'workflows' is a workflow_state_to_dict() dict -- the
+    same shape used by get_workflow_state(). Column choice here (flow_uid /
+    record_name / stage / started / expires) matches `pam workflow
+    my-access`'s documented table output; other fields in that same dict
+    (conditions, checked_out_by, approved_by) are omitted here for width.
+    """
+    workflows = result.get("workflows") or []
+    if not workflows:
+        print("\nNo active workflows.")
         return
-    nsf_management.load_nsf_access_details(vault, load_folder=load_folder, load_record=load_record)
 
-    for folder_uid in folder_uids:
-        folder = view.get_folder(folder_uid)
-        print(f"\nFolder: {folder.name if folder else '(NSF Folder)'}")
-        print(f"UID:    {folder_uid}")
-        folder_access_detail = view.get_nsf_folder_access_detail(folder_uid)
-        accessors = (folder_access_detail or {}).get("accessors")
-        if not accessors:
-            print("Access: No cached access details found.")
-            continue
-        print("Access:")
-        for access in accessors:
-            print(
-                f"  - accessor_uid={access.get('accessor_uid')}"
-                f" | access_type={access.get('access_type')}"
-                f" | role={access.get('role')}"
-                f" | inherited={access.get('inherited')}"
-                f" | hidden={access.get('hidden')}"
-                f" | owner={access.get('owner', False)}"
-            )
-            permissions = access.get("permissions")
-            if permissions:
-                print(f"    permissions={json.dumps(permissions)}")
+    print(f"\nMy Active Workflows ({len(workflows)})\n")
+    header = f"  {'Flow UID':<14}  {'Resource':<20}  {'Stage':<10}  {'Started':<20}  {'Expires':<20}"
+    print(header)
+    print(f"  {'-' * 14}  {'-' * 20}  {'-' * 10}  {'-' * 20}  {'-' * 20}")
 
-    for record_uid in record_uids:
-        print(f"\nRecord UID: {record_uid}")
-        record_access_detail = view.get_nsf_record_access_detail(record_uid)
-        if not record_access_detail:
-            print("Access: No cached access details found.")
-            continue
-        print("Access:")
-        for access in record_access_detail:
-            print(
-                f"  - accessor_uid={access.get('access_type_uid')}"
-                f" | access_type={access.get('access_type')}"
-                f" | role={access.get('access_role_type')}"
-                f" | owner={access.get('owner')}"
-                f" | inherited={access.get('inherited')}"
-                f" | denied={access.get('denied_access')}"
-            )
-            permissions = {
-                "can_view_title": access.get("can_view_title"),
-                "can_view": access.get("can_view"),
-                "can_edit": access.get("can_edit"),
-                "can_list_access": access.get("can_list_access"),
-                "can_update_access": access.get("can_update_access"),
-                "can_delete": access.get("can_delete"),
-                "can_change_ownership": access.get("can_change_ownership"),
-                "can_request_access": access.get("can_request_access"),
-                "can_approve_access": access.get("can_approve_access"),
-            }
-            print(f"    permissions={json.dumps(permissions)}")
+    for workflow in workflows:
+        flow_uid = str(workflow.get("flow_uid") or "")
+        resource = str(workflow.get("record_name") or "")
+        stage = str(workflow.get("stage") or "")
+        started = str(workflow.get("started") or "")
+        expires = str(workflow.get("expires") or "")
+        print(f"  {flow_uid:<14}  {resource:<20}  {stage:<10}  {started:<20}  {expires:<20}")
 
 
-def nsf_access_list_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
-    # Sample UIDs — replace with the NSF folder/record UIDs you want to inspect.
-    folder_uids = ["<FOLDER_UID_1>", "<FOLDER_UID_2>"]
-    record_uids = ["<RECORD_UID_1>", "<RECORD_UID_2>"]
+def my_access_workflow_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
+    # get_user_access_state() takes no per-call parameters -- it always
+    # returns every active workflow session for the currently authenticated
+    # user, across all resources. Nothing to configure here.
+    enterprise_data = None
 
     vault = open_vault(keeper_auth_context)
     try:
-        nsf_access_list(vault, folder_uids, record_uids)
-    except Exception as e:
-        print(f"Error: {e}")
+        result = get_user_access_state(vault, enterprise_data=enterprise_data)
+        print_user_access(result)
+    except WorkflowError as exc:
+        print(f"Workflow error: {exc}")
+    except errors.KeeperApiError as exc:
+        print(f"Keeper API error: ({exc.result_code}) {exc.message}")
+    except KeyboardInterrupt:
+        print("\nCancelled.")
+    except Exception as exc:
+        print(f"Unexpected error: {exc}")
     finally:
         close_vault(vault, keeper_auth_context)
 
@@ -594,7 +567,7 @@ def nsf_access_list_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
 def main() -> None:
     keeper_auth_context, _ = login()
     if keeper_auth_context:
-        nsf_access_list_run(keeper_auth_context)
+        my_access_workflow_run(keeper_auth_context)
     else:
         print("Login failed.")
 
