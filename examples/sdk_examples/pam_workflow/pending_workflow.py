@@ -2,7 +2,8 @@ import getpass
 import json
 import logging
 import sqlite3
-from typing import Dict, List, Optional
+from datetime import datetime
+from typing import Dict, Optional
 
 import fido2
 import webbrowser
@@ -19,7 +20,11 @@ from keepersdk.authentication.yubikey import (
     yubikey_authenticate,
 )
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
-from keepersdk.vault import nsf_management, sqlite_storage, vault_online
+from keepersdk.helpers.workflow import (
+    WorkflowError,
+    get_pending_approvals,
+)
+from keepersdk.vault import sqlite_storage, vault_online
 
 try:
     import pyperclip
@@ -511,82 +516,62 @@ def close_vault(vault: vault_online.VaultOnline, keeper_auth_context: keeper_aut
     keeper_auth_context.close()
 
 
-def nsf_access_list(
-    vault: vault_online.VaultOnline,
-    folder_uids: List[str],
-    record_uids: List[str],
-) -> None:
-    load_folder = bool(folder_uids)
-    load_record = bool(record_uids)
-    view = vault.nsf_data
-    if view is None:
-        print("NSF storage is not available on this vault.")
+def format_timestamp(ts_ms: Optional[int]) -> str:
+    """started_on / expires_on come back as epoch milliseconds (0/None if unset)."""
+    if not ts_ms:
+        return "(not set)"
+    dt = datetime.fromtimestamp(ts_ms / 1000).astimezone()
+    tz_label = dt.strftime("%Z") or dt.tzname() or "local"
+    return dt.strftime(f"%Y-%m-%d %H:%M:%S {tz_label}")
+
+
+def print_pending_requests(requests: list) -> None:
+    if not requests:
+        print("\nNo pending approval requests.")
         return
-    nsf_management.load_nsf_access_details(vault, load_folder=load_folder, load_record=load_record)
 
-    for folder_uid in folder_uids:
-        folder = view.get_folder(folder_uid)
-        print(f"\nFolder: {folder.name if folder else '(NSF Folder)'}")
-        print(f"UID:    {folder_uid}")
-        folder_access_detail = view.get_nsf_folder_access_detail(folder_uid)
-        accessors = (folder_access_detail or {}).get("accessors")
-        if not accessors:
-            print("Access: No cached access details found.")
-            continue
-        print("Access:")
-        for access in accessors:
-            print(
-                f"  - accessor_uid={access.get('accessor_uid')}"
-                f" | access_type={access.get('access_type')}"
-                f" | role={access.get('role')}"
-                f" | inherited={access.get('inherited')}"
-                f" | hidden={access.get('hidden')}"
-                f" | owner={access.get('owner', False)}"
-            )
-            permissions = access.get("permissions")
-            if permissions:
-                print(f"    permissions={json.dumps(permissions)}")
-
-    for record_uid in record_uids:
-        print(f"\nRecord UID: {record_uid}")
-        record_access_detail = view.get_nsf_record_access_detail(record_uid)
-        if not record_access_detail:
-            print("Access: No cached access details found.")
-            continue
-        print("Access:")
-        for access in record_access_detail:
-            print(
-                f"  - accessor_uid={access.get('access_type_uid')}"
-                f" | access_type={access.get('access_type')}"
-                f" | role={access.get('access_role_type')}"
-                f" | owner={access.get('owner')}"
-                f" | inherited={access.get('inherited')}"
-                f" | denied={access.get('denied_access')}"
-            )
-            permissions = {
-                "can_view_title": access.get("can_view_title"),
-                "can_view": access.get("can_view"),
-                "can_edit": access.get("can_edit"),
-                "can_list_access": access.get("can_list_access"),
-                "can_update_access": access.get("can_update_access"),
-                "can_delete": access.get("can_delete"),
-                "can_change_ownership": access.get("can_change_ownership"),
-                "can_request_access": access.get("can_request_access"),
-                "can_approve_access": access.get("can_approve_access"),
-            }
-            print(f"    permissions={json.dumps(permissions)}")
+    print(f"\nPending approval requests ({len(requests)}):")
+    for i, req in enumerate(requests, start=1):
+        print(f"\n[{i}] {req.get('record_name')} ({req.get('record_uid')})")
+        print(f"    Flow UID     : {req.get('flow_uid')}")
+        print(f"    Requested by : {req.get('requested_by')}")
+        print(f"    Started on   : {format_timestamp(req.get('started_on'))}")
+        print(f"    Expires on   : {format_timestamp(req.get('expires_on'))}")
+        if req.get("duration"):
+            print(f"    Duration     : {req['duration']}")
+        print(f"    Escalated    : {'Yes' if req.get('escalated') else 'No'}")
+        if req.get("reason"):
+            print(f"    Reason       : {req['reason']}")
+        if req.get("ticket"):
+            print(f"    Ticket       : {req['ticket']}")
+        print("\n    To act on this request:")
+        print(f'      pam_workflow_approve.py  -> flow_uid="{req.get("flow_uid")}"')
+        print(f'      pam_workflow_deny.py     -> flow_uid="{req.get("flow_uid")}"')
 
 
-def nsf_access_list_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
-    # Sample UIDs — replace with the NSF folder/record UIDs you want to inspect.
-    folder_uids = ["<FOLDER_UID_1>", "<FOLDER_UID_2>"]
-    record_uids = ["<RECORD_UID_1>", "<RECORD_UID_2>"]
+def pending_workflow_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
+    # get_pending_approvals() takes no record identifier -- it returns every
+    # pending access request across all PAM records the current logged-in
+    # user is an approver for.
+    #
+    # enterprise_data is optional and best-effort: it's only used to resolve
+    # a requester's numeric user ID to an email/name when the request itself
+    # doesn't already carry the email. Leave it None for a non-enterprise-admin
+    # session, or wire in your own IEnterpriseData source for fuller resolution.
+    enterprise_data = None
 
     vault = open_vault(keeper_auth_context)
     try:
-        nsf_access_list(vault, folder_uids, record_uids)
-    except Exception as e:
-        print(f"Error: {e}")
+        result = get_pending_approvals(vault, enterprise_data=enterprise_data)
+        print_pending_requests(result.get("requests") or [])
+    except WorkflowError as exc:
+        print(f"Workflow error: {exc}")
+    except errors.KeeperApiError as exc:
+        print(f"Keeper API error: ({exc.result_code}) {exc.message}")
+    except KeyboardInterrupt:
+        print("\nCancelled.")
+    except Exception as exc:
+        print(f"Unexpected error: {exc}")
     finally:
         close_vault(vault, keeper_auth_context)
 
@@ -594,7 +579,7 @@ def nsf_access_list_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
 def main() -> None:
     keeper_auth_context, _ = login()
     if keeper_auth_context:
-        nsf_access_list_run(keeper_auth_context)
+        pending_workflow_run(keeper_auth_context)
     else:
         print("Login failed.")
 

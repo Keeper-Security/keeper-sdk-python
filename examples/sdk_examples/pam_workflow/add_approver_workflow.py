@@ -19,7 +19,12 @@ from keepersdk.authentication.yubikey import (
     yubikey_authenticate,
 )
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
-from keepersdk.vault import nsf_management, sqlite_storage, vault_online
+from keepersdk.helpers.workflow import (
+    WorkflowError,
+    add_workflow_approvers,
+    read_workflow,
+)
+from keepersdk.vault import sqlite_storage, vault_online
 
 try:
     import pyperclip
@@ -511,82 +516,96 @@ def close_vault(vault: vault_online.VaultOnline, keeper_auth_context: keeper_aut
     keeper_auth_context.close()
 
 
-def nsf_access_list(
+def add_approvers(
     vault: vault_online.VaultOnline,
-    folder_uids: List[str],
-    record_uids: List[str],
-) -> None:
-    load_folder = bool(folder_uids)
-    load_record = bool(record_uids)
-    view = vault.nsf_data
-    if view is None:
-        print("NSF storage is not available on this vault.")
-        return
-    nsf_management.load_nsf_access_details(vault, load_folder=load_folder, load_record=load_record)
+    record_identifier: str,
+    users: List[str],
+    teams: List[str],
+    escalation: bool,
+    escalation_after: Optional[str],
+) -> dict:
+    """
+    Add approvers to an existing PAM workflow.
 
-    for folder_uid in folder_uids:
-        folder = view.get_folder(folder_uid)
-        print(f"\nFolder: {folder.name if folder else '(NSF Folder)'}")
-        print(f"UID:    {folder_uid}")
-        folder_access_detail = view.get_nsf_folder_access_detail(folder_uid)
-        accessors = (folder_access_detail or {}).get("accessors")
-        if not accessors:
-            print("Access: No cached access details found.")
-            continue
-        print("Access:")
-        for access in accessors:
-            print(
-                f"  - accessor_uid={access.get('accessor_uid')}"
-                f" | access_type={access.get('access_type')}"
-                f" | role={access.get('role')}"
-                f" | inherited={access.get('inherited')}"
-                f" | hidden={access.get('hidden')}"
-                f" | owner={access.get('owner', False)}"
-            )
-            permissions = access.get("permissions")
-            if permissions:
-                print(f"    permissions={json.dumps(permissions)}")
+    add_workflow_approvers() does not verify a workflow exists on the
+    record before attaching approvers, so this checks first via
+    read_workflow() and raises a clear WorkflowError if none is found.
+    """
+    existing = read_workflow(vault, record_identifier, enterprise_data=None)
+    if existing.get("status") == "no_workflow":
+        raise WorkflowError(
+            f"No workflow configured for record "
+            f"{existing.get('record_name')} ({existing.get('record_uid')}). "
+            f"Create one first with create_workflow.py."
+        )
 
-    for record_uid in record_uids:
-        print(f"\nRecord UID: {record_uid}")
-        record_access_detail = view.get_nsf_record_access_detail(record_uid)
-        if not record_access_detail:
-            print("Access: No cached access details found.")
-            continue
-        print("Access:")
-        for access in record_access_detail:
-            print(
-                f"  - accessor_uid={access.get('access_type_uid')}"
-                f" | access_type={access.get('access_type')}"
-                f" | role={access.get('access_role_type')}"
-                f" | owner={access.get('owner')}"
-                f" | inherited={access.get('inherited')}"
-                f" | denied={access.get('denied_access')}"
-            )
-            permissions = {
-                "can_view_title": access.get("can_view_title"),
-                "can_view": access.get("can_view"),
-                "can_edit": access.get("can_edit"),
-                "can_list_access": access.get("can_list_access"),
-                "can_update_access": access.get("can_update_access"),
-                "can_delete": access.get("can_delete"),
-                "can_change_ownership": access.get("can_change_ownership"),
-                "can_request_access": access.get("can_request_access"),
-                "can_approve_access": access.get("can_approve_access"),
-            }
-            print(f"    permissions={json.dumps(permissions)}")
+    return add_workflow_approvers(
+        vault,
+        record_identifier,
+        users=users,
+        teams=teams,
+        escalation=escalation,
+        escalation_after=escalation_after,
+        enterprise_data=None,
+    )
 
 
-def nsf_access_list_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
-    # Sample UIDs — replace with the NSF folder/record UIDs you want to inspect.
-    folder_uids = ["<FOLDER_UID_1>", "<FOLDER_UID_2>"]
-    record_uids = ["<RECORD_UID_1>", "<RECORD_UID_2>"]
+def print_approvers_added(result: dict) -> None:
+    print("\nApprovers added")
+    print(f"  Record      : {result.get('record_name')} ({result.get('record_uid')})")
+    print(f"  Total added : {result.get('approvers_added')}")
+
+    users = result.get("users") or []
+    teams = result.get("teams") or []
+    if users:
+        print("  Users:")
+        for user in users:
+            print(f"    - {user}")
+    if teams:
+        print("  Teams:")
+        for team in teams:
+            print(f"    - {team}")
+
+    if result.get("escalation"):
+        print("  Escalation approvers : Yes")
+        if result.get("escalation_after"):
+            print(f"  Notified after       : {result['escalation_after']}")
+    else:
+        print("  Escalation approvers : No (notified immediately, same as primary approvers)")
+
+
+def add_approver_workflow_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
+    # Record identifier accepts either the record's UID or its title.
+    # A workflow must already exist on this record.
+    record_identifier = "<PAM_RECORD_UID_OR_TITLE>"
+
+    # Users/teams to add as approvers. Leave a list empty if not adding
+    # that type -- at least one of the two must be non-empty.
+    approver_users: List[str] = ["<APPROVER_EMAIL>"]
+    approver_teams: List[str] = []
+
+    # If True, these approvers are only notified after escalation_after
+    # elapses without a decision from the primary approvers.
+    escalation = False
+    escalation_after: Optional[str] = None
 
     vault = open_vault(keeper_auth_context)
     try:
-        nsf_access_list(vault, folder_uids, record_uids)
-    except Exception as e:
-        print(f"Error: {e}")
+        result = add_approvers(
+            vault,
+            record_identifier,
+            approver_users,
+            approver_teams,
+            escalation,
+            escalation_after,
+        )
+        print_approvers_added(result)
+    except WorkflowError as exc:
+        print(f"Workflow error: {exc}")
+    except errors.KeeperApiError as exc:
+        print(f"Keeper API error: ({exc.result_code}) {exc.message}")
+    except KeyboardInterrupt:
+        print("\nCancelled.")
     finally:
         close_vault(vault, keeper_auth_context)
 
@@ -594,7 +613,7 @@ def nsf_access_list_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
 def main() -> None:
     keeper_auth_context, _ = login()
     if keeper_auth_context:
-        nsf_access_list_run(keeper_auth_context)
+        add_approver_workflow_run(keeper_auth_context)
     else:
         print("Login failed.")
 
