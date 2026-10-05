@@ -541,15 +541,20 @@ class FolderShares():
         """Process user shares for the shared folder."""
         if not users:
             return
-        
-        existing_users = {x['username'] if isinstance(x, dict) else x.name for x in curr_sf.get('users', [])}
-        
+
+        existing_users = {}
+        for user in curr_sf.get('users', []):
+            username = user['username'] if isinstance(user, dict) else user.name
+            if username:
+                existing_users[username.casefold()] = username
+
         for email in users:
+            current_username = existing_users.get(email.casefold(), email)
             uo = folder_pb2.SharedFolderUpdateUser()
-            uo.username = email
+            uo.username = current_username
             set_expiration_fields(uo, share_expiration, rotate_on_expiration)
-            
-            if email in existing_users:
+
+            if email.casefold() in existing_users:
                 if action == ShareAction.GRANT.value:
                     uo.manageRecords = FolderShares._convert_manage_permission(mr)
                     uo.manageUsers = FolderShares._convert_manage_permission(mu)
@@ -625,9 +630,15 @@ class FolderShares():
             rq.defaultCanShare = FolderShares._convert_manage_permission(cs)
     
     @staticmethod
-    def _process_records(vault, rq, curr_sf, rec_uids, action, ce, cs, share_expiration,
-                         rotate_on_expiration: bool = False):
-        """Process record shares for the shared folder."""
+    def _process_records(vault, rq, curr_sf, rec_uids, action, ce, cs):
+        """Process record permissions for the shared folder.
+
+        Share expiration applies to the user/team access to the shared folder,
+        not to the record entry itself. Setting expiration on
+        SharedFolderUpdateRecord makes the record access time-limited and can
+        cause the record to be removed from the owner's vault when the timer
+        expires.
+        """
         if not rec_uids:
             return
         
@@ -636,8 +647,7 @@ class FolderShares():
         for record_uid in rec_uids:
             ro = folder_pb2.SharedFolderUpdateRecord()
             ro.recordUid = utils.base64_url_decode(record_uid)
-            set_expiration_fields(ro, share_expiration, rotate_on_expiration)
-            
+
             if record_uid in existing_records:
                 if action == ShareAction.GRANT.value:
                     ro.canEdit = FolderShares._convert_manage_permission(ce)
@@ -683,7 +693,7 @@ class FolderShares():
         FolderShares._process_users(vault, rq, curr_sf, users, action, mr, mu, share_expiration, rotate_on_expiration)
         FolderShares._process_teams(vault, rq, curr_sf, teams, action, mr, mu, share_expiration, rotate_on_expiration)
         FolderShares._process_default_record_permissions(rq, action, ce, cs, default_record)
-        FolderShares._process_records(vault, rq, curr_sf, rec_uids, action, ce, cs, share_expiration, rotate_on_expiration)
+        FolderShares._process_records(vault, rq, curr_sf, rec_uids, action, ce, cs)
         
         return rq
 
