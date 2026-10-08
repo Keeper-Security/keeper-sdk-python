@@ -507,7 +507,7 @@ def collect_nsf_folder_accessors(vault: VaultOnline, folder_uid: str) -> List[Di
         return accessors
     from .nsf_management import get_nsf_folder_access
     try:
-        info = get_nsf_folder_access(vault, [folder_uid])
+        info = get_nsf_folder_access(vault, [folder_uid], show_inherited=True, show_denied=True)
         for result in info.get('results', []):
             if result.get('success'):
                 accessors.extend(result.get('accessors', []))
@@ -568,7 +568,7 @@ def collect_nsf_record_accessors(vault: VaultOnline, record_uid: str) -> List[Di
         return accessors
     from .nsf_management import get_nsf_record_accesses
     try:
-        info = get_nsf_record_accesses(vault, [record_uid])
+        info = get_nsf_record_accesses(vault, [record_uid], show_inherited=True, show_denied=True)
         accessors.extend(info.get('record_accesses', []))
     except Exception:
         pass
