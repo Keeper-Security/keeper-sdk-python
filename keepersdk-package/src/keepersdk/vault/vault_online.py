@@ -160,6 +160,7 @@ class VaultOnline(vault_plugins.IVaultData, keeper_auth.IKeeperAuth):
                 self._keeper_auth.auth_context,
                 teams=self._vault_data.get_nsf_team_key_materials(),
             )
+        self._ingest_record_rotations(result)
 
     def _background_task(self):
         if self._keeper_auth.auth_context.enterprise_ec_public_key:
