@@ -400,7 +400,7 @@ def get_connected_auth() -> keeper_auth.KeeperAuth:
     return keeper_auth.KeeperAuth(keeper_endpoint, auth_context)
 
 
-TestClientVersion = 'c18.0.0'
+TestClientVersion = 'c18.1.0'
 DefaultEnvironment = 'env.company.com'
 AccountUid = crypto.get_random_bytes(16)
 UserName = 'some_fake_user@company.com'
