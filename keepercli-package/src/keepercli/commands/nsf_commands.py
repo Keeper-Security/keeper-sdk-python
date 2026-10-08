@@ -338,7 +338,7 @@ class NsfGetCommand(base.ArgparseCommand):
         show_denied = kwargs.get('show_denied', False)
 
         def _run():
-            return nsf_management.get_nsf_item(vault, uid, show_inherited, show_denied)
+            return nsf_management.get_nsf_item(vault, uid, show_inherited=show_inherited, show_denied=show_denied)
 
         detail = _wrap_nsf('nsf-get', _run)
         if detail.get('item_type') == 'folder':
