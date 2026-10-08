@@ -708,3 +708,103 @@ def access_role_label(access: Dict[str, Any]) -> str:
     if access.get('can_view') or access.get('can_view_title'):
         return 'viewer'
     return 'unknown'
+
+
+# ---------------------------------------------------------------------------
+# Folder access state and request planning for child-folder access changes
+# ---------------------------------------------------------------------------
+#
+# A child folder accessor is one of:
+#   * direct    - its own access row (and folder-key edge) on this folder
+#   * inherited - access flowing from a parent; no folder-key edge here
+#   * denied    - inherited access explicitly denied on this folder
+#   * none      - no access
+#
+# The backend refuses to change the folder key on another user's existing
+# access row, so turning inherited access into an explicit role must be an
+# *add* carrying the recipient-encrypted folder key, not an update. Without
+# that key edge the child disappears from the recipient's vault when the
+# parent grant is later revoked.
+
+FOLDER_ACCESS_NONE = 'none'
+FOLDER_ACCESS_INHERITED = 'inherited'
+FOLDER_ACCESS_DIRECT = 'direct'
+FOLDER_ACCESS_DENIED = 'denied'
+
+FOLDER_ACCESS_ADD = 'folderAccessAdds'
+FOLDER_ACCESS_UPDATE = 'folderAccessUpdates'
+FOLDER_ACCESS_REMOVE = 'folderAccessRemoves'
+
+
+def folder_access_state_from_accessors(accessors: List[Dict[str, Any]]) -> str:
+    """Classify the accessor rows of one actor on one folder.
+
+    ``accessors`` are rows in ``get_nsf_folder_access`` shape (fetched with
+    ``show_inherited=True, show_denied=True``). The server may report an
+    inherited row alongside a direct or denied one: a denial wins, then any
+    direct (non-inherited) row, then inherited.
+    """
+    rows = [a for a in (accessors or []) if a]
+    if not rows:
+        return FOLDER_ACCESS_NONE
+    if any(a.get('denied_access') for a in rows):
+        return FOLDER_ACCESS_DENIED
+    if any(not a.get('inherited') for a in rows):
+        return FOLDER_ACCESS_DIRECT
+    return FOLDER_ACCESS_INHERITED
+
+
+def plan_folder_access_change(state: str, action: str) -> List[Dict[str, Any]]:
+    """Return the ordered folder access requests for *action* given *state*.
+
+    ``action`` is ``'grant'`` (set/change a role), ``'deny'`` or ``'remove'``.
+    Each step is ``{'request': <list name>, 'include_folder_key': bool,
+    'denied_access': bool}``. Steps are sent sequentially and a later step is
+    sent only when the previous one succeeded.
+
+      * inherited -> grant : folderAccessAdds + recipient-encrypted folderKey
+      * denied    -> grant : folderAccessRemoves (denial), then
+                             folderAccessAdds + folderKey
+      * none      -> grant : folderAccessAdds + folderKey
+      * direct    -> grant : folderAccessUpdates, no folderKey
+      * inherited -> deny  : folderAccessUpdates + deniedAccess=True, no folderKey
+      * denied    -> deny / remove : nothing to send
+      * direct    -> remove: folderAccessRemoves
+      * none      -> remove: folderAccessRemoves (the server reports the outcome)
+
+    Raises ValueError for transitions that are not allowed.
+    """
+    add_with_key = {'request': FOLDER_ACCESS_ADD, 'include_folder_key': True, 'denied_access': False}
+    update = {'request': FOLDER_ACCESS_UPDATE, 'include_folder_key': False, 'denied_access': False}
+    remove = {'request': FOLDER_ACCESS_REMOVE, 'include_folder_key': False, 'denied_access': False}
+
+    if action == 'grant':
+        if state == FOLDER_ACCESS_DIRECT:
+            return [update]
+        if state == FOLDER_ACCESS_DENIED:
+            return [remove, add_with_key]
+        return [add_with_key]
+
+    if action == 'deny':
+        if state == FOLDER_ACCESS_INHERITED:
+            return [dict(update, denied_access=True)]
+        if state == FOLDER_ACCESS_DENIED:
+            return []
+        raise ValueError(f'Only inherited access can be denied (current state: {state})')
+
+    if action == 'remove':
+        if state in (FOLDER_ACCESS_DIRECT, FOLDER_ACCESS_NONE):
+            return [remove]
+        if state == FOLDER_ACCESS_DENIED:
+            return []
+        raise ValueError('Inherited access cannot be removed directly; it comes from a parent folder')
+
+    raise ValueError(f'Unknown folder access action: {action}')
+
+
+def current_folder_role_name(accessors: List[Dict[str, Any]]) -> Optional[str]:
+    """AccessRoleType name of the most specific row (direct before inherited)."""
+    for a in sorted(accessors or [], key=lambda r: bool(r.get('inherited'))):
+        if a.get('role'):
+            return a['role']
+    return None
