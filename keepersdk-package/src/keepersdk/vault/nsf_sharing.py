@@ -136,6 +136,147 @@ def _check_existing_nsf_folder_access(
     return None
 
 
+def _lookup_nsf_folder_accessors(
+        vault: VaultOnline,
+        folder_uid: str,
+        uid_bytes: bytes,
+        access_type_label: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Every server accessor row (including inherited and denied) for one actor.
+
+    Rows matching *access_type_label* are preferred; otherwise all rows for the
+    UID are returned. Lookup failures return an empty list (state ``none``).
+    """
+    uid_encoded = utils.base64_url_encode(uid_bytes)
+    rows: List[Dict[str, Any]] = []
+    try:
+        info = get_nsf_folder_access(vault, [folder_uid], show_inherited=True, show_denied=True)
+    except Exception:
+        return rows
+    for result in info.get('results', []):
+        if not result.get('success'):
+            continue
+        rows.extend(a for a in result.get('accessors', [])
+                    if a and a.get('accessor_uid') == uid_encoded)
+    if access_type_label:
+        typed = [a for a in rows if a.get('access_type') == access_type_label]
+        if typed:
+            return typed
+    return rows
+
+
+def _encrypted_folder_key_for(
+        vault: VaultOnline,
+        folder_uid: str,
+        uid_bytes: bytes,
+        recipient: str,
+        *,
+        as_team: bool) -> folder_pb2.EncryptedDataKey:
+    """Encrypt the folder key for a user (public key) or a team."""
+    fk = _get_folder_key(vault, folder_uid)
+    ek = folder_pb2.EncryptedDataKey()
+    if as_team:
+        team_uid_b64 = utils.base64_url_encode(uid_bytes)
+        try:
+            team_keys = nsf_common.get_team_keys(vault, team_uid_b64)
+        except ValueError as exc:
+            raise NsfError(f'Team keys not available for {recipient}') from exc
+        efk, key_type = nsf_common.encrypt_for_team(
+            fk, team_keys,
+            forbid_rsa=vault.keeper_auth.auth_context.forbid_rsa)
+    else:
+        pub_key, use_ecc, _, _ = nsf_common.get_user_public_key(vault, recipient)
+        if not pub_key:
+            raise NsfError(f"Public key not available for user '{recipient}'")
+        efk = nsf_common.encrypt_for_recipient(fk, pub_key, use_ecc)
+        key_type = (
+            folder_pb2.encrypted_by_public_key_ecc if use_ecc
+            else folder_pb2.encrypted_by_public_key)
+    ek.encryptedKey = efk
+    ek.encryptedKeyType = key_type
+    return ek
+
+
+def _build_folder_access_step(
+        folder_uid: str,
+        uid_bytes: bytes,
+        access_type_enum: int,
+        step: Dict[str, Any],
+        *,
+        role: Optional[str] = None,
+        hidden: Optional[bool] = None,
+        expiration_timestamp: Optional[int] = None,
+        folder_key: Optional[folder_pb2.EncryptedDataKey] = None) -> folder_pb2.FolderAccessData:
+    ad = folder_pb2.FolderAccessData()
+    ad.folderUid = utils.base64_url_decode(folder_uid)
+    ad.accessTypeUid = uid_bytes
+    ad.accessType = access_type_enum
+    if step['request'] == nsf_common.FOLDER_ACCESS_REMOVE:
+        return ad
+    if step['denied_access']:
+        # A denial is not a direct grant: no role change and never a folder key.
+        ad.deniedAccess = True
+        return ad
+    if role is not None:
+        access_role = nsf_common.resolve_nsf_role(role)
+        ad.accessRoleType = access_role
+        ad.permissions.CopyFrom(nsf_common.get_folder_permissions_for_role(access_role))
+    if hidden is not None:
+        ad.hidden = hidden
+    if expiration_timestamp is not None:
+        ad.tlaProperties.expiration = expiration_timestamp
+    if step['include_folder_key']:
+        if folder_key is None:
+            raise NsfError('Folder key is required to create direct folder access')
+        ad.folderKey.CopyFrom(folder_key)
+    return ad
+
+
+_FOLDER_STEP_MESSAGES = {
+    nsf_common.FOLDER_ACCESS_ADD: 'Access granted successfully',
+    nsf_common.FOLDER_ACCESS_UPDATE: 'Access updated successfully',
+    nsf_common.FOLDER_ACCESS_REMOVE: 'Access revoked successfully',
+}
+
+
+def _execute_folder_access_plan(
+        vault: VaultOnline,
+        folder_uid: str,
+        label: str,
+        uid_bytes: bytes,
+        access_type_enum: int,
+        plan: List[Dict[str, Any]],
+        *,
+        folder_key_factory=None,
+        messages: Optional[Dict[str, str]] = None,
+        **fields: Any) -> Dict[str, Any]:
+    """Send *plan* steps one request at a time; raise on the first failure.
+
+    For the denied re-add, the add is only sent once the denial removal
+    succeeded, so no add is attempted while the denied row still exists.
+    """
+    msgs = dict(_FOLDER_STEP_MESSAGES, **(messages or {}))
+    result: Dict[str, Any] = {}
+    for idx, step in enumerate(plan):
+        folder_key = folder_key_factory() if step['include_folder_key'] else None
+        ad = _build_folder_access_step(
+            folder_uid, uid_bytes, access_type_enum, step, folder_key=folder_key, **fields)
+        request = step['request']
+        response = _folder_access_update(
+            vault,
+            adds=[ad] if request == nsf_common.FOLDER_ACCESS_ADD else None,
+            updates=[ad] if request == nsf_common.FOLDER_ACCESS_UPDATE else None,
+            removes=[ad] if request == nsf_common.FOLDER_ACCESS_REMOVE else None)
+        message = 'Access denied successfully' if step['denied_access'] else msgs[request]
+        result = nsf_common.parse_folder_access_result(response, folder_uid, label, message)
+        result['request'] = request
+        if not result['success']:
+            msg = result['message']
+            if idx < len(plan) - 1:
+                msg = f'{msg} (step {idx + 1} of {len(plan)}; remaining steps skipped)'
+            raise KeeperApiError(result['status'], msg)
+    return result
+
+
 def collect_nsf_records_in_folder(
         vault: VaultOnline,
         folder_identifier: Optional[str],
@@ -177,7 +318,17 @@ def grant_nsf_folder_access(
         expiration_timestamp: Optional[int] = None,
         as_team: bool = False,
         request_sync: bool = True) -> Dict[str, Any]:
-    """Grant user or team access to an NSF folder."""
+    """Grant user or team access to an NSF folder.
+
+    The request depends on the accessor's current state on this folder:
+
+    * direct    - role/expiration change via ``folderAccessUpdates`` (no new key)
+    * inherited - becomes a direct grant via ``folderAccessAdds`` with the
+      recipient-encrypted folder key (even when the role is unchanged)
+    * denied    - ``folderAccessRemoves`` for the denial, then
+      ``folderAccessAdds`` with the folder key
+    * none      - ``folderAccessAdds`` with the folder key
+    """
     folder_uid = resolve_nsf_folder_uid(vault, folder_identifier) or folder_identifier
     if not is_nsf_folder(vault, folder_uid):
         raise NsfError(f'NSF folder not found: {folder_identifier}')
@@ -191,10 +342,12 @@ def grant_nsf_folder_access(
     uid_bytes, label, access_type_enum = _resolve_folder_accessor(
         vault, recipient, as_team=as_team)
 
-    existing_role = _check_existing_nsf_folder_access(
-        vault, folder_uid, uid_bytes, access_type_label)
-    if existing_role is not None:
-        if existing_role == target_role_name and expiration_timestamp is None:
+    accessors = _lookup_nsf_folder_accessors(vault, folder_uid, uid_bytes, access_type_label)
+    state = nsf_common.folder_access_state_from_accessors(accessors)
+
+    if state == nsf_common.FOLDER_ACCESS_DIRECT:
+        if (nsf_common.current_folder_role_name(accessors) == target_role_name
+                and expiration_timestamp is None):
             return {
                 'folder_uid': folder_uid,
                 'accessor': label,
@@ -203,51 +356,24 @@ def grant_nsf_folder_access(
                 'message': f"{'Team' if as_team else 'User'} already has {role} access",
                 'success': True,
                 'action_taken': 'already_had_access',
+                'previous_access_state': state,
             }
         result = update_nsf_folder_access(
             vault, folder_uid, recipient, role=role, as_team=as_team,
-            expiration_timestamp=expiration_timestamp, request_sync=request_sync)
+            expiration_timestamp=expiration_timestamp, request_sync=request_sync,
+            _known_state=state)
         result['action_taken'] = 'updated'
         return result
 
-    ad = folder_pb2.FolderAccessData()
-    ad.folderUid = utils.base64_url_decode(folder_uid)
-    ad.accessTypeUid = uid_bytes
-    ad.accessType = access_type_enum
-    ad.accessRoleType = access_role
-    ad.permissions.CopyFrom(nsf_common.get_folder_permissions_for_role(access_role))
-
-    if expiration_timestamp is not None:
-        ad.tlaProperties.expiration = expiration_timestamp
-
-    fk = _get_folder_key(vault, folder_uid)
-    ek = folder_pb2.EncryptedDataKey()
-    if as_team:
-        team_uid_b64 = utils.base64_url_encode(uid_bytes)
-        try:
-            team_keys = nsf_common.get_team_keys(vault, team_uid_b64)
-        except ValueError as exc:
-            raise NsfError(f'Team keys not available for {recipient}') from exc
-        efk, key_type = nsf_common.encrypt_for_team(
-            fk, team_keys,
-            forbid_rsa=vault.keeper_auth.auth_context.forbid_rsa)
-    else:
-        pub_key, use_ecc, _, _ = nsf_common.get_user_public_key(vault, recipient)
-        efk = nsf_common.encrypt_for_recipient(fk, pub_key, use_ecc)
-        key_type = (
-            folder_pb2.encrypted_by_public_key_ecc if use_ecc
-            else folder_pb2.encrypted_by_public_key)
-    ek.encryptedKey = efk
-    ek.encryptedKeyType = key_type
-    ad.folderKey.CopyFrom(ek)
-
-    response = _folder_access_update(vault, adds=[ad])
-    result = nsf_common.parse_folder_access_result(
-        response, folder_uid, label, 'Access granted successfully')
+    plan = nsf_common.plan_folder_access_change(state, 'grant')
+    result = _execute_folder_access_plan(
+        vault, folder_uid, label, uid_bytes, access_type_enum, plan,
+        folder_key_factory=lambda: _encrypted_folder_key_for(
+            vault, folder_uid, uid_bytes, recipient, as_team=as_team),
+        role=role, expiration_timestamp=expiration_timestamp)
     result['access_type'] = access_type_label
-    result.setdefault('action_taken', 'granted' if result['success'] else 'grant_failed')
-    if not result['success']:
-        raise KeeperApiError(result['status'], result['message'])
+    result['previous_access_state'] = state
+    result.setdefault('action_taken', 'granted')
     _request_sync(vault, request_sync)
     return result
 
@@ -396,8 +522,15 @@ def update_nsf_folder_access(
         hidden: Optional[bool] = None,
         expiration_timestamp: Optional[int] = None,
         as_team: bool = False,
-        request_sync: bool = True) -> Dict[str, Any]:
-    """Update role, visibility, or expiration for an existing NSF folder accessor."""
+        request_sync: bool = True,
+        _known_state: Optional[str] = None) -> Dict[str, Any]:
+    """Update role, visibility, or expiration for an NSF folder accessor.
+
+    Direct access is changed with ``folderAccessUpdates`` and keeps its folder
+    key. Inherited (or denied) access is turned into a direct grant with
+    ``folderAccessAdds`` plus the recipient-encrypted folder key, so the child
+    keeps its own key edge if access to the parent is later revoked.
+    """
     if role is None and hidden is None and expiration_timestamp is None:
         raise NsfError('At least one field (role, hidden, or expiration) is required')
 
@@ -410,25 +543,36 @@ def update_nsf_folder_access(
     uid_bytes, label, access_type_enum = _resolve_folder_accessor(
         vault, recipient, as_team=as_team)
 
-    ad = folder_pb2.FolderAccessData()
-    ad.folderUid = utils.base64_url_decode(folder_uid)
-    ad.accessTypeUid = uid_bytes
-    ad.accessType = access_type_enum
-    if role is not None:
-        access_role = nsf_common.resolve_nsf_role(role)
-        ad.accessRoleType = access_role
-        ad.permissions.CopyFrom(nsf_common.get_folder_permissions_for_role(access_role))
-    if hidden is not None:
-        ad.hidden = hidden
-    if expiration_timestamp is not None:
-        ad.tlaProperties.expiration = expiration_timestamp
+    accessors: List[Dict[str, Any]] = []
+    state = _known_state
+    if state is None:
+        accessors = _lookup_nsf_folder_accessors(
+            vault, folder_uid, uid_bytes, folder_pb2.AccessType.Name(access_type_enum))
+        state = nsf_common.folder_access_state_from_accessors(accessors)
 
-    response = _folder_access_update(vault, updates=[ad])
-    result = nsf_common.parse_folder_access_result(
-        response, folder_uid, label, 'Access updated successfully')
+    if state in (nsf_common.FOLDER_ACCESS_DIRECT, nsf_common.FOLDER_ACCESS_NONE):
+        # NONE: nothing known to convert; let the server validate the update.
+        plan = [{'request': nsf_common.FOLDER_ACCESS_UPDATE,
+                 'include_folder_key': False, 'denied_access': False}]
+    else:
+        plan = nsf_common.plan_folder_access_change(state, 'grant')
+        if role is None:
+            # An add needs a role; keep the one currently in effect.
+            current = (nsf_common.current_folder_role_name(accessors) or '').lower()
+            if current not in nsf_common.ROLE_NAME_MAP:
+                raise NsfError(
+                    'A role is required to change inherited or denied access on '
+                    'this folder (it becomes a direct grant)')
+            role = current
+
+    result = _execute_folder_access_plan(
+        vault, folder_uid, label, uid_bytes, access_type_enum, plan,
+        folder_key_factory=lambda: _encrypted_folder_key_for(
+            vault, folder_uid, uid_bytes, recipient, as_team=as_team),
+        messages={nsf_common.FOLDER_ACCESS_ADD: 'Access updated successfully'},
+        role=role, hidden=hidden, expiration_timestamp=expiration_timestamp)
     result['access_type'] = 'AT_TEAM' if as_team else 'AT_USER'
-    if not result['success']:
-        raise KeeperApiError(result['status'], result['message'])
+    result['previous_access_state'] = state
     _request_sync(vault, request_sync)
     return result
 
@@ -440,7 +584,14 @@ def revoke_nsf_folder_access(
         *,
         as_team: bool = False,
         request_sync: bool = True) -> Dict[str, Any]:
-    """Revoke user or team access from an NSF folder."""
+    """Revoke user or team access from an NSF folder.
+
+    * Direct access is removed with ``folderAccessRemoves``.
+    * Inherited access cannot be removed on the child (it comes from the
+      parent), so it is denied with ``folderAccessUpdates`` +
+      ``deniedAccess=True`` and no folder key.
+    * Already-denied access needs no request.
+    """
     folder_uid = resolve_nsf_folder_uid(vault, folder_identifier) or folder_identifier
     if not is_nsf_folder(vault, folder_uid):
         raise NsfError(f'NSF folder not found: {folder_identifier}')
@@ -449,18 +600,44 @@ def revoke_nsf_folder_access(
 
     uid_bytes, label, access_type_enum = _resolve_folder_accessor(
         vault, recipient, as_team=as_team)
+    access_type_label = 'AT_TEAM' if as_team else 'AT_USER'
 
-    ad = folder_pb2.FolderAccessData()
-    ad.folderUid = utils.base64_url_decode(folder_uid)
-    ad.accessTypeUid = uid_bytes
-    ad.accessType = access_type_enum
+    accessors = _lookup_nsf_folder_accessors(vault, folder_uid, uid_bytes, access_type_label)
+    if accessors:
+        # Use the server-reported UID / access type (e.g. inherited team rows).
+        server_uid = accessors[0].get('accessor_uid')
+        if server_uid:
+            uid_bytes = utils.base64_url_decode(server_uid)
+        server_type = accessors[0].get('access_type')
+        if server_type:
+            try:
+                access_type_enum = folder_pb2.AccessType.Value(server_type)
+                access_type_label = server_type
+            except ValueError as exc:
+                raise NsfError(
+                    f"Unrecognised access type '{server_type}' returned by server "
+                    f"for folder '{folder_uid}'") from exc
+    state = nsf_common.folder_access_state_from_accessors(accessors)
 
-    response = _folder_access_update(vault, removes=[ad])
-    result = nsf_common.parse_folder_access_result(
-        response, folder_uid, label, 'Access revoked successfully')
-    result['access_type'] = 'AT_TEAM' if as_team else 'AT_USER'
-    if not result['success']:
-        raise KeeperApiError(result['status'], result['message'])
+    action = 'deny' if state == nsf_common.FOLDER_ACCESS_INHERITED else 'remove'
+    plan = nsf_common.plan_folder_access_change(state, action)
+    if not plan:
+        return {
+            'folder_uid': folder_uid,
+            'accessor': label,
+            'access_type': access_type_label,
+            'status': 'SUCCESS',
+            'message': 'Access is already denied on this folder',
+            'success': True,
+            'action_taken': 'already_denied',
+            'previous_access_state': state,
+        }
+
+    result = _execute_folder_access_plan(
+        vault, folder_uid, label, uid_bytes, access_type_enum, plan)
+    result['access_type'] = access_type_label
+    result['previous_access_state'] = state
+    result['action_taken'] = 'denied' if action == 'deny' else 'revoked'
     _request_sync(vault, request_sync)
     return result
 
