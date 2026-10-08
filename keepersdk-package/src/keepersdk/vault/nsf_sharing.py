@@ -49,8 +49,8 @@ def _ensure_record_ownership_permission(vault: VaultOnline, record_uid: str) -> 
 
 
 def _prepare_folder_for_access_change(vault: VaultOnline, folder_uid: str) -> None:
-    """Break parent permission inheritance before changing folder accessors."""
-    nsf_common.ensure_folder_direct_permissions(vault, folder_uid, request_sync=False)
+    """Check folder permission inheritance before changing folder accessors."""
+    nsf_common.ensure_folder_direct_permissions(vault, folder_uid)
 
 
 @dataclass
