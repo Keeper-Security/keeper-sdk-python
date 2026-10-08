@@ -123,7 +123,7 @@ def _check_existing_nsf_folder_access(
     """Return the existing AccessRoleType name for an accessor, or None."""
     try:
         uid_encoded = utils.base64_url_encode(uid_bytes)
-        info = get_nsf_folder_access(vault, [folder_uid])
+        info = get_nsf_folder_access(vault, [folder_uid], show_inherited=True, show_denied=True)
         for result in info.get('results', []):
             if not result.get('success'):
                 continue
@@ -762,7 +762,7 @@ def plan_nsf_record_permissions(
     if not record_uids:
         raise NsfError('No records found in the specified folder')
 
-    accesses_result = get_nsf_record_accesses(vault, list(record_uids))
+    accesses_result = get_nsf_record_accesses(vault, list(record_uids), show_inherited=True, show_denied=True)
     role_map = {name: nsf_common.resolve_nsf_role(name) for name in (
         'viewer', 'share-manager', 'content-manager', 'content-share-manager', 'full-manager')}
 

@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from keepersdk import utils
 from keepersdk.proto import folder_pb2
@@ -83,12 +83,12 @@ class TestNsfPermissions(unittest.TestCase):
     def test_record_access_inheritance_helpers(self):
         record_uid = utils.generate_uid()
         vault = self._vault()
-        from unittest.mock import patch
         api_access = [{
             'record_uid': record_uid,
             'accessor_name': 'alice@example.com',
             'access_type': 'AT_USER',
             'inherited': True,
+            'denied_access': False,
             'owner': False,
         }]
         with patch.object(
@@ -126,6 +126,212 @@ class TestNsfPermissions(unittest.TestCase):
             ),
         ])
         self.assertFalse(nsf_common.folder_inherits_parent_permissions(vault, folder_uid))
+
+    def test_record_access_filter_hides_inherited_by_default(self):
+        accesses = [
+            {
+                'accessor_name': 'direct@example.com',
+                'inherited': False,
+                'denied_access': False,
+            },
+            {
+                'accessor_name': 'inherited@example.com',
+                'inherited': True,
+                'denied_access': False,
+            },
+        ]
+
+        filtered = [
+            access for access in accesses
+            if not access.get('inherited') and not access.get('denied_access')
+        ]
+
+        self.assertEqual(
+            ['direct@example.com'],
+            [access['accessor_name'] for access in filtered],
+        )
+
+    def test_record_access_filter_shows_inherited_when_requested(self):
+        accesses = [
+            {
+                'accessor_name': 'direct@example.com',
+                'inherited': False,
+                'denied_access': False,
+            },
+            {
+                'accessor_name': 'inherited@example.com',
+                'inherited': True,
+                'denied_access': False,
+            },
+        ]
+
+        show_inherited = True
+        show_denied = False
+
+        filtered = [
+            access for access in accesses
+            if (show_inherited or not access.get('inherited'))
+            and (show_denied or not access.get('denied_access'))
+        ]
+
+        self.assertEqual(
+            [
+                'direct@example.com',
+                'inherited@example.com',
+            ],
+            [access['accessor_name'] for access in filtered],
+        )
+
+    def test_record_access_filter_hides_denied_by_default(self):
+        accesses = [
+            {
+                'accessor_name': 'direct@example.com',
+                'inherited': False,
+                'denied_access': False,
+            },
+            {
+                'accessor_name': 'denied@example.com',
+                'inherited': False,
+                'denied_access': True,
+            },
+        ]
+
+        filtered = [
+            access for access in accesses
+            if not access.get('inherited') and not access.get('denied_access')
+        ]
+
+        self.assertEqual(
+            ['direct@example.com'],
+            [access['accessor_name'] for access in filtered],
+        )
+
+    def test_record_access_filter_shows_denied_when_requested(self):
+        accesses = [
+            {
+                'accessor_name': 'direct@example.com',
+                'inherited': False,
+                'denied_access': False,
+            },
+            {
+                'accessor_name': 'denied@example.com',
+                'inherited': False,
+                'denied_access': True,
+            },
+        ]
+
+        show_inherited = False
+        show_denied = True
+
+        filtered = [
+            access for access in accesses
+            if (show_inherited or not access.get('inherited'))
+            and (show_denied or not access.get('denied_access'))
+        ]
+
+        self.assertEqual(
+            [
+                'direct@example.com',
+                'denied@example.com',
+            ],
+            [access['accessor_name'] for access in filtered],
+        )
+
+    def test_record_access_filter_shows_inherited_and_denied_when_requested(self):
+        accesses = [
+            {
+                'accessor_name': 'direct@example.com',
+                'inherited': False,
+                'denied_access': False,
+            },
+            {
+                'accessor_name': 'inherited@example.com',
+                'inherited': True,
+                'denied_access': False,
+            },
+            {
+                'accessor_name': 'denied@example.com',
+                'inherited': False,
+                'denied_access': True,
+            },
+            {
+                'accessor_name': 'inherited-denied@example.com',
+                'inherited': True,
+                'denied_access': True,
+            },
+        ]
+
+        show_inherited = True
+        show_denied = True
+
+        filtered = [
+            access for access in accesses
+            if (show_inherited or not access.get('inherited'))
+            and (show_denied or not access.get('denied_access'))
+        ]
+
+        self.assertEqual(
+            [
+                'direct@example.com',
+                'inherited@example.com',
+                'denied@example.com',
+                'inherited-denied@example.com',
+            ],
+            [access['accessor_name'] for access in filtered],
+        )
+
+    def test_record_access_filter_hides_inherited_denied_by_default(self):
+        accesses = [
+            {
+                'accessor_name': 'direct@example.com',
+                'inherited': False,
+                'denied_access': False,
+            },
+            {
+                'accessor_name': 'inherited@example.com',
+                'inherited': True,
+                'denied_access': False,
+            },
+            {
+                'accessor_name': 'denied@example.com',
+                'inherited': False,
+                'denied_access': True,
+            },
+            {
+                'accessor_name': 'inherited-denied@example.com',
+                'inherited': True,
+                'denied_access': True,
+            },
+        ]
+
+        filtered = [
+            access for access in accesses
+            if not access.get('inherited') and not access.get('denied_access')
+        ]
+
+        self.assertEqual(
+            ['direct@example.com'],
+            [access['accessor_name'] for access in filtered],
+        )
+
+    def test_permission_state_values_are_preserved(self):
+        access = {
+            'accessor_name': 'user@example.com',
+            'inherited': True,
+            'denied_access': False,
+        }
+
+        self.assertTrue(access['inherited'])
+        self.assertFalse(access['denied_access'])
+
+        access = {
+            'accessor_name': 'user@example.com',
+            'inherited': False,
+            'denied_access': True,
+        }
+
+        self.assertFalse(access['inherited'])
+        self.assertTrue(access['denied_access'])
 
 
 class TestEncryptForTeam(unittest.TestCase):
