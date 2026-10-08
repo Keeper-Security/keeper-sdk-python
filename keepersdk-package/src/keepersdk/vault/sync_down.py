@@ -583,6 +583,7 @@ def sync_down_request(auth: keeper_auth.KeeperAuth,
         rt_rq.standard = True
         rt_rq.user = True
         rt_rq.enterprise = True
+        rt_rq.pam = True
         rt_rs = auth.execute_auth_rest(
             'vault/get_record_types', rt_rq, response_type=record_pb2.RecordTypesResponse)
         assert rt_rs is not None
