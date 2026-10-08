@@ -683,14 +683,10 @@ def folder_inherits_parent_permissions(vault: VaultOnline, folder_uid: str) -> b
 
 def ensure_folder_direct_permissions(
         vault: VaultOnline,
-        folder_uid: str,
-        *,
-        request_sync: bool = False) -> bool:
-    """Disable parent permission inheritance so folder access changes apply locally."""
+        folder_uid: str) -> bool:
+    """Check whether folder permission inheritance is enabled."""
     if not folder_inherits_parent_permissions(vault, folder_uid):
         return False
-    from .nsf_management import update_nsf_folder
-    update_nsf_folder(vault, folder_uid, inherit_permissions=False, request_sync=request_sync)
     return True
 
 
