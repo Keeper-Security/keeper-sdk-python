@@ -316,6 +316,14 @@ class NsfGetCommand(base.ArgparseCommand):
             '--unmask', dest='unmask', action='store_true',
             help='Reveal masked field values (passwords, secrets)',
         )
+        parser.add_argument(
+            '--show-inherited', dest='show_inherited', action='store_true',
+            help='Include inherited permission entries in the accessor list',
+        )
+        parser.add_argument(
+            '--show-denied', dest='show_denied', action='store_true',
+            help='Include denied-access permission entries in the accessor list',
+        )
 
     def execute(self, context: KeeperParams, **kwargs):
         vault = _require_vault(context)
@@ -326,16 +334,18 @@ class NsfGetCommand(base.ArgparseCommand):
         fmt = kwargs.get('format') or 'detail'
         verbose = kwargs.get('verbose', False)
         unmask = kwargs.get('unmask', False)
+        show_inherited = kwargs.get('show_inherited', False)
+        show_denied = kwargs.get('show_denied', False)
 
         def _run():
-            return nsf_management.get_nsf_item(vault, uid)
+            return nsf_management.get_nsf_item(vault, uid, show_inherited, show_denied)
 
         detail = _wrap_nsf('nsf-get', _run)
         if detail.get('item_type') == 'folder':
             if fmt == 'json':
-                self._print_folder_json(detail, verbose)
+                self._print_folder_json(detail, verbose, show_inherited, show_denied)
             else:
-                self._print_folder_detail(detail, verbose)
+                self._print_folder_detail(detail, verbose, show_inherited, show_denied)
             return
 
         if unmask:
@@ -345,12 +355,16 @@ class NsfGetCommand(base.ArgparseCommand):
                 detail.get('record_uid', uid),
             )
         if fmt == 'json':
-            self._print_record_json(vault, detail, verbose, unmask)
+            self._print_record_json(vault, detail, verbose, unmask, show_inherited, show_denied)
         else:
-            self._print_record_detail(detail, verbose, unmask)
+            self._print_record_detail(detail, verbose, unmask, show_inherited, show_denied)
 
     @staticmethod
-    def _print_folder_detail(detail: Dict[str, Any], verbose: bool) -> None:
+    def _print_folder_detail(
+            detail: Dict[str, Any],
+            verbose: bool,
+            show_inherited: bool,
+            show_denied: bool) -> None:
         logger.info('')
         logger.info('{0:>25s}: {1}'.format('NSF Folder UID', detail.get('nsf_folder_uid', '')))
         logger.info('{0:>25s}: {1}'.format('Name', detail.get('name', '')))
@@ -364,10 +378,16 @@ class NsfGetCommand(base.ArgparseCommand):
             verbose,
             owner_username=detail.get('owner_username'),
             owner_account_uid=detail.get('owner_account_uid'),
+            show_inherited=show_inherited,
+            show_denied=show_denied,
         )
 
     @staticmethod
-    def _print_folder_json(detail: Dict[str, Any], verbose: bool) -> None:
+    def _print_folder_json(
+            detail: Dict[str, Any],
+            verbose: bool,
+            show_inherited: bool,
+            show_denied: bool) -> None:
         fo = {
             'nsf_folder_uid': detail.get('nsf_folder_uid'),
             'name': detail.get('name'),
@@ -382,18 +402,27 @@ class NsfGetCommand(base.ArgparseCommand):
         for fr in access.get('results') or []:
             if not fr.get('success'):
                 continue
-            accessors = fr.get('accessors') or []
+            accessors = [
+                a for a in (fr.get('accessors') or [])
+                if (show_inherited or not a.get('inherited'))
+                and (show_denied or not a.get('denied_access'))
+            ]
             if accessors:
                 owner_username = detail.get('owner_username')
                 owner_account_uid = detail.get('owner_account_uid')
-                fo['accessors'] = accessors if verbose else [
-                    {
-                        'username': a.get('username'),
-                        'role': nsf_common.folder_access_role_label(
-                            a, owner_username, owner_account_uid),
-                    }
-                    for a in accessors
-                ]
+                if verbose:
+                    fo['accessors'] = accessors
+                else:
+                    fo['accessors'] = [
+                        {
+                            'username': a.get('username'),
+                            'role': nsf_common.folder_access_role_label(
+                                a, owner_username, owner_account_uid),
+                            'inherited': bool(a.get('inherited')),
+                            'denied_access': bool(a.get('denied_access')),
+                        }
+                        for a in accessors
+                    ]
         logger.info(json.dumps(fo, indent=2))
 
     @staticmethod
@@ -401,13 +430,19 @@ class NsfGetCommand(base.ArgparseCommand):
             access: Dict[str, Any],
             verbose: bool,
             owner_username: Optional[str] = None,
-            owner_account_uid: Optional[str] = None) -> None:
+            owner_account_uid: Optional[str] = None,
+            show_inherited: bool = False,
+            show_denied: bool = False) -> None:
         for fr in access.get('results') or []:
             if not fr.get('success'):
                 err = fr.get('error') or {}
                 logger.warning('  Access error: %s — %s', err.get('status'), err.get('message'))
                 continue
-            accessors = fr.get('accessors') or []
+            accessors = [
+                a for a in (fr.get('accessors') or [])
+                if (show_inherited or not a.get('inherited'))
+                and (show_denied or not a.get('denied_access'))
+            ]
             if not accessors:
                 continue
             logger.info('')
@@ -417,10 +452,20 @@ class NsfGetCommand(base.ArgparseCommand):
                 role = nsf_common.folder_access_role_label(
                     a, owner_username, owner_account_uid)
                 logger.info('{0:>25s}: {1}'.format(label, role))
+                if a.get('inherited'):
+                    logger.info('{0:>25s}: Yes'.format('Inherited'))
+                if a.get('denied_access'):
+                    logger.info('{0:>25s}: Yes'.format('Denied Access'))
                 if verbose and a.get('permissions'):
                     logger.info('{0:>25s}: {1}'.format('', json.dumps(a.get('permissions', {}))))
 
-    def _print_record_detail(self, detail: Dict[str, Any], verbose: bool, unmask: bool) -> None:
+    def _print_record_detail(
+            self,
+            detail: Dict[str, Any],
+            verbose: bool,
+            unmask: bool,
+            show_inherited: bool,
+            show_denied: bool) -> None:
         record_uid = detail.get('record_uid', '')
         logger.info('')
         logger.info('{0:>20s}: {1}'.format('UID', record_uid))
@@ -461,14 +506,17 @@ class NsfGetCommand(base.ArgparseCommand):
             for i, line in enumerate(notes.split('\n')):
                 logger.info('{0:>21s} {1}'.format('Notes:' if i == 0 else '', line.strip()))
 
-        self._print_record_permissions(detail.get('record_accesses') or [], verbose)
+        self._print_record_permissions(
+            detail.get('record_accesses') or [], verbose, show_inherited, show_denied)
 
     def _print_record_json(
             self,
             vault,
             detail: Dict[str, Any],
             verbose: bool,
-            unmask: bool) -> None:
+            unmask: bool,
+            show_inherited: bool,
+            show_denied: bool) -> None:
         ro: Dict[str, Any] = {
             'record_uid': detail.get('record_uid'),
             'title': detail.get('title'),
@@ -483,7 +531,11 @@ class NsfGetCommand(base.ArgparseCommand):
         if detail.get('notes'):
             ro['notes'] = detail['notes']
 
-        accesses = detail.get('record_accesses') or []
+        accesses = [
+            a for a in (detail.get('record_accesses') or [])
+            if (show_inherited or not a.get('inherited'))
+            and (show_denied or not a.get('denied_access'))
+        ]
         if accesses:
             ro['user_permissions'] = [
                 {
@@ -491,6 +543,8 @@ class NsfGetCommand(base.ArgparseCommand):
                     'owner': a.get('owner', False),
                     'editable': a.get('can_edit', False),
                     'role': nsf_common.access_role_label(a),
+                    'inherited': bool(a.get('inherited')),
+                    'denied_access': bool(a.get('denied_access')),
                     **({flag: a.get(flag) for flag in (
                         'can_view_title', 'can_edit', 'can_view', 'can_list_access',
                         'can_update_access', 'can_delete',
@@ -516,7 +570,16 @@ class NsfGetCommand(base.ArgparseCommand):
         return ''
 
     @staticmethod
-    def _print_record_permissions(accesses: List[Dict[str, Any]], verbose: bool) -> None:
+    def _print_record_permissions(
+            accesses: List[Dict[str, Any]],
+            verbose: bool,
+            show_inherited: bool = False,
+            show_denied: bool = False) -> None:
+        accesses = [
+            a for a in accesses
+            if (show_inherited or not a.get('inherited'))
+            and (show_denied or not a.get('denied_access'))
+        ]
         if not accesses:
             return
         logger.info('')
@@ -533,6 +596,10 @@ class NsfGetCommand(base.ArgparseCommand):
             can_share = a.get('can_approve_access', False) or a.get('can_update_access', False)
             logger.info('  Shareable: ' + ('Yes' if can_share else 'No'))
             logger.info('  Read-Only: ' + ('Yes' if not can_edit else 'No'))
+            if a.get('inherited'):
+                logger.info('  Inherited: Yes')
+            if a.get('denied_access'):
+                logger.info('  Denied Access: Yes')
             if verbose:
                 logger.info(f'  {"Permission":<20}  Value')
                 logger.info(f'  {"-"*20}  -----')
@@ -1269,7 +1336,7 @@ class NsfShareFolderCommand(base.ArgparseCommand):
         for raw in recipients:
             if raw in ('@existing', '@current'):
                 access = nsf_management.get_nsf_folder_access(vault, [
-                    nsf_management.resolve_nsf_folder_uid(vault, folder_arg) or folder_arg])
+                    nsf_management.resolve_nsf_folder_uid(vault, folder_arg) or folder_arg], show_inherited=True, show_denied=True)
                 for fr in access.get('results') or []:
                     if not fr.get('success'):
                         continue
