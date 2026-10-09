@@ -2,8 +2,8 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from keepersdk import utils
-from keepersdk.proto import folder_pb2
-from keepersdk.vault import memory_nsf_storage, nsf_common, nsf_storage_types as nsf
+from keepersdk.proto import folder_access_pb2, folder_pb2, record_details_pb2
+from keepersdk.vault import memory_nsf_storage, nsf_common, nsf_management, nsf_storage_types as nsf
 
 
 class TestNsfPermissions(unittest.TestCase):
@@ -127,211 +127,133 @@ class TestNsfPermissions(unittest.TestCase):
         ])
         self.assertFalse(nsf_common.folder_inherits_parent_permissions(vault, folder_uid))
 
-    def test_record_access_filter_hides_inherited_by_default(self):
-        accesses = [
-            {
-                'accessor_name': 'direct@example.com',
-                'inherited': False,
-                'denied_access': False,
-            },
-            {
-                'accessor_name': 'inherited@example.com',
-                'inherited': True,
-                'denied_access': False,
-            },
-        ]
 
-        filtered = [
-            access for access in accesses
-            if not access.get('inherited') and not access.get('denied_access')
-        ]
+class TestNsfAccessListingFilters(unittest.TestCase):
+    """Exercise the real SDK filters (not a copy of their logic)."""
 
-        self.assertEqual(
-            ['direct@example.com'],
-            [access['accessor_name'] for access in filtered],
-        )
+    _ROWS = (
+        ('direct@example.com', False, False),
+        ('inherited@example.com', True, False),
+        ('denied@example.com', False, True),
+        ('inherited-denied@example.com', True, True),
+    )
 
-    def test_record_access_filter_shows_inherited_when_requested(self):
-        accesses = [
-            {
-                'accessor_name': 'direct@example.com',
-                'inherited': False,
-                'denied_access': False,
-            },
-            {
-                'accessor_name': 'inherited@example.com',
-                'inherited': True,
-                'denied_access': False,
-            },
-        ]
+    def setUp(self):
+        self.record_uid = utils.generate_uid()
+        self.folder_uid = utils.generate_uid()
+        self.vault = MagicMock()
+        for target in ('resolve_nsf_record_uid', 'resolve_nsf_folder_uid'):
+            p = patch('keepersdk.vault.nsf_management.' + target, side_effect=lambda _v, u: u)
+            p.start()
+            self.addCleanup(p.stop)
+        p = patch('keepersdk.vault.nsf_management._resolve_uid_to_username',
+                  side_effect=lambda _v, uid: f'user-{uid}')
+        self.resolve_username = p.start()
+        self.addCleanup(p.stop)
 
-        show_inherited = True
-        show_denied = False
+    def _record_response(self):
+        rs = record_details_pb2.RecordAccessResponse()
+        for name, inherited, denied in self._ROWS:
+            ra = rs.recordAccesses.add()
+            ra.accessorInfo.name = name
+            ra.data.recordUid = utils.base64_url_decode(self.record_uid)
+            ra.data.accessTypeUid = utils.base64_url_decode(utils.generate_uid())
+            ra.data.accessType = folder_pb2.AT_USER
+            ra.data.inherited = inherited
+            ra.data.deniedAccess = denied
+        return rs
 
-        filtered = [
-            access for access in accesses
-            if (show_inherited or not access.get('inherited'))
-            and (show_denied or not access.get('denied_access'))
-        ]
+    def _folder_response(self):
+        rs = folder_access_pb2.GetFolderAccessResponse()
+        fr = rs.folderAccessResults.add()
+        fr.folderUid = utils.base64_url_decode(self.folder_uid)
+        for _name, inherited, denied in self._ROWS:
+            a = fr.accessors.add()
+            a.folderUid = fr.folderUid
+            a.accessTypeUid = utils.base64_url_decode(utils.generate_uid())
+            a.accessType = folder_pb2.AT_USER
+            a.accessRoleType = folder_pb2.VIEWER
+            a.inherited = inherited
+            a.deniedAccess = denied
+        return rs
 
-        self.assertEqual(
-            [
-                'direct@example.com',
-                'inherited@example.com',
-            ],
-            [access['accessor_name'] for access in filtered],
-        )
+    def _records(self, **kwargs):
+        self.vault.keeper_auth.execute_auth_rest.return_value = self._record_response()
+        rs = nsf_management.get_nsf_record_accesses(self.vault, [self.record_uid], **kwargs)
+        return [a['accessor_name'] for a in rs['record_accesses']]
 
-    def test_record_access_filter_hides_denied_by_default(self):
-        accesses = [
-            {
-                'accessor_name': 'direct@example.com',
-                'inherited': False,
-                'denied_access': False,
-            },
-            {
-                'accessor_name': 'denied@example.com',
-                'inherited': False,
-                'denied_access': True,
-            },
-        ]
+    def _folders(self, **kwargs):
+        self.vault.keeper_auth.execute_auth_rest.return_value = self._folder_response()
+        rs = nsf_management.get_nsf_folder_access(self.vault, [self.folder_uid], **kwargs)
+        accessors = rs['results'][0]['accessors']
+        self.assertTrue(all(accessors), 'filtered rows must be dropped, not left as {}')
+        return [(a['inherited'], a['denied_access']) for a in accessors]
 
-        filtered = [
-            access for access in accesses
-            if not access.get('inherited') and not access.get('denied_access')
-        ]
+    def test_record_default_hides_inherited_and_denied(self):
+        self.assertEqual(['direct@example.com'], self._records())
 
-        self.assertEqual(
-            ['direct@example.com'],
-            [access['accessor_name'] for access in filtered],
-        )
+    def test_record_show_all(self):
+        self.assertEqual([r[0] for r in self._ROWS],
+                         self._records(show_inherited=True, show_denied=True))
 
-    def test_record_access_filter_shows_denied_when_requested(self):
-        accesses = [
-            {
-                'accessor_name': 'direct@example.com',
-                'inherited': False,
-                'denied_access': False,
-            },
-            {
-                'accessor_name': 'denied@example.com',
-                'inherited': False,
-                'denied_access': True,
-            },
-        ]
+    def test_record_hide_inherited_and_denied(self):
+        self.assertEqual(['direct@example.com'],
+                         self._records(show_inherited=False, show_denied=False))
 
-        show_inherited = False
-        show_denied = True
+    def test_record_hide_inherited_only(self):
+        self.assertEqual(['direct@example.com', 'denied@example.com'],
+                         self._records(show_inherited=False, show_denied=True))
 
-        filtered = [
-            access for access in accesses
-            if (show_inherited or not access.get('inherited'))
-            and (show_denied or not access.get('denied_access'))
-        ]
+    def test_record_hide_denied_only(self):
+        self.assertEqual(['direct@example.com', 'inherited@example.com'],
+                         self._records(show_inherited=True, show_denied=False))
 
-        self.assertEqual(
-            [
-                'direct@example.com',
-                'denied@example.com',
-            ],
-            [access['accessor_name'] for access in filtered],
-        )
+    def test_record_rows_keep_state_flags(self):
+        self.vault.keeper_auth.execute_auth_rest.return_value = self._record_response()
+        rows = nsf_management.get_nsf_record_accesses(
+            self.vault, [self.record_uid], show_inherited=True, show_denied=True)['record_accesses']
+        self.assertEqual([(r['inherited'], r['denied_access']) for r in rows],
+                         [(i, d) for _n, i, d in self._ROWS])
 
-    def test_record_access_filter_shows_inherited_and_denied_when_requested(self):
-        accesses = [
-            {
-                'accessor_name': 'direct@example.com',
-                'inherited': False,
-                'denied_access': False,
-            },
-            {
-                'accessor_name': 'inherited@example.com',
-                'inherited': True,
-                'denied_access': False,
-            },
-            {
-                'accessor_name': 'denied@example.com',
-                'inherited': False,
-                'denied_access': True,
-            },
-            {
-                'accessor_name': 'inherited-denied@example.com',
-                'inherited': True,
-                'denied_access': True,
-            },
-        ]
+    def test_folder_default_hides_inherited_and_denied(self):
+        self.assertEqual([(False, False)], self._folders())
 
-        show_inherited = True
-        show_denied = True
+    def test_folder_show_all(self):
+        self.assertEqual([(i, d) for _n, i, d in self._ROWS],
+                         self._folders(show_inherited=True, show_denied=True))
 
-        filtered = [
-            access for access in accesses
-            if (show_inherited or not access.get('inherited'))
-            and (show_denied or not access.get('denied_access'))
-        ]
+    def test_folder_hide_inherited_and_denied(self):
+        self.assertEqual([(False, False)], self._folders(show_inherited=False, show_denied=False))
 
-        self.assertEqual(
-            [
-                'direct@example.com',
-                'inherited@example.com',
-                'denied@example.com',
-                'inherited-denied@example.com',
-            ],
-            [access['accessor_name'] for access in filtered],
-        )
+    def test_folder_hide_inherited_only(self):
+        self.assertEqual([(False, False), (False, True)],
+                         self._folders(show_inherited=False, show_denied=True))
 
-    def test_record_access_filter_hides_inherited_denied_by_default(self):
-        accesses = [
-            {
-                'accessor_name': 'direct@example.com',
-                'inherited': False,
-                'denied_access': False,
-            },
-            {
-                'accessor_name': 'inherited@example.com',
-                'inherited': True,
-                'denied_access': False,
-            },
-            {
-                'accessor_name': 'denied@example.com',
-                'inherited': False,
-                'denied_access': True,
-            },
-            {
-                'accessor_name': 'inherited-denied@example.com',
-                'inherited': True,
-                'denied_access': True,
-            },
-        ]
+    def test_folder_hide_denied_only(self):
+        self.assertEqual([(False, False), (True, False)],
+                         self._folders(show_inherited=True, show_denied=False))
 
-        filtered = [
-            access for access in accesses
-            if not access.get('inherited') and not access.get('denied_access')
-        ]
+    def test_folder_filtered_rows_skip_username_lookup(self):
+        self._folders(show_inherited=False, show_denied=False)
+        self.assertEqual(1, self.resolve_username.call_count)
 
-        self.assertEqual(
-            ['direct@example.com'],
-            [access['accessor_name'] for access in filtered],
-        )
 
-    def test_permission_state_values_are_preserved(self):
-        access = {
-            'accessor_name': 'user@example.com',
-            'inherited': True,
-            'denied_access': False,
-        }
+class TestNsfLoadAccessDetails(unittest.TestCase):
 
-        self.assertTrue(access['inherited'])
-        self.assertFalse(access['denied_access'])
-
-        access = {
-            'accessor_name': 'user@example.com',
-            'inherited': False,
-            'denied_access': True,
-        }
-
-        self.assertFalse(access['inherited'])
-        self.assertTrue(access['denied_access'])
+    def test_load_always_requests_inherited_and_denied(self):
+        view = MagicMock()
+        view.folders.return_value = [MagicMock(folder_uid='f1')]
+        view.records.return_value = [MagicMock(record_uid='r1')]
+        vault = MagicMock()
+        with patch('keepersdk.vault.nsf_management._nsf_view', return_value=view), \
+                patch('keepersdk.vault.nsf_management.get_nsf_folder_access',
+                      return_value={'results': [{'folder_uid': 'f1', 'success': True, 'accessors': []}]}) as gfa, \
+                patch('keepersdk.vault.nsf_management.get_nsf_record_accesses',
+                      return_value={'record_accesses': []}) as gra:
+            loaded = nsf_management.load_nsf_access_details(vault, load_folder=True, load_record=True)
+        self.assertEqual(loaded, {'folders': 1, 'records': 1})
+        self.assertEqual(gfa.call_args.kwargs, {'show_inherited': True, 'show_denied': True})
+        self.assertEqual(gra.call_args.kwargs, {'show_inherited': True, 'show_denied': True})
 
 
 class TestEncryptForTeam(unittest.TestCase):

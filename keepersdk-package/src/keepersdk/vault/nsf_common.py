@@ -681,15 +681,6 @@ def folder_inherits_parent_permissions(vault: VaultOnline, folder_uid: str) -> b
     return row.inherit_user_permissions != int(folder_pb2.BOOLEAN_FALSE)
 
 
-def ensure_folder_direct_permissions(
-        vault: VaultOnline,
-        folder_uid: str) -> bool:
-    """Check whether folder permission inheritance is enabled."""
-    if not folder_inherits_parent_permissions(vault, folder_uid):
-        return False
-    return True
-
-
 def access_role_label(access: Dict[str, Any]) -> str:
     if access.get('owner'):
         return 'owner'
@@ -759,8 +750,11 @@ def plan_folder_access_change(state: str, action: str) -> List[Dict[str, Any]]:
 
     ``action`` is ``'grant'`` (set/change a role), ``'deny'`` or ``'remove'``.
     Each step is ``{'request': <list name>, 'include_folder_key': bool,
-    'denied_access': bool}``. Steps are sent sequentially and a later step is
-    sent only when the previous one succeeded.
+    'denied_access': bool, 'rollback': Optional[str]}``. Steps are sent
+    sequentially and a later step is sent only when the previous one
+    succeeded. ``rollback`` names the compensating action to take for a
+    completed step when a later step fails (``'deny'`` re-applies a denial
+    that was removed, so a failed grant never leaves inherited access open).
 
       * inherited -> grant : folderAccessAdds + recipient-encrypted folderKey
       * denied    -> grant : folderAccessRemoves (denial), then
@@ -774,15 +768,19 @@ def plan_folder_access_change(state: str, action: str) -> List[Dict[str, Any]]:
 
     Raises ValueError for transitions that are not allowed.
     """
-    add_with_key = {'request': FOLDER_ACCESS_ADD, 'include_folder_key': True, 'denied_access': False}
-    update = {'request': FOLDER_ACCESS_UPDATE, 'include_folder_key': False, 'denied_access': False}
-    remove = {'request': FOLDER_ACCESS_REMOVE, 'include_folder_key': False, 'denied_access': False}
+    add_with_key = {'request': FOLDER_ACCESS_ADD, 'include_folder_key': True,
+                    'denied_access': False, 'rollback': None}
+    update = {'request': FOLDER_ACCESS_UPDATE, 'include_folder_key': False,
+              'denied_access': False, 'rollback': None}
+    remove = {'request': FOLDER_ACCESS_REMOVE, 'include_folder_key': False,
+              'denied_access': False, 'rollback': None}
 
     if action == 'grant':
         if state == FOLDER_ACCESS_DIRECT:
             return [update]
         if state == FOLDER_ACCESS_DENIED:
-            return [remove, add_with_key]
+            # If the add fails, the removed denial must be restored.
+            return [dict(remove, rollback='deny'), add_with_key]
         return [add_with_key]
 
     if action == 'deny':
@@ -803,8 +801,13 @@ def plan_folder_access_change(state: str, action: str) -> List[Dict[str, Any]]:
 
 
 def current_folder_role_name(accessors: List[Dict[str, Any]]) -> Optional[str]:
-    """AccessRoleType name of the most specific row (direct before inherited)."""
+    """AccessRoleType name of the most specific row (direct before inherited).
+
+    Denied rows grant nothing, so they are ignored.
+    """
     for a in sorted(accessors or [], key=lambda r: bool(r.get('inherited'))):
+        if a.get('denied_access'):
+            continue
         if a.get('role'):
             return a['role']
     return None
