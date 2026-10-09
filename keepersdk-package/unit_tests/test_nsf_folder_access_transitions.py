@@ -6,7 +6,7 @@ from unittest import mock
 from keepersdk import utils
 from keepersdk.errors import KeeperApiError
 from keepersdk.proto import folder_pb2
-from keepersdk.vault import nsf_common, nsf_sharing
+from keepersdk.vault import nsf_common, nsf_management, nsf_sharing
 
 _S = 'keepersdk.vault.nsf_sharing.'
 
@@ -71,7 +71,6 @@ class TestNsfFolderAccessTransitions(unittest.TestCase):
             mock.patch(_S + 'resolve_nsf_folder_uid', return_value=self.folder_uid),
             mock.patch(_S + 'is_nsf_folder', return_value=True),
             mock.patch(_S + '_ensure_folder_share_permission'),
-            mock.patch(_S + '_prepare_folder_for_access_change'),
             mock.patch(_S + '_request_sync'),
             mock.patch(_S + '_resolve_folder_accessor',
                        return_value=(self.uid_bytes, self.email, folder_pb2.AT_USER)),
@@ -165,11 +164,20 @@ class TestNsfFolderAccessTransitions(unittest.TestCase):
         self.assertFalse(ad.HasField('folderKey'))
         self.enc.assert_not_called()
 
-    def test_update_inherited_keeps_current_role_and_adds_key(self):
+    def test_update_inherited_requires_explicit_role(self):
+        self._rows(_row(self.uid_b64, inherited=True))
+        upd = self._access()
+        with self.assertRaises(nsf_management.NsfError):
+            nsf_sharing.update_nsf_folder_access(
+                self.vault, self.folder_uid, self.email, expiration_timestamp=1_900_000_000_000)
+        upd.assert_not_called()
+
+    def test_update_inherited_with_role_adds_key(self):
         self._rows(_row(self.uid_b64, inherited=True))
         upd = self._access(_response(0))
         nsf_sharing.update_nsf_folder_access(
-            self.vault, self.folder_uid, self.email, expiration_timestamp=1_900_000_000_000)
+            self.vault, self.folder_uid, self.email, role='viewer',
+            expiration_timestamp=1_900_000_000_000)
         ad = upd.call_args.kwargs['adds'][0]
         self.assertEqual(ad.accessRoleType, folder_pb2.VIEWER)
         self.assertTrue(ad.HasField('folderKey'))
@@ -212,6 +220,143 @@ class TestNsfFolderAccessTransitions(unittest.TestCase):
         self._access(_response(_FAILURE))
         with self.assertRaises(KeeperApiError):
             nsf_sharing.revoke_nsf_folder_access(self.vault, self.folder_uid, self.email)
+
+    def test_grant_denied_restores_denial_when_add_fails(self):
+        self._rows(_row(self.uid_b64, inherited=True, denied=True))
+        upd = self._access(_response(0), _response(_FAILURE), _response(0))
+        with self.assertRaises(KeeperApiError) as ctx:
+            nsf_sharing.grant_nsf_folder_access(
+                self.vault, self.folder_uid, self.email, role='viewer')
+        self.assertEqual(upd.call_count, 3)
+        restore = upd.call_args_list[2].kwargs['updates'][0]
+        self.assertTrue(restore.deniedAccess)
+        self.assertFalse(restore.HasField('folderKey'))
+        self.assertIn('denial was restored', str(ctx.exception))
+
+    def test_grant_denied_warns_when_denial_cannot_be_restored(self):
+        self._rows(_row(self.uid_b64, denied=True))
+        self._access(_response(0), _response(_FAILURE), _response(_FAILURE))
+        with self.assertRaises(KeeperApiError) as ctx:
+            nsf_sharing.grant_nsf_folder_access(
+                self.vault, self.folder_uid, self.email, role='viewer')
+        self.assertIn('could not be restored', str(ctx.exception))
+
+    def test_grant_denied_key_failure_sends_nothing(self):
+        self._rows(_row(self.uid_b64, denied=True))
+        upd = self._access()
+        self.enc.side_effect = nsf_management.NsfError('no public key')
+        with self.assertRaises(nsf_management.NsfError):
+            nsf_sharing.grant_nsf_folder_access(
+                self.vault, self.folder_uid, self.email, role='viewer')
+        upd.assert_not_called()
+
+    def test_lookup_failure_raises_instead_of_assuming_none(self):
+        p = mock.patch(_S + 'get_nsf_folder_access', side_effect=RuntimeError('network'))
+        p.start()
+        self.addCleanup(p.stop)
+        upd = self._access()
+        with self.assertRaises(nsf_management.NsfError):
+            nsf_sharing.grant_nsf_folder_access(self.vault, self.folder_uid, self.email)
+        upd.assert_not_called()
+
+    def test_lookup_error_result_raises(self):
+        info = {'results': [{'folder_uid': self.folder_uid, 'success': False,
+                             'error': {'status': 'ACCESS_DENIED', 'message': 'nope'}}]}
+        p = mock.patch(_S + 'get_nsf_folder_access', return_value=info)
+        p.start()
+        self.addCleanup(p.stop)
+        upd = self._access()
+        with self.assertRaises(nsf_management.NsfError):
+            nsf_sharing.revoke_nsf_folder_access(self.vault, self.folder_uid, self.email)
+        upd.assert_not_called()
+
+    def test_revoke_owner_is_refused(self):
+        self._rows(_row(self.uid_b64, access_type='AT_OWNER', role='MANAGER'))
+        upd = self._access()
+        with self.assertRaises(nsf_management.NsfError):
+            nsf_sharing.revoke_nsf_folder_access(self.vault, self.folder_uid, self.email)
+        upd.assert_not_called()
+
+    def test_grant_owner_is_refused(self):
+        self._rows(_row(self.uid_b64, access_type='AT_OWNER', role='MANAGER'))
+        upd = self._access()
+        with self.assertRaises(nsf_management.NsfError):
+            nsf_sharing.grant_nsf_folder_access(self.vault, self.folder_uid, self.email)
+        upd.assert_not_called()
+
+
+class TestNsfApplicationFolderAccess(unittest.TestCase):
+
+    def setUp(self):
+        self.folder_uid = utils.generate_uid()
+        self.app_uid = utils.generate_uid()
+        self.vault = mock.Mock()
+        self.vault.vault_data.get_record_key.return_value = b'\x01' * 32
+        for target, kw in (
+                ('resolve_nsf_folder_uid', {'return_value': self.folder_uid}),
+                ('is_nsf_folder', {'return_value': True}),
+                ('_ensure_folder_share_permission', {}),
+                ('_request_sync', {}),
+                ('_get_folder_key', {'return_value': b'\x02' * 32})):
+            p = mock.patch(_S + target, **kw)
+            p.start()
+            self.addCleanup(p.stop)
+
+    def _rows(self, *rows):
+        info = {'results': [{'folder_uid': self.folder_uid, 'success': True,
+                             'accessors': list(rows)}]}
+        p = mock.patch(_S + 'get_nsf_folder_access', return_value=info)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def _access(self, *responses):
+        p = mock.patch(_S + '_folder_access_update', side_effect=list(responses))
+        m = p.start()
+        self.addCleanup(p.stop)
+        return m
+
+    def test_grant_inherited_app_adds_with_key(self):
+        self._rows(_row(self.app_uid, inherited=True, access_type='AT_APPLICATION'))
+        upd = self._access(_response(0))
+        result = nsf_sharing.grant_nsf_folder_to_application(
+            self.vault, self.folder_uid, self.app_uid)
+        self.assertEqual(result['previous_access_state'], 'inherited')
+        ad = upd.call_args.kwargs['adds'][0]
+        self.assertTrue(ad.HasField('folderKey'))
+        self.assertEqual(ad.folderKey.encryptedKeyType, folder_pb2.encrypted_by_data_key_gcm)
+        self.assertEqual(ad.accessType, folder_pb2.AT_APPLICATION)
+
+    def test_grant_direct_app_same_role_is_noop(self):
+        self._rows(_row(self.app_uid, access_type='AT_APPLICATION'))
+        upd = self._access()
+        result = nsf_sharing.grant_nsf_folder_to_application(
+            self.vault, self.folder_uid, self.app_uid)
+        self.assertEqual(result['action_taken'], 'already_had_access')
+        upd.assert_not_called()
+
+    def test_grant_direct_app_new_role_updates(self):
+        self._rows(_row(self.app_uid, access_type='AT_APPLICATION'))
+        upd = self._access(_response(0))
+        nsf_sharing.grant_nsf_folder_to_application(
+            self.vault, self.folder_uid, self.app_uid, is_editable=True)
+        ad = upd.call_args.kwargs['updates'][0]
+        self.assertEqual(ad.accessRoleType, folder_pb2.CONTENT_MANAGER)
+        self.assertFalse(ad.HasField('folderKey'))
+
+    def test_update_inherited_app_becomes_direct_grant(self):
+        self._rows(_row(self.app_uid, inherited=True, access_type='AT_APPLICATION'))
+        upd = self._access(_response(0))
+        nsf_sharing.update_nsf_folder_application_access(
+            self.vault, self.folder_uid, self.app_uid, is_editable=True)
+        self.assertTrue(upd.call_args.kwargs['adds'][0].HasField('folderKey'))
+
+    def test_revoke_inherited_app_is_denied(self):
+        self._rows(_row(self.app_uid, inherited=True, access_type='AT_APPLICATION'))
+        upd = self._access(_response(0))
+        result = nsf_sharing.revoke_nsf_folder_from_application(
+            self.vault, self.folder_uid, self.app_uid)
+        self.assertEqual(result['action_taken'], 'denied')
+        self.assertTrue(upd.call_args.kwargs['updates'][0].deniedAccess)
 
 
 if __name__ == '__main__':

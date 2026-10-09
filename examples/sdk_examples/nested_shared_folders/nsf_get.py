@@ -515,10 +515,14 @@ def nsf_get(vault: vault_online.VaultOnline) -> None:
     """Get NSF record or folder details by UID or title (nsf-get).
 
     For folders, the response includes parent_uid and parent_name (when available).
+    Inherited and denied access entries are omitted unless requested.
     """
     ITEM_UID_OR_TITLE = "<record_uid_or_title>"  # Record/folder UID or title
+    SHOW_INHERITED = False  # include inherited permission entries
+    SHOW_DENIED = False     # include denied-access permission entries
 
-    detail = nsf_management.get_nsf_item(vault, ITEM_UID_OR_TITLE)
+    detail = nsf_management.get_nsf_item(
+        vault, ITEM_UID_OR_TITLE, show_inherited=SHOW_INHERITED, show_denied=SHOW_DENIED)
     print(json.dumps(detail, indent=2, default=str))
 
 

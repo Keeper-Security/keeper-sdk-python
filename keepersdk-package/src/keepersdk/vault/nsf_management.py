@@ -394,7 +394,11 @@ def get_nsf_folder_detail(
         include_access: bool = True,
         show_inherited: bool = False,
         show_denied: bool = False) -> Dict[str, Any]:
-    """Folder detail payload for ``nsf-get`` (folder branch)."""
+    """Folder detail payload for ``nsf-get`` (folder branch).
+
+    Inherited / denied accessors are omitted unless ``show_inherited`` /
+    ``show_denied`` is True (see :func:`get_nsf_folder_access`).
+    """
     folder = _nsf_view(vault).get_folder(folder_uid)
     if folder is None:
         raise NsfError(f'NSF folder not found: {folder_uid}')
@@ -445,7 +449,11 @@ def get_nsf_record_detail(
         include_access: bool = True,
         show_inherited: bool = False,
         show_denied: bool = False) -> Dict[str, Any]:
-    """Record detail payload for ``nsf-get`` (record branch)."""
+    """Record detail payload for ``nsf-get`` (record branch).
+
+    Inherited / denied accessors are omitted unless ``show_inherited`` /
+    ``show_denied`` is True (see :func:`get_nsf_record_accesses`).
+    """
     meta = load_nsf_record_metadata(vault, record_uid)
     entry = _nsf_view(vault).get_record(record_uid)
     result: Dict[str, Any] = {
@@ -478,7 +486,11 @@ def get_nsf_item(
         include_access: bool = True,
         show_inherited: bool = False,
         show_denied: bool = False) -> Dict[str, Any]:
-    """Resolve and return folder or record detail."""
+    """Resolve and return folder or record detail.
+
+    Inherited / denied accessors are omitted unless ``show_inherited`` /
+    ``show_denied`` is True.
+    """
     folder_uid = resolve_nsf_folder_uid(vault, uid_or_title)
     if folder_uid:
         return {'item_type': 'folder', **get_nsf_folder_detail(
@@ -1047,7 +1059,14 @@ def get_nsf_record_accesses(
         record_uids: Iterable[str],
         show_inherited: bool = False,
         show_denied: bool = False) -> Dict[str, Any]:
-    """``vault/records/v3/details/access``, chunked at 100 UIDs per request."""
+    """``vault/records/v3/details/access``, chunked at 100 UIDs per request.
+
+    By default only direct, non-denied rows are returned. Pass
+    ``show_inherited=True`` and/or ``show_denied=True`` to include inherited /
+    denied rows. Code that reasons about effective access (permission checks,
+    sharing, revocation) must pass both as True, otherwise it sees an
+    incomplete picture.
+    """
     uids = [resolve_nsf_record_uid(vault, u) or u for u in record_uids]
     uids = [u for u in uids if u]
     if not uids:
@@ -1066,7 +1085,7 @@ def get_nsf_record_accesses(
         for ra in rs.recordAccesses:
             d = ra.data
             ai = ra.accessorInfo
-            if (not show_inherited and d.inherited) or not (show_denied and d.deniedAccess):
+            if not _include_access_row(bool(d.inherited), bool(d.deniedAccess), show_inherited, show_denied):
                 continue
             ao = {
                 'record_uid': utils.base64_url_encode(d.recordUid),
@@ -1113,15 +1132,29 @@ _FOLDER_ACCESS_MAX_PAGES = 50
 """Safety cap on continuation-token pages consumed per UID chunk."""
 
 
-def _parse_folder_accessor(vault: VaultOnline, a: Any, show_inherited: bool = False, show_denied: bool = False) -> Dict[str, Any]:
+def _include_access_row(inherited: bool, denied: bool, show_inherited: bool, show_denied: bool) -> bool:
+    """Shared inherited/denied filter for folder and record access rows."""
+    if inherited and not show_inherited:
+        return False
+    if denied and not show_denied:
+        return False
+    return True
+
+
+def _parse_folder_accessor(
+        vault: VaultOnline,
+        a: Any,
+        show_inherited: bool = False,
+        show_denied: bool = False) -> Optional[Dict[str, Any]]:
+    """Parse one folder accessor row, or return None when it is filtered out."""
+    if not _include_access_row(bool(a.inherited), bool(a.deniedAccess), show_inherited, show_denied):
+        return None
     auid = utils.base64_url_encode(a.accessTypeUid)
     at = folder_pb2.AccessType.Name(a.accessType)
     rt = folder_pb2.AccessRoleType.Name(a.accessRoleType)
     username = None
     if at == 'AT_USER':
         username = _resolve_uid_to_username(vault, auid)
-    if (not show_inherited and a.inherited) or (not show_denied and a.deniedAccess):
-        return {}
     ai = {
         'accessor_uid': auid, 'access_type': at, 'role': rt,
         'access_role_type': int(a.accessRoleType),
@@ -1154,7 +1187,10 @@ def _parse_folder_accessor(vault: VaultOnline, a: Any, show_inherited: bool = Fa
 
 
 def _fetch_nsf_folder_access_chunk(
-        vault: VaultOnline, chunk: List[str], show_inherited: bool = False, show_denied: bool = False) -> Dict[str, Dict[str, Any]]:
+        vault: VaultOnline,
+        chunk: List[str],
+        show_inherited: bool = False,
+        show_denied: bool = False) -> Dict[str, Dict[str, Any]]:
     """Fetch access details for one <=100-UID chunk, fully draining continuation pages."""
     accumulated: Dict[str, Dict[str, Any]] = {}
     continuation_token = None
@@ -1179,7 +1215,11 @@ def _fetch_nsf_folder_access_chunk(
                               'message': err.message},
                     'success': False}
             else:
-                accessors = [_parse_folder_accessor(vault, a, show_inherited, show_denied) for a in fr.accessors]
+                accessors = []
+                for a in fr.accessors:
+                    parsed = _parse_folder_accessor(vault, a, show_inherited, show_denied)
+                    if parsed is not None:
+                        accessors.append(parsed)
                 entry = accumulated.setdefault(
                     fuid, {'folder_uid': fuid, 'accessors': [], 'success': True})
                 entry['accessors'].extend(accessors)
@@ -1196,6 +1236,12 @@ def get_nsf_folder_access(
         show_inherited: bool = False,
         show_denied: bool = False) -> Dict[str, Any]:
     """``vault/folders/v3/access``, chunked at 100 UIDs per request.
+
+    By default only direct, non-denied rows are returned. Pass
+    ``show_inherited=True`` and/or ``show_denied=True`` to include inherited /
+    denied rows. Code that reasons about effective access (permission checks,
+    sharing, revocation) must pass both as True, otherwise it sees an
+    incomplete picture.
 
     Fully drains continuation-token pagination within each chunk before
     moving to the next, so the returned ``results`` are always complete —
@@ -1217,7 +1263,7 @@ def get_nsf_folder_access(
     return {'results': results}
 
 
-def load_nsf_access_details(vault: VaultOnline, load_folder: bool = False, load_record: bool = False, show_inherited: bool = False, show_denied: bool = False) -> Dict[str, int]:
+def load_nsf_access_details(vault: VaultOnline, load_folder: bool = False, load_record: bool = False) -> Dict[str, int]:
     """Fetch access details for every NSF folder/record and cache them on ``vault.nsf_data``.
 
     Scans all folder and record UIDs currently known to the NSF cache
@@ -1226,6 +1272,9 @@ def load_nsf_access_details(vault: VaultOnline, load_folder: bool = False, load_
     the results back onto ``vault.nsf_data`` — folders keyed by folder UID (the
     full result entry returned by :func:`get_nsf_folder_access`), records keyed
     by record UID (the list of accessor rows for that record).
+
+    The cache always holds the complete access state, including inherited and
+    denied rows; filter at read time if only direct access is wanted.
     """
     view = _nsf_view(vault)
     if not load_folder and not load_record:
@@ -1238,7 +1287,7 @@ def load_nsf_access_details(vault: VaultOnline, load_folder: bool = False, load_
     loaded = {'folders': 0, 'records': 0}
 
     if folder_uid_list:
-        access = get_nsf_folder_access(vault, folder_uid_list, show_inherited=show_inherited, show_denied=show_denied)
+        access = get_nsf_folder_access(vault, folder_uid_list, show_inherited=True, show_denied=True)
         for fr in access.get('results') or []:
             fuid = fr.get('folder_uid')
             if not fuid:
@@ -1247,7 +1296,7 @@ def load_nsf_access_details(vault: VaultOnline, load_folder: bool = False, load_
             loaded['folders'] += 1
 
     if record_uid_list:
-        access = get_nsf_record_accesses(vault, record_uid_list, show_inherited=show_inherited, show_denied=show_denied)
+        access = get_nsf_record_accesses(vault, record_uid_list, show_inherited=True, show_denied=True)
         by_uid: Dict[str, List[Dict[str, Any]]] = {}
         for ao in access.get('record_accesses') or []:
             by_uid.setdefault(ao['record_uid'], []).append(ao)
