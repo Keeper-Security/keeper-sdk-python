@@ -48,11 +48,6 @@ def _ensure_record_ownership_permission(vault: VaultOnline, record_uid: str) -> 
         raise NsfError(str(exc)) from exc
 
 
-def _prepare_folder_for_access_change(vault: VaultOnline, folder_uid: str) -> None:
-    """Check folder permission inheritance before changing folder accessors."""
-    nsf_common.ensure_folder_direct_permissions(vault, folder_uid)
-
-
 @dataclass
 class NsfShareResult:
     success: bool
@@ -115,27 +110,6 @@ def _resolve_folder_accessor(
     return uid_bytes, recipient, folder_pb2.AT_USER
 
 
-def _check_existing_nsf_folder_access(
-        vault: VaultOnline,
-        folder_uid: str,
-        uid_bytes: bytes,
-        access_type_label: str) -> Optional[str]:
-    """Return the existing AccessRoleType name for an accessor, or None."""
-    try:
-        uid_encoded = utils.base64_url_encode(uid_bytes)
-        info = get_nsf_folder_access(vault, [folder_uid], show_inherited=True, show_denied=True)
-        for result in info.get('results', []):
-            if not result.get('success'):
-                continue
-            for accessor in result.get('accessors', []):
-                if (accessor.get('access_type') == access_type_label
-                        and accessor.get('accessor_uid') == uid_encoded):
-                    return accessor.get('role')
-    except Exception:
-        pass
-    return None
-
-
 def _lookup_nsf_folder_accessors(
         vault: VaultOnline,
         folder_uid: str,
@@ -143,25 +117,41 @@ def _lookup_nsf_folder_accessors(
         access_type_label: Optional[str] = None) -> List[Dict[str, Any]]:
     """Every server accessor row (including inherited and denied) for one actor.
 
-    Rows matching *access_type_label* are preferred; otherwise all rows for the
-    UID are returned. Lookup failures return an empty list (state ``none``).
+    Rows matching *access_type_label* are preferred; otherwise the remaining
+    rows for the UID are returned. ``AT_OWNER`` rows are never used as a
+    stand-in for another access type: if the only match is the folder owner
+    the call raises, so owner access is never updated, denied or removed by
+    accident.
+
+    Raises :class:`NsfError` when the current access cannot be read, instead
+    of guessing state ``none`` and sending the wrong kind of request.
     """
     uid_encoded = utils.base64_url_encode(uid_bytes)
-    rows: List[Dict[str, Any]] = []
     try:
         info = get_nsf_folder_access(vault, [folder_uid], show_inherited=True, show_denied=True)
-    except Exception:
-        return rows
+    except Exception as exc:
+        raise NsfError(f'Could not read current access for folder {folder_uid}: {exc}') from exc
+
+    rows: List[Dict[str, Any]] = []
     for result in info.get('results', []):
-        if not result.get('success'):
+        if result.get('folder_uid') not in (None, folder_uid):
             continue
+        if not result.get('success'):
+            err = result.get('error') or {}
+            raise NsfError(
+                f"Could not read current access for folder {folder_uid}: "
+                f"{err.get('status', 'error')} {err.get('message', '')}".strip())
         rows.extend(a for a in result.get('accessors', [])
                     if a and a.get('accessor_uid') == uid_encoded)
+
     if access_type_label:
         typed = [a for a in rows if a.get('access_type') == access_type_label]
         if typed:
             return typed
-    return rows
+    others = [a for a in rows if a.get('access_type') != 'AT_OWNER']
+    if rows and not others:
+        raise NsfError('Folder owner access cannot be changed with this operation')
+    return others
 
 
 def _encrypted_folder_key_for(
@@ -253,28 +243,88 @@ def _execute_folder_access_plan(
 
     For the denied re-add, the add is only sent once the denial removal
     succeeded, so no add is attempted while the denied row still exists.
+
+    Every request is fully built (including the encrypted folder key) before
+    the first one is sent, so client-side failures cannot leave a partially
+    applied plan. If a later step is rejected by the server, completed steps
+    that carry a ``rollback`` action are compensated (a removed denial is
+    re-applied) before the error is raised.
     """
     msgs = dict(_FOLDER_STEP_MESSAGES, **(messages or {}))
-    result: Dict[str, Any] = {}
-    for idx, step in enumerate(plan):
-        folder_key = folder_key_factory() if step['include_folder_key'] else None
-        ad = _build_folder_access_step(
-            folder_uid, uid_bytes, access_type_enum, step, folder_key=folder_key, **fields)
-        request = step['request']
-        response = _folder_access_update(
+
+    folder_key: Optional[folder_pb2.EncryptedDataKey] = None
+    if any(step['include_folder_key'] for step in plan):
+        if folder_key_factory is None:
+            raise NsfError('Folder key is required to create direct folder access')
+        folder_key = folder_key_factory()
+    requests = [
+        _build_folder_access_step(
+            folder_uid, uid_bytes, access_type_enum, step,
+            folder_key=folder_key if step['include_folder_key'] else None, **fields)
+        for step in plan
+    ]
+
+    def _send(request: str, ad: folder_pb2.FolderAccessData) -> folder_pb2.FolderAccessResponse:
+        return _folder_access_update(
             vault,
             adds=[ad] if request == nsf_common.FOLDER_ACCESS_ADD else None,
             updates=[ad] if request == nsf_common.FOLDER_ACCESS_UPDATE else None,
             removes=[ad] if request == nsf_common.FOLDER_ACCESS_REMOVE else None)
+
+    result: Dict[str, Any] = {}
+    completed: List[Dict[str, Any]] = []
+    for idx, (step, ad) in enumerate(zip(plan, requests)):
+        request = step['request']
         message = 'Access denied successfully' if step['denied_access'] else msgs[request]
-        result = nsf_common.parse_folder_access_result(response, folder_uid, label, message)
+        result = nsf_common.parse_folder_access_result(_send(request, ad), folder_uid, label, message)
         result['request'] = request
-        if not result['success']:
-            msg = result['message']
-            if idx < len(plan) - 1:
-                msg = f'{msg} (step {idx + 1} of {len(plan)}; remaining steps skipped)'
-            raise KeeperApiError(result['status'], msg)
+        if result['success']:
+            completed.append(step)
+            continue
+
+        msg = result['message']
+        if idx < len(plan) - 1:
+            msg = f'{msg} (step {idx + 1} of {len(plan)}; remaining steps skipped)'
+        rollback_notes = _rollback_folder_access_steps(
+            vault, folder_uid, label, uid_bytes, access_type_enum, completed)
+        if rollback_notes:
+            msg = f"{msg}; {'; '.join(rollback_notes)}"
+        raise KeeperApiError(result['status'], msg)
     return result
+
+
+def _rollback_folder_access_steps(
+        vault: VaultOnline,
+        folder_uid: str,
+        label: str,
+        uid_bytes: bytes,
+        access_type_enum: int,
+        completed: List[Dict[str, Any]]) -> List[str]:
+    """Compensate completed plan steps after a later step failed.
+
+    Returns human-readable notes describing what was (or could not be) undone.
+    """
+    notes: List[str] = []
+    for step in reversed(completed):
+        if step.get('rollback') != 'deny':
+            continue
+        deny_step = {'request': nsf_common.FOLDER_ACCESS_UPDATE, 'include_folder_key': False,
+                     'denied_access': True, 'rollback': None}
+        ad = _build_folder_access_step(folder_uid, uid_bytes, access_type_enum, deny_step)
+        try:
+            response = _folder_access_update(vault, updates=[ad])
+            restored = nsf_common.parse_folder_access_result(
+                response, folder_uid, label, 'Access denied successfully')
+            ok = bool(restored.get('success'))
+        except Exception:
+            ok = False
+        if ok:
+            notes.append('the previous denial was restored')
+        else:
+            notes.append(
+                'WARNING: the previous denial was removed and could not be restored; '
+                'the accessor may now have inherited access to this folder')
+    return notes
 
 
 def collect_nsf_records_in_folder(
@@ -309,302 +359,77 @@ def collect_nsf_records_in_folder(
     return record_uids
 
 
-def grant_nsf_folder_access(
+def _already_had_access_result(
+        folder_uid: str, label: str, access_type_label: str, message: str, state: str) -> Dict[str, Any]:
+    return {
+        'folder_uid': folder_uid,
+        'accessor': label,
+        'access_type': access_type_label,
+        'status': 'SUCCESS',
+        'message': message,
+        'success': True,
+        'action_taken': 'already_had_access',
+        'previous_access_state': state,
+    }
+
+
+def _update_folder_access_for_state(
         vault: VaultOnline,
-        folder_identifier: str,
-        recipient: str,
+        folder_uid: str,
+        label: str,
+        uid_bytes: bytes,
+        access_type_enum: int,
+        state: str,
         *,
-        role: str = 'viewer',
-        expiration_timestamp: Optional[int] = None,
-        as_team: bool = False,
-        request_sync: bool = True) -> Dict[str, Any]:
-    """Grant user or team access to an NSF folder.
-
-    The request depends on the accessor's current state on this folder:
-
-    * direct    - role/expiration change via ``folderAccessUpdates`` (no new key)
-    * inherited - becomes a direct grant via ``folderAccessAdds`` with the
-      recipient-encrypted folder key (even when the role is unchanged)
-    * denied    - ``folderAccessRemoves`` for the denial, then
-      ``folderAccessAdds`` with the folder key
-    * none      - ``folderAccessAdds`` with the folder key
-    """
-    folder_uid = resolve_nsf_folder_uid(vault, folder_identifier) or folder_identifier
-    if not is_nsf_folder(vault, folder_uid):
-        raise NsfError(f'NSF folder not found: {folder_identifier}')
-    _ensure_folder_share_permission(vault, folder_uid)
-    _prepare_folder_for_access_change(vault, folder_uid)
-
-    access_role = nsf_common.resolve_nsf_role(role)
-    target_role_name = folder_pb2.AccessRoleType.Name(access_role)
-    access_type_label = 'AT_TEAM' if as_team else 'AT_USER'
-
-    uid_bytes, label, access_type_enum = _resolve_folder_accessor(
-        vault, recipient, as_team=as_team)
-
-    accessors = _lookup_nsf_folder_accessors(vault, folder_uid, uid_bytes, access_type_label)
-    state = nsf_common.folder_access_state_from_accessors(accessors)
-
-    if state == nsf_common.FOLDER_ACCESS_DIRECT:
-        if (nsf_common.current_folder_role_name(accessors) == target_role_name
-                and expiration_timestamp is None):
-            return {
-                'folder_uid': folder_uid,
-                'accessor': label,
-                'access_type': access_type_label,
-                'status': 'SUCCESS',
-                'message': f"{'Team' if as_team else 'User'} already has {role} access",
-                'success': True,
-                'action_taken': 'already_had_access',
-                'previous_access_state': state,
-            }
-        result = update_nsf_folder_access(
-            vault, folder_uid, recipient, role=role, as_team=as_team,
-            expiration_timestamp=expiration_timestamp, request_sync=request_sync,
-            _known_state=state)
-        result['action_taken'] = 'updated'
-        return result
-
-    plan = nsf_common.plan_folder_access_change(state, 'grant')
-    result = _execute_folder_access_plan(
-        vault, folder_uid, label, uid_bytes, access_type_enum, plan,
-        folder_key_factory=lambda: _encrypted_folder_key_for(
-            vault, folder_uid, uid_bytes, recipient, as_team=as_team),
-        role=role, expiration_timestamp=expiration_timestamp)
-    result['access_type'] = access_type_label
-    result['previous_access_state'] = state
-    result.setdefault('action_taken', 'granted')
-    _request_sync(vault, request_sync)
-    return result
-
-
-def _nsf_app_role_for_editable(is_editable: bool) -> str:
-    """Map KSM editable flag to NSF folder role used for AT_APPLICATION shares."""
-    return 'content-manager' if is_editable else 'viewer'
-
-
-def grant_nsf_folder_to_application(
-        vault: VaultOnline,
-        folder_identifier: str,
-        app_uid: str,
-        *,
-        is_editable: bool = False,
-        request_sync: bool = True) -> Dict[str, Any]:
-    """Share an NSF folder with a KSM application via AT_APPLICATION.
-    """
-    folder_uid = resolve_nsf_folder_uid(vault, folder_identifier) or folder_identifier
-    if not is_nsf_folder(vault, folder_uid):
-        raise NsfError(f'NSF folder not found: {folder_identifier}')
-    _ensure_folder_share_permission(vault, folder_uid)
-    _prepare_folder_for_access_change(vault, folder_uid)
-
-    app_key = vault.vault_data.get_record_key(app_uid)
-    if not app_key:
-        raise NsfError(f'Could not resolve record key for application {app_uid}')
-
-    role = _nsf_app_role_for_editable(is_editable)
-    access_role = nsf_common.resolve_nsf_role(role)
-    target_role_name = folder_pb2.AccessRoleType.Name(access_role)
-    app_uid_bytes = utils.base64_url_decode(app_uid)
-
-    existing_role = _check_existing_nsf_folder_access(
-        vault, folder_uid, app_uid_bytes, 'AT_APPLICATION')
-    if existing_role is not None:
-        if existing_role == target_role_name:
-            return {
-                'folder_uid': folder_uid,
-                'accessor': app_uid,
-                'access_type': 'AT_APPLICATION',
-                'status': 'SUCCESS',
-                'message': f'Application already has {role} access',
-                'success': True,
-                'action_taken': 'already_had_access',
-            }
-        return update_nsf_folder_application_access(
-            vault, folder_uid, app_uid, is_editable=is_editable, request_sync=request_sync)
-
-    ad = folder_pb2.FolderAccessData()
-    ad.folderUid = utils.base64_url_decode(folder_uid)
-    ad.accessTypeUid = app_uid_bytes
-    ad.accessType = folder_pb2.AT_APPLICATION
-    ad.accessRoleType = access_role
-    ad.permissions.CopyFrom(nsf_common.get_folder_permissions_for_role(access_role))
-
-    folder_key = _get_folder_key(vault, folder_uid)
-    ek = folder_pb2.EncryptedDataKey()
-    ek.encryptedKey = crypto.encrypt_aes_v2(folder_key, app_key)
-    ek.encryptedKeyType = folder_pb2.encrypted_by_data_key_gcm
-    ad.folderKey.CopyFrom(ek)
-
-    response = _folder_access_update(vault, adds=[ad])
-    result = nsf_common.parse_folder_access_result(
-        response, folder_uid, app_uid, 'Application access granted successfully')
-    result['access_type'] = 'AT_APPLICATION'
-    result.setdefault(
-        'action_taken', 'granted' if result['success'] else 'grant_failed')
-    if not result['success']:
-        raise KeeperApiError(result['status'], result['message'])
-    _request_sync(vault, request_sync)
-    return result
-
-
-def update_nsf_folder_application_access(
-        vault: VaultOnline,
-        folder_identifier: str,
-        app_uid: str,
-        *,
-        is_editable: bool = False,
-        request_sync: bool = True) -> Dict[str, Any]:
-    """Update AT_APPLICATION role for an NSF folder already shared with a KSM app."""
-    folder_uid = resolve_nsf_folder_uid(vault, folder_identifier) or folder_identifier
-    if not is_nsf_folder(vault, folder_uid):
-        raise NsfError(f'NSF folder not found: {folder_identifier}')
-    _ensure_folder_share_permission(vault, folder_uid)
-    _prepare_folder_for_access_change(vault, folder_uid)
-
-    role = _nsf_app_role_for_editable(is_editable)
-    access_role = nsf_common.resolve_nsf_role(role)
-    app_uid_bytes = utils.base64_url_decode(app_uid)
-
-    ad = folder_pb2.FolderAccessData()
-    ad.folderUid = utils.base64_url_decode(folder_uid)
-    ad.accessTypeUid = app_uid_bytes
-    ad.accessType = folder_pb2.AT_APPLICATION
-    ad.accessRoleType = access_role
-    ad.permissions.CopyFrom(nsf_common.get_folder_permissions_for_role(access_role))
-
-    response = _folder_access_update(vault, updates=[ad])
-    result = nsf_common.parse_folder_access_result(
-        response, folder_uid, app_uid, 'Application access updated successfully')
-    result['access_type'] = 'AT_APPLICATION'
-    result.setdefault(
-        'action_taken', 'updated' if result['success'] else 'update_failed')
-    if not result['success']:
-        raise KeeperApiError(result['status'], result['message'])
-    _request_sync(vault, request_sync)
-    return result
-
-
-def revoke_nsf_folder_from_application(
-        vault: VaultOnline,
-        folder_identifier: str,
-        app_uid: str,
-        *,
-        request_sync: bool = True) -> Dict[str, Any]:
-    """Revoke AT_APPLICATION access for a KSM app on an NSF folder."""
-    folder_uid = resolve_nsf_folder_uid(vault, folder_identifier) or folder_identifier
-    if not is_nsf_folder(vault, folder_uid):
-        raise NsfError(f'NSF folder not found: {folder_identifier}')
-    _ensure_folder_share_permission(vault, folder_uid)
-    _prepare_folder_for_access_change(vault, folder_uid)
-
-    ad = folder_pb2.FolderAccessData()
-    ad.folderUid = utils.base64_url_decode(folder_uid)
-    ad.accessTypeUid = utils.base64_url_decode(app_uid)
-    ad.accessType = folder_pb2.AT_APPLICATION
-
-    response = _folder_access_update(vault, removes=[ad])
-    result = nsf_common.parse_folder_access_result(
-        response, folder_uid, app_uid, 'Application access revoked successfully')
-    result['access_type'] = 'AT_APPLICATION'
-    if not result['success']:
-        raise KeeperApiError(result['status'], result['message'])
-    _request_sync(vault, request_sync)
-    return result
-
-
-def update_nsf_folder_access(
-        vault: VaultOnline,
-        folder_identifier: str,
-        recipient: str,
-        *,
+        folder_key_factory,
         role: Optional[str] = None,
         hidden: Optional[bool] = None,
         expiration_timestamp: Optional[int] = None,
-        as_team: bool = False,
-        request_sync: bool = True,
-        _known_state: Optional[str] = None) -> Dict[str, Any]:
-    """Update role, visibility, or expiration for an NSF folder accessor.
+        messages: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+    """Apply a role / hidden / expiration change given the accessor's current *state*.
 
-    Direct access is changed with ``folderAccessUpdates`` and keeps its folder
-    key. Inherited (or denied) access is turned into a direct grant with
-    ``folderAccessAdds`` plus the recipient-encrypted folder key, so the child
-    keeps its own key edge if access to the parent is later revoked.
+    Direct access is changed in place with ``folderAccessUpdates``. Inherited or
+    denied access can only be changed by turning it into a direct grant
+    (``folderAccessAdds`` + folder key), which then survives a later revoke on
+    the parent folder. Because that widens access, it requires an explicit
+    *role*: changing only ``hidden`` or the expiration never silently creates a
+    direct grant.
     """
-    if role is None and hidden is None and expiration_timestamp is None:
-        raise NsfError('At least one field (role, hidden, or expiration) is required')
-
-    folder_uid = resolve_nsf_folder_uid(vault, folder_identifier) or folder_identifier
-    if not is_nsf_folder(vault, folder_uid):
-        raise NsfError(f'NSF folder not found: {folder_identifier}')
-    _ensure_folder_share_permission(vault, folder_uid)
-    _prepare_folder_for_access_change(vault, folder_uid)
-
-    uid_bytes, label, access_type_enum = _resolve_folder_accessor(
-        vault, recipient, as_team=as_team)
-
-    accessors: List[Dict[str, Any]] = []
-    state = _known_state
-    if state is None:
-        accessors = _lookup_nsf_folder_accessors(
-            vault, folder_uid, uid_bytes, folder_pb2.AccessType.Name(access_type_enum))
-        state = nsf_common.folder_access_state_from_accessors(accessors)
-
     if state in (nsf_common.FOLDER_ACCESS_DIRECT, nsf_common.FOLDER_ACCESS_NONE):
         # NONE: nothing known to convert; let the server validate the update.
-        plan = [{'request': nsf_common.FOLDER_ACCESS_UPDATE,
-                 'include_folder_key': False, 'denied_access': False}]
+        plan = [{'request': nsf_common.FOLDER_ACCESS_UPDATE, 'include_folder_key': False,
+                 'denied_access': False, 'rollback': None}]
     else:
-        plan = nsf_common.plan_folder_access_change(state, 'grant')
         if role is None:
-            # An add needs a role; keep the one currently in effect.
-            current = (nsf_common.current_folder_role_name(accessors) or '').lower()
-            if current not in nsf_common.ROLE_NAME_MAP:
-                raise NsfError(
-                    'A role is required to change inherited or denied access on '
-                    'this folder (it becomes a direct grant)')
-            role = current
+            raise NsfError(
+                f'Access on this folder is {state}. Changing it creates a direct grant '
+                'that persists even if access to the parent folder is revoked; pass an '
+                'explicit role to confirm.')
+        plan = nsf_common.plan_folder_access_change(state, 'grant')
 
     result = _execute_folder_access_plan(
         vault, folder_uid, label, uid_bytes, access_type_enum, plan,
-        folder_key_factory=lambda: _encrypted_folder_key_for(
-            vault, folder_uid, uid_bytes, recipient, as_team=as_team),
-        messages={nsf_common.FOLDER_ACCESS_ADD: 'Access updated successfully'},
+        folder_key_factory=folder_key_factory,
+        messages=messages,
         role=role, hidden=hidden, expiration_timestamp=expiration_timestamp)
-    result['access_type'] = 'AT_TEAM' if as_team else 'AT_USER'
     result['previous_access_state'] = state
-    _request_sync(vault, request_sync)
     return result
 
 
-def revoke_nsf_folder_access(
+def _revoke_folder_access_for_rows(
         vault: VaultOnline,
-        folder_identifier: str,
-        recipient: str,
+        folder_uid: str,
+        label: str,
+        uid_bytes: bytes,
+        access_type_enum: int,
+        access_type_label: str,
+        accessors: List[Dict[str, Any]],
         *,
-        as_team: bool = False,
-        request_sync: bool = True) -> Dict[str, Any]:
-    """Revoke user or team access from an NSF folder.
-
-    * Direct access is removed with ``folderAccessRemoves``.
-    * Inherited access cannot be removed on the child (it comes from the
-      parent), so it is denied with ``folderAccessUpdates`` +
-      ``deniedAccess=True`` and no folder key.
-    * Already-denied access needs no request.
-    """
-    folder_uid = resolve_nsf_folder_uid(vault, folder_identifier) or folder_identifier
-    if not is_nsf_folder(vault, folder_uid):
-        raise NsfError(f'NSF folder not found: {folder_identifier}')
-    _ensure_folder_share_permission(vault, folder_uid)
-    _prepare_folder_for_access_change(vault, folder_uid)
-
-    uid_bytes, label, access_type_enum = _resolve_folder_accessor(
-        vault, recipient, as_team=as_team)
-    access_type_label = 'AT_TEAM' if as_team else 'AT_USER'
-
-    accessors = _lookup_nsf_folder_accessors(vault, folder_uid, uid_bytes, access_type_label)
+        messages: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+    """Remove direct access, deny inherited access, or no-op for denied access."""
     if accessors:
         # Use the server-reported UID / access type (e.g. inherited team rows).
+        # _lookup_nsf_folder_accessors never returns AT_OWNER rows here.
         server_uid = accessors[0].get('accessor_uid')
         if server_uid:
             uid_bytes = utils.base64_url_decode(server_uid)
@@ -634,11 +459,291 @@ def revoke_nsf_folder_access(
         }
 
     result = _execute_folder_access_plan(
-        vault, folder_uid, label, uid_bytes, access_type_enum, plan)
+        vault, folder_uid, label, uid_bytes, access_type_enum, plan, messages=messages)
     result['access_type'] = access_type_label
     result['previous_access_state'] = state
     result['action_taken'] = 'denied' if action == 'deny' else 'revoked'
+    return result
+
+
+def grant_nsf_folder_access(
+        vault: VaultOnline,
+        folder_identifier: str,
+        recipient: str,
+        *,
+        role: str = 'viewer',
+        expiration_timestamp: Optional[int] = None,
+        as_team: bool = False,
+        request_sync: bool = True) -> Dict[str, Any]:
+    """Grant user or team access to an NSF folder.
+
+    The request depends on the accessor's current state on this folder:
+
+    * direct    - role/expiration change via ``folderAccessUpdates`` (no new key)
+    * inherited - becomes a direct grant via ``folderAccessAdds`` with the
+      recipient-encrypted folder key (even when the role is unchanged)
+    * denied    - ``folderAccessRemoves`` for the denial, then
+      ``folderAccessAdds`` with the folder key (the denial is restored if the
+      add fails)
+    * none      - ``folderAccessAdds`` with the folder key
+    """
+    folder_uid = resolve_nsf_folder_uid(vault, folder_identifier) or folder_identifier
+    if not is_nsf_folder(vault, folder_uid):
+        raise NsfError(f'NSF folder not found: {folder_identifier}')
+    _ensure_folder_share_permission(vault, folder_uid)
+
+    access_role = nsf_common.resolve_nsf_role(role)
+    target_role_name = folder_pb2.AccessRoleType.Name(access_role)
+    access_type_label = 'AT_TEAM' if as_team else 'AT_USER'
+
+    uid_bytes, label, access_type_enum = _resolve_folder_accessor(
+        vault, recipient, as_team=as_team)
+
+    accessors = _lookup_nsf_folder_accessors(vault, folder_uid, uid_bytes, access_type_label)
+    state = nsf_common.folder_access_state_from_accessors(accessors)
+
+    def key_factory():
+        return _encrypted_folder_key_for(vault, folder_uid, uid_bytes, recipient, as_team=as_team)
+
+    if state == nsf_common.FOLDER_ACCESS_DIRECT:
+        if (nsf_common.current_folder_role_name(accessors) == target_role_name
+                and expiration_timestamp is None):
+            return _already_had_access_result(
+                folder_uid, label, access_type_label,
+                f"{'Team' if as_team else 'User'} already has {role} access", state)
+        result = _update_folder_access_for_state(
+            vault, folder_uid, label, uid_bytes, access_type_enum, state,
+            folder_key_factory=key_factory,
+            role=role, expiration_timestamp=expiration_timestamp)
+        result['access_type'] = access_type_label
+        result['action_taken'] = 'updated'
+        _request_sync(vault, request_sync)
+        return result
+
+    plan = nsf_common.plan_folder_access_change(state, 'grant')
+    result = _execute_folder_access_plan(
+        vault, folder_uid, label, uid_bytes, access_type_enum, plan,
+        folder_key_factory=key_factory,
+        role=role, expiration_timestamp=expiration_timestamp)
+    result['access_type'] = access_type_label
+    result['previous_access_state'] = state
+    result.setdefault('action_taken', 'granted')
     _request_sync(vault, request_sync)
+    return result
+
+
+def _nsf_app_role_for_editable(is_editable: bool) -> str:
+    """Map KSM editable flag to NSF folder role used for AT_APPLICATION shares."""
+    return 'content-manager' if is_editable else 'viewer'
+
+
+def _app_folder_key_factory(vault: VaultOnline, folder_uid: str, app_uid: str):
+    """Return a callable producing the folder key encrypted with the KSM app's record key."""
+    def factory() -> folder_pb2.EncryptedDataKey:
+        app_key = vault.vault_data.get_record_key(app_uid)
+        if not app_key:
+            raise NsfError(f'Could not resolve record key for application {app_uid}')
+        folder_key = _get_folder_key(vault, folder_uid)
+        ek = folder_pb2.EncryptedDataKey()
+        ek.encryptedKey = crypto.encrypt_aes_v2(folder_key, app_key)
+        ek.encryptedKeyType = folder_pb2.encrypted_by_data_key_gcm
+        return ek
+    return factory
+
+
+_APP_STEP_MESSAGES = {
+    nsf_common.FOLDER_ACCESS_ADD: 'Application access granted successfully',
+    nsf_common.FOLDER_ACCESS_UPDATE: 'Application access updated successfully',
+    nsf_common.FOLDER_ACCESS_REMOVE: 'Application access revoked successfully',
+}
+
+
+def grant_nsf_folder_to_application(
+        vault: VaultOnline,
+        folder_identifier: str,
+        app_uid: str,
+        *,
+        is_editable: bool = False,
+        request_sync: bool = True) -> Dict[str, Any]:
+    """Share an NSF folder with a KSM application via AT_APPLICATION.
+
+    Uses the same direct / inherited / denied / none transitions as
+    :func:`grant_nsf_folder_access`, with the folder key encrypted by the
+    application's record key.
+    """
+    folder_uid = resolve_nsf_folder_uid(vault, folder_identifier) or folder_identifier
+    if not is_nsf_folder(vault, folder_uid):
+        raise NsfError(f'NSF folder not found: {folder_identifier}')
+    _ensure_folder_share_permission(vault, folder_uid)
+
+    if not vault.vault_data.get_record_key(app_uid):
+        raise NsfError(f'Could not resolve record key for application {app_uid}')
+
+    role = _nsf_app_role_for_editable(is_editable)
+    access_role = nsf_common.resolve_nsf_role(role)
+    target_role_name = folder_pb2.AccessRoleType.Name(access_role)
+    app_uid_bytes = utils.base64_url_decode(app_uid)
+
+    accessors = _lookup_nsf_folder_accessors(vault, folder_uid, app_uid_bytes, 'AT_APPLICATION')
+    state = nsf_common.folder_access_state_from_accessors(accessors)
+    key_factory = _app_folder_key_factory(vault, folder_uid, app_uid)
+
+    if state == nsf_common.FOLDER_ACCESS_DIRECT:
+        if nsf_common.current_folder_role_name(accessors) == target_role_name:
+            return _already_had_access_result(
+                folder_uid, app_uid, 'AT_APPLICATION',
+                f'Application already has {role} access', state)
+        result = _update_folder_access_for_state(
+            vault, folder_uid, app_uid, app_uid_bytes, folder_pb2.AT_APPLICATION, state,
+            folder_key_factory=key_factory, role=role, messages=_APP_STEP_MESSAGES)
+        result['access_type'] = 'AT_APPLICATION'
+        result['action_taken'] = 'updated'
+        _request_sync(vault, request_sync)
+        return result
+
+    plan = nsf_common.plan_folder_access_change(state, 'grant')
+    result = _execute_folder_access_plan(
+        vault, folder_uid, app_uid, app_uid_bytes, folder_pb2.AT_APPLICATION, plan,
+        folder_key_factory=key_factory, messages=_APP_STEP_MESSAGES, role=role)
+    result['access_type'] = 'AT_APPLICATION'
+    result['previous_access_state'] = state
+    result.setdefault('action_taken', 'granted')
+    _request_sync(vault, request_sync)
+    return result
+
+
+def update_nsf_folder_application_access(
+        vault: VaultOnline,
+        folder_identifier: str,
+        app_uid: str,
+        *,
+        is_editable: bool = False,
+        request_sync: bool = True) -> Dict[str, Any]:
+    """Update the AT_APPLICATION role for a KSM app on an NSF folder.
+
+    Inherited or denied application access becomes a direct grant carrying
+    the app-encrypted folder key (see :func:`update_nsf_folder_access`).
+    """
+    folder_uid = resolve_nsf_folder_uid(vault, folder_identifier) or folder_identifier
+    if not is_nsf_folder(vault, folder_uid):
+        raise NsfError(f'NSF folder not found: {folder_identifier}')
+    _ensure_folder_share_permission(vault, folder_uid)
+
+    role = _nsf_app_role_for_editable(is_editable)
+    app_uid_bytes = utils.base64_url_decode(app_uid)
+    accessors = _lookup_nsf_folder_accessors(vault, folder_uid, app_uid_bytes, 'AT_APPLICATION')
+    state = nsf_common.folder_access_state_from_accessors(accessors)
+
+    result = _update_folder_access_for_state(
+        vault, folder_uid, app_uid, app_uid_bytes, folder_pb2.AT_APPLICATION, state,
+        folder_key_factory=_app_folder_key_factory(vault, folder_uid, app_uid),
+        role=role, messages=dict(_APP_STEP_MESSAGES, **{
+            nsf_common.FOLDER_ACCESS_ADD: 'Application access updated successfully'}))
+    result['access_type'] = 'AT_APPLICATION'
+    result.setdefault('action_taken', 'updated')
+    _request_sync(vault, request_sync)
+    return result
+
+
+def revoke_nsf_folder_from_application(
+        vault: VaultOnline,
+        folder_identifier: str,
+        app_uid: str,
+        *,
+        request_sync: bool = True) -> Dict[str, Any]:
+    """Revoke AT_APPLICATION access for a KSM app on an NSF folder.
+
+    Direct access is removed; inherited access is denied on this folder.
+    """
+    folder_uid = resolve_nsf_folder_uid(vault, folder_identifier) or folder_identifier
+    if not is_nsf_folder(vault, folder_uid):
+        raise NsfError(f'NSF folder not found: {folder_identifier}')
+    _ensure_folder_share_permission(vault, folder_uid)
+
+    app_uid_bytes = utils.base64_url_decode(app_uid)
+    accessors = _lookup_nsf_folder_accessors(vault, folder_uid, app_uid_bytes, 'AT_APPLICATION')
+    result = _revoke_folder_access_for_rows(
+        vault, folder_uid, app_uid, app_uid_bytes, folder_pb2.AT_APPLICATION,
+        'AT_APPLICATION', accessors, messages=_APP_STEP_MESSAGES)
+    if result.get('action_taken') != 'already_denied':
+        _request_sync(vault, request_sync)
+    return result
+
+
+def update_nsf_folder_access(
+        vault: VaultOnline,
+        folder_identifier: str,
+        recipient: str,
+        *,
+        role: Optional[str] = None,
+        hidden: Optional[bool] = None,
+        expiration_timestamp: Optional[int] = None,
+        as_team: bool = False,
+        request_sync: bool = True) -> Dict[str, Any]:
+    """Update role, visibility, or expiration for an NSF folder accessor.
+
+    Direct access is changed with ``folderAccessUpdates`` and keeps its folder
+    key. Inherited (or denied) access is turned into a direct grant with
+    ``folderAccessAdds`` plus the recipient-encrypted folder key, so the child
+    keeps its own key edge if access to the parent is later revoked. That
+    conversion widens access, so it requires an explicit ``role``.
+    """
+    if role is None and hidden is None and expiration_timestamp is None:
+        raise NsfError('At least one field (role, hidden, or expiration) is required')
+
+    folder_uid = resolve_nsf_folder_uid(vault, folder_identifier) or folder_identifier
+    if not is_nsf_folder(vault, folder_uid):
+        raise NsfError(f'NSF folder not found: {folder_identifier}')
+    _ensure_folder_share_permission(vault, folder_uid)
+
+    uid_bytes, label, access_type_enum = _resolve_folder_accessor(
+        vault, recipient, as_team=as_team)
+
+    accessors = _lookup_nsf_folder_accessors(
+        vault, folder_uid, uid_bytes, folder_pb2.AccessType.Name(access_type_enum))
+    state = nsf_common.folder_access_state_from_accessors(accessors)
+
+    result = _update_folder_access_for_state(
+        vault, folder_uid, label, uid_bytes, access_type_enum, state,
+        folder_key_factory=lambda: _encrypted_folder_key_for(
+            vault, folder_uid, uid_bytes, recipient, as_team=as_team),
+        messages={nsf_common.FOLDER_ACCESS_ADD: 'Access updated successfully'},
+        role=role, hidden=hidden, expiration_timestamp=expiration_timestamp)
+    result['access_type'] = 'AT_TEAM' if as_team else 'AT_USER'
+    _request_sync(vault, request_sync)
+    return result
+
+
+def revoke_nsf_folder_access(
+        vault: VaultOnline,
+        folder_identifier: str,
+        recipient: str,
+        *,
+        as_team: bool = False,
+        request_sync: bool = True) -> Dict[str, Any]:
+    """Revoke user or team access from an NSF folder.
+
+    * Direct access is removed with ``folderAccessRemoves``.
+    * Inherited access cannot be removed on the child (it comes from the
+      parent), so it is denied with ``folderAccessUpdates`` +
+      ``deniedAccess=True`` and no folder key.
+    * Already-denied access needs no request.
+    * Folder owner access is never touched (raises :class:`NsfError`).
+    """
+    folder_uid = resolve_nsf_folder_uid(vault, folder_identifier) or folder_identifier
+    if not is_nsf_folder(vault, folder_uid):
+        raise NsfError(f'NSF folder not found: {folder_identifier}')
+    _ensure_folder_share_permission(vault, folder_uid)
+
+    uid_bytes, label, access_type_enum = _resolve_folder_accessor(
+        vault, recipient, as_team=as_team)
+    access_type_label = 'AT_TEAM' if as_team else 'AT_USER'
+
+    accessors = _lookup_nsf_folder_accessors(vault, folder_uid, uid_bytes, access_type_label)
+    result = _revoke_folder_access_for_rows(
+        vault, folder_uid, label, uid_bytes, access_type_enum, access_type_label, accessors)
+    if result.get('action_taken') != 'already_denied':
+        _request_sync(vault, request_sync)
     return result
 
 

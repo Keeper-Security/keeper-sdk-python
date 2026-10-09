@@ -515,8 +515,6 @@ def nsf_access_list(
     vault: vault_online.VaultOnline,
     folder_uids: List[str],
     record_uids: List[str],
-    show_inherited: bool = False,
-    show_denied: bool = False
 ) -> None:
     load_folder = bool(folder_uids)
     load_record = bool(record_uids)
@@ -524,7 +522,7 @@ def nsf_access_list(
     if view is None:
         print("NSF storage is not available on this vault.")
         return
-    nsf_management.load_nsf_access_details(vault, load_folder=load_folder, load_record=load_record, show_inherited=show_inherited, show_denied=show_denied)
+    nsf_management.load_nsf_access_details(vault, load_folder=load_folder, load_record=load_record)
 
     for folder_uid in folder_uids:
         folder = view.get_folder(folder_uid)
@@ -584,12 +582,9 @@ def nsf_access_list_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
     folder_uids = ["<FOLDER_UID_1>", "<FOLDER_UID_2>"]
     record_uids = ["<RECORD_UID_1>", "<RECORD_UID_2>"]
 
-    show_inherited = True
-    show_denied = True
-
     vault = open_vault(keeper_auth_context)
     try:
-        nsf_access_list(vault, folder_uids, record_uids, show_inherited, show_denied)
+        nsf_access_list(vault, folder_uids, record_uids)
     except Exception as e:
         print(f"Error: {e}")
     finally:

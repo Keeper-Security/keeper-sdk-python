@@ -514,10 +514,15 @@ def close_vault(vault: vault_online.VaultOnline, keeper_auth_context: keeper_aut
 def nsf_access_list(
         vault: vault_online.VaultOnline,
         folder_uids: List[str],
-        record_uids: List[str]) -> None:
+        record_uids: List[str],
+        show_inherited: bool = False,
+        show_denied: bool = False) -> None:
     """
     Print access details for a caller-supplied list of NSF folder and
     record UIDs.
+
+    Inherited and denied entries are omitted unless ``show_inherited`` /
+    ``show_denied`` is True (the SDK default is to hide them).
 
     Access details are not pre-populated in the NSF in-memory cache, so
     this fetches them for exactly the requested UIDs via
@@ -535,7 +540,8 @@ def nsf_access_list(
     if not folder_uids:
         print("No NSF folder UIDs requested.")
     else:
-        access = nsf_management.get_nsf_folder_access(vault, folder_uids)
+        access = nsf_management.get_nsf_folder_access(
+            vault, folder_uids, show_inherited=show_inherited, show_denied=show_denied)
         for fr in access.get("results") or []:
             fuid = fr.get("folder_uid")
             if fuid:
@@ -560,6 +566,7 @@ def nsf_access_list(
                     f" | access_type={access.get('access_type')}"
                     f" | role={access.get('role')}"
                     f" | inherited={access.get('inherited')}"
+                    f" | denied={access.get('denied_access')}"
                     f" | hidden={access.get('hidden')}"
                     f" | owner={access.get('owner', False)}"
                 )
@@ -574,7 +581,8 @@ def nsf_access_list(
     if not record_uids:
         print("No NSF record UIDs requested.")
     else:
-        access = nsf_management.get_nsf_record_accesses(vault, record_uids)
+        access = nsf_management.get_nsf_record_accesses(
+            vault, record_uids, show_inherited=show_inherited, show_denied=show_denied)
         by_uid: Dict[str, List] = {}
         for ao in access.get("record_accesses") or []:
             by_uid.setdefault(ao["record_uid"], []).append(ao)
@@ -619,9 +627,13 @@ def nsf_access_list_run(keeper_auth_context: keeper_auth.KeeperAuth) -> None:
     folder_uids = ["<FOLDER_UID_1>", "<FOLDER_UID_2>"]
     record_uids = ["<RECORD_UID_1>", "<RECORD_UID_2>"]
 
+    # Set to True to include inherited / denied entries (hidden by default).
+    show_inherited = False
+    show_denied = False
+
     vault = open_vault(keeper_auth_context)
     try:
-        nsf_access_list(vault, folder_uids, record_uids)
+        nsf_access_list(vault, folder_uids, record_uids, show_inherited, show_denied)
     except Exception as e:
         print(f"Error: {e}")
     finally:
