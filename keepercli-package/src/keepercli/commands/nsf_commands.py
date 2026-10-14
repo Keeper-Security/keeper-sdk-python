@@ -1783,4 +1783,3 @@ class NsfLoadAccessCacheCommand(base.ArgparseCommand):
         logger.info(
             'Loaded access details for %d folder(s) and %d record(s) into the NSF cache',
             loaded.get('folders', 0), loaded.get('records', 0))
-
