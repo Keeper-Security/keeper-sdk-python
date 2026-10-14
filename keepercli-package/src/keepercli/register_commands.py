@@ -106,6 +106,7 @@ def register_commands(commands: base.CliCommands, scopes: Optional[base.CommandS
         commands.register_command('nsf-record-permission', nsf_commands.NsfRecordPermissionCommand(), base.CommandScope.Vault)
         commands.register_command('nsf-transfer-record', nsf_commands.NsfTransferRecordCommand(), base.CommandScope.Vault)
         commands.register_command('nsf-shortcut', nsf_commands.NsfShortcutCommand(), base.CommandScope.Vault)
+        commands.register_command('nsf-move', nsf_commands.NsfMvCommand(), base.CommandScope.Vault)
         commands.register_command('workflow', PAMWorkflowCommand(), base.CommandScope.Vault)
 
 
