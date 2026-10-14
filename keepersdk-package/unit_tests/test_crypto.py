@@ -70,6 +70,24 @@ class TestCrypto(TestCase):
         dec_data = crypto.decrypt_rsa(enc_data, prk)
         self.assertEqual(data, dec_data)
 
+    def test_decrypt_rsa_pads_leading_zero_stripped_ciphertext(self):
+        # Keeper can deliver an RSA ciphertext whose leading zero byte(s) were
+        # stripped; decrypt_rsa must left-pad back to the modulus length before
+        # decrypting (previously only handled when key_size == 2047).
+        puk = crypto.load_rsa_public_key(utils.base64_url_decode(_test_public_key))
+        prk = crypto.load_rsa_private_key(utils.base64_url_decode(_test_private_key))
+        data = b'nominal rsa padding regression'
+
+        stripped = None
+        for _ in range(5000):
+            candidate = crypto.encrypt_rsa(data, puk)
+            if candidate[:1] == b'\x00':
+                stripped = candidate.lstrip(b'\x00')
+                break
+        self.assertIsNotNone(stripped, 'could not produce a leading-zero ciphertext')
+        self.assertLess(len(stripped), (puk.key_size + 7) // 8)
+        self.assertEqual(crypto.decrypt_rsa(stripped, prk), data)
+
     def test_derive_key_hash_v1(self):
         password = 'q2rXmNBFeLwAEX55hVVTfg'
         salt = utils.base64_url_decode('Ozv5_XSBgw-XSrDosp8Y1A')

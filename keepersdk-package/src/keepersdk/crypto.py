@@ -129,10 +129,9 @@ def encrypt_rsa(data: bytes, rsa_key: rsa.RSAPublicKey) -> bytes:
 
 
 def decrypt_rsa(data: bytes, rsa_key: rsa.RSAPrivateKey) -> bytes:
-    if rsa_key.key_size == 2047:
-        remainder = len(data) % 256
-        if remainder > 0:
-            data = b'\x00' * (256-remainder) + data
+    modulus_size = (rsa_key.key_size + 7) // 8
+    if len(data) < modulus_size:
+        data = b'\x00' * (modulus_size - len(data)) + data
     return rsa_key.decrypt(data, PKCS1v15())
 
 
