@@ -1,11 +1,12 @@
 from google.api import annotations_pb2 as _annotations_pb2
-import folder_pb2 as _folder_pb2
-import record_pb2 as _record_pb2
-import pagination_pb2 as _pagination_pb2
+from . import folder_pb2 as _folder_pb2
+from . import record_pb2 as _record_pb2
+from . import pagination_pb2 as _pagination_pb2
 from google.protobuf.internal import containers as _containers
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
-from typing import ClassVar as _ClassVar, Iterable as _Iterable, Mapping as _Mapping, Optional as _Optional, Union as _Union
+from collections.abc import Iterable as _Iterable, Mapping as _Mapping
+from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
