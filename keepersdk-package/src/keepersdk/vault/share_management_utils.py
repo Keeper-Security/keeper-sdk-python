@@ -1652,3 +1652,15 @@ def update_record_permissions(
     return result
 
 
+
+
+def get_shared_folder_team_permissions(shared_folder: Optional[vault_types.SharedFolder]) -> List[Dict[str, Any]]:
+    """Return team permissions of a loaded shared folder in the dict shape FolderShares.prepare_request expects."""
+    if not shared_folder or not shared_folder.user_permissions:
+        return []
+    return [{
+        'team_uid': up.user_uid,
+        'name': up.name,
+        'manage_records': up.manage_records,
+        'manage_users': up.manage_users,
+    } for up in shared_folder.user_permissions if up.user_type == vault_types.SharedFolderUserType.Team]
