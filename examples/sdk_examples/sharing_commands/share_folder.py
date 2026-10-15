@@ -19,7 +19,7 @@ from keepersdk.authentication.yubikey import (
     yubikey_authenticate,
 )
 from keepersdk.constants import KEEPER_PUBLIC_HOSTS
-from keepersdk.vault import shares_management, sqlite_storage, vault_online
+from keepersdk.vault import share_management_utils, shares_management, sqlite_storage, vault_online
 
 try:
     import pyperclip
@@ -518,7 +518,7 @@ def _build_shared_folder_info(vault: vault_online.VaultOnline, shared_folder_uid
     sf_info = {
         "shared_folder_uid": sf_uid,
         "users": sh_fol.user_permissions,
-        "teams": [],
+        "teams": share_management_utils.get_shared_folder_team_permissions(sh_fol),
         "records": [{"record_uid": r.record_uid} for r in sh_fol.record_permissions],
         "shared_folder_key_unencrypted": sf_unencrypted_key,
         "default_manage_users": sh_fol.default_manage_users,
@@ -572,15 +572,16 @@ def share_shared_folder_with_users_and_teams(
     #   default_account: If True, applies manage_records/manage_users as default for all users/teams.
     #   share_expiration: Optional expiration (in seconds) for the share.
     #
+    share_kwargs = {
+        "action": shares_management.ShareAction.GRANT.value,  # 'grant' to share, 'remove' to unshare
+        "manage_records": shares_management.ManagePermission.ON.value if manage_records else shares_management.ManagePermission.OFF.value,  # Allow managing records
+        "manage_users": shares_management.ManagePermission.ON.value if manage_users else shares_management.ManagePermission.OFF.value,      # Allow managing users/teams
+        "can_edit": shares_management.ManagePermission.ON.value if can_edit else shares_management.ManagePermission.OFF.value,              # Allow editing records
+        "can_share": shares_management.ManagePermission.ON.value if can_share else shares_management.ManagePermission.OFF.value,            # Allow sharing records
+    }
     request = shares_management.FolderShares.prepare_request(
         vault=vault,
-        kwargs={
-            "action": shares_management.ShareAction.GRANT.value,  # 'grant' to share, 'remove' to unshare
-            "manage_records": shares_management.ManagePermission.ON.value if manage_records else shares_management.ManagePermission.OFF.value,  # Allow managing records
-            "manage_users": shares_management.ManagePermission.ON.value if manage_users else shares_management.ManagePermission.OFF.value,      # Allow managing users/teams
-            "can_edit": shares_management.ManagePermission.ON.value if can_edit else shares_management.ManagePermission.OFF.value,              # Allow editing records
-            "can_share": shares_management.ManagePermission.ON.value if can_share else shares_management.ManagePermission.OFF.value,            # Allow sharing records
-        },
+        kwargs=share_kwargs,
         curr_sf=sf_info,
         users=users,
         teams=teams,
@@ -591,8 +592,22 @@ def share_shared_folder_with_users_and_teams(
     )
 
     partitioned_requests = [[request]]
-    shares_management.FolderShares.send_requests(vault, partitioned_requests)
-    print("Shared folder successfully shared with users and teams.")
+
+    # Retry for expired shares: if a user/team already on the folder has an expired share, the
+    # server answers the update with status 'doesnt_exist'. The rebuilder evicts that member from
+    # the local shared folder cache and rebuilds the request as sharedFolderAddUser/AddTeam.
+    rebuild_request = shares_management.FolderShares.make_stale_member_rebuilder(
+        vault, share_kwargs, share_expiration=share_expiration
+    )
+    success_responses, failed_responses = shares_management.FolderShares.send_requests(
+        vault, partitioned_requests, rebuild_request=rebuild_request
+    )
+    for message in success_responses:
+        print(message)
+    for message in failed_responses:
+        print(f"FAILED: {message}")
+    if not failed_responses:
+        print("Shared folder successfully shared with users and teams.")
     vault.close()
     keeper_auth_context.close()
 

@@ -60,6 +60,13 @@ def set_expiration_fields(obj, expiration):
             obj.expiration = -1
 
 
+def _log_expired_share_messages(messages: List[str]) -> None:
+    """Surface shares that had expired and were granted again."""
+    for message in messages:
+        if 'expired' in message:
+            logger.info(message)
+
+
 class ShareRecordCommand(base.ArgparseCommand):
     
     def __init__(self):
@@ -149,6 +156,7 @@ class ShareRecordCommand(base.ArgparseCommand):
         except share_management_utils.ShareValidationError as err:
             raise base.CommandError(str(err)) from err
 
+        expired_shares = set()
         try:
             request = RecordShares.prep_request(
                 vault=vault,
@@ -162,13 +170,16 @@ class ShareRecordCommand(base.ArgparseCommand):
                 can_share=kwargs.get('can_share'),
                 recursive=kwargs.get('recursive'),
                 rotate_on_expiration=rotate_on_expiration,
+                expired_shares=expired_shares,
             )
         except (share_management_utils.ShareValidationError, ValueError) as err:
             raise base.CommandError(str(err)) from err
         if request:
-            success_responses, failed_responses = RecordShares.send_requests(vault, [request])
+            success_responses, failed_responses = RecordShares.send_requests(
+                vault, [request], expired_shares=expired_shares)
             if success_responses:
                 logger.info(f'{len(success_responses)} share requests were successfully processed')
+                _log_expired_share_messages(success_responses)
             if failed_responses:
                 logger.error(f'{len(failed_responses)} share requests failed to process')
                 for failed_response in failed_responses:
@@ -319,9 +330,17 @@ class ShareFolderCommand(base.ArgparseCommand):
             vault, shared_folder_uids, user_data, record_data,
             action, share_expiration, kwargs, rotate_on_expiration
         )
-        success_responses, failed_responses = FolderShares.send_requests(vault=vault, partitioned_requests=rq_groups)
+        # If a user/team share on the folder has expired, the server rejects the update with
+        # 'doesnt_exist'; the rebuilder evicts it from the cache and re-adds it.
+        rebuild_request = FolderShares.make_stale_member_rebuilder(
+            vault, kwargs, share_expiration=share_expiration, rotate_on_expiration=rotate_on_expiration
+        )
+        success_responses, failed_responses = FolderShares.send_requests(
+            vault=vault, partitioned_requests=rq_groups, rebuild_request=rebuild_request
+        )
         if success_responses:
             logger.info(f'{len(success_responses)} share requests were successfully processed')
+            _log_expired_share_messages(success_responses)
         if failed_responses:
             logger.error(f'{len(failed_responses)} share requests failed to process')
             for failed_response in failed_responses:
@@ -695,7 +714,7 @@ class ShareFolderCommand(base.ArgparseCommand):
         sf_info = {
             'shared_folder_uid': sf_uid,
             'users': sh_fol.user_permissions,
-            'teams': [],
+            'teams': share_management_utils.get_shared_folder_team_permissions(sh_fol),
             'records': sh_fol.record_permissions,
             'shared_folder_key_unencrypted': sf_unencrypted_key,
             'default_manage_users': sh_fol.default_can_share,
