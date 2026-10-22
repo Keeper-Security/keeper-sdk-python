@@ -1006,9 +1006,14 @@ def update_nsf_typed_record(
 
 def get_nsf_record_details(
         vault: VaultOnline,
-        record_uids: Iterable[str]) -> Dict[str, Any]:
-    """``vault/get_records_details`` — title/type when cache lacks decrypted payload."""
-    uids = [resolve_nsf_record_uid(vault, u) or u for u in record_uids]
+        record_uids: Iterable[str],
+        record_keys: Optional[Mapping[str, bytes]] = None) -> Dict[str, Any]:
+    """``vault/get_records_details`` — title/type when cache lacks decrypted payload.
+
+    ``record_keys`` supplies keys for records absent from the NSF view (e.g. trashed records).
+    """
+    known_keys = dict(record_keys or {})
+    uids = [u if u in known_keys else (resolve_nsf_record_uid(vault, u) or u) for u in record_uids]
     uids = [u for u in uids if u]
     if not uids:
         raise NsfError('At least one record UID is required')
@@ -1019,6 +1024,8 @@ def get_nsf_record_details(
         for entry in view.records()
         if entry.record_key
     }
+    for uid, key in known_keys.items():
+        record_keys.setdefault(uid, key)
 
     out_data: List[Dict[str, Any]] = []
     forbidden: List[str] = []
