@@ -41,6 +41,21 @@ class TransferDataKeys(Enum):
     )
 
 
+# Numeric key types used by the KeeperDrive key lists and the transfer API.
+KD_KEY_TYPE_AES_V1 = 1
+KD_KEY_TYPE_RSA = 2
+KD_KEY_TYPE_AES_V2 = 3
+KD_KEY_TYPE_ECC = 4
+
+# String key-type identifiers for the KeeperDrive transfer folder, keyed by the numeric type.
+KD_TRANSFER_FOLDER_KEY_TYPES = {
+    KD_KEY_TYPE_AES_V1: EncryptionType.ENCRYPTED_BY_DATA_KEY.value,
+    KD_KEY_TYPE_RSA: EncryptionType.ENCRYPTED_BY_PUBLIC_KEY.value,
+    KD_KEY_TYPE_AES_V2: EncryptionType.ENCRYPTED_BY_DATA_KEY_GCM.value,
+    KD_KEY_TYPE_ECC: EncryptionType.ENCRYPTED_BY_PUBLIC_KEY_ECC.value,
+}
+
+
 class TransferKeyType(Enum):
     RAW_DATA_KEY = 0
     ENCRYPTED_BY_DATA_KEY = 1
@@ -608,17 +623,20 @@ class AccountTransferManager:
         return reencrypted, corrupted
 
     def _encrypt_kd_key(self, key: bytes, target_keys: keeper_auth.UserKeys) -> Tuple[bytes, int]:
-        """Encrypt a KeeperDrive key using the transfer API's numeric key types."""
-        if self.auth.auth_context.forbid_rsa:
-            if target_keys.aes:
-                return crypto.encrypt_aes_v2(key, target_keys.aes), 3
-            if target_keys.ec:
-                return crypto.encrypt_ec(key, crypto.load_ec_public_key(target_keys.ec)), 4
-        else:
-            if target_keys.aes:
-                return crypto.encrypt_aes_v1(key, target_keys.aes), 1
-            if target_keys.rsa:
-                return crypto.encrypt_rsa(key, crypto.load_rsa_public_key(target_keys.rsa)), 2
+        """Encrypt a KeeperDrive key for the recipient and return it with its numeric key type.
+
+        Uses the same fallback order as ``_encrypt_for_target``: AES, then ECC, then RSA
+        (RSA only when it is allowed).
+        """
+        forbid_rsa = self.auth.auth_context.forbid_rsa
+        if target_keys.aes:
+            if forbid_rsa:
+                return crypto.encrypt_aes_v2(key, target_keys.aes), KD_KEY_TYPE_AES_V2
+            return crypto.encrypt_aes_v1(key, target_keys.aes), KD_KEY_TYPE_AES_V1
+        if target_keys.ec:
+            return crypto.encrypt_ec(key, crypto.load_ec_public_key(target_keys.ec)), KD_KEY_TYPE_ECC
+        if target_keys.rsa and not forbid_rsa:
+            return crypto.encrypt_rsa(key, crypto.load_rsa_public_key(target_keys.rsa)), KD_KEY_TYPE_RSA
         raise AccountTransferError('No permitted recipient key available for KeeperDrive transfer')
 
     def _encrypt_kd_owner_key(self, key: bytes, target_keys: keeper_auth.UserKeys) -> Tuple[bytes, int]:
@@ -630,34 +648,17 @@ class AccountTransferManager:
         raise AccountTransferError('No permitted recipient public key available for KeeperDrive owner key')
 
     def _create_kd_transfer_folder(self, target_keys: keeper_auth.UserKeys, from_username: str) -> Dict[str, Any]:
-        """Create the KeeperDrive transfer folder. Its key type is a string identifier, unlike the
-        numeric key types on the KeeperDrive key lists."""
+        """Create the KeeperDrive transfer folder, encrypted for the recipient with the same rules as KeeperDrive keys."""
         folder_key = utils.generate_aes_key()
         folder_data = json.dumps({'name': f'Transfer from {from_username}'}).encode('utf-8')
         encrypted_data = crypto.encrypt_aes_v2(folder_data, folder_key)
-        if self.auth.auth_context.forbid_rsa:
-            if target_keys.aes:
-                encrypted_key = crypto.encrypt_aes_v2(folder_key, target_keys.aes)
-                key_type = EncryptionType.ENCRYPTED_BY_DATA_KEY_GCM.value
-            elif target_keys.ec:
-                encrypted_key = crypto.encrypt_ec(folder_key, crypto.load_ec_public_key(target_keys.ec))
-                key_type = EncryptionType.ENCRYPTED_BY_PUBLIC_KEY_ECC.value
-            else:
-                raise AccountTransferError('No permitted recipient key available for KeeperDrive transfer folder')
-        else:
-            if target_keys.aes:
-                encrypted_key = crypto.encrypt_aes_v1(folder_key, target_keys.aes)
-                key_type = EncryptionType.ENCRYPTED_BY_DATA_KEY.value
-            elif target_keys.ec:
-                encrypted_key = crypto.encrypt_ec(folder_key, crypto.load_ec_public_key(target_keys.ec))
-                key_type = EncryptionType.ENCRYPTED_BY_PUBLIC_KEY_ECC.value
-            else:
-                raise AccountTransferError('No permitted recipient key available for KeeperDrive transfer folder')
+        encrypted_key, numeric_key_type = self._encrypt_kd_key(folder_key, target_keys)
         return {
             'folder_uid': utils.generate_uid(),
             'folder_data': utils.base64_url_encode(encrypted_data),
             'folder_key': utils.base64_url_encode(encrypted_key),
-            'folder_key_type': key_type,
+            # The transfer folder uses string key-type identifiers, unlike the numeric ones on the key lists.
+            'folder_key_type': KD_TRANSFER_FOLDER_KEY_TYPES[numeric_key_type],
         }
 
     def _decrypt_key_by_type(self,

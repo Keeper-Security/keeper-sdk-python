@@ -9,6 +9,7 @@ not perform a live account transfer.
 import unittest
 from unittest.mock import MagicMock, patch
 
+from keepersdk import utils
 from keepersdk.enterprise.account_transfer import (
     AccountTransferError,
     AccountTransferManager,
@@ -316,6 +317,101 @@ class KeeperDriveTransferTests(unittest.TestCase):
         )
         with self.assertRaises(Exception):
             self.manager._decrypt_key_by_type(b"ignored", 999, self.user_data_key, None, None)
+
+
+class RecipientKeyFallbackTests(unittest.TestCase):
+    """Regression tests: KeeperDrive transfer encryption must follow the same recipient-key
+    fallback as the rest of the transfer code (AES, then ECC, then RSA when RSA is allowed).
+    These use real EC and RSA keys and decrypt the output to prove it is readable."""
+
+    @classmethod
+    def setUpClass(cls):
+        from keepersdk import crypto
+        cls.crypto = crypto
+        cls.ec_private, ec_public = crypto.generate_ec_key()
+        cls.ec_public_bytes = crypto.unload_ec_public_key(ec_public)
+        cls.rsa_private, rsa_public = crypto.generate_rsa_key()
+        cls.rsa_public_bytes = crypto.unload_rsa_public_key(rsa_public)
+
+    def setUp(self):
+        self.auth = MagicMock()
+        self.auth.auth_context.forbid_rsa = False
+        self.manager = AccountTransferManager(MagicMock(), self.auth)
+        self.user_data_key = b"d" * 32
+
+    def ec_only(self):
+        return UserKeys(aes=None, rsa=None, ec=self.ec_public_bytes)
+
+    def rsa_only(self):
+        return UserKeys(aes=None, rsa=self.rsa_public_bytes, ec=None)
+
+    def test_ec_only_recipient_gets_ecc_key_when_rsa_allowed(self):
+        encrypted, key_type = self.manager._encrypt_kd_key(b"record-key-32-bytes-long-value!", self.ec_only())
+        self.assertEqual(key_type, 4)
+        self.assertEqual(self.crypto.decrypt_ec(encrypted, self.ec_private), b"record-key-32-bytes-long-value!")
+
+    def test_rsa_only_recipient_gets_rsa_key_when_rsa_allowed(self):
+        encrypted, key_type = self.manager._encrypt_kd_key(b"record-key-32-bytes-long-value!", self.rsa_only())
+        self.assertEqual(key_type, 2)
+        self.assertEqual(self.crypto.decrypt_rsa(encrypted, self.rsa_private), b"record-key-32-bytes-long-value!")
+
+    def test_rsa_forbidden_with_ec_only_recipient_uses_ecc(self):
+        self.auth.auth_context.forbid_rsa = True
+        encrypted, key_type = self.manager._encrypt_kd_key(b"record-key-32-bytes-long-value!", self.ec_only())
+        self.assertEqual(key_type, 4)
+        self.assertEqual(self.crypto.decrypt_ec(encrypted, self.ec_private), b"record-key-32-bytes-long-value!")
+
+    def test_rsa_forbidden_with_rsa_only_recipient_fails(self):
+        self.auth.auth_context.forbid_rsa = True
+        with self.assertRaises(AccountTransferError):
+            self.manager._encrypt_kd_key(b"record-key", self.rsa_only())
+
+    def test_aes_is_preferred_over_ecc_and_rsa(self):
+        target = UserKeys(aes=b"a" * 32, rsa=self.rsa_public_bytes, ec=self.ec_public_bytes)
+        _, key_type = self.manager._encrypt_kd_key(b"record-key", target)
+        self.assertEqual(key_type, 1)
+
+    def test_transfer_folder_for_rsa_only_recipient(self):
+        folder = self.manager._create_kd_transfer_folder(self.rsa_only(), "from@example.com")
+        self.assertEqual(folder["folder_key_type"], "encrypted_by_public_key")
+        folder_key = self.crypto.decrypt_rsa(
+            utils.base64_url_decode(folder["folder_key"]), self.rsa_private)
+        self.assertIn(b"from@example.com", self.crypto.decrypt_aes_v2(
+            utils.base64_url_decode(folder["folder_data"]), folder_key))
+
+    def test_transfer_folder_for_ec_only_recipient(self):
+        folder = self.manager._create_kd_transfer_folder(self.ec_only(), "from@example.com")
+        self.assertEqual(folder["folder_key_type"], "encrypted_by_public_key_ecc")
+        folder_key = self.crypto.decrypt_ec(utils.base64_url_decode(folder["folder_key"]), self.ec_private)
+        self.assertIn(b"from@example.com", self.crypto.decrypt_aes_v2(
+            utils.base64_url_decode(folder["folder_data"]), folder_key))
+
+    def test_transfer_folder_for_ec_only_recipient_when_rsa_forbidden(self):
+        self.auth.auth_context.forbid_rsa = True
+        folder = self.manager._create_kd_transfer_folder(self.ec_only(), "from@example.com")
+        self.assertEqual(folder["folder_key_type"], "encrypted_by_public_key_ecc")
+
+    def test_transfer_folder_for_rsa_only_recipient_when_rsa_forbidden_fails(self):
+        self.auth.auth_context.forbid_rsa = True
+        with self.assertRaises(AccountTransferError):
+            self.manager._create_kd_transfer_folder(self.rsa_only(), "from@example.com")
+
+    def test_record_keys_for_ec_only_recipient_are_not_corrupted(self):
+        record_key = b"record-key-32-bytes-long-value!"
+        encrypted_for_user = self.crypto.encrypt_aes_v1(record_key, self.user_data_key)
+        items = [{
+            "record_uid": "r1",
+            "record_key": utils.base64_url_encode(encrypted_for_user),
+            "record_key_type": 1,
+        }]
+        with patch.object(self.manager, "_decrypt_key_by_type", return_value=record_key):
+            reencrypted, corrupted = self.manager._reencrypt_kd_record_keys(
+                items, self.user_data_key, None, None, self.ec_only())
+        self.assertEqual(corrupted, [])
+        self.assertEqual(reencrypted[0]["record_key_type"], 4)
+        self.assertEqual(
+            self.crypto.decrypt_ec(utils.base64_url_decode(reencrypted[0]["record_key"]), self.ec_private),
+            record_key)
 
 
 if __name__ == "__main__":
