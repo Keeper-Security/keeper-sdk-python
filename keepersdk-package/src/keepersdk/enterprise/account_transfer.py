@@ -30,6 +30,16 @@ class TransferDataKeys(Enum):
     USER_FOLDER_KEYS = 'user_folder_keys'
     CORRUPTED_USER_FOLDER_KEYS = 'corrupted_user_folder_keys'
     USER_FOLDER_TRANSFER = 'user_folder_transfer'
+    KD_FOLDER_KEYS = 'kd_folder_keys'
+    KD_RECORD_KEYS = 'kd_record_keys'
+    KD_NESTED_RECORD_OWNER_KEYS = 'kd_nested_record_owner_keys'
+    KD_FOLDER_TRANSFER = 'kd_folder_transfer'
+    CORRUPTED_KD_FOLDER_KEYS = 'corrupted_kd_folder_keys'
+    CORRUPTED_KD_RECORD_KEYS = 'corrupted_kd_record_keys'
+    CORRUPTED_KD_NESTED_RECORD_OWNER_KEYS = (
+        'corrupted_kd_nested_record_owner_keys'
+    )
+
 
 class TransferKeyType(Enum):
     RAW_DATA_KEY = 0
@@ -54,6 +64,9 @@ class PreTransferResponse:
     shared_folder_keys: List[Dict[str, Any]] = field(default_factory=list)
     team_keys: List[Dict[str, Any]] = field(default_factory=list)
     user_folder_keys: List[Dict[str, Any]] = field(default_factory=list)
+    kd_folder_keys: List[Dict[str, Any]] = field(default_factory=list)
+    kd_record_keys: List[Dict[str, Any]] = field(default_factory=list)
+    kd_nested_record_owner_keys: List[Dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -68,6 +81,12 @@ class TransferResult:
     corrupted_shared_folders: int = 0
     corrupted_teams: int = 0
     corrupted_user_folders: int = 0
+    kd_folders_transferred: int = 0
+    kd_records_transferred: int = 0
+    kd_nested_record_owners_transferred: int = 0
+    corrupted_kd_folders: int = 0
+    corrupted_kd_records: int = 0
+    corrupted_kd_nested_record_owners: int = 0
     error_message: Optional[str] = None
 
 
@@ -142,7 +161,10 @@ class AccountTransferManager:
             'record_keys': rs.get('record_keys', []),
             'shared_folder_keys': rs.get('shared_folder_keys', []),
             'team_keys': rs.get('team_keys', []),
-            'user_folder_keys': rs.get('user_folder_keys', [])
+            'user_folder_keys': rs.get('user_folder_keys', []),
+            'kd_folder_keys': rs.get('kd_folder_keys', []),
+            'kd_record_keys': rs.get('kd_record_keys', []),
+            'kd_nested_record_owner_keys': rs.get('kd_nested_record_owner_keys', [])
         })
         
         return PreTransferResponse(**decoded_data)
@@ -274,7 +296,29 @@ class AccountTransferManager:
         if corrupted:
             transfer_data[TransferDataKeys.CORRUPTED_USER_FOLDER_KEYS.value] = corrupted
         transfer_data[TransferDataKeys.USER_FOLDER_TRANSFER.value] = transfer_folder
-        
+        # KeeperDrive / NSF keys are supplied by the same pre_account_transfer
+        # response, but use their own payload fields and owner-key rules.
+        kd_folder_keys, kd_folder_corrupted = self._reencrypt_kd_folder_keys(
+            pre_transfer.kd_folder_keys, user_data_key, user_rsa_private_key,
+            user_ecc_private_key, target_keys)
+        kd_record_keys, kd_record_corrupted = self._reencrypt_kd_record_keys(
+            pre_transfer.kd_record_keys, user_data_key, user_rsa_private_key,
+            user_ecc_private_key, target_keys)
+        kd_nested_keys, kd_nested_corrupted = self._reencrypt_kd_nested_owner_keys(
+            pre_transfer.kd_nested_record_owner_keys, user_data_key,
+            user_rsa_private_key, user_ecc_private_key, target_keys)
+        if pre_transfer.kd_folder_keys:
+            transfer_data[TransferDataKeys.KD_FOLDER_KEYS.value] = kd_folder_keys
+            transfer_data[TransferDataKeys.CORRUPTED_KD_FOLDER_KEYS.value] = kd_folder_corrupted
+        if pre_transfer.kd_record_keys:
+            transfer_data[TransferDataKeys.KD_RECORD_KEYS.value] = kd_record_keys
+            transfer_data[TransferDataKeys.CORRUPTED_KD_RECORD_KEYS.value] = kd_record_corrupted
+        if pre_transfer.kd_nested_record_owner_keys:
+            transfer_data[TransferDataKeys.KD_NESTED_RECORD_OWNER_KEYS.value] = kd_nested_keys
+            transfer_data[TransferDataKeys.CORRUPTED_KD_NESTED_RECORD_OWNER_KEYS.value] = kd_nested_corrupted
+        if kd_folder_keys or kd_record_keys or kd_nested_keys:
+            transfer_data[TransferDataKeys.KD_FOLDER_TRANSFER.value] = self._create_kd_transfer_folder(
+                target_keys, from_username)
         return transfer_data
     
     def _reencrypt_record_keys(self,
@@ -479,7 +523,143 @@ class AccountTransferManager:
                 corrupted.append(ufk)
         
         return reencrypted, corrupted, transfer_folder
-    
+
+    def _reencrypt_kd_folder_keys(self,
+                                  keys: List[Dict],
+                                  user_data_key: bytes,
+                                  user_rsa_key: Optional[Any],
+                                  user_ecc_key: Optional[Any],
+                                  target_keys: keeper_auth.UserKeys) -> Tuple[List[Dict], List[Dict]]:
+        """Re-encrypt KeeperDrive folder keys for the target user. Returns (reencrypted, corrupted)."""
+        reencrypted: List[Dict] = []
+        corrupted: List[Dict] = []
+        for item in keys:
+            try:
+                folder_key = self._decrypt_key_by_type(
+                    utils.base64_url_decode(item['folder_key']),
+                    item.get('folder_key_type', 1), user_data_key, user_rsa_key, user_ecc_key)
+                encrypted_key, key_type = self._encrypt_kd_key(folder_key, target_keys)
+                reencrypted.append({
+                    'folder_uid': item['folder_uid'],
+                    'folder_key': utils.base64_url_encode(encrypted_key),
+                    'folder_key_type': key_type,
+                })
+            except Exception as e:
+                logger.debug(f"Corrupted KeeperDrive folder key {item.get('folder_uid', 'unknown')}: {e}")
+                corrupted.append(item)
+        return reencrypted, corrupted
+
+    def _reencrypt_kd_record_keys(self,
+                                  keys: List[Dict],
+                                  user_data_key: bytes,
+                                  user_rsa_key: Optional[Any],
+                                  user_ecc_key: Optional[Any],
+                                  target_keys: keeper_auth.UserKeys) -> Tuple[List[Dict], List[Dict]]:
+        """Re-encrypt KeeperDrive record keys (and their owner keys, when present) for the target user."""
+        reencrypted: List[Dict] = []
+        corrupted: List[Dict] = []
+        for item in keys:
+            try:
+                record_key = self._decrypt_key_by_type(
+                    utils.base64_url_decode(item['record_key']),
+                    item.get('record_key_type', 1), user_data_key, user_rsa_key, user_ecc_key)
+                encrypted_key, key_type = self._encrypt_kd_key(record_key, target_keys)
+                entry = {
+                    'record_uid': item['record_uid'],
+                    'record_key': utils.base64_url_encode(encrypted_key),
+                    'record_key_type': key_type,
+                }
+                if item.get('record_owner_key'):
+                    owner_key = self._decrypt_key_by_type(
+                        utils.base64_url_decode(item['record_owner_key']),
+                        item.get('record_owner_key_type', 1), user_data_key, user_rsa_key, user_ecc_key)
+                    owner_encrypted, owner_type = self._encrypt_kd_owner_key(owner_key, target_keys)
+                    entry['record_owner_key'] = utils.base64_url_encode(owner_encrypted)
+                    entry['record_owner_key_type'] = owner_type
+                reencrypted.append(entry)
+            except Exception as e:
+                logger.debug(f"Corrupted KeeperDrive record key {item.get('record_uid', 'unknown')}: {e}")
+                corrupted.append(item)
+        return reencrypted, corrupted
+
+    def _reencrypt_kd_nested_owner_keys(self,
+                                        keys: List[Dict],
+                                        user_data_key: bytes,
+                                        user_rsa_key: Optional[Any],
+                                        user_ecc_key: Optional[Any],
+                                        target_keys: keeper_auth.UserKeys) -> Tuple[List[Dict], List[Dict]]:
+        """Re-encrypt KeeperDrive nested record owner keys for the target user."""
+        reencrypted: List[Dict] = []
+        corrupted: List[Dict] = []
+        for item in keys:
+            try:
+                owner_key = self._decrypt_key_by_type(
+                    utils.base64_url_decode(item['owner_key']),
+                    item.get('owner_key_type', 1), user_data_key, user_rsa_key, user_ecc_key)
+                encrypted_key, key_type = self._encrypt_kd_owner_key(owner_key, target_keys)
+                reencrypted.append({
+                    'record_uid': item['record_uid'],
+                    'owner_key': utils.base64_url_encode(encrypted_key),
+                    'owner_key_type': key_type,
+                })
+            except Exception as e:
+                logger.debug(f"Corrupted KeeperDrive nested owner key {item.get('record_uid', 'unknown')}: {e}")
+                corrupted.append(item)
+        return reencrypted, corrupted
+
+    def _encrypt_kd_key(self, key: bytes, target_keys: keeper_auth.UserKeys) -> Tuple[bytes, int]:
+        """Encrypt a KeeperDrive key using the transfer API's numeric key types."""
+        if self.auth.auth_context.forbid_rsa:
+            if target_keys.aes:
+                return crypto.encrypt_aes_v2(key, target_keys.aes), 3
+            if target_keys.ec:
+                return crypto.encrypt_ec(key, crypto.load_ec_public_key(target_keys.ec)), 4
+        else:
+            if target_keys.aes:
+                return crypto.encrypt_aes_v1(key, target_keys.aes), 1
+            if target_keys.rsa:
+                return crypto.encrypt_rsa(key, crypto.load_rsa_public_key(target_keys.rsa)), 2
+        raise AccountTransferError('No permitted recipient key available for KeeperDrive transfer')
+
+    def _encrypt_kd_owner_key(self, key: bytes, target_keys: keeper_auth.UserKeys) -> Tuple[bytes, int]:
+        """Encrypt a KeeperDrive owner key so the recipient can decrypt it with their private key."""
+        if target_keys.ec:
+            return crypto.encrypt_ec(key, crypto.load_ec_public_key(target_keys.ec)), 4
+        if target_keys.rsa and not self.auth.auth_context.forbid_rsa:
+            return crypto.encrypt_rsa(key, crypto.load_rsa_public_key(target_keys.rsa)), 2
+        raise AccountTransferError('No permitted recipient public key available for KeeperDrive owner key')
+
+    def _create_kd_transfer_folder(self, target_keys: keeper_auth.UserKeys, from_username: str) -> Dict[str, Any]:
+        """Create the KeeperDrive transfer folder. Its key type is a string identifier, unlike the
+        numeric key types on the KeeperDrive key lists."""
+        folder_key = utils.generate_aes_key()
+        folder_data = json.dumps({'name': f'Transfer from {from_username}'}).encode('utf-8')
+        encrypted_data = crypto.encrypt_aes_v2(folder_data, folder_key)
+        if self.auth.auth_context.forbid_rsa:
+            if target_keys.aes:
+                encrypted_key = crypto.encrypt_aes_v2(folder_key, target_keys.aes)
+                key_type = EncryptionType.ENCRYPTED_BY_DATA_KEY_GCM.value
+            elif target_keys.ec:
+                encrypted_key = crypto.encrypt_ec(folder_key, crypto.load_ec_public_key(target_keys.ec))
+                key_type = EncryptionType.ENCRYPTED_BY_PUBLIC_KEY_ECC.value
+            else:
+                raise AccountTransferError('No permitted recipient key available for KeeperDrive transfer folder')
+        else:
+            if target_keys.aes:
+                encrypted_key = crypto.encrypt_aes_v1(folder_key, target_keys.aes)
+                key_type = EncryptionType.ENCRYPTED_BY_DATA_KEY.value
+            elif target_keys.ec:
+                encrypted_key = crypto.encrypt_ec(folder_key, crypto.load_ec_public_key(target_keys.ec))
+                key_type = EncryptionType.ENCRYPTED_BY_PUBLIC_KEY_ECC.value
+            else:
+                raise AccountTransferError('No permitted recipient key available for KeeperDrive transfer folder')
+        return {
+            'folder_uid': utils.generate_uid(),
+            'folder_data': utils.base64_url_encode(encrypted_data),
+            'folder_key': utils.base64_url_encode(encrypted_key),
+            'folder_key_type': key_type,
+        }
+
     def _decrypt_key_by_type(self,
                             encrypted_key: bytes,
                             key_type: int,
@@ -542,7 +722,32 @@ class AccountTransferManager:
         if 'user_folder_transfer' in transfer_data:
             folder_transfer = transfer_data['user_folder_transfer']
             logger.info(f'Creating transfer folder: {folder_transfer.get("transfer_folder_uid", "unknown_uid")}')
-        
+        logger.info(
+            "Account transfer payload counts: %s",
+            {
+                key: len(rq.get(key, []))
+                for key in (
+                    'record_keys',
+                    'corrupted_record_keys',
+                    'shared_folder_keys',
+                    'corrupted_shared_folder_keys',
+                    'team_keys',
+                    'corrupted_team_keys',
+                    'user_folder_keys',
+                    'corrupted_user_folder_keys',
+                    'kd_folder_keys',
+                    'corrupted_kd_folder_keys',
+                    'kd_record_keys',
+                    'corrupted_kd_record_keys',
+                    'kd_nested_record_owner_keys',
+                    'corrupted_kd_nested_record_owner_keys',
+                )
+            },
+        )
+        logger.info(
+            "Transfer payload sections present: %s",
+            sorted(rq.keys()),
+        )
         self.auth.execute_auth_command(rq)
         
         return TransferResult(
@@ -555,6 +760,12 @@ class AccountTransferManager:
             corrupted_records=len(transfer_data.get('corrupted_record_keys', [])),
             corrupted_shared_folders=len(transfer_data.get('corrupted_shared_folder_keys', [])),
             corrupted_teams=len(transfer_data.get('corrupted_team_keys', [])),
-            corrupted_user_folders=len(transfer_data.get('corrupted_user_folder_keys', []))
+            corrupted_user_folders=len(transfer_data.get('corrupted_user_folder_keys', [])),
+            kd_folders_transferred=len(transfer_data.get('kd_folder_keys', [])),
+            kd_records_transferred=len(transfer_data.get('kd_record_keys', [])),
+            kd_nested_record_owners_transferred=len(transfer_data.get('kd_nested_record_owner_keys', [])),
+            corrupted_kd_folders=len(transfer_data.get('corrupted_kd_folder_keys', [])),
+            corrupted_kd_records=len(transfer_data.get('corrupted_kd_record_keys', [])),
+            corrupted_kd_nested_record_owners=len(transfer_data.get('corrupted_kd_nested_record_owner_keys', []))
         )
 
