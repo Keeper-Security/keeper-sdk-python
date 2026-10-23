@@ -424,7 +424,13 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
                             logger.info(f'Teams: {result.teams_transferred}')
                         if result.user_folders_transferred > 0:
                             logger.info(f' User Folders: {result.user_folders_transferred}')
-                        
+                        if result.kd_folders_transferred > 0:
+                            logger.info(f'KeeperDrive Folders: {result.kd_folders_transferred}')
+                        if result.kd_records_transferred > 0:
+                            logger.info(f'KeeperDrive Records: {result.kd_records_transferred}')
+                        if result.kd_nested_record_owners_transferred > 0:
+                            logger.info(f'KeeperDrive Nested Record Owners: {result.kd_nested_record_owners_transferred}')
+
                         # Show warnings for corrupted items
                         if result.corrupted_records > 0:
                             logger.warning(f'Corrupted records skipped: {result.corrupted_records}')
@@ -434,6 +440,14 @@ class EnterpriseTransferAccountCommand(base.ArgparseCommand):
                             logger.warning(f'Corrupted teams skipped: {result.corrupted_teams}')
                         if result.corrupted_user_folders > 0:
                             logger.warning(f'Corrupted user folders skipped: {result.corrupted_user_folders}')
+                        if result.corrupted_kd_folders > 0:
+                            logger.warning(f'Corrupted KeeperDrive folders skipped: {result.corrupted_kd_folders}')
+                        if result.corrupted_kd_records > 0:
+                            logger.warning(f'Corrupted KeeperDrive records skipped: {result.corrupted_kd_records}')
+                        if result.corrupted_kd_nested_record_owners > 0:
+                            logger.warning(
+                                f'Corrupted KeeperDrive nested record owners skipped: '
+                                f'{result.corrupted_kd_nested_record_owners}')
                     
                 except Exception as e:
                     failed += 1
