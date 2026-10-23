@@ -30,6 +30,7 @@ from .helpers import (
     dedupe_approver_items,
     ensure_can_configure_workflow_settings,
     extract_workflow_param,
+    get_record_key,
     is_workflow_exempt,
     logger,
     post_to_router,
@@ -530,30 +531,39 @@ def _encrypt_denial_reason(
         flow_uid_bytes: bytes,
         reason_bytes: bytes,
         enterprise_data: Optional[enterprise_types.IEnterpriseData] = None):
+    """Encrypt a denial reason with the requested record key.
+
+    Workflow request reasons and tickets are encrypted with the PAM record key.
+    The denial reason must use the same key and AES-v2 format so the requester
+    can decrypt it when the notification is displayed.
+    """
     try:
         response = post_to_router(
             vault, 'get_approval_requests', response_type=workflow_pb2.ApprovalRequests)
         if not response or not response.workflows:
+            logger.debug('No workflow requests available to resolve denial-reason record key')
             return None
-        requester_email = None
+
+        record_uid = None
         for wf in response.workflows:
             if wf.flowUid == flow_uid_bytes:
-                requester_email = wf.user or RecordResolver.resolve_user(vault, wf.userId, enterprise_data)
+                resource = getattr(wf, 'resource', None)
+                if resource and resource.value and resource.type == GraphSync_pb2.RFT_REC:
+                    record_uid = utils.base64_url_encode(resource.value)
                 break
-        if not requester_email or requester_email.startswith('User ID '):
-            logger.debug('Could not resolve requester email for flow UID')
+
+        if not record_uid:
+            logger.debug('Could not resolve PAM record UID for workflow denial reason')
             return None
-        vault.keeper_auth.load_user_public_keys([requester_email])
-        public_keys = vault.keeper_auth.get_user_keys(requester_email)
-        if not public_keys:
-            logger.debug('Public key not available for %s', requester_email)
+
+        record_key = get_record_key(vault, record_uid)
+        if not record_key:
+            logger.debug('Record key not available for workflow denial reason')
             return None
-        if public_keys.ec:
-            return crypto.encrypt_ec(reason_bytes, crypto.load_ec_public_key(public_keys.ec))
-        if public_keys.rsa:
-            return crypto.encrypt_rsa(reason_bytes, crypto.load_rsa_public_key(public_keys.rsa))
+
+        return crypto.encrypt_aes_v2(reason_bytes, record_key)
     except Exception:
-        logger.debug('Failed to encrypt denial reason with requester public key', exc_info=True)
+        logger.debug('Failed to encrypt denial reason with PAM record key', exc_info=True)
     return None
 
 
