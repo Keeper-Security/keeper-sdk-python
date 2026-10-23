@@ -12,7 +12,7 @@ from ..params import KeeperParams
 
 from keepersdk import utils
 from keepersdk.proto import record_pb2
-from keepersdk.vault import trash_management, share_management_utils
+from keepersdk.vault import trash_management, share_management_utils, vault_online
 from keepersdk.vault.trash_management import TrashManagement
 
 
@@ -48,18 +48,21 @@ class TrashListCommand(base.ArgparseCommand):
     @staticmethod
     def add_arguments_to_parser(parser: argparse.ArgumentParser):
         """Add command-specific arguments to the parser."""
+        parser.add_argument('--reload', dest='reload', action='store_true', help='reload Drive (NSF) trash from the server')
         parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', help="verbose output")
         parser.add_argument('pattern', nargs='?', type=str, action='store', help='search pattern')
 
     def execute(self, context: KeeperParams, **kwargs):
         """Execute the trash list command."""
+        reload = kwargs.get('reload', False)
         TrashManagement._ensure_deleted_records_loaded(context.vault)
-        
+
         deleted_records = TrashManagement.get_deleted_records()
         orphaned_records = TrashManagement.get_orphaned_records()
         shared_folders = TrashManagement.get_shared_folders()
-        
-        if self._is_trash_empty(deleted_records, orphaned_records, shared_folders):
+        nsf_records = TrashManagement.get_nsf_trashcan_records(context.vault, reload)
+        nsf_folders = TrashManagement.nsf_trashcan_folder_cache
+        if self._is_trash_empty(deleted_records, orphaned_records, shared_folders, nsf_records, nsf_folders):
             logger.info('Trash is empty')
             return
 
@@ -71,8 +74,9 @@ class TrashListCommand(base.ArgparseCommand):
         
         headers = ['Folder UID', 'Record UID', 'Name', 'Record Type', 'Deleted At', 'Status']
         record_table = self._build_record_table(deleted_records, orphaned_records, pattern, title_pattern)
+        record_table.extend(self._build_nsf_record_table(context.vault, nsf_records, pattern, title_pattern))
         folder_table = self._build_folder_table(shared_folders, kwargs.get('verbose', False))
-        
+        folder_table.extend(self._build_nsf_folder_table(context.vault, nsf_records, nsf_folders, pattern, title_pattern))
         record_table.sort(key=lambda x: x[2].casefold())
         folder_table.sort(key=lambda x: x[2].casefold())
         all_records = record_table + folder_table
@@ -83,13 +87,17 @@ class TrashListCommand(base.ArgparseCommand):
             filename=kwargs.get('output'), 
             row_number=True
         )
-    
-    def _is_trash_empty(self, deleted_records: Dict, orphaned_records: Dict, shared_folders: Dict) -> bool:
-        """Check if trash is empty."""
-        return (len(deleted_records) == 0 and 
-                len(orphaned_records) == 0 and 
-                len(shared_folders) == 0)
-    
+
+    def _is_trash_empty(
+            self, deleted_records: Dict, orphaned_records: Dict, shared_folders: Dict,
+            nsf_records: Dict, nsf_folders: Dict) -> bool:
+        """Check if all supported trash sources are empty."""
+        return (len(deleted_records) == 0 and
+                len(orphaned_records) == 0 and
+                len(shared_folders) == 0 and
+                len(nsf_records) == 0 and
+                len(nsf_folders) == 0)
+
     def _normalize_search_pattern(self, pattern: Optional[str]) -> Optional[str]:
         """Normalize search pattern (convert '*' to None)."""
         if pattern == '*':
@@ -141,6 +149,7 @@ class TrashListCommand(base.ArgparseCommand):
             
         if title_pattern:
             record_data_json = record.get('data_unencrypted')
+
             try:
                 record_data = json.loads(record_data_json)
                 record_title = record_data.get('title', '')
@@ -171,9 +180,64 @@ class TrashListCommand(base.ArgparseCommand):
         else:
             status = 'Record'
             date_deleted = self._get_deleted_date(record)
-        
+
         return ['', record_uid, record_title, record_type, date_deleted, status]
-    
+
+    def _build_nsf_record_table(
+            self, vault: vault_online.VaultOnline, nsf_records: Dict, pattern: Optional[str],
+            title_pattern: Optional[re.Pattern]) -> List[List]:
+        """Build trash rows for deleted NSF records."""
+        if not nsf_records:
+            return []
+        details_by_uid = TrashManagement.get_nsf_trashcan_record_details(vault, nsf_records)
+        rows = []
+        for record in nsf_records.values():
+            record_uid = record.get('record_uid', '')
+            detail = details_by_uid.get(record_uid, {})
+            title = detail.get('title', '')
+            record_type = detail.get('type', '')
+            if pattern and pattern != record_uid:
+                if not title_pattern or not title_pattern.match(title):
+                    continue
+            rows.append([
+                record.get('folder_uid') or '',
+                record_uid,
+                title,
+                record_type,
+                self._get_deleted_date(record),
+                'Drive',
+            ])
+        return rows
+
+    def _build_nsf_folder_table(
+            self, vault: vault_online.VaultOnline, nsf_records: Dict, nsf_folders: Dict, pattern: Optional[str],
+            title_pattern: Optional[re.Pattern]) -> List[List]:
+        """Build summary rows for deleted NSF folders."""
+        if not nsf_folders:
+            return []
+        record_counts: Dict[str, int] = {}
+        for record in nsf_records.values():
+            folder_uid = record.get('folder_uid')
+            if folder_uid:
+                record_counts[folder_uid] = record_counts.get(folder_uid, 0) + 1
+        rows = []
+        for folder in nsf_folders.values():
+            folder_uid = folder.get('folder_uid', '')
+            folder_name = TrashManagement.get_nsf_trashcan_folder_name(vault, folder_uid)
+            if pattern and pattern != folder_uid:
+                if not title_pattern or not title_pattern.match(folder_name):
+                    continue
+            count = record_counts.get(folder_uid, 0)
+            rows.append([
+                folder_uid,
+                f'{count} record(s)' if count else None,
+                folder_name,
+                '',
+                self._get_deleted_date(folder),
+                'Drive Folder',
+            ])
+        return rows
+
     def _build_folder_table(self, shared_folders: Dict, verbose: bool) -> List[List]:
         """Build the folder table for shared folders."""
         if not shared_folders:
@@ -311,6 +375,16 @@ class TrashGetCommand(base.ArgparseCommand):
         
         if len(record_uid) == 0 or len(record_uid) > STRING_LENGTH_LIMIT:
             logger.info('Invalid record UID length')
+            return
+        nsf_records = TrashManagement.get_nsf_trashcan_records(context.vault)
+        if record_uid in nsf_records:
+            detail = TrashManagement.get_nsf_trashcan_record_details(
+                context.vault, {record_uid: nsf_records[record_uid]})[record_uid]
+            if not detail.get('title'):
+                logger.info('Cannot retrieve NSF record %s', record_uid)
+                return
+            logger.info('{0:>21s}: {1}'.format('Title', detail.get('title', '')))
+            logger.info('{0:>21s}: {1}'.format('Type', detail.get('type', '')))
             return
 
         try:
@@ -459,6 +533,8 @@ class TrashRestoreCommand(base.ArgparseCommand):
         """Add command-specific arguments to the parser."""
         parser.add_argument('-f', '--force', dest='force', action='store_true',
                                   help='do not prompt for confirmation')
+        parser.add_argument('-t', '--folder', dest='folder', action='store', default=None,
+                                  help='restore into this NSF folder (UID or folder name)')
         parser.add_argument('records', nargs='+', type=str, action='store',
                                   help='Record UID or search pattern')
     
@@ -468,10 +544,27 @@ class TrashRestoreCommand(base.ArgparseCommand):
         if not records:
             logger.info('records parameter is empty.')
             return
-        
+        target_folder_name = kwargs.get('folder')
+        target_folder_uid = None
+        if target_folder_name:
+            try:
+                target_folder_uid = trash_management.resolve_nsf_trash_target_folder(context.vault, target_folder_name)
+            except ValueError as e:
+                raise base.CommandError(str(e)) from e
+            if not target_folder_uid:
+                raise base.CommandError(f'No such NSF folder: {target_folder_name}')
         confirm_callback = self._create_confirm_callback(kwargs.get('force', False))
-        trash_management.restore_trash_records(context.vault, records, confirm_callback)
-    
+        try:
+            trash_management.restore_trash_records(
+                context.vault,
+                records,
+                confirm_callback,
+                target_folder_uid=target_folder_uid,
+                target_folder_name=target_folder_name,
+            )
+        except ValueError as e:
+            raise base.CommandError(str(e)) from e
+
     def _validate_records_parameter(self, records: Any) -> Optional[List[str]]:
         """Validate and normalize records parameter with security checks."""
         if not isinstance(records, (tuple, list)):
