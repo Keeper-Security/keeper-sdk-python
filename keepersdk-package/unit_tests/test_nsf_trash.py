@@ -106,11 +106,12 @@ class TestNsfTrashManagement(unittest.TestCase):
         vault.keeper_auth.execute_auth_rest.return_value = response
 
         with patch.object(trash_management.nsf_management, '_get_folder_key', return_value=target_key):
-            restored = trash_management._execute_nsf_restoration(
+            restored, failures = trash_management._execute_nsf_restoration(
                 vault, {record_uid}, set(), nsf_records, nsf_folders,
                 target_folder_uid=target_folder_uid)
 
         self.assertEqual(restored, {record_uid})
+        self.assertEqual(failures, {})
         request = vault.keeper_auth.execute_auth_rest.call_args.args[1]
         self.assertEqual(request.target_folder_uid, utils.base64_url_decode(target_folder_uid))
         self.assertEqual(len(request.records), 1)
@@ -136,23 +137,24 @@ class TestNsfTrashManagement(unittest.TestCase):
         }
         vault = self._vault(data_key)
 
-        responses = []
-        for uid in (record_uid_1, record_uid_2):
+        def restore_all(_endpoint, request, **_kwargs):
             response = remove_pb2.TrashcanRestoreResponse()
-            result = response.results.add()
-            result.item_uid = utils.base64_url_decode(uid)
-            result.item_type = remove_pb2.RESTORE_ITEM_RECORD
-            result.status = remove_pb2.RS_SUCCESS
-            responses.append(response)
-        vault.keeper_auth.execute_auth_rest.side_effect = responses
+            for record in request.records:
+                result = response.results.add()
+                result.item_uid = record.record_uid
+                result.item_type = remove_pb2.RESTORE_ITEM_RECORD
+                result.status = remove_pb2.RS_SUCCESS
+            return response
+        vault.keeper_auth.execute_auth_rest.side_effect = restore_all
         vault.nsf_data = Mock()
 
         with patch.object(trash_management.nsf_management, '_get_folder_key',
                           return_value=utils.generate_aes_key()):
-            restored = trash_management._execute_nsf_restoration(
+            restored, failures = trash_management._execute_nsf_restoration(
                 vault, {record_uid_1, record_uid_2}, set(), nsf_records, {})
 
         self.assertEqual(restored, {record_uid_1, record_uid_2})
+        self.assertEqual(failures, {})
         self.assertEqual(vault.keeper_auth.execute_auth_rest.call_count, 2)
         destinations = {
             call.args[1].target_folder_uid
@@ -315,7 +317,7 @@ class TestNsfTrashManagement(unittest.TestCase):
         self.assertFalse(trash_management.TrashManagement.load_nsf_trashcan(vault))
         vault.keeper_auth.execute_auth_rest.assert_not_called()
 
-    def test_restore_nsf_skips_items_when_target_key_unavailable(self):
+    def test_restore_nsf_reports_items_when_target_key_unavailable(self):
         record_uid = utils.generate_uid()
         folder_uid = utils.generate_uid()
         nsf_records = {record_uid: {
@@ -325,11 +327,11 @@ class TestNsfTrashManagement(unittest.TestCase):
         vault.nsf_data = Mock()
         with patch.object(trash_management.nsf_management, '_get_folder_key',
                           side_effect=trash_management.nsf_management.NsfError('no key')):
-            with self.assertLogs(trash_management.logger, level='WARNING'):
-                restored = trash_management._execute_nsf_restoration(
-                    vault, {record_uid}, set(), nsf_records, {})
+            restored, failures = trash_management._execute_nsf_restoration(
+                vault, {record_uid}, set(), nsf_records, {})
 
         self.assertEqual(restored, set())
+        self.assertIn('unavailable', failures[record_uid])
         vault.keeper_auth.execute_auth_rest.assert_not_called()
 
     def test_restore_nsf_restores_parent_folders_before_children_and_records(self):
@@ -354,9 +356,10 @@ class TestNsfTrashManagement(unittest.TestCase):
             self._restore_response((child_uid, remove_pb2.RESTORE_ITEM_FOLDER, remove_pb2.RS_SUCCESS)),
             self._restore_response((record_uid, remove_pb2.RESTORE_ITEM_RECORD, remove_pb2.RS_NOT_IN_TRASHCAN)),
         ]
-        with self.assertNoLogs(trash_management.logger, level='WARNING'):
-            trash_management._execute_nsf_restoration(
-                vault, {record_uid}, {parent_uid, child_uid}, nsf_records, nsf_folders)
+        _, failures = trash_management._execute_nsf_restoration(
+            vault, {record_uid}, {parent_uid, child_uid}, nsf_records, nsf_folders)
+
+        self.assertEqual(failures, {})
 
         requests = [c.args[1] for c in vault.keeper_auth.execute_auth_rest.call_args_list]
         self.assertEqual([r.folders[0].folder_uid for r in requests[:2]],
@@ -383,6 +386,83 @@ class TestNsfTrashManagement(unittest.TestCase):
         self.assertEqual(first[record_uid]['title'], 'Db')
         details.assert_called_once()
         self.assertEqual(details.call_args.kwargs['record_keys'], {record_uid: record_key})
+
+
+    def _single_record(self):
+        record_uid = utils.generate_uid()
+        nsf_records = {record_uid: {
+            'record_uid': record_uid, 'folder_uid': None, 'trashcan_uid': utils.generate_uid(),
+            'record_key_unencrypted': utils.generate_aes_key()}}
+        return record_uid, nsf_records
+
+    def test_restore_nsf_reports_request_level_errors(self):
+        record_uid, nsf_records = self._single_record()
+        for response in (None, remove_pb2.TrashcanRestoreResponse(error_message='server busy')):
+            vault = self._vault()
+            vault.keeper_auth.execute_auth_rest.return_value = response
+            restored, failures = trash_management._execute_nsf_restoration(
+                vault, {record_uid}, set(), nsf_records, {})
+            self.assertEqual(restored, set())
+            self.assertIn(record_uid, failures)
+
+    def test_restore_nsf_reports_items_without_result(self):
+        record_uid, nsf_records = self._single_record()
+        vault = self._vault()
+        vault.keeper_auth.execute_auth_rest.return_value = remove_pb2.TrashcanRestoreResponse()
+        restored, failures = trash_management._execute_nsf_restoration(
+            vault, {record_uid}, set(), nsf_records, {})
+        self.assertEqual(restored, set())
+        self.assertEqual(failures, {record_uid: 'no result returned by server'})
+
+    def test_restore_nsf_reports_failed_status(self):
+        record_uid, nsf_records = self._single_record()
+        vault = self._vault()
+        vault.keeper_auth.execute_auth_rest.return_value = self._restore_response(
+            (record_uid, remove_pb2.RESTORE_ITEM_RECORD, remove_pb2.RS_ACCESS_DENIED))
+        _, failures = trash_management._execute_nsf_restoration(vault, {record_uid}, set(), nsf_records, {})
+        self.assertEqual(failures, {record_uid: 'access denied'})
+
+    def test_restore_nsf_clears_cache_when_request_raises(self):
+        record_uid, nsf_records = self._single_record()
+        trash_management.TrashManagement.nsf_trashcan_record_cache.update(nsf_records)
+        vault = self._vault()
+        vault.keeper_auth.execute_auth_rest.side_effect = ConnectionError('network down')
+        with self.assertRaises(ConnectionError):
+            trash_management._execute_nsf_restoration(vault, {record_uid}, set(), nsf_records, {})
+        self.assertEqual(trash_management.TrashManagement.nsf_trashcan_record_cache, {})
+
+    def test_restore_trash_records_raises_after_processing_successes(self):
+        ok_uid, nsf_records = self._single_record()
+        failed_uid, failed_records = self._single_record()
+        nsf_records.update(failed_records)
+        trash_data = {
+            'deleted_records': {}, 'orphaned_records': {}, 'deleted_shared_records': {},
+            'deleted_shared_folders': {}, 'nsf_records': nsf_records, 'nsf_folders': {},
+        }
+        vault = self._vault()
+        vault.keeper_auth.execute_auth_rest.return_value = self._restore_response(
+            (ok_uid, remove_pb2.RESTORE_ITEM_RECORD, remove_pb2.RS_SUCCESS),
+            (failed_uid, remove_pb2.RESTORE_ITEM_RECORD, remove_pb2.RS_FAIL))
+        with patch.object(trash_management, '_load_trash_data', return_value=trash_data), \
+                patch.object(trash_management, '_post_restore_processing') as post:
+            with self.assertRaises(trash_management.TrashRestoreError) as ctx:
+                trash_management.restore_trash_records(vault, [ok_uid, failed_uid])
+
+        self.assertEqual(ctx.exception.failures, {failed_uid: 'failed'})
+        self.assertIsInstance(ctx.exception, ValueError)
+        self.assertEqual(post.call_args.args[3], {ok_uid})
+
+    def test_get_nsf_record_details_without_record_keys(self):
+        record_uid = utils.generate_uid()
+        entry = Mock(record_uid=record_uid, record_key=utils.generate_aes_key())
+        vault = self._vault()
+        vault.nsf_data = Mock()
+        vault.nsf_data.records.return_value = [entry]
+        vault.nsf_data.get_record.return_value = entry
+        vault.keeper_auth.execute_auth_rest.return_value = None
+        result = trash_management.nsf_management.get_nsf_record_details(vault, [record_uid])
+        self.assertEqual(result, {'data': [], 'forbidden_records': []})
+        vault.keeper_auth.execute_auth_rest.assert_called_once()
 
 
 if __name__ == '__main__':

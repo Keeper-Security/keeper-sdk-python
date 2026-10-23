@@ -674,6 +674,24 @@ def get_trash_record(vault: vault_online.VaultOnline, record_uid: str) -> Tuple[
     return record, is_shared
 
 
+class TrashRestoreError(ValueError):
+    """Raised after a restore when some items could not be restored.
+
+    Items that were restored stay restored; ``failures`` maps each item UID
+    that was not restored to the reason.
+    """
+    _MAX_LISTED = 10
+
+    def __init__(self, failures: Dict[str, str]) -> None:
+        self.failures = dict(failures)
+        listed = [f'{uid} ({reason})' for uid, reason in list(self.failures.items())[:self._MAX_LISTED]]
+        more = len(self.failures) - len(listed)
+        message = f'Failed to restore {len(self.failures)} item(s): ' + ', '.join(listed)
+        if more > 0:
+            message += f', and {more} more'
+        super().__init__(message)
+
+
 def restore_trash_records(
         vault: vault_online.VaultOnline,
         records: List[str],
@@ -685,6 +703,8 @@ def restore_trash_records(
     ``target_folder_uid`` is supported only for NSF trash items. When omitted,
     NSF records return to their original folder and NSF folders return to their
     original parent.
+
+    Raises ``TrashRestoreError`` after processing if any NSF item was not restored.
     """
     trash_data = _load_trash_data(vault)
     if _is_trash_empty(trash_data):
@@ -715,8 +735,9 @@ def restore_trash_records(
         _execute_record_restoration(vault, restore_plan, trash_data)
         _execute_shared_folder_restoration(vault, restore_plan)
     restored_nsf_records: Set[str] = set()
+    nsf_failures: Dict[str, str] = {}
     if has_nsf:
-        restored_nsf_records = _execute_nsf_restoration(
+        restored_nsf_records, nsf_failures = _execute_nsf_restoration(
             vault,
             restore_plan.get('nsf_records_to_restore', set()),
             restore_plan.get('nsf_folders_to_restore', set()),
@@ -725,6 +746,8 @@ def restore_trash_records(
             target_folder_uid=target_folder_uid,
         )
     _post_restore_processing(vault, restore_plan, trash_data, restored_nsf_records)
+    if nsf_failures:
+        raise TrashRestoreError(nsf_failures)
 
 
 def _build_restore_confirmation(
@@ -806,8 +829,12 @@ def _send_nsf_restore_requests(
         vault: vault_online.VaultOnline,
         destination_uid: Optional[str],
         restore_records: List[remove_pb2.RestoreRecord],
-        restore_folders: List[remove_pb2.RestoreFolder]) -> List[remove_pb2.RestoreResult]:
-    """Send restore requests for one destination folder in chunks."""
+        restore_folders: List[remove_pb2.RestoreFolder],
+        failures: Dict[str, str]) -> List[remove_pb2.RestoreResult]:
+    """Send restore requests for one destination folder in chunks.
+
+    Items of a chunk the server rejected, or returned no result for, are added to ``failures``.
+    """
     target_folder_uid_bytes = utils.base64_url_decode(destination_uid) if destination_uid else b''
     results: List[remove_pb2.RestoreResult] = []
     while restore_records or restore_folders:
@@ -823,18 +850,23 @@ def _send_nsf_restore_requests(
             chunk = restore_folders[:left]
             del restore_folders[:len(chunk)]
             request.folders.extend(chunk)
+        sent_uids = [utils.base64_url_encode(x.record_uid) for x in request.records]
+        sent_uids.extend(utils.base64_url_encode(x.folder_uid) for x in request.folders)
         response = vault.keeper_auth.execute_auth_rest(
             'vault/folders/v3/trashcan/restore',
             request,
             response_type=remove_pb2.TrashcanRestoreResponse,
         )
-        if response is None:
-            logger.warning('NSF trash restore returned no response')
-            continue
-        if response.error_message:
-            logger.warning('NSF trash restore failed: %s', response.error_message)
+        if response is None or response.error_message:
+            reason = response.error_message if response is not None else 'no response from server'
+            for uid in sent_uids:
+                failures[uid] = reason
             continue
         results.extend(response.results)
+        answered = {utils.base64_url_encode(x.item_uid) for x in response.results}
+        for uid in sent_uids:
+            if uid not in answered:
+                failures[uid] = 'no result returned by server'
     return results
 
 
@@ -844,15 +876,19 @@ def _execute_nsf_restoration(
         folder_uids: Set[str],
         nsf_records: Dict[str, Any],
         nsf_folders: Dict[str, Any],
-        target_folder_uid: Optional[str] = None) -> Set[str]:
+        target_folder_uid: Optional[str] = None) -> Tuple[Set[str], Dict[str, str]]:
     """Restore NSF records/folders through ``vault/folders/v3/trashcan/restore``.
 
     Folders are restored first, parents before children, so that items restored
     to their original location find their parent folder back in place.
+
+    Returns the restored record UIDs and ``{item_uid: reason}`` for every item
+    that was not restored.
     """
-    if not record_uids and not folder_uids:
-        return set()
     restored_record_uids: Set[str] = set()
+    failures: Dict[str, str] = {}
+    if not record_uids and not folder_uids:
+        return restored_record_uids, failures
     restored_folder_uids: Set[str] = set()
 
     def handle_results(results: List[remove_pb2.RestoreResult]) -> None:
@@ -871,87 +907,86 @@ def _execute_nsf_restoration(
             reason = _NSF_RESTORE_STATUS_NAMES.get(result.status, 'unknown error')
             if result.error_message:
                 reason = f'{reason}: {result.error_message}'
-            logger.warning('Failed to restore NSF item "%s": %s', item_uid, reason)
+            failures[item_uid] = reason
 
-    def target_key_for(destination_uid: Optional[str], item_count: int) -> Optional[bytes]:
-        target_key = _get_nsf_target_key(vault, destination_uid)
-        if not target_key:
-            logger.warning('Cannot restore %d NSF item(s) into folder "%s": folder key is unavailable',
-                           item_count, destination_uid)
-        return target_key
-
-    # Folders, one depth level at a time.
-    folders = []
-    for folder_uid in folder_uids:
-        if folder_uid not in nsf_folders:
-            logger.warning('NSF trash folder "%s" is no longer available', folder_uid)
-            continue
-        folders.append(folder_uid)
-    depths = {uid: _nsf_folder_depth(uid, nsf_folders) for uid in folders}
-    for depth in sorted(set(depths.values())):
-        folder_groups: Dict[Optional[str], List[str]] = {}
-        for folder_uid in folders:
-            if depths[folder_uid] != depth:
+    try:
+        # Folders, one depth level at a time.
+        folders = []
+        for folder_uid in folder_uids:
+            if folder_uid not in nsf_folders:
+                failures[folder_uid] = 'no longer in trash'
                 continue
-            folder = nsf_folders[folder_uid]
-            destination_uid = target_folder_uid if target_folder_uid is not None else folder.get('parent_uid')
-            folder_groups.setdefault(destination_uid, []).append(folder_uid)
-        for destination_uid, group in folder_groups.items():
-            target_key = target_key_for(destination_uid, len(group))
-            if not target_key:
-                continue
-            restore_folders: List[remove_pb2.RestoreFolder] = []
-            for folder_uid in group:
-                folder_key = nsf_folders[folder_uid].get('folder_key_unencrypted')
-                if not folder_key:
-                    logger.warning('Cannot restore NSF folder "%s": folder key is unavailable', folder_uid)
+            folders.append(folder_uid)
+        depths = {uid: _nsf_folder_depth(uid, nsf_folders) for uid in folders}
+        for depth in sorted(set(depths.values())):
+            folder_groups: Dict[Optional[str], List[str]] = {}
+            for folder_uid in folders:
+                if depths[folder_uid] != depth:
                     continue
-                request_folder = remove_pb2.RestoreFolder()
-                request_folder.folder_uid = utils.base64_url_decode(folder_uid)
-                request_folder.encrypted_folder_key = crypto.encrypt_aes_v2(folder_key, target_key)
-                restore_folders.append(request_folder)
-            handle_results(_send_nsf_restore_requests(vault, destination_uid, [], restore_folders))
+                folder = nsf_folders[folder_uid]
+                destination_uid = target_folder_uid if target_folder_uid is not None else folder.get('parent_uid')
+                folder_groups.setdefault(destination_uid, []).append(folder_uid)
+            for destination_uid, group in folder_groups.items():
+                target_key = _get_nsf_target_key(vault, destination_uid)
+                if not target_key:
+                    for folder_uid in group:
+                        failures[folder_uid] = f'key of destination folder "{destination_uid}" is unavailable'
+                    continue
+                restore_folders: List[remove_pb2.RestoreFolder] = []
+                for folder_uid in group:
+                    folder_key = nsf_folders[folder_uid].get('folder_key_unencrypted')
+                    if not folder_key:
+                        failures[folder_uid] = 'folder key is unavailable'
+                        continue
+                    request_folder = remove_pb2.RestoreFolder()
+                    request_folder.folder_uid = utils.base64_url_decode(folder_uid)
+                    request_folder.encrypted_folder_key = crypto.encrypt_aes_v2(folder_key, target_key)
+                    restore_folders.append(request_folder)
+                handle_results(_send_nsf_restore_requests(vault, destination_uid, [], restore_folders, failures))
 
-    # Records.
-    record_groups: Dict[Optional[str], List[str]] = {}
-    for record_uid in record_uids:
-        record = nsf_records.get(record_uid)
-        if not record:
-            logger.warning('NSF trash record "%s" is no longer available', record_uid)
-            continue
-        destination_uid = target_folder_uid if target_folder_uid is not None else record.get('folder_uid')
-        record_groups.setdefault(destination_uid, []).append(record_uid)
-    for destination_uid, group in record_groups.items():
-        target_key = target_key_for(destination_uid, len(group))
-        if not target_key:
-            continue
-        restore_records: List[remove_pb2.RestoreRecord] = []
-        for record_uid in group:
-            record = nsf_records[record_uid]
-            record_key = record.get('record_key_unencrypted')
-            if not record_key:
-                logger.warning('Cannot restore NSF record "%s": record key is unavailable', record_uid)
+        # Records.
+        record_groups: Dict[Optional[str], List[str]] = {}
+        for record_uid in record_uids:
+            record = nsf_records.get(record_uid)
+            if not record:
+                failures[record_uid] = 'no longer in trash'
                 continue
-            # source_folder_uid must identify the actual source container in the
-            # trash hierarchy. For root-level records, folder_record_key.folder_uid
-            # can be empty; in that case use the trashcan container supplied by
-            # the sync response. The NSF root UID is not a valid substitute here.
-            source_folder_uid = record.get('folder_uid') or record.get('trashcan_uid')
-            if not source_folder_uid:
-                logger.warning(
-                    'Cannot restore NSF record "%s": source folder and trashcan UID are unavailable',
-                    record_uid,
-                )
+            destination_uid = target_folder_uid if target_folder_uid is not None else record.get('folder_uid')
+            record_groups.setdefault(destination_uid, []).append(record_uid)
+        for destination_uid, group in record_groups.items():
+            target_key = _get_nsf_target_key(vault, destination_uid)
+            if not target_key:
+                for record_uid in group:
+                    failures[record_uid] = f'key of destination folder "{destination_uid}" is unavailable'
                 continue
-            request_record = remove_pb2.RestoreRecord()
-            request_record.record_uid = utils.base64_url_decode(record_uid)
-            request_record.encrypted_record_key = crypto.encrypt_aes_v2(record_key, target_key)
-            request_record.source_folder_uid = utils.base64_url_decode(source_folder_uid)
-            restore_records.append(request_record)
-        handle_results(_send_nsf_restore_requests(vault, destination_uid, restore_records, []))
+            restore_records: List[remove_pb2.RestoreRecord] = []
+            for record_uid in group:
+                record = nsf_records[record_uid]
+                record_key = record.get('record_key_unencrypted')
+                if not record_key:
+                    failures[record_uid] = 'record key is unavailable'
+                    continue
+                # source_folder_uid must identify the actual source container in the
+                # trash hierarchy. For root-level records, folder_record_key.folder_uid
+                # can be empty; in that case use the trashcan container supplied by
+                # the sync response. The NSF root UID is not a valid substitute here.
+                source_folder_uid = record.get('folder_uid') or record.get('trashcan_uid')
+                if not source_folder_uid:
+                    failures[record_uid] = 'source folder and trashcan UID are unavailable'
+                    continue
+                request_record = remove_pb2.RestoreRecord()
+                request_record.record_uid = utils.base64_url_decode(record_uid)
+                request_record.encrypted_record_key = crypto.encrypt_aes_v2(record_key, target_key)
+                request_record.source_folder_uid = utils.base64_url_decode(source_folder_uid)
+                restore_records.append(request_record)
+            handle_results(_send_nsf_restore_requests(vault, destination_uid, restore_records, [], failures))
+    finally:
+        # Trash contents changed (or may have); force a full resync on next load.
+        TrashManagement.clear_nsf_trashcan_cache()
 
-    TrashManagement.clear_nsf_trashcan_cache()
-    return restored_record_uids
+    for item_uid, reason in failures.items():
+        logger.debug('NSF trash item "%s" was not restored: %s', item_uid, reason)
+    return restored_record_uids, failures
 
 
 def _load_trash_data(vault: vault_online.VaultOnline) -> Dict[str, Any]:

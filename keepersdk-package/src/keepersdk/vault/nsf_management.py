@@ -1019,13 +1019,13 @@ def get_nsf_record_details(
         raise NsfError('At least one record UID is required')
 
     view = _nsf_view(vault)
-    record_keys = {
+    keys_by_uid: Dict[str, bytes] = {
         entry.record_uid: entry.record_key
         for entry in view.records()
         if entry.record_key
     }
     for uid, key in known_keys.items():
-        record_keys.setdefault(uid, key)
+        keys_by_uid.setdefault(uid, key)
 
     out_data: List[Dict[str, Any]] = []
     forbidden: List[str] = []
@@ -1055,7 +1055,7 @@ def get_nsf_record_details(
             if not record_uid or record_data is None:
                 continue
             record_key = _resolve_record_key_for_details(
-                vault, record_data, record_uid, record_keys)
+                vault, record_data, record_uid, keys_by_uid)
             if not record_key:
                 continue
             plain = _decrypt_record_details_payload(record_data, record_key)
