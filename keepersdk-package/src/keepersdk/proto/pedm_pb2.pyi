@@ -1,5 +1,4 @@
 import folder_pb2 as _folder_pb2
-import NotificationCenter_pb2 as _NotificationCenter_pb2
 from google.protobuf.internal import containers as _containers
 from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
@@ -15,11 +14,24 @@ class CollectionLinkType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     CLT_POLICY: _ClassVar[CollectionLinkType]
     CLT_COLLECTION: _ClassVar[CollectionLinkType]
     CLT_DEPLOYMENT: _ClassVar[CollectionLinkType]
+
+class ApprovalStatusType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    AST_UNSPECIFIED: _ClassVar[ApprovalStatusType]
+    AST_APPROVED: _ClassVar[ApprovalStatusType]
+    AST_DENIED: _ClassVar[ApprovalStatusType]
+    AST_EXPIRED: _ClassVar[ApprovalStatusType]
+    AST_ESCALATED: _ClassVar[ApprovalStatusType]
 CLT_OTHER: CollectionLinkType
 CLT_AGENT: CollectionLinkType
 CLT_POLICY: CollectionLinkType
 CLT_COLLECTION: CollectionLinkType
 CLT_DEPLOYMENT: CollectionLinkType
+AST_UNSPECIFIED: ApprovalStatusType
+AST_APPROVED: ApprovalStatusType
+AST_DENIED: ApprovalStatusType
+AST_EXPIRED: ApprovalStatusType
+AST_ESCALATED: ApprovalStatusType
 
 class PEDMTOTPValidateRequest(_message.Message):
     __slots__ = ("username", "enterpriseId", "code")
@@ -310,16 +322,18 @@ class CollectionLink(_message.Message):
     def __init__(self, collectionUid: _Optional[bytes] = ..., linkUid: _Optional[bytes] = ..., linkType: _Optional[_Union[CollectionLinkType, str]] = ...) -> None: ...
 
 class ApprovalStatusNode(_message.Message):
-    __slots__ = ("approvalUid", "approvalStatus", "enterpriseUserId", "modified")
+    __slots__ = ("approvalUid", "approvalStatus", "enterpriseUserId", "expireIn", "modified")
     APPROVALUID_FIELD_NUMBER: _ClassVar[int]
     APPROVALSTATUS_FIELD_NUMBER: _ClassVar[int]
     ENTERPRISEUSERID_FIELD_NUMBER: _ClassVar[int]
+    EXPIREIN_FIELD_NUMBER: _ClassVar[int]
     MODIFIED_FIELD_NUMBER: _ClassVar[int]
     approvalUid: bytes
-    approvalStatus: _NotificationCenter_pb2.NotificationApprovalStatus
+    approvalStatus: ApprovalStatusType
     enterpriseUserId: int
+    expireIn: int
     modified: int
-    def __init__(self, approvalUid: _Optional[bytes] = ..., approvalStatus: _Optional[_Union[_NotificationCenter_pb2.NotificationApprovalStatus, str]] = ..., enterpriseUserId: _Optional[int] = ..., modified: _Optional[int] = ...) -> None: ...
+    def __init__(self, approvalUid: _Optional[bytes] = ..., approvalStatus: _Optional[_Union[ApprovalStatusType, str]] = ..., enterpriseUserId: _Optional[int] = ..., expireIn: _Optional[int] = ..., modified: _Optional[int] = ...) -> None: ...
 
 class ApprovalNode(_message.Message):
     __slots__ = ("approvalUid", "approvalType", "agentUid", "accountInfo", "applicationInfo", "justification", "expireIn", "created")
@@ -467,6 +481,40 @@ class GetCollectionLinkResponse(_message.Message):
     collectionLinkData: _containers.RepeatedCompositeFieldContainer[CollectionLinkData]
     def __init__(self, collectionLinkData: _Optional[_Iterable[_Union[CollectionLinkData, _Mapping]]] = ...) -> None: ...
 
+class OfflineAgentRegisterRequest(_message.Message):
+    __slots__ = ("agentUid", "deploymentUid", "publicKey", "machineId", "collection", "agentData")
+    AGENTUID_FIELD_NUMBER: _ClassVar[int]
+    DEPLOYMENTUID_FIELD_NUMBER: _ClassVar[int]
+    PUBLICKEY_FIELD_NUMBER: _ClassVar[int]
+    MACHINEID_FIELD_NUMBER: _ClassVar[int]
+    COLLECTION_FIELD_NUMBER: _ClassVar[int]
+    AGENTDATA_FIELD_NUMBER: _ClassVar[int]
+    agentUid: bytes
+    deploymentUid: bytes
+    publicKey: bytes
+    machineId: str
+    collection: _containers.RepeatedCompositeFieldContainer[CollectionValue]
+    agentData: bytes
+    def __init__(self, agentUid: _Optional[bytes] = ..., deploymentUid: _Optional[bytes] = ..., publicKey: _Optional[bytes] = ..., machineId: _Optional[str] = ..., collection: _Optional[_Iterable[_Union[CollectionValue, _Mapping]]] = ..., agentData: _Optional[bytes] = ...) -> None: ...
+
+class OfflineAgentRegisterResponse(_message.Message):
+    __slots__ = ("agentUid",)
+    AGENTUID_FIELD_NUMBER: _ClassVar[int]
+    agentUid: bytes
+    def __init__(self, agentUid: _Optional[bytes] = ...) -> None: ...
+
+class OfflineAgentSyncDownRequest(_message.Message):
+    __slots__ = ("agentUid",)
+    AGENTUID_FIELD_NUMBER: _ClassVar[int]
+    agentUid: bytes
+    def __init__(self, agentUid: _Optional[bytes] = ...) -> None: ...
+
+class OfflineAgentSyncDownResponse(_message.Message):
+    __slots__ = ("encryptedSyncData",)
+    ENCRYPTEDSYNCDATA_FIELD_NUMBER: _ClassVar[int]
+    encryptedSyncData: bytes
+    def __init__(self, encryptedSyncData: _Optional[bytes] = ...) -> None: ...
+
 class GetAgentLastSeenRequest(_message.Message):
     __slots__ = ("activeOnly", "agentUid")
     ACTIVEONLY_FIELD_NUMBER: _ClassVar[int]
@@ -566,3 +614,27 @@ class GetAgentDailyCountResponse(_message.Message):
     ENTERPRISECOUNTS_FIELD_NUMBER: _ClassVar[int]
     enterpriseCounts: _containers.RepeatedCompositeFieldContainer[AgentCountForEnterprise]
     def __init__(self, enterpriseCounts: _Optional[_Iterable[_Union[AgentCountForEnterprise, _Mapping]]] = ...) -> None: ...
+
+class GetAgenticWorkloadCountRequest(_message.Message):
+    __slots__ = ("enterpriseId", "preset", "range")
+    ENTERPRISEID_FIELD_NUMBER: _ClassVar[int]
+    PRESET_FIELD_NUMBER: _ClassVar[int]
+    RANGE_FIELD_NUMBER: _ClassVar[int]
+    enterpriseId: _containers.RepeatedScalarFieldContainer[int]
+    preset: str
+    range: DateRange
+    def __init__(self, enterpriseId: _Optional[_Iterable[int]] = ..., preset: _Optional[str] = ..., range: _Optional[_Union[DateRange, _Mapping]] = ...) -> None: ...
+
+class EnterpriseWorkloadCount(_message.Message):
+    __slots__ = ("enterpriseId", "workloadCount")
+    ENTERPRISEID_FIELD_NUMBER: _ClassVar[int]
+    WORKLOADCOUNT_FIELD_NUMBER: _ClassVar[int]
+    enterpriseId: int
+    workloadCount: int
+    def __init__(self, enterpriseId: _Optional[int] = ..., workloadCount: _Optional[int] = ...) -> None: ...
+
+class GetAgenticWorkloadCountResponse(_message.Message):
+    __slots__ = ("counts",)
+    COUNTS_FIELD_NUMBER: _ClassVar[int]
+    counts: _containers.RepeatedCompositeFieldContainer[EnterpriseWorkloadCount]
+    def __init__(self, counts: _Optional[_Iterable[_Union[EnterpriseWorkloadCount, _Mapping]]] = ...) -> None: ...

@@ -490,9 +490,10 @@ class PedmAgentApprovalCreateCommand(base.ArgparseCommand):
             justification = None
         expire_in = kwargs.get('expire_in')
 
+        approval_uid = utils.generate_uid()
         approval_rq = {
             'add_approvals': [{
-                'approval_uid': utils.generate_uid(),
+                'approval_uid': approval_uid,
                 'approval_type': approval_type,
                 'application_info': utils.base64_url_encode(application_info),
                 'account_info': utils.base64_url_encode(account_info),
@@ -507,6 +508,63 @@ class PedmAgentApprovalCreateCommand(base.ArgparseCommand):
             logger = api.get_logger()
             for fa in failed_approvals:
                 logger.warning(fa.get('message'))
+        if isinstance(failed_approvals, list) and len(failed_approvals) > 0:
+            return
+
+        self.add_approval_audience(agent, approval_uid, approval_type, account_dict, application_dict, kwargs.get('justification'))
+
+    def add_approval_audience(self, agent: agent_plugin.PedmAgentPlugin, approval_uid: str, approval_type: int,
+                              account_dict: Dict[str, Any], application_dict: Dict[str, Any], justification: Optional[str]) -> None:
+        """Encrypts the approval for its approver teams and posts it with add_approval_audience."""
+        logger = api.get_logger()
+        audience = agent.get_approval_audience(approval_type)
+        if not audience:
+            logger.info('No approval audience is configured for this approval type; approvers are not notified')
+            return
+        username = account_dict.get('Username')
+        if not username:
+            raise base.CommandError('User Account information should contain "Username"')
+        encrypted_data, audience_keys = self.encrypt_for_audience(agent, audience, {
+            'version': 1,
+            'account_info': {'Username': username},
+            'application_info': {k: v for k, v in application_dict.items() if k != 'FileHash'},
+            'justification': justification or '',
+            'agent_info': self.get_agent_info(agent),
+        })
+        rq = {'approvals': [{'approval_uid': approval_uid, 'encrypted_data': encrypted_data, 'audience': audience_keys}]}
+        rs = agent.execute_rest('add_approval_audience', rq)
+        failed = rs.get('failed_approvals') if isinstance(rs, dict) else None
+        if isinstance(failed, list) and len(failed) > 0:
+            for fa in failed:
+                logger.warning(fa.get('message'))
+        else:
+            logger.info('Approval request %s is encrypted for %d approver team(s)', approval_uid, len(audience_keys))
+
+    @staticmethod
+    def get_agent_info(agent: agent_plugin.PedmAgentPlugin) -> Dict[str, Any]:
+        inventory = PedmAgentInventoryBasicCommand.get_system_info()
+        return {
+            'AgentUID': agent.agent_uid,
+            'MachineName': inventory.get('MachineName'),
+            'OS': inventory.get('Name'),
+            'OSVersion': inventory.get('Version'),
+        }
+
+    @staticmethod
+    def encrypt_for_audience(agent: agent_plugin.PedmAgentPlugin, audience: List[Dict[str, Any]],
+                             data: Dict[str, Any]) -> Tuple[str, List[Dict[str, Any]]]:
+        """Encrypts the approval data with a new key and wraps that key for every audience public key."""
+        approval_key = utils.generate_aes_key()
+        encrypted_data = utils.base64_url_encode(crypto.encrypt_aes_v2(json.dumps(data).encode('utf-8'), approval_key))
+        audience_keys: List[Dict[str, Any]] = []
+        for a in audience:
+            public_key = crypto.load_ec_public_key(utils.base64_url_decode(a['public_key']))
+            audience_keys.append({
+                'audience_type': a['audience_type'],
+                'audience_uid': a['audience_uid'],
+                'encrypted_key': utils.base64_url_encode(crypto.encrypt_ec(approval_key, public_key)),
+            })
+        return encrypted_data, audience_keys
 
 
 class PedmAgentPolicyCommand(base.GroupCommand):

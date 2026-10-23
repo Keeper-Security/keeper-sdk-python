@@ -1057,9 +1057,25 @@ class PedmPolicyAddCommand(base.ArgparseCommand, PedmPolicyMixin):
 
 
 class PedmPolicyEditCommand(base.ArgparseCommand, PedmPolicyMixin):
+    POLICY_EDIT_OPTIONS = (
+        ('policy_name', '--policy-name'),
+        ('control', '--control'),
+        ('status', '--status'),
+        ('enable', '--enable'),
+        ('user_filter', '--user-filter'),
+        ('machine_filter', '--machine-filter'),
+        ('app_filter', '--app-filter'),
+        ('date_filter', '--date-filter'),
+        ('time_filter', '--time-filter'),
+        ('day_filter', '--day-filter'),
+        ('risk_level', '--risk-level'),
+    )
+
     def __init__(self):
         parser = argparse.ArgumentParser(prog='edit', description='Edit PEDM policy', parents=[PedmPolicyMixin.policy_filter])
         parser.add_argument('policy', help='Policy UID')
+        parser.add_argument('--file', dest='file', action='store',
+                            help='Load policy from JSON file. Mutually exclusive with other policy change options')
         parser.add_argument('--policy-name', dest='policy_name', action='store',
                             help='Policy name')
         parser.add_argument('--control', dest='control', action='append',
@@ -1077,35 +1093,49 @@ class PedmPolicyEditCommand(base.ArgparseCommand, PedmPolicyMixin):
 
         policy = PedmUtils.resolve_single_policy(plugin, kwargs.get('policy'))
 
-        policy_data = copy.deepcopy(policy.data or {})
-        policy_type = policy_data.get('PolicyType') or 'Unknown'
-        controls = PedmPolicyMixin.get_policy_controls(policy_type, **kwargs)
-        if isinstance(controls, list):
-            actions = policy_data.get('Actions')
-            if not isinstance(actions, dict):
-                actions = {}
-                policy_data['Actions'] = actions
-            on_success = actions.get('OnSuccess')
-            if not isinstance(on_success, dict):
-                on_success = {}
-            on_success['Controls'] = controls
-            policy_data['OnSuccess'] = on_success
-
-        policy_name = kwargs.get('policy_name')
-        if policy_name:
-            policy_data['PolicyName'] = policy_name
-        policy_filter = PedmPolicyMixin.get_policy_filter(plugin, **kwargs)
-        if policy_filter:
-            policy_data.update(policy_filter)
-
-        arg_status = kwargs.get('status')
-        if isinstance(arg_status, str):
-            policy_data['Status'] = arg_status
-
         disabled: Optional[bool] = None
-        arg_enable = kwargs.get('enable')
-        if isinstance(arg_enable, str):
-            disabled = True if arg_enable == 'off' else False
+        policy_file = kwargs.get('file')
+        if policy_file:
+            conflicting = [label for key, label in self.POLICY_EDIT_OPTIONS if kwargs.get(key) is not None]
+            if conflicting:
+                raise base.CommandError(f'--file cannot be combined with: {", ".join(conflicting)}')
+
+            policy_file = os.path.expanduser(policy_file)
+            if not os.path.isfile(policy_file):
+                raise base.CommandError(f'File "{policy_file}" does not exist')
+            with open(policy_file, 'r') as f:
+                policy_data = json.load(f)
+            if not isinstance(policy_data, dict):
+                raise base.CommandError(f'File "{policy_file}" should contain a JSON object')
+        else:
+            policy_data = copy.deepcopy(policy.data or {})
+            policy_type = policy_data.get('PolicyType') or 'Unknown'
+            controls = PedmPolicyMixin.get_policy_controls(policy_type, **kwargs)
+            if isinstance(controls, list):
+                actions = policy_data.get('Actions')
+                if not isinstance(actions, dict):
+                    actions = {}
+                    policy_data['Actions'] = actions
+                on_success = actions.get('OnSuccess')
+                if not isinstance(on_success, dict):
+                    on_success = {}
+                on_success['Controls'] = controls
+                policy_data['OnSuccess'] = on_success
+
+            policy_name = kwargs.get('policy_name')
+            if policy_name:
+                policy_data['PolicyName'] = policy_name
+            policy_filter = PedmPolicyMixin.get_policy_filter(plugin, **kwargs)
+            if policy_filter:
+                policy_data.update(policy_filter)
+
+            arg_status = kwargs.get('status')
+            if isinstance(arg_status, str):
+                policy_data['Status'] = arg_status
+
+            arg_enable = kwargs.get('enable')
+            if isinstance(arg_enable, str):
+                disabled = True if arg_enable == 'off' else False
 
         pu = admin_types.PedmUpdatePolicy(policy_uid=policy.policy_uid, data=policy_data, disabled=disabled)
 
@@ -1862,6 +1892,50 @@ class PedmBICommand(base.GroupCommand):
         super().__init__('BI endpoint test')
         self.register_command(PedmBIAgentCountCommand(), 'agent-count')
         self.register_command(PedmBIDailyCountCommand(), 'daily-count')
+        self.register_command(PedmBIAgenticCountCommand(), 'agentic-count')
+
+
+class PedmBIAgenticCountCommand(base.ArgparseCommand):
+    def __init__(self):
+        parser = argparse.ArgumentParser(prog='agentic-count', description='Retrieve active agentic counts', parents=[base.report_output_parser])
+        parser.add_argument('--key', dest='key', action='store', required=True,
+                            help='BI API key')
+        parser.add_argument('--created', dest='created', action='store',
+                            help='Filter: Created date. Predefined filters: '
+                                 'today, yesterday, last_7_days, last_30_days, month_to_date, last_month, year_to_date, last_year')
+        parser.add_argument('--enterprise', dest='enterprise', action='append', required=True,
+                            help='Enterprise ID')
+        super().__init__(parser)
+
+    def execute(self, context: KeeperParams, **kwargs) -> Any:
+        logger = api.get_logger()
+        enterprise_ids: List[int] = []
+        enterprise = kwargs.get('enterprise')
+        if not isinstance(enterprise, list):
+            enterprise = [enterprise]
+        for e in enterprise:
+            try:
+                enterprise_id = int(e)
+                enterprise_ids.append(enterprise_id)
+            except ValueError:
+                logger.warning(f'Invalid enterprise ID: {e}')
+        rq = pedm_pb2.GetAgenticWorkloadCountRequest()
+        rq.preset = kwargs.get('created') or 'last_30_days'
+        rq.enterpriseId.extend(enterprise_ids)
+
+        key = utils.base64_url_decode(kwargs.get('key'))
+        rs = context.auth.keeper_endpoint.execute_router_bi(key, 'agentic_workload_count', rq, response_type=pedm_pb2.GetAgenticWorkloadCountResponse)
+        assert rs is not None
+
+        table = []
+        headers = ['enterprise_id', 'workload_count']
+        for count_rs in rs.counts:
+            table.append([count_rs.enterpriseId, count_rs.workloadCount])
+
+        fmt = kwargs.get('format')
+        if fmt != 'json':
+            headers = [report_utils.field_to_title(x) for x in headers]
+        return report_utils.dump_report_data(table, headers, fmt=fmt, filename=kwargs.get('output'))
 
 
 class PedmBIAgentCountCommand(base.ArgparseCommand):
@@ -1873,7 +1947,7 @@ class PedmBIAgentCountCommand(base.ArgparseCommand):
                             help='Enterprise ID')
         super().__init__(parser)
 
-    def execute(self, context: KeeperParams, **kwargs) -> None:
+    def execute(self, context: KeeperParams, **kwargs) -> Any:
         logger = api.get_logger()
         enterprise_ids: List[int] = []
         enterprise = kwargs.get('enterprise')

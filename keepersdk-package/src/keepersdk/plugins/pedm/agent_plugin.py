@@ -310,6 +310,7 @@ class PedmAgentPlugin:
             'Timestamp': str(timestamp),
             'Version': '1'
         }
+
         if 'ROUTER_URL' in os.environ:
             up = urlparse(os.environ['ROUTER_URL'])
             url_comp = (up.scheme, up.netloc, f'api/agent/{endpoint}', None, None, None)
@@ -400,6 +401,12 @@ class PedmAgentPlugin:
                                 pass
                         yield agent_storage.PedmAgentCollection(
                             collection_uid=collection_uid, collection_type=collection_type, data=data)
+
+    def get_approval_audience(self, approval_type: int) -> List[Dict[str, Any]]:
+        """Teams an approval of this type is encrypted for: [{audience_type, audience_uid, public_key}]."""
+        rs = self.execute_rest('get_approval_audience', {'approval_type': approval_type})
+        audience = rs.get('audience') if isinstance(rs, dict) else None
+        return [x for x in audience if isinstance(x, dict)] if isinstance(audience, list) else []
 
     def load_agent_collections(self) -> None:
         # TODO refactor to use get_recourses + get_collections
