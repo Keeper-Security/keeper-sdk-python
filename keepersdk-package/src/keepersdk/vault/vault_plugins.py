@@ -249,10 +249,14 @@ class PendingSharePlugin(IPendingSharePlugin, keeper_auth.IKeeperAuth, abc.ABC):
                 pass
 
 
+MAX_AUDIT_EVENT_SEND_ATTEMPTS = 3
+
+
 class ClientAuditEventPlugin(IClientAuditEventPlugin, keeper_auth.IKeeperAuth, abc.ABC):
     def __init__(self) -> None:
         super(ClientAuditEventPlugin, self).__init__()
         self._pending_audit_events: List[Dict[str, Any]] = []
+        self._audit_event_send_failures = 0
 
     def schedule_audit_event(self, name: str, **kwargs) -> None:
         with self.lock:
@@ -276,7 +280,23 @@ class ClientAuditEventPlugin(IClientAuditEventPlugin, keeper_auth.IKeeperAuth, a
                 'command': 'audit_event_client_logging',
                 'item_logs': item_logs,
             }
-            self.keeper_auth.execute_auth_command(rq)
+            try:
+                self.keeper_auth.execute_auth_command(rq)
+            except Exception:
+                with self.lock:
+                    self._audit_event_send_failures += 1
+                    if self._audit_event_send_failures < MAX_AUDIT_EVENT_SEND_ATTEMPTS:
+                        # Put the batch back at the head of the queue to be retried on the next send.
+                        self._pending_audit_events[0:0] = item_logs
+                    else:
+                        # Drop a batch that keeps failing so it cannot block the events queued behind it.
+                        self._audit_event_send_failures = 0
+                        utils.get_logger().warning(
+                            'Client audit events dropped after %d failed attempts: %d event(s)',
+                            MAX_AUDIT_EVENT_SEND_ATTEMPTS, len(item_logs))
+                raise
+            with self.lock:
+                self._audit_event_send_failures = 0
 
 
 class BreachWatchPlugin(IBreachWatchPlugin, IVaultData, keeper_auth.IKeeperAuth, abc.ABC):

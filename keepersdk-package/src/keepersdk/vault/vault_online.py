@@ -64,15 +64,20 @@ class VaultOnline(vault_plugins.IVaultData, keeper_auth.IKeeperAuth):
 
     def close(self):
         self.auto_sync = False
+        logger = utils.get_logger()
         if self._background_future is not None:
             try:
                 self._background_future.result(timeout=10)
-            except Exception:
-                pass
+            except concurrent.futures.TimeoutError:
+                # The running request is not aborted, but a failure after close() has no retry.
+                logger.warning('Background vault task is still running at close; '
+                               'client audit events it is sending may not be delivered')
+            except Exception as e:
+                logger.debug('Background vault task error: %s', e)
         try:
             self.flush_client_audit_events()
         except Exception as e:
-            utils.get_logger().debug('Client Audit Event Plugin Error: %s', e)
+            logger.warning('Client audit events could not be sent at close: %s', e)
         self._executor.shutdown(wait=False)
         self._vault_data.close()
 
