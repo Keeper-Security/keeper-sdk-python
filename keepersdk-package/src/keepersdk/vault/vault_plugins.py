@@ -265,17 +265,18 @@ class ClientAuditEventPlugin(IClientAuditEventPlugin, keeper_auth.IKeeperAuth, a
     def send_client_audit_events(self) -> None:
         if self._pending_audit_events is None:
             return
-        if len(self._pending_audit_events) == 0:
-            return
+        while True:
+            with self.lock:
+                if len(self._pending_audit_events) == 0:
+                    return
+                item_logs = self._pending_audit_events[:99]
+                self._pending_audit_events = self._pending_audit_events[99:]
 
-        rq: Dict[str, Any] = {
-            'command': 'audit_event_client_logging',
-        }
-        with self.lock:
-            rq['item_logs'] = self._pending_audit_events[:99]
-            self._pending_audit_events = self._pending_audit_events[99:]
-
-        self.keeper_auth.execute_auth_command(rq)
+            rq: Dict[str, Any] = {
+                'command': 'audit_event_client_logging',
+                'item_logs': item_logs,
+            }
+            self.keeper_auth.execute_auth_command(rq)
 
 
 class BreachWatchPlugin(IBreachWatchPlugin, IVaultData, keeper_auth.IKeeperAuth, abc.ABC):

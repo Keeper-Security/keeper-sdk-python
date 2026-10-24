@@ -64,6 +64,15 @@ class VaultOnline(vault_plugins.IVaultData, keeper_auth.IKeeperAuth):
 
     def close(self):
         self.auto_sync = False
+        if self._background_future is not None:
+            try:
+                self._background_future.result(timeout=10)
+            except Exception:
+                pass
+        try:
+            self.flush_client_audit_events()
+        except Exception as e:
+            utils.get_logger().debug('Client Audit Event Plugin Error: %s', e)
         self._executor.shutdown(wait=False)
         self._vault_data.close()
 
@@ -85,6 +94,14 @@ class VaultOnline(vault_plugins.IVaultData, keeper_auth.IKeeperAuth):
     def client_audit_event_plugin(self) -> Optional[vault_plugins.IClientAuditEventPlugin]:
         if isinstance(self, vault_plugins.IClientAuditEventPlugin):
             return self
+
+    def flush_client_audit_events(self) -> None:
+        """Send pending client audit events now, on the calling thread."""
+        if not self._keeper_auth.auth_context.enterprise_ec_public_key:
+            return
+        plugin = self.client_audit_event_plugin()
+        if plugin is not None:
+            plugin.send_client_audit_events()
 
     def audit_data_plugin(self) -> Optional[vault_plugins.IAuditDataPlugin]:
         if isinstance(self, vault_plugins.IAuditDataPlugin):
