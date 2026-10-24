@@ -1,3 +1,5 @@
+import concurrent.futures
+import threading
 import unittest
 from unittest.mock import MagicMock
 
@@ -136,3 +138,54 @@ class TestClientAuditEvents(unittest.TestCase):
         with self.assertLogs(level='WARNING') as logs:
             vault.close()
         self.assertTrue(any('could not be sent at close' in m for m in logs.output))
+
+    def test_events_stay_queued_until_server_accepts(self):
+        vault = get_enterprise_vault()
+        self.addCleanup(vault.close)
+        caep = vault.client_audit_event_plugin()
+        caep.schedule_audit_event('open_record', record_uid='uid1')
+        queued_during_send = []
+
+        def execute(rq):
+            queued_during_send.append(len(caep._pending_audit_events))
+            return {'result': 'success'}
+        vault.keeper_auth.execute_auth_command.side_effect = execute
+        vault.flush_client_audit_events()
+
+        self.assertEqual(queued_during_send, [1])
+        self.assertEqual(caep._pending_audit_events, [])
+
+    def test_concurrent_flush_does_not_send_duplicates(self):
+        vault = get_enterprise_vault()
+        self.addCleanup(vault.close)
+        caep = vault.client_audit_event_plugin()
+        caep.schedule_audit_event('open_record', record_uid='uid1')
+        in_flight = threading.Event()
+        release = threading.Event()
+
+        def execute(rq):
+            in_flight.set()
+            release.wait(5)
+            return {'result': 'success'}
+        vault.keeper_auth.execute_auth_command.side_effect = execute
+        worker = threading.Thread(target=vault.flush_client_audit_events)
+        worker.start()
+        self.assertTrue(in_flight.wait(5))
+        second = threading.Thread(target=vault.flush_client_audit_events)
+        second.start()
+        release.set()
+        worker.join(5)
+        second.join(5)
+
+        self.assertEqual(len(sent_events(vault)), 1)
+
+    def test_close_does_not_block_on_running_background_task(self):
+        vault = get_enterprise_vault()
+        vault.client_audit_event_plugin().schedule_audit_event('open_record', record_uid='uid1')
+        vault._background_future = MagicMock()
+        vault._background_future.result.side_effect = concurrent.futures.TimeoutError()
+        with self.assertLogs(level='WARNING') as logs:
+            vault.close()
+
+        self.assertTrue(any('still running at close' in m for m in logs.output))
+        vault.keeper_auth.execute_auth_command.assert_not_called()
