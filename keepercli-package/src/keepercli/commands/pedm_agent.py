@@ -511,7 +511,7 @@ class PedmAgentApprovalCreateCommand(base.ArgparseCommand):
         if isinstance(failed_approvals, list) and len(failed_approvals) > 0:
             return
 
-        self.add_approval_audience(agent, approval_uid, approval_type, account_dict, application_dict, kwargs.get('justification'))
+        # self.add_approval_audience(agent, approval_uid, approval_type, account_dict, application_dict, kwargs.get('justification'))
 
     def add_approval_audience(self, agent: agent_plugin.PedmAgentPlugin, approval_uid: str, approval_type: int,
                               account_dict: Dict[str, Any], application_dict: Dict[str, Any], justification: Optional[str]) -> None:
