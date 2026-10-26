@@ -7,7 +7,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple, Union
 
 from .. import crypto, utils
 from ..errors import KeeperApiError
-from ..proto import folder_pb2, record_endpoints_pb2, record_pb2, remove_pb2, record_details_pb2, folder_access_pb2, keeperdrive_move_pb2
+from ..proto import folder_pb2, record_endpoints_pb2, record_pb2, remove_pb2, record_details_pb2, folder_access_pb2, keeperdrive_move_pb2, keeperdrive_convert_pb2
 from . import nsf_crypto, nsf_data, nsf_common, sync_down, vault_extensions, vault_record
 from .vault_online import VaultOnline
 
@@ -41,6 +41,18 @@ class NsfModifyResult:
     status: str = ''
     message: str = ''
     revision: int = 0
+
+
+@dataclass
+class NsfRecordConversionResult:
+    """Outcome for converting one classic record to the NSF permission model."""
+    record_uid: str
+    status: str = ''
+    message: str = ''
+    success: bool = False
+    skipped: bool = False
+    outcome_uncertain: bool = False
+    refresh_warning: str = ''
 
 
 @dataclass(frozen=True)
@@ -1663,6 +1675,189 @@ def _validate_nsf_folder_move_destination(
         if folder is None:
             break
         current_uid = folder.parent_uid or ROOT_FOLDER_UID
+
+
+
+def convert_classic_records_to_nsf(
+        vault: VaultOnline,
+        record_uids: Iterable[str],
+        folder_identifier: Optional[str] = None,
+        *,
+        request_sync: bool = True) -> List[NsfRecordConversionResult]:
+    """Permanently convert owned classic records to NSF records in batches of 100."""
+    if record_uids is None:
+        raise NsfError('At least one classic record UID is required.')
+    record_uids = list(record_uids)
+    if not record_uids:
+        raise NsfError('At least one classic record UID is required.')
+
+    owner_key = vault.keeper_auth.auth_context.data_key
+    if not owner_key or len(owner_key) != 32:
+        raise NsfError('User data key must be a 32-byte AES key.')
+
+    destination_uid = ''
+    destination_key = owner_key
+    if folder_identifier:
+        identifier = folder_identifier.strip()
+        if identifier.casefold() not in ('root', 'my drive', ROOT_FOLDER_UID.casefold()):
+            destination_uid = resolve_nsf_folder_uid(vault, identifier) or identifier
+            if not is_nsf_folder(vault, destination_uid):
+                raise NsfError(
+                    f'Destination "{folder_identifier}" is not an NSF folder in the local cache.')
+            destination_key = _get_folder_key(vault, destination_uid)
+            if not destination_key or len(destination_key) != 32:
+                raise NsfError(f'Destination folder key for "{destination_uid}" is invalid.')
+
+    def skipped(uid: str, status: str, message: str) -> NsfRecordConversionResult:
+        return NsfRecordConversionResult(record_uid=uid, status=status, message=message, skipped=True)
+
+    results: List[Optional[NsfRecordConversionResult]] = [None] * len(record_uids)
+    seen: set[str] = set()
+    pending: List[Tuple[int, str, bytes]] = []
+    for index, raw_uid in enumerate(record_uids):
+        uid = raw_uid.strip() if isinstance(raw_uid, str) else ''
+        if not uid:
+            results[index] = skipped(str(raw_uid or ''), 'SKIPPED_INVALID_UID', 'Record UID is empty or invalid.')
+            continue
+        try:
+            uid_bytes = utils.base64_url_decode(uid)
+        except Exception:
+            results[index] = skipped(uid, 'SKIPPED_INVALID_UID', 'Invalid Keeper record UID; skipped.')
+            continue
+        if len(uid_bytes) != 16 or utils.base64_url_encode(uid_bytes) != uid:
+            results[index] = skipped(uid, 'SKIPPED_INVALID_UID', 'UID must be a canonical 16-byte Keeper UID; skipped.')
+            continue
+        if uid in seen:
+            results[index] = skipped(uid, 'SKIPPED_DUPLICATE', 'Duplicate record UID; skipped.')
+            continue
+        seen.add(uid)
+        if is_nsf_record(vault, uid):
+            results[index] = skipped(uid, 'SKIPPED_ALREADY_NSF', 'Record is already an NSF record; skipped.')
+            continue
+        if vault.vault_data.get_record(uid) is None:
+            results[index] = skipped(uid, 'SKIPPED_NOT_FOUND', 'Classic record was not found in the local cache; skipped.')
+            continue
+        record_key = vault.vault_data.get_record_key(uid)
+        if not record_key or len(record_key) != 32:
+            results[index] = skipped(uid, 'SKIPPED_INVALID_KEY', 'Classic record key is unavailable or invalid; skipped.')
+            continue
+        pending.append((index, uid, uid_bytes))
+
+    status_messages = {
+        keeperdrive_convert_pb2.OK: ('OK', 'Converted successfully.'),
+        keeperdrive_convert_pb2.ENTERPRISE_NOT_KEEPER_DRIVE_ENABLED: ('ENTERPRISE_NOT_KEEPER_DRIVE_ENABLED', 'The enterprise is not Keeper Drive enabled.'),
+        keeperdrive_convert_pb2.NOT_RECORD_OWNER: ('NOT_RECORD_OWNER', 'The record is not owned by the caller.'),
+        keeperdrive_convert_pb2.RECORD_NOT_FOUND: ('RECORD_NOT_FOUND', 'No active owned record was found.'),
+        keeperdrive_convert_pb2.RECORD_ALREADY_CONVERTED: ('RECORD_ALREADY_CONVERTED', 'The record is already an NSF record.'),
+        keeperdrive_convert_pb2.FOLDER_ACCESS_DENIED: ('FOLDER_ACCESS_DENIED', 'The caller cannot add records to the destination folder.'),
+        keeperdrive_convert_pb2.INVALID_FOLDER_KEY: ('INVALID_FOLDER_KEY', 'The destination folder key is invalid.'),
+        keeperdrive_convert_pb2.INVALID_OWNER_KEY: ('INVALID_OWNER_KEY', 'The owner key is invalid.'),
+        keeperdrive_convert_pb2.RECORD_NOT_LEGACY: ('RECORD_NOT_LEGACY', 'The record is not a classic record.'),
+        keeperdrive_convert_pb2.TARGET_NOT_DRIVE_FOLDER: ('TARGET_NOT_DRIVE_FOLDER', 'The destination is not an NSF folder.'),
+        keeperdrive_convert_pb2.RECORD_LINK_CHILD_NOT_OWNED: ('RECORD_LINK_CHILD_NOT_OWNED', 'A linked child record is not owned by the caller.'),
+        keeperdrive_convert_pb2.RECORD_LINK_PARENT_NOT_OWNED: ('RECORD_LINK_PARENT_NOT_OWNED', 'A linked parent record is not owned by the caller.'),
+        keeperdrive_convert_pb2.RECORD_LINK_RECORD_IN_TRASH: ("RECORD_LINK_RECORD_IN_TRASH", "A linked record is in the caller's trash."),
+        keeperdrive_convert_pb2.INTERNAL_ERROR: ('INTERNAL_ERROR', 'The server could not complete the conversion.'),
+        keeperdrive_convert_pb2.RECORD_LINK_CHILD_NOT_INCLUDED: ('RECORD_LINK_CHILD_NOT_INCLUDED', 'A linked classic record must also be included.'),
+        keeperdrive_convert_pb2.RECORD_LINK_FILE_PROMOTION_FAILED: ('RECORD_LINK_FILE_PROMOTION_FAILED', 'A linked file attachment could not be promoted.'),
+        keeperdrive_convert_pb2.RECORD_LINK_COMPONENT_FAILED: ('RECORD_LINK_COMPONENT_FAILED', 'A related record failed and this record was rolled back.'),
+        keeperdrive_convert_pb2.RECORD_VERSION_NOT_CONVERTIBLE: ('RECORD_VERSION_NOT_CONVERTIBLE', 'The record version cannot be converted.'),
+    }
+
+    for offset in range(0, len(pending), 100):
+        batch = pending[offset:offset + 100]
+        request = keeperdrive_convert_pb2.ConvertRecordRequest()
+        for _, uid, uid_bytes in batch:
+            record_key = vault.vault_data.get_record_key(uid)
+            request.records.add(
+                record_uid=uid_bytes,
+                folder_uid=utils.base64_url_decode(destination_uid) if destination_uid else b'',
+                record_key_encrypted_by_folder_key=crypto.encrypt_aes_v2(record_key, destination_key),
+                record_key_encrypted_by_owner_key=crypto.encrypt_aes_v2(record_key, owner_key),
+            )
+        requested = {uid for _, uid, _ in batch}
+        try:
+            response = vault.keeper_auth.execute_auth_rest(
+                'vault/records/v3/convert', request,
+                response_type=keeperdrive_convert_pb2.ConvertRecordResponse)
+        except (OSError, TimeoutError, ConnectionError):
+            # A transport failure can happen after the server has committed the conversion.
+            for index, uid, _ in batch:
+                results[index] = NsfRecordConversionResult(
+                    record_uid=uid, status='RESPONSE_UNAVAILABLE',
+                    message='No reliable conversion response was received. Refresh the vault and verify each record before retrying.',
+                    outcome_uncertain=True)
+            continue
+        except KeeperApiError as exc:
+            # A batch-level API error does not include per-record outcomes. Until
+            # the backend guarantees that these responses are always pre-commit,
+            # preserve the server code but mark the batch uncertain rather than
+            # claiming that a permanent conversion definitely failed.
+            error_code = str(getattr(exc, 'result_code', '') or 'API_ERROR')
+            is_transport_error = error_code.casefold() == 'http_error'
+            status = 'RESPONSE_UNAVAILABLE' if is_transport_error else error_code.upper()
+            message = (
+                'No reliable conversion response was received. Refresh the vault and verify each record before retrying.'
+                if is_transport_error else
+                f'The conversion batch returned API error {error_code!r}; the server commit state is not confirmed. '
+                'Refresh the vault and verify each record before retrying.'
+            )
+            for index, uid, _ in batch:
+                results[index] = NsfRecordConversionResult(
+                    record_uid=uid, status=status, message=message,
+                    outcome_uncertain=True)
+            continue
+        if response is None:
+            for index, uid, _ in batch:
+                results[index] = NsfRecordConversionResult(
+                    record_uid=uid, status='RESPONSE_MISSING',
+                    message='The conversion service returned no response. Refresh the vault and verify its state before retrying.',
+                    outcome_uncertain=True)
+            continue
+        returned = {}
+        duplicates = set()
+        for item in response.results:
+            returned_uid = utils.base64_url_encode(item.record_uid) if item.record_uid else ''
+            if returned_uid not in requested:
+                continue
+            if returned_uid in returned:
+                duplicates.add(returned_uid)
+            else:
+                returned[returned_uid] = item
+        for index, uid, _ in batch:
+            if uid in duplicates:
+                results[index] = NsfRecordConversionResult(
+                    record_uid=uid, status='RESULT_DUPLICATE',
+                    message='The server returned multiple results for this record. Refresh the vault and verify its current state.',
+                    outcome_uncertain=True)
+            elif uid not in returned:
+                results[index] = NsfRecordConversionResult(
+                    record_uid=uid, status='RESULT_MISSING',
+                    message='The server did not return a result for this record. Refresh the vault and verify its current state.',
+                    outcome_uncertain=True)
+            else:
+                item = returned[uid]
+                status, message = status_messages.get(
+                    item.status,
+                    (f'UNKNOWN_STATUS_{item.status}', f'The server returned unknown conversion status {item.status}; verify the record state after sync-down.'))
+                results[index] = NsfRecordConversionResult(
+                    record_uid=uid, status=status, message=message,
+                    success=item.status == keeperdrive_convert_pb2.OK,
+                    outcome_uncertain=(
+                        item.status == keeperdrive_convert_pb2.CONVERT_RECORD_STATUS_UNSPECIFIED
+                        or status.startswith('UNKNOWN_STATUS_')))
+
+    final_results = [item for item in results if item is not None]
+    if request_sync and any(r.success or r.outcome_uncertain for r in final_results):
+        try:
+            vault.sync_requested = True
+            vault.run_pending_jobs()
+        except Exception:
+            warning = 'Vault refresh failed after conversion. Refresh the vault and verify record state before relying on cached data.'
+            for result in final_results:
+                if result.success or result.outcome_uncertain:
+                    result.refresh_warning = warning
+    return final_results
 
 
 def move_nsf_record(
