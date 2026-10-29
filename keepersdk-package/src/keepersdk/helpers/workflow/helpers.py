@@ -219,7 +219,7 @@ def _record_uids_by_title(vault: vault_online.VaultOnline, title: str) -> List[s
     Builds a title index lazily and rebuilds when the vault record count changes.
     """
     title_cf = title.casefold()
-    record_count = len(vault.vault_data)
+    record_count = vault.vault_data.record_count
     cached = getattr(vault, '_workflow_title_lookup', None)
     if cached is None or cached[0] != record_count:
         index: dict[str, List[str]] = {}
