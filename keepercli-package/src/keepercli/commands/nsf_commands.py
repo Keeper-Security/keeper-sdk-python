@@ -23,6 +23,20 @@ logger = api.get_logger()
 _MASKED_TYPES = frozenset({'password', 'secret', 'pinCode', 'pin_code'})
 
 
+def _field_values(field: Dict[str, Any]) -> List[Any]:
+    """Return a record field's ``value`` as a list."""
+    values = field.get('value', [])
+    if not isinstance(values, list):
+        values = [values]
+    return values
+
+
+def _has_password_value(fields: List[Any]) -> bool:
+    """True when any ``password`` field in the record has a non-empty value."""
+    return any(isinstance(f, dict) and f.get('type') == 'password' and any(_field_values(f))
+               for f in fields)
+
+
 def _mask_sensitive_fields(fields: List[Any], *, unmask: bool) -> List[Any]:
     """Return a copy of record fields with sensitive values replaced unless ``unmask``."""
     if unmask or not fields:
@@ -37,12 +51,9 @@ def _mask_sensitive_fields(fields: List[Any], *, unmask: bool) -> List[Any]:
             masked_fields.append(f)
             continue
         entry = dict(f)
-        values = entry.get('value', [])
-        if not isinstance(values, list):
-            values = [values]
         entry['value'] = [
             '********' if (val or val == 0) else val
-            for val in values
+            for val in _field_values(entry)
         ]
         masked_fields.append(entry)
     return masked_fields
@@ -358,6 +369,13 @@ class NsfGetCommand(base.ArgparseCommand):
             self._print_record_json(vault, detail, verbose, unmask, show_inherited, show_denied)
         else:
             self._print_record_detail(detail, verbose, unmask, show_inherited, show_denied)
+
+        record_uid = detail.get('record_uid')
+        caep = vault.client_audit_event_plugin()
+        if caep and record_uid:
+            caep.schedule_audit_event('open_record', record_uid=record_uid)
+            if unmask and _has_password_value(detail.get('fields') or []):
+                caep.schedule_audit_event('revealed_password', record_uid=record_uid)
 
     @staticmethod
     def _print_folder_detail(

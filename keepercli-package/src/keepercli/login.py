@@ -643,6 +643,11 @@ def logout(context: KeeperParams):
         sp_url = urllib.parse.urlunparse(sp_url_builder)
         prompt_utils.output_text(FormattedText([('class:h3', 'SSO Logout URL: '), ('', sp_url)]))
 
+    if context.vault:
+        try:
+            context.vault.flush_client_audit_events()
+        except Exception as e:
+            logger.debug('Client audit events error: %s', e)
     try:
         context.auth.execute_auth_rest('vault/logout_v3', None)
     except Exception as e:
