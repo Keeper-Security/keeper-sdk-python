@@ -1294,6 +1294,19 @@ class RecordGetCommand(base.ArgparseCommand):
 
         display_func = dispatch.get(output_format, lambda: self._display_record_detail(vault, record_uid, unmask))
         display_func()
+        self._schedule_record_audit_events(vault, record_uid, output_format, unmask)
+
+    def _schedule_record_audit_events(self, vault: vault_online.VaultOnline, record_uid: str,
+                                      output_format: str, unmask: bool):
+        """Log record open, and password reveal when the password was printed unmasked."""
+        caep = vault.client_audit_event_plugin()
+        if not caep:
+            return
+        caep.schedule_audit_event('open_record', record_uid=record_uid)
+        if unmask or output_format == 'password':
+            record_data = vault.vault_data.load_record(record_uid)
+            if record_data and record_data.extract_password():
+                caep.schedule_audit_event('revealed_password', record_uid=record_uid)
 
     def _display_shared_folder(self, vault: vault_online.VaultOnline, shared_folder, output_format: str):
         """Display a shared folder in the specified format."""

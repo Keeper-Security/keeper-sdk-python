@@ -787,7 +787,9 @@ def _post_restore_processing(vault: vault_online.VaultOnline, restore_plan: Dict
         password = _extract_password_from_record(record)
         
         breach_watch.scan_and_store_record_status(record_uid, record_key, password)
-        vault.client_audit_event_plugin().schedule_audit_event('record_restored', record_uid=record_uid)
+        caep = vault.client_audit_event_plugin()
+        if caep:
+            caep.schedule_audit_event('record_restored', record_uid=record_uid)
     
     vault.sync_down()
 
