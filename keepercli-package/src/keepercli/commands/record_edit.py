@@ -1831,11 +1831,7 @@ class RecordGetCommand(base.ArgparseCommand):
     
     def _is_sensitive_field_type(self, field_type: str) -> bool:
         """Check if a field type is considered sensitive and should be masked."""
-        sensitive_types = {
-            'password', 'secret', 'otp', 'privateKey', 'pinCode', 
-            'oneTimeCode', 'keyPair', 'licenseNumber'
-        }
-        return field_type in sensitive_types
+        return record_utils.is_sensitive_field_type(field_type)
 
 
 class RecordSearchCommand(base.ArgparseCommand):

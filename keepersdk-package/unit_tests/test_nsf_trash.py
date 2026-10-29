@@ -463,6 +463,85 @@ class TestNsfTrashManagement(unittest.TestCase):
         result = trash_management.nsf_management.get_nsf_record_details(vault, [record_uid])
         self.assertEqual(result, {'data': [], 'forbidden_records': []})
         vault.keeper_auth.execute_auth_rest.assert_called_once()
+    def _details_response(self, record_uid, record_key, payload):
+        rs = record_pb2.GetRecordDataWithAccessInfoResponse()
+        item = rs.recordDataWithAccessInfo.add()
+        item.recordUid = utils.base64_url_decode(record_uid)
+        item.recordData.version = 3
+        item.recordData.encryptedRecordData = utils.base64_url_encode(
+            crypto.encrypt_aes_v2(json.dumps(payload).encode(), record_key))
+        return rs
+
+    def test_get_nsf_record_details_payload_is_opt_in(self):
+        record_uid = utils.generate_uid()
+        record_key = utils.generate_aes_key()
+        payload = {'title': 'Db', 'type': 'login', 'fields': [{'type': 'password', 'value': ['secret']}]}
+        vault = self._vault()
+        vault.nsf_data = Mock()
+        vault.nsf_data.records.return_value = []
+        vault.keeper_auth.execute_auth_rest.return_value = self._details_response(record_uid, record_key, payload)
+        nsf_management = trash_management.nsf_management
+
+        default = nsf_management.get_nsf_record_details(vault, [record_uid], record_keys={record_uid: record_key})
+        self.assertNotIn('payload', default['data'][0])
+        full = nsf_management.get_nsf_record_details(
+            vault, [record_uid], record_keys={record_uid: record_key}, include_payload=True)
+        self.assertEqual(full['data'][0]['payload'], payload)
+
+    def test_get_nsf_trashcan_record_data_returns_fields_without_caching(self):
+        record_uid = utils.generate_uid()
+        record_key = utils.generate_aes_key()
+        payload = {'title': 'Db', 'type': 'login', 'fields': [{'type': 'password', 'value': ['secret']}]}
+        trash_management.TrashManagement.nsf_trashcan_record_cache[record_uid] = {
+            'record_uid': record_uid, 'record_key_unencrypted': record_key}
+        vault = self._vault()
+        vault.nsf_data = Mock()
+        vault.nsf_data.records.return_value = []
+        vault.keeper_auth.execute_auth_rest.return_value = self._details_response(record_uid, record_key, payload)
+
+        data = trash_management.TrashManagement.get_nsf_trashcan_record_data(vault, record_uid)
+
+        self.assertEqual(data, payload)
+        self.assertNotIn('payload', trash_management.TrashManagement.nsf_trashcan_record_cache[record_uid])
+        self.assertIsNone(trash_management.TrashManagement.get_nsf_trashcan_record_data(vault, 'unknown'))
+
+
+class TestClassicTrashLoading(unittest.TestCase):
+
+    def setUp(self):
+        TM = trash_management.TrashManagement
+        for cache in (TM.deleted_record_cache, TM.orphaned_record_cache, TM.deleted_shared_folder_cache):
+            cache.clear()
+            self.addCleanup(cache.clear)
+
+    def test_classic_records_load_without_deleted_shared_folders(self):
+        data_key = utils.generate_aes_key()
+        record_key = utils.generate_aes_key()
+        record_uid = utils.generate_uid()
+        record_data = json.dumps({'title': 'Classic', 'type': 'login', 'fields': []}).encode()
+
+        vault = Mock()
+        vault.keeper_auth.auth_context.data_key = data_key
+        # Empty body from vault/get_deleted_shared_folders_and_records is returned as None.
+        vault.keeper_auth.execute_auth_rest.return_value = None
+        vault.keeper_auth.execute_auth_command.return_value = {
+            'result': 'success',
+            'records': [{
+                'record_uid': record_uid,
+                'record_key': utils.base64_url_encode(crypto.encrypt_aes_v2(record_key, data_key)),
+                'record_key_type': 3,
+                'data': utils.base64_url_encode(crypto.encrypt_aes_v2(record_data, record_key)),
+                'version': 3,
+            }],
+        }
+        trash_management.TrashManagement.deleted_shared_folder_cache['folders'] = {'stale': {}}
+
+        trash_management.TrashManagement._ensure_deleted_records_loaded(vault)
+
+        records = trash_management.TrashManagement.get_deleted_records()
+        self.assertIn(record_uid, records)
+        self.assertEqual(records[record_uid]['data_unencrypted'], record_data)
+        self.assertEqual(trash_management.TrashManagement.get_shared_folders(), {})
 
 
 if __name__ == '__main__':

@@ -7,7 +7,7 @@ from typing import List, Dict, Any, Optional
 
 from . import base
 from .. import api, prompt_utils
-from ..helpers import report_utils
+from ..helpers import record_utils, report_utils
 from ..params import KeeperParams
 
 from keepersdk import utils
@@ -359,53 +359,90 @@ class TrashGetCommand(base.ArgparseCommand):
     @staticmethod
     def add_arguments_to_parser(parser: argparse.ArgumentParser):
         """Add command-specific arguments to the parser."""
-        parser.add_argument('record', action='store', help='Deleted record UID')
-    
+        parser.add_argument('--unmask', dest='unmask', action='store_true', help='display hidden field content')
+        parser.add_argument('record', nargs='+', action='store', help='Deleted record UID or title')
+
     def execute(self, context: KeeperParams, **kwargs):
         """Execute the trash get command."""
-        record_uid = kwargs.get('record')
-        if not record_uid:
+        record_name = kwargs.get('record')
+        # A title with spaces may be passed unquoted.
+        if isinstance(record_name, list):
+            record_name = ' '.join(record_name)
+        if not record_name:
             logger.info('Record UID parameter is required')
             return
 
         # Validate record UID format and length
-        if not isinstance(record_uid, str):
+        if not isinstance(record_name, str):
             logger.info('Record UID must be a string')
             return
-        
-        if len(record_uid) == 0 or len(record_uid) > STRING_LENGTH_LIMIT:
+
+        if len(record_name) == 0 or len(record_name) > STRING_LENGTH_LIMIT:
             logger.info('Invalid record UID length')
             return
         nsf_records = TrashManagement.get_nsf_trashcan_records(context.vault)
+        if record_name in nsf_records:
+            record_uid = record_name
+        else:
+            record_uid = self._resolve_record_title(context.vault, record_name, nsf_records)
+            if not record_uid:
+                return
         if record_uid in nsf_records:
-            detail = TrashManagement.get_nsf_trashcan_record_details(
-                context.vault, {record_uid: nsf_records[record_uid]})[record_uid]
-            if not detail.get('title'):
+            record_data = TrashManagement.get_nsf_trashcan_record_data(context.vault, record_uid)
+            if not record_data:
                 logger.info('Cannot retrieve NSF record %s', record_uid)
                 return
-            logger.info('{0:>21s}: {1}'.format('Title', detail.get('title', '')))
-            logger.info('{0:>21s}: {1}'.format('Type', detail.get('type', '')))
-            return
+            is_shared = False
+        else:
+            # Classic trash was loaded while resolving the UID or title.
+            record = TrashManagement.get_deleted_records().get(record_uid)
+            is_shared = False
+            if not record:
+                record = TrashManagement.get_orphaned_records().get(record_uid)
+                is_shared = True
 
-        try:
-            record, is_shared = trash_management.get_trash_record(context.vault, record_uid)
-        except Exception as e:
-            logger.error('Error retrieving record: %s', e)
-            return
-        if not record:
-            logger.info('%s is not a valid deleted record UID', record_uid)
-            return
+            record_data = self._parse_record_data(record)
+            if not record_data:
+                logger.info('Cannot restore record %s', record_uid)
+                return
 
-        record_data = self._parse_record_data(record)
-        if not record_data:
-            logger.info('Cannot restore record %s', record_uid)
-            return
+        password_revealed = self._display_record_info(record_data, kwargs.get('unmask', False))
+        if password_revealed:
+            caep = context.vault.client_audit_event_plugin()
+            if caep:
+                caep.schedule_audit_event('revealed_password', record_uid=record_uid)
 
-        self._display_record_info(record_data)
-        
         if is_shared:
             self._display_share_info(context, record, record_uid)
-    
+
+    def _resolve_record_title(self, vault: vault_online.VaultOnline, record_name: str,
+                              nsf_records: Dict[str, Any]) -> Optional[str]:
+        """Resolve a classic trash record UID, or a record title (case-insensitive) across classic and NSF trash."""
+        try:
+            TrashManagement._ensure_deleted_records_loaded(vault)
+        except Exception as e:
+            logger.error('Error retrieving record: %s', e)
+            return None
+        classic_records = {**TrashManagement.get_orphaned_records(), **TrashManagement.get_deleted_records()}
+        if record_name in classic_records:
+            return record_name
+
+        title = record_name.casefold()
+        matches = [uid for uid, record in classic_records.items()
+                   if ((self._parse_record_data(record) or {}).get('title') or '').casefold() == title]
+        if nsf_records:
+            title_pattern = re.compile(re.escape(record_name) + r'\Z', re.IGNORECASE)
+            matches.extend(TrashManagement.find_nsf_trashcan_records_by_title(vault, title_pattern, nsf_records))
+
+        if not matches:
+            logger.info('%s is not a valid deleted record UID or title', record_name)
+            return None
+        if len(matches) > 1:
+            logger.info('More than one deleted record titled "%s". Use the record UID: %s',
+                        record_name, ', '.join(sorted(matches)))
+            return None
+        return matches[0]
+
     def _parse_record_data(self, record: Dict) -> Optional[Dict]:
         """Parse record data from JSON with security validation."""
         record_data_json = record.get('data_unencrypted')
@@ -418,24 +455,33 @@ class TrashGetCommand(base.ArgparseCommand):
             logger.debug("Failed to parse record data: %s", e)
             return None
     
-    def _display_record_info(self, record_data: Dict):
-        """Display basic record information."""
+    def _display_record_info(self, record_data: Dict, unmask: bool = False) -> bool:
+        """Display basic record information. Returns True if a password value was displayed."""
         title = record_data.get('title')
         record_type = record_data.get('type')
         
         logger.info('{0:>21s}: {1}'.format('Title', title))
         logger.info('{0:>21s}: {1}'.format('Type', record_type))
         
-        self._display_record_fields(record_data.get('fields', {}))
+        return self._display_record_fields(record_data.get('fields', {}), unmask)
     
-    def _display_record_fields(self, fields: List[Dict]):
-        """Display record fields."""
+    def _display_record_fields(self, fields: List[Dict], unmask: bool = False) -> bool:
+        """Display record fields, masking sensitive values unless ``unmask``. Returns True if a password was displayed."""
+        password_revealed = False
         for field in fields:
             field_name = self._get_field_name(field)
-            field_value = self._format_field_value(field.get('value'))
+            field_type = field.get('type', '')
+            value = field.get('value')
+            if not unmask and record_utils.is_sensitive_field_type(field_type):
+                field_value = record_utils.MASKED_VALUE if record_utils.field_has_value(value) else None
+            else:
+                field_value = self._format_field_value(value)
+                if field_value and field_type == 'password':
+                    password_revealed = True
             
             if field_value:
                 logger.info('{0:>21s}: {1}'.format(field_name, field_value))
+        return password_revealed
     
     def _get_field_name(self, field: Dict) -> str:
         """Get display name for field."""

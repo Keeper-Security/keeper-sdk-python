@@ -1007,10 +1007,12 @@ def update_nsf_typed_record(
 def get_nsf_record_details(
         vault: VaultOnline,
         record_uids: Iterable[str],
-        record_keys: Optional[Mapping[str, bytes]] = None) -> Dict[str, Any]:
+        record_keys: Optional[Mapping[str, bytes]] = None,
+        include_payload: bool = False) -> Dict[str, Any]:
     """``vault/get_records_details`` — title/type when cache lacks decrypted payload.
 
     ``record_keys`` supplies keys for records absent from the NSF view (e.g. trashed records).
+    ``include_payload`` adds the decrypted record JSON (including secret field values) as ``payload``.
     """
     known_keys = dict(record_keys or {})
     uids = [u if u in known_keys else (resolve_nsf_record_uid(vault, u) or u) for u in record_uids]
@@ -1062,13 +1064,16 @@ def get_nsf_record_details(
             if not plain:
                 continue
             payload = _parse_record_payload(plain.decode('utf-8'))
-            out_data.append({
+            detail = {
                 'record_uid': record_uid,
                 'title': str(payload.get('title') or 'Unknown'),
                 'type': str(payload.get('type') or 'Unknown'),
                 'revision': int(record_data.revision or 0),
                 'version': int(record_data.version or 0),
-            })
+            }
+            if include_payload:
+                detail['payload'] = payload
+            out_data.append(detail)
     return {'data': out_data, 'forbidden_records': forbidden}
 
 

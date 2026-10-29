@@ -241,6 +241,28 @@ class TrashManagement:
                 for uid, rec in nsf_records.items()}
 
     @staticmethod
+    def get_nsf_trashcan_record_data(vault: vault_online.VaultOnline, record_uid: str) -> Optional[Dict[str, Any]]:
+        """Return the decrypted record JSON (title, type, fields, custom) of an NSF trash record.
+
+        The data contains secret field values, so it is fetched on demand and not cached.
+        """
+        record = TrashManagement.nsf_trashcan_record_cache.get(record_uid)
+        if record is None:
+            return None
+        record_key = record.get('record_key_unencrypted')
+        try:
+            details = nsf_management.get_nsf_record_details(
+                vault, [record_uid], record_keys={record_uid: record_key} if record_key else None,
+                include_payload=True)
+        except Exception as e:
+            logger.debug('Unable to load NSF trash record data for %s: %s', record_uid, e)
+            return None
+        for detail in details.get('data') or []:
+            if detail.get('record_uid') == record_uid:
+                return detail.get('payload') or None
+        return None
+
+    @staticmethod
     def get_nsf_trashcan_folder_name(vault: vault_online.VaultOnline, folder_uid: str) -> str:
         """Folder name from the local NSF view, or the folder UID when it is not available."""
         folder = vault.nsf_data.get_folder(folder_uid) if vault.nsf_data is not None else None
@@ -275,28 +297,30 @@ class TrashManagement:
         """
         # Load deleted shared folders and records
         folder_response = TrashManagement._fetch_deleted_shared_folders_and_records(vault)
-        if not folder_response:
-            return
-            
-        users = TrashManagement._extract_users(folder_response)
-        folder_keys = TrashManagement._build_folder_keys(vault)
-        
-        # Process shared folders
-        folders = TrashManagement._process_shared_folders(folder_response, vault, folder_keys)
-        
-        # Process shared folder records
-        record_keys = TrashManagement._process_shared_folder_records(
-            folder_response, folder_keys
-        )
-        
-        # Process deleted record data
-        records = TrashManagement._process_deleted_record_data(
-            folder_response, record_keys, users
-        )
-        
-        # Update shared folder cache
-        TrashManagement._update_shared_folder_cache(folders, records)
-        
+        # An empty response body (no deleted shared folders) comes back as None;
+        # classic deleted and orphaned records must still be loaded below.
+        if folder_response:
+            users = TrashManagement._extract_users(folder_response)
+            folder_keys = TrashManagement._build_folder_keys(vault)
+
+            # Process shared folders
+            folders = TrashManagement._process_shared_folders(folder_response, vault, folder_keys)
+
+            # Process shared folder records
+            record_keys = TrashManagement._process_shared_folder_records(
+                folder_response, folder_keys
+            )
+
+            # Process deleted record data
+            records = TrashManagement._process_deleted_record_data(
+                folder_response, record_keys, users
+            )
+
+            # Update shared folder cache
+            TrashManagement._update_shared_folder_cache(folders, records)
+        else:
+            TrashManagement._update_shared_folder_cache({}, {})
+
         # Load and process deleted records from command
         TrashManagement._load_deleted_records_from_command(vault)
 
