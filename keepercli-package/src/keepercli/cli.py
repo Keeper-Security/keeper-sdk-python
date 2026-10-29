@@ -170,6 +170,10 @@ def loop(keeper_config: KeeperConfig, commands: base.CliCommands) -> int:
                 context.vault.sync_down()
             result = do_command(command, context, commands)
             error_no = 0
+            if context.vault and not context.vault.sync_requested:
+                # Deliver client audit events (e.g. open_record, copy_password) in the background.
+                # Skipped while a sync is pending so sync still runs before the next command, as before.
+                context.vault.run_pending_jobs()
             if isinstance(result, KeeperParams):
                 if len(context_stack) > 0 and result is context_stack[-1]:
                     context_to_release = context

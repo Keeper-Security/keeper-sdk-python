@@ -373,7 +373,9 @@ class ClipboardCommand(base.ArgparseCommand):
         
         # Schedule audit event for password copy
         if copy_item == 'Password' and text:
-            context.vault.client_audit_event_plugin().schedule_audit_event('copy_password', record_uid=record_uid)
+            caep = context.vault.client_audit_event_plugin()
+            if caep:
+                caep.schedule_audit_event('copy_password', record_uid=record_uid)
 
     def _load_record_history(self, context: KeeperParams, record_uid: str) -> Optional[List]:
         """Load record history from server."""
@@ -702,7 +704,9 @@ class RecordHistoryCommand(base.ArgparseCommand):
         record_data = json.loads(record_data_bytes)
 
         self._execute_restore_request(vault, rev['record_uid'], rev['revision'])
-        vault.client_audit_event_plugin().schedule_audit_event('revision_restored', record_uid=rev['record_uid'])
+        caep = vault.client_audit_event_plugin()
+        if caep:
+            caep.schedule_audit_event('revision_restored', record_uid=rev['record_uid'])
         vault.sync_down()
         logger.info('Record "%s" revision V.%d has been restored', record_data.get('title'), revision)
 
