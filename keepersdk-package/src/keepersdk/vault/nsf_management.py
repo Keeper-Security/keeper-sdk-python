@@ -1677,6 +1677,28 @@ def _validate_nsf_folder_move_destination(
         current_uid = folder.parent_uid or ROOT_FOLDER_UID
 
 
+def resolve_nsf_conversion_destination(vault: VaultOnline, folder_identifier: Optional[str]) -> str:
+    """Resolve the destination folder UID or name for conversion; ``''`` means the NSF root.
+
+    Raises ``NsfError`` when the folder is not found or the name matches more than one folder.
+    """
+    if not folder_identifier:
+        return ''
+    identifier = folder_identifier.strip()
+    if identifier.casefold() in ('root', 'my drive', ROOT_FOLDER_UID.casefold()):
+        return ''
+    destination_uid = resolve_nsf_folder_uid(vault, identifier)
+    if not destination_uid:
+        lower = identifier.casefold()
+        matches = [f.folder_uid for f in _nsf_view(vault).folders() if (f.name or '').casefold() == lower]
+        if len(matches) > 1:
+            raise NsfError(
+                f'{len(matches)} NSF folders are named "{identifier}". Use the folder UID for this operation.')
+        destination_uid = identifier
+    if not is_nsf_folder(vault, destination_uid):
+        raise NsfError(f'Destination "{folder_identifier}" is not an NSF folder in the local cache.')
+    return destination_uid
+
 
 def convert_classic_records_to_nsf(
         vault: VaultOnline,
@@ -1695,18 +1717,12 @@ def convert_classic_records_to_nsf(
     if not owner_key or len(owner_key) != 32:
         raise NsfError('User data key must be a 32-byte AES key.')
 
-    destination_uid = ''
+    destination_uid = resolve_nsf_conversion_destination(vault, folder_identifier)
     destination_key = owner_key
-    if folder_identifier:
-        identifier = folder_identifier.strip()
-        if identifier.casefold() not in ('root', 'my drive', ROOT_FOLDER_UID.casefold()):
-            destination_uid = resolve_nsf_folder_uid(vault, identifier) or identifier
-            if not is_nsf_folder(vault, destination_uid):
-                raise NsfError(
-                    f'Destination "{folder_identifier}" is not an NSF folder in the local cache.')
-            destination_key = _get_folder_key(vault, destination_uid)
-            if not destination_key or len(destination_key) != 32:
-                raise NsfError(f'Destination folder key for "{destination_uid}" is invalid.')
+    if destination_uid:
+        destination_key = _get_folder_key(vault, destination_uid)
+        if not destination_key or len(destination_key) != 32:
+            raise NsfError(f'Destination folder key for "{destination_uid}" is invalid.')
 
     def skipped(uid: str, status: str, message: str) -> NsfRecordConversionResult:
         return NsfRecordConversionResult(record_uid=uid, status=status, message=message, skipped=True)

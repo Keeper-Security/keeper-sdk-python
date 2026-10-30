@@ -906,11 +906,17 @@ class NsfConvertCommand(base.ArgparseCommand):
         vault = _require_vault(context)
         record_uids = kwargs.get('records') or []
         folder = kwargs.get('folder')
+        # Validate the destination before asking for confirmation.
+        destination_uid = _wrap_nsf(
+            'nsf-convert', lambda: nsf_management.resolve_nsf_conversion_destination(vault, folder))
         if not kwargs.get('force'):
             logger.warning(
                 'WARNING: Conversion is permanent. Classic shared-folder membership '
                 'and additional classic folder placements are not retained.')
-            logger.info('Destination: %s', folder or 'NSF root')
+            if destination_uid and destination_uid != folder:
+                logger.info('Destination: %s (%s)', folder, destination_uid)
+            else:
+                logger.info('Destination: %s', destination_uid or 'NSF root')
             for uid in record_uids:
                 logger.info('  %s', uid)
             if not _confirm_removal('Continue with permanent conversion?', False):
@@ -920,7 +926,7 @@ class NsfConvertCommand(base.ArgparseCommand):
         results = _wrap_nsf(
             'nsf-convert',
             lambda: nsf_management.convert_classic_records_to_nsf(
-                vault, record_uids, folder_identifier=folder))
+                vault, record_uids, folder_identifier=destination_uid or None))
         for result in results:
             if result.success:
                 logger.info("Classic record '%s' converted to an NSF record.", result.record_uid)
