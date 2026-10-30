@@ -878,6 +878,81 @@ def _confirm_removal(prompt: str, force: bool) -> bool:
     return prompt_utils.user_choice(prompt, 'yn', default='n') in ('y', 'yes')
 
 
+
+
+class NsfConvertCommand(base.ArgparseCommand):
+    """Permanently convert classic records to the NSF permission model."""
+
+    def __init__(self):
+        parser = argparse.ArgumentParser(
+            prog='nsf-convert',
+            description='Permanently convert owned classic records to NSF records.',
+        )
+        parser.add_argument(
+            'records', nargs='+',
+            help='Classic record UID(s) to convert (batches of up to 100 are sent automatically)',
+        )
+        parser.add_argument(
+            '--folder', dest='folder',
+            help='Existing NSF destination folder UID/name; omitted means NSF root',
+        )
+        parser.add_argument(
+            '-f', '--force', dest='force', action='store_true',
+            help='Skip permanent-conversion confirmation',
+        )
+        super().__init__(parser)
+
+    def execute(self, context: KeeperParams, **kwargs):
+        vault = _require_vault(context)
+        record_uids = kwargs.get('records') or []
+        folder = kwargs.get('folder')
+        # Validate the destination before asking for confirmation.
+        destination_uid = _wrap_nsf(
+            'nsf-convert', lambda: nsf_management.resolve_nsf_conversion_destination(vault, folder))
+        if not kwargs.get('force'):
+            logger.warning(
+                'WARNING: Conversion is permanent. Classic shared-folder membership '
+                'and additional classic folder placements are not retained.')
+            if destination_uid and destination_uid != folder:
+                logger.info('Destination: %s (%s)', folder, destination_uid)
+            else:
+                logger.info('Destination: %s', destination_uid or 'NSF root')
+            for uid in record_uids:
+                logger.info('  %s', uid)
+            if not _confirm_removal('Continue with permanent conversion?', False):
+                logger.info('Conversion cancelled.')
+                return
+
+        results = _wrap_nsf(
+            'nsf-convert',
+            lambda: nsf_management.convert_classic_records_to_nsf(
+                vault, record_uids, folder_identifier=destination_uid or None))
+        for result in results:
+            if result.success:
+                logger.info("Classic record '%s' converted to an NSF record.", result.record_uid)
+            elif result.outcome_uncertain:
+                logger.warning(
+                    "Conversion outcome for '%s' is uncertain: %s (status: %s). "
+                    "Refresh the vault and verify the record before retrying.",
+                    result.record_uid, result.message, result.status)
+            elif result.skipped:
+                logger.warning("Classic record '%s' skipped: %s", result.record_uid, result.message)
+            else:
+                logger.error(
+                    "Classic record '%s' was not converted: %s (status: %s)",
+                    result.record_uid, result.message, result.status)
+        for result in results:
+            if result.refresh_warning:
+                logger.warning('%s', result.refresh_warning)
+                break
+        logger.info(
+            'Conversion complete: %d confirmed converted, %d uncertain, %d failed, %d skipped.',
+            sum(1 for r in results if r.success),
+            sum(1 for r in results if r.outcome_uncertain),
+            sum(1 for r in results if not r.success and not r.outcome_uncertain and not r.skipped),
+            sum(1 for r in results if r.skipped),
+        )
+
 class NsfRecordDetailsCommand(base.ArgparseCommand):
 
     def __init__(self):
