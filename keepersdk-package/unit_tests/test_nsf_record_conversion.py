@@ -150,5 +150,44 @@ class NsfRecordConversionTests(unittest.TestCase):
         self.assertIn('Vault refresh failed', results[0].refresh_warning)
 
 
+class NsfConversionDestinationTests(unittest.TestCase):
+    def setUp(self):
+        self.vault = Mock()
+        self.folders = []
+        for folder_uid, name in (('FOLDER_A', 'data234'), ('FOLDER_B', 'Data234'), ('FOLDER_C', 'unique')):
+            folder = Mock(folder_uid=folder_uid)
+            folder.name = name
+            self.folders.append(folder)
+        view = Mock()
+        view.folders.return_value = self.folders
+        view.get_folder.side_effect = lambda uid: next((f for f in self.folders if f.folder_uid == uid), None)
+        patcher = patch('keepersdk.vault.nsf_management._nsf_view', return_value=view)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_duplicate_folder_names_require_uid(self):
+        with self.assertRaises(nsf_management.NsfError) as ctx:
+            nsf_management.resolve_nsf_conversion_destination(self.vault, 'data234')
+        self.assertEqual(str(ctx.exception),
+                         '2 NSF folders are named "data234". Use the folder UID for this operation.')
+
+    def test_folder_is_resolved_by_unique_name_or_uid(self):
+        self.assertEqual(nsf_management.resolve_nsf_conversion_destination(self.vault, 'UNIQUE'), 'FOLDER_C')
+        self.assertEqual(nsf_management.resolve_nsf_conversion_destination(self.vault, 'FOLDER_A'), 'FOLDER_A')
+
+    def test_root_and_missing_destination(self):
+        self.assertEqual(nsf_management.resolve_nsf_conversion_destination(self.vault, None), '')
+        self.assertEqual(nsf_management.resolve_nsf_conversion_destination(self.vault, 'My Drive'), '')
+        with self.assertRaises(nsf_management.NsfError) as ctx:
+            nsf_management.resolve_nsf_conversion_destination(self.vault, 'missing')
+        self.assertIn('is not an NSF folder', str(ctx.exception))
+
+    def test_conversion_is_not_sent_for_duplicate_folder_names(self):
+        self.vault.keeper_auth.auth_context.data_key = b'\x03' * 32
+        with self.assertRaises(nsf_management.NsfError):
+            nsf_management.convert_classic_records_to_nsf(self.vault, ['UID'], folder_identifier='data234')
+        self.vault.keeper_auth.execute_auth_rest.assert_not_called()
+
+
 if __name__ == '__main__':
     unittest.main()
