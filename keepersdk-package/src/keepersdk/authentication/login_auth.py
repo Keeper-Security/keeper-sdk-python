@@ -446,7 +446,10 @@ def _ensure_device_token_loaded(login: LoginAuth, *, new_device=False) -> None:
                         uc.last_device = None
                         config.users().put(uc)
 
-            dc = next((x for x in config.devices().list()), None)
+            # A device token is server-bound. Do not reuse a cached device unless
+            # its configuration explicitly contains this server.
+            dc = next((x for x in config.devices().list()
+                       if x.get_server_info().get(server) is not None), None)
             if dc:
                 try:
                     context.device_token = \
@@ -918,7 +921,8 @@ class _CloudSsoTokenLoginStep(_SsoTokenLoginStep):
         rq.forceLogin = False
         rq.detached = True
         api_rq = endpoint.prepare_api_request(
-            login.keeper_endpoint.server_key_id, self.transmission_key, rq.SerializeToString())
+            login.keeper_endpoint.server_key_id, self.transmission_key, rq.SerializeToString(),
+            public_keys=login.keeper_endpoint.server_public_keys)
         url_comp = list(urlparse(sso_info.sso_url))
         url_comp[4] = f'payload={quote_plus(utils.base64_url_encode(api_rq.SerializeToString()))}'
         self._login_url = urlunparse(url_comp)

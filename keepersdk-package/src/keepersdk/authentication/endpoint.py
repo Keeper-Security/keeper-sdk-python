@@ -14,7 +14,7 @@ from urllib.parse import urlunparse, urlparse
 import requests
 from google.protobuf.json_format import MessageToJson
 from google.protobuf.message import Message
-from urllib3.exceptions import InsecureRequestWarning
+from urllib3.exceptions import InsecureRequestWarning, MaxRetryError, NewConnectionError
 
 from . import configuration
 from .. import crypto, utils
@@ -30,6 +30,40 @@ MAX_THROTTLE_RETRIES = 3
 MAX_KEY_RETRIES = 3
 MAX_THROTTLE_WAIT_SECONDS = 300
 DEFAULT_THROTTLE_WAIT_SECONDS = 60
+MAX_CONNECTION_RETRIES = 3
+CONNECTION_RETRY_DELAY_SECONDS = 1
+
+
+def _is_connection_setup_error(error: Exception) -> bool:
+    """True when a request failed before anything was sent, so it is safe to resend."""
+    if isinstance(error, requests.exceptions.ConnectTimeout):
+        return True
+    if isinstance(error, requests.exceptions.SSLError):
+        return False
+    if isinstance(error, requests.exceptions.ConnectionError):
+        reason = error.args[0] if error.args else None
+        return isinstance(reason, MaxRetryError) and isinstance(reason.reason, NewConnectionError)
+    return False
+
+
+def post_with_connection_retry(url: str, **kwargs) -> requests.Response:
+    """``requests.post`` that retries failures to connect (timeout, refused, DNS).
+
+    Failures after the request may have reached the server (read timeouts, dropped
+    connections) are not retried because Keeper API calls are not idempotent.
+    """
+    attempt = 1
+    while True:
+        try:
+            return requests.post(url, **kwargs)
+        except requests.exceptions.RequestException as e:
+            if attempt >= MAX_CONNECTION_RETRIES or not _is_connection_setup_error(e):
+                raise
+            delay = CONNECTION_RETRY_DELAY_SECONDS * (2 ** (attempt - 1))
+            utils.get_logger().debug('Connection to %s failed (%s). Retry %d of %d in %d second(s)',
+                                     url, e, attempt, MAX_CONNECTION_RETRIES - 1, delay)
+            time.sleep(delay)
+            attempt += 1
 
 
 def _parse_retry_after(value: str) -> Optional[int]:
@@ -132,18 +166,22 @@ def set_proxies(proxies: Optional[Dict]) -> None:
     _proxies = proxies
 
 
-def encrypt_with_keeper_key(data: bytes, key_id: int) -> bytes:
-    if 1 <= key_id <= 6:
+def encrypt_with_keeper_key(data: bytes, key_id: int, public_keys: Optional[Dict[int, Any]] = None) -> bytes:
+    """Encrypt with a configured server EC key before using built-in Keeper keys."""
+    public_keys = public_keys or {}
+    if key_id in public_keys:
+        return crypto.encrypt_ec(data, public_keys[key_id])
+    if 1 <= key_id <= 6 and key_id in SERVER_PUBLIC_KEYS:
         return crypto.encrypt_rsa(data, SERVER_PUBLIC_KEYS[key_id])
-    elif 7 <= key_id <= 17:
+    if 7 <= key_id <= 17 and key_id in SERVER_PUBLIC_KEYS:
         return crypto.encrypt_ec(data, SERVER_PUBLIC_KEYS[key_id])
-    else:
-        raise errors.KeeperApiError('invalid_key_id', f'Key ID \"{key_id}\" is not valid.')
+    raise errors.KeeperApiError('invalid_key_id', f'Key ID "{key_id}" is not valid for the configured Keeper server.')
 
 
 def prepare_api_request(key_id: int, transmission_key: bytes,
                         payload: Optional[bytes] = None,
                         *,
+                        public_keys: Optional[Dict[int, Any]] = None,
                         session_token: Optional[bytes] = None,
                         keeper_locale: Optional[str] = None,
                         payload_version: Optional[int] = None) -> APIRequest_pb2.ApiRequest:
@@ -156,7 +194,7 @@ def prepare_api_request(key_id: int, transmission_key: bytes,
         api_payload.payload = payload
 
     enc_payload = crypto.encrypt_aes_v2(api_payload.SerializeToString(), transmission_key)
-    enc_transmission_key = encrypt_with_keeper_key(transmission_key, key_id)
+    enc_transmission_key = encrypt_with_keeper_key(transmission_key, key_id, public_keys)
     api_request = APIRequest_pb2.ApiRequest()
     api_request.encryptedTransmissionKey = enc_transmission_key
     api_request.publicKeyId = key_id
@@ -174,6 +212,8 @@ class KeeperEndpoint(object):
         self.locale = resolve_locale()
         self._server: str = ''
         self._server_key_id = 7
+        self._server_public_keys: Dict[int, Any] = {}
+        self._ignore_certificate_errors = False
         self._storage = configuration_storage
         if not keeper_server:
             config = configuration_storage.get()
@@ -197,15 +237,37 @@ class KeeperEndpoint(object):
         if sc:
             self._server = sc.server
             self._server_key_id = sc.server_key_id
-            if self._server_key_id < 7:
+            self._server_public_keys = {}
+            for key_id, encoded_key in (sc.public_keys or {}).items():
+                try:
+                    self._server_public_keys[int(key_id)] = crypto.load_ec_public_key(
+                        utils.base64_url_decode(encoded_key))
+                except Exception as e:
+                    raise errors.KeeperApiError(
+                        'invalid_server_public_key',
+                        f'Invalid EC public key configured for server "{keeper_server}" (key ID {key_id}): {e}') from e
+            self._ignore_certificate_errors = bool(sc.ignore_certificate_errors)
+            if self._server_key_id < 7 and self._server_key_id not in self._server_public_keys:
                 self._server_key_id = 7
         else:
             self._server = keeper_server
             self._server_key_id = 7
+            self._server_public_keys = {}
+            self._ignore_certificate_errors = False
+
+    @property
+    def ignore_certificate_errors(self) -> bool:
+        """Return the TLS validation setting for the currently selected server."""
+        return self._ignore_certificate_errors or not get_certificate_check()
 
     @property
     def server_key_id(self):
         return self._server_key_id or 7
+
+    @property
+    def server_public_keys(self) -> Dict[int, Any]:
+        """Return the validated custom EC keys for the active server."""
+        return dict(self._server_public_keys)
 
     def get_configuration_storage(self):
         return self._storage
@@ -220,7 +282,7 @@ class KeeperEndpoint(object):
         logger = utils.get_logger()
         transmission_key = utils.generate_aes_key()
         encrypted_session_token = crypto.encrypt_aes_v2(session_token, transmission_key)
-        encrypted_transmission_key = encrypt_with_keeper_key(transmission_key, self._server_key_id)
+        encrypted_transmission_key = encrypt_with_keeper_key(transmission_key, self._server_key_id, self._server_public_keys)
 
         headers = {
             'TransmissionKey': base64.b64encode(encrypted_transmission_key).decode('ascii'),
@@ -240,8 +302,8 @@ class KeeperEndpoint(object):
 
         throttle_retries = 0
         while True:
-            response = requests.post(url, headers=headers, data=payload, verify=get_certificate_check(),
-                                     timeout=DEFAULT_TIMEOUT)
+            response = post_with_connection_retry(url, headers=headers, data=payload,
+                                                  verify=not self.ignore_certificate_errors, timeout=DEFAULT_TIMEOUT)
             logger.debug('<<<  [ROUTER] Response Code: [%d]', response.status_code)
 
             if response.status_code == 200:
@@ -366,6 +428,7 @@ class KeeperEndpoint(object):
         key_retries = 0
         while True:
             api_request = prepare_api_request(key_id, transmission_key, payload,
+                                              public_keys=self.server_public_keys,
                                               session_token=session_token,
                                               keeper_locale=self.locale,
                                               payload_version=payload_version)
@@ -381,15 +444,17 @@ class KeeperEndpoint(object):
                 'Content-Type': 'application/octet-stream',
                 'User-Agent': 'KeeperSDK.Python/' + self.client_version
             }
-            rs = requests.post(url, data=api_request.SerializeToString(), headers=headers, proxies=get_proxies(),
-                               verify=get_certificate_check(), timeout=DEFAULT_TIMEOUT)
+            rs = post_with_connection_retry(url, data=api_request.SerializeToString(), headers=headers,
+                                            proxies=get_proxies(), verify=not self.ignore_certificate_errors,
+                                            timeout=DEFAULT_TIMEOUT)
             logger.debug('<<< Response Code: [%d]', rs.status_code)
 
             if rs.status_code == 200:
                 if key_id != self._server_key_id:
                     self._server_key_id = key_id
                     config = self._storage.get()
-                    sc = configuration.ServerConfiguration(self.server)
+                    existing = config.servers().get(self.server)
+                    sc = configuration.ServerConfiguration(existing if existing else self.server)
                     sc.server_key_id = key_id
                     config.servers().put(sc)
                     self._storage.put(config)
@@ -481,7 +546,8 @@ class KeeperEndpoint(object):
         rq.deviceTimeStamp = utils.current_milli_time()
         payload = rq.SerializeToString()
 
-        api_rq = prepare_api_request(self.server_key_id, transmission_key, payload)
+        api_rq = prepare_api_request(self.server_key_id, transmission_key, payload,
+                                    public_keys=self.server_public_keys)
         push_server = self.get_push_server()
         push_url = '/wss_open_connection/' + utils.base64_url_encode(api_rq.SerializeToString())
         url_comp = ('wss', push_server, push_url, None, None, None)

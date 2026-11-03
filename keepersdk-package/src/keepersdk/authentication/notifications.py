@@ -100,6 +100,10 @@ class BasePushNotifications(abc.ABC, FanOut[Dict[str, Any]]):
     def get_connection_parameters(self) -> Optional[PushConnectionParameters]:
         pass
 
+    def get_ignore_certificate_errors(self) -> bool:
+        """Return whether TLS validation should be bypassed for this connection."""
+        return not endpoint.get_certificate_check()
+
     async def main_loop(self) -> None:
         logger = utils.get_logger()
 
@@ -116,7 +120,7 @@ class BasePushNotifications(abc.ABC, FanOut[Dict[str, Any]]):
 
             if url.startswith('wss://'):
                 ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
-                if not endpoint.get_certificate_check():
+                if self.get_ignore_certificate_errors():
                     ssl_context.check_hostname = False
                     ssl_context.verify_mode = ssl.CERT_NONE
             try:
