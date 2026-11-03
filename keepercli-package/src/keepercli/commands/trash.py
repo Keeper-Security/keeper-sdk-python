@@ -205,7 +205,7 @@ class TrashListCommand(base.ArgparseCommand):
                 title,
                 record_type,
                 self._get_deleted_date(record),
-                'Drive',
+                'NSF Record',
             ])
         return rows
 
@@ -234,7 +234,7 @@ class TrashListCommand(base.ArgparseCommand):
                 folder_name,
                 '',
                 self._get_deleted_date(folder),
-                'Drive Folder',
+                'NSF Folder',
             ])
         return rows
 
@@ -403,7 +403,7 @@ class TrashGetCommand(base.ArgparseCommand):
 
             record_data = self._parse_record_data(record)
             if not record_data:
-                logger.info('Cannot restore record %s', record_uid)
+                logger.info('Cannot retrieve record %s', record_uid)
                 return
 
         password_revealed = self._display_record_info(record_data, kwargs.get('unmask', False))
