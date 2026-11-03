@@ -14,6 +14,8 @@ from .. import utils, background
 
 M = TypeVar('M')
 
+PUSH_SHUTDOWN_TIMEOUT = 5
+
 
 class FanOut(Generic[M]):
     """Generic fan-out/publish-subscribe pattern for distributing messages to multiple callbacks."""
@@ -145,13 +147,15 @@ class BasePushNotifications(abc.ABC, FanOut[Dict[str, Any]]):
     async def close_ws(self):
         try:
             ws_app = self._ws_app
-            if ws_app and ws_app.state == websockets.protocol.State.OPEN:
+            # The server may have started closing already (e.g. on logout); wait for that to finish too.
+            if ws_app and ws_app.state != websockets.protocol.State.CLOSED:
                 await ws_app.close(websockets.frames.CloseCode.GOING_AWAY)
             running_task = self._running_task
             if running_task and not running_task.done():
-                running_task.cancel()
-                await running_task
-        except Exception:
+                # running_task is a concurrent future; wrap it so this loop can await main_loop's exit.
+                # wait_for cancels main_loop if it does not exit in time.
+                await asyncio.wait_for(asyncio.wrap_future(running_task), timeout=PUSH_SHUTDOWN_TIMEOUT)
+        except (Exception, asyncio.CancelledError):
             pass
         finally:
             self._running_task = None
