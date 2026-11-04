@@ -105,20 +105,60 @@ class NsfRecordConversionTests(unittest.TestCase):
 
         self.assertEqual(len(results), 101)
         self.assertTrue(all(result.success for result in results[:100]))
-        self.assertTrue(results[100].outcome_uncertain)
+        # Still classic after sync-down: verified as not converted.
+        self.assertFalse(results[100].outcome_uncertain)
+        self.assertFalse(results[100].success)
         self.assertEqual(results[100].status, 'ACCESS_DENIED')
         self.vault.run_pending_jobs.assert_called_once()
 
     @patch('keepersdk.vault.nsf_management.is_nsf_record', return_value=False)
     @patch('keepersdk.vault.nsf_management.crypto.encrypt_aes_v2', return_value=b'encrypted')
-    def test_transport_failure_marks_batch_uncertain_and_syncs(self, _encrypt, _is_nsf):
+    def test_transport_failure_verified_not_converted_after_sync(self, _encrypt, _is_nsf):
         self.vault.keeper_auth.execute_auth_rest.side_effect = OSError('connection lost')
+
+        results = nsf_management.convert_classic_records_to_nsf(self.vault, [self.uid])
+
+        self.assertFalse(results[0].outcome_uncertain)
+        self.assertFalse(results[0].success)
+        self.assertEqual(results[0].status, 'RESPONSE_UNAVAILABLE')
+        self.assertIn('Not converted', results[0].message)
+        self.vault.run_pending_jobs.assert_called_once()
+
+    @patch('keepersdk.vault.nsf_management.crypto.encrypt_aes_v2', return_value=b'encrypted')
+    def test_transport_failure_verified_converted_after_sync(self, _encrypt):
+        self.vault.keeper_auth.execute_auth_rest.side_effect = KeeperApiError('http_error', 'Bad Gateway: 502')
+        converted = []
+        self.vault.run_pending_jobs.side_effect = lambda: converted.append(self.uid)
+
+        with patch('keepersdk.vault.nsf_management.is_nsf_record', side_effect=lambda _v, uid: uid in converted):
+            results = nsf_management.convert_classic_records_to_nsf(self.vault, [self.uid])
+
+        self.assertTrue(results[0].success)
+        self.assertFalse(results[0].outcome_uncertain)
+        self.assertEqual(results[0].status, 'OK')
+
+    @patch('keepersdk.vault.nsf_management.is_nsf_record', return_value=False)
+    @patch('keepersdk.vault.nsf_management.crypto.encrypt_aes_v2', return_value=b'encrypted')
+    def test_transport_failure_stays_uncertain_when_state_unknown(self, _encrypt, _is_nsf):
+        self.vault.keeper_auth.execute_auth_rest.side_effect = OSError('connection lost')
+        get_record = self.vault.vault_data.get_record
+        self.vault.run_pending_jobs.side_effect = lambda: setattr(get_record, 'return_value', None)
 
         results = nsf_management.convert_classic_records_to_nsf(self.vault, [self.uid])
 
         self.assertTrue(results[0].outcome_uncertain)
         self.assertEqual(results[0].status, 'RESPONSE_UNAVAILABLE')
-        self.vault.run_pending_jobs.assert_called_once()
+
+    @patch('keepersdk.vault.nsf_management.is_nsf_record', return_value=False)
+    @patch('keepersdk.vault.nsf_management.crypto.encrypt_aes_v2', return_value=b'encrypted')
+    def test_transport_failure_stays_uncertain_when_sync_fails(self, _encrypt, _is_nsf):
+        self.vault.keeper_auth.execute_auth_rest.side_effect = OSError('connection lost')
+        self.vault.run_pending_jobs.side_effect = RuntimeError('sync failed')
+
+        results = nsf_management.convert_classic_records_to_nsf(self.vault, [self.uid])
+
+        self.assertTrue(results[0].outcome_uncertain)
+        self.assertIn('Vault refresh failed', results[0].refresh_warning)
 
     @patch('keepersdk.vault.nsf_management.resolve_nsf_folder_uid', return_value='AQEBAQEBAQEBAQEBAQEBAQ')
     @patch('keepersdk.vault.nsf_management.is_nsf_folder', return_value=True)

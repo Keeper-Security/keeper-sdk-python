@@ -1687,17 +1687,16 @@ def resolve_nsf_conversion_destination(vault: VaultOnline, folder_identifier: Op
     identifier = folder_identifier.strip()
     if identifier.casefold() in ('root', 'my drive', ROOT_FOLDER_UID.casefold()):
         return ''
+    # Resolves an NSF folder UID or a unique folder name.
     destination_uid = resolve_nsf_folder_uid(vault, identifier)
-    if not destination_uid:
-        lower = identifier.casefold()
-        matches = [f.folder_uid for f in _nsf_view(vault).folders() if (f.name or '').casefold() == lower]
-        if len(matches) > 1:
-            raise NsfError(
-                f'{len(matches)} NSF folders are named "{identifier}". Use the folder UID for this operation.')
-        destination_uid = identifier
-    if not is_nsf_folder(vault, destination_uid):
-        raise NsfError(f'Destination "{folder_identifier}" is not an NSF folder in the local cache.')
-    return destination_uid
+    if destination_uid:
+        return destination_uid
+    lower = identifier.casefold()
+    matches = [f.folder_uid for f in _nsf_view(vault).folders() if (f.name or '').casefold() == lower]
+    if len(matches) > 1:
+        raise NsfError(
+            f'{len(matches)} NSF folders are named "{identifier}". Use the folder UID for this operation.')
+    raise NsfError(f'Destination "{folder_identifier}" is not an NSF folder in the local cache.')
 
 
 def convert_classic_records_to_nsf(
@@ -1873,7 +1872,31 @@ def convert_classic_records_to_nsf(
             for result in final_results:
                 if result.success or result.outcome_uncertain:
                     result.refresh_warning = warning
+        else:
+            _verify_uncertain_conversions(vault, final_results)
     return final_results
+
+
+def _verify_uncertain_conversions(vault: VaultOnline, results: List[NsfRecordConversionResult]) -> None:
+    """Resolve uncertain conversion outcomes from the refreshed vault.
+
+    Conversion is permanent, so the caller must not retry a record whose outcome is unknown.
+    After sync-down, a record present in the NSF cache was converted; a record that is still
+    classic and absent from the NSF cache was not. Anything else stays uncertain.
+    """
+    for result in results:
+        if not result.outcome_uncertain:
+            continue
+        uid = result.record_uid
+        if is_nsf_record(vault, uid):
+            result.status = 'OK'
+            result.message = 'Converted successfully (confirmed after vault refresh).'
+            result.success = True
+            result.outcome_uncertain = False
+        elif vault.vault_data.get_record(uid) is not None:
+            result.message = (f'Not converted (confirmed after vault refresh: the record is still a classic record). '
+                              f'Server response: {result.status}.')
+            result.outcome_uncertain = False
 
 
 def move_nsf_record(
