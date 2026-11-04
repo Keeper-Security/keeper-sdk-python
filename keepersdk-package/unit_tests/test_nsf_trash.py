@@ -122,6 +122,26 @@ class TestNsfTrashManagement(unittest.TestCase):
         )
         self.assertEqual(request.records[0].source_folder_uid, utils.base64_url_decode(source_folder_uid))
 
+    def test_restore_nsf_record_to_root_sends_empty_target_uid(self):
+        data_key = utils.generate_aes_key()
+        record_key = utils.generate_aes_key()
+        record_uid = utils.generate_uid()
+        nsf_records = {record_uid: {
+            'record_uid': record_uid, 'folder_uid': utils.generate_uid(), 'record_key_unencrypted': record_key}}
+        vault = self._vault(data_key)
+        vault.keeper_auth.execute_auth_rest.return_value = \
+            self._restore_response((record_uid, remove_pb2.RESTORE_ITEM_RECORD, remove_pb2.RS_SUCCESS))
+
+        restored, failures = trash_management._execute_nsf_restoration(
+            vault, {record_uid}, set(), nsf_records, {},
+            target_folder_uid=trash_management.nsf_management.ROOT_FOLDER_UID)
+
+        self.assertEqual(restored, {record_uid})
+        self.assertEqual(failures, {})
+        request = vault.keeper_auth.execute_auth_rest.call_args.args[1]
+        self.assertEqual(request.target_folder_uid, b'')
+        self.assertEqual(crypto.decrypt_aes_v2(request.records[0].encrypted_record_key, data_key), record_key)
+
     def test_restore_nsf_groups_items_by_original_destination(self):
         data_key = utils.generate_aes_key()
         record_key_1 = utils.generate_aes_key()
@@ -356,10 +376,11 @@ class TestNsfTrashManagement(unittest.TestCase):
             self._restore_response((child_uid, remove_pb2.RESTORE_ITEM_FOLDER, remove_pb2.RS_SUCCESS)),
             self._restore_response((record_uid, remove_pb2.RESTORE_ITEM_RECORD, remove_pb2.RS_NOT_IN_TRASHCAN)),
         ]
-        _, failures = trash_management._execute_nsf_restoration(
+        restored, failures = trash_management._execute_nsf_restoration(
             vault, {record_uid}, {parent_uid, child_uid}, nsf_records, nsf_folders)
 
         self.assertEqual(failures, {})
+        self.assertEqual(restored, {record_uid})
 
         requests = [c.args[1] for c in vault.keeper_auth.execute_auth_rest.call_args_list]
         self.assertEqual([r.folders[0].folder_uid for r in requests[:2]],

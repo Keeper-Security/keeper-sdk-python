@@ -859,7 +859,11 @@ def _send_nsf_restore_requests(
 
     Items of a chunk the server rejected, or returned no result for, are added to ``failures``.
     """
-    target_folder_uid_bytes = utils.base64_url_decode(destination_uid) if destination_uid else b''
+    # The API represents the root folder as an empty UID, same as NSF move.
+    if not destination_uid or destination_uid == nsf_management.ROOT_FOLDER_UID:
+        target_folder_uid_bytes = b''
+    else:
+        target_folder_uid_bytes = utils.base64_url_decode(destination_uid)
     results: List[remove_pb2.RestoreResult] = []
     while restore_records or restore_folders:
         request = remove_pb2.TrashcanRestoreRequest()
@@ -927,6 +931,7 @@ def _execute_nsf_restoration(
             if result.status == remove_pb2.RS_NOT_IN_TRASHCAN and item_uid in nsf_records \
                     and nsf_records[item_uid].get('folder_uid') in restored_folder_uids:
                 logger.debug('NSF record "%s" was restored with its folder', item_uid)
+                restored_record_uids.add(item_uid)
                 continue
             reason = _NSF_RESTORE_STATUS_NAMES.get(result.status, 'unknown error')
             if result.error_message:
