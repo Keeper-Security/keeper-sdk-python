@@ -24,6 +24,24 @@ logger = api.get_logger()
 
 GET_SHARE_ADMINS = 'enterprise/get_sharing_admins'
 
+MASKED_VALUE = '********'
+SENSITIVE_FIELD_TYPES = frozenset({
+    'password', 'secret', 'otp', 'privateKey', 'pinCode',
+    'oneTimeCode', 'keyPair', 'licenseNumber'
+})
+
+
+def is_sensitive_field_type(field_type: Optional[str]) -> bool:
+    """Check if a field type is considered sensitive and should be masked."""
+    return field_type in SENSITIVE_FIELD_TYPES
+
+
+def field_has_value(value) -> bool:
+    """True when a record field value (scalar or list) is non-empty."""
+    if isinstance(value, list):
+        return any(value)
+    return bool(value)
+
 
 def is_record_uid(value: str) -> bool:
     if not value:
