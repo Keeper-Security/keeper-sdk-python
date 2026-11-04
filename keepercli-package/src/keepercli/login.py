@@ -11,6 +11,7 @@ import pyperclip
 from prompt_toolkit.formatted_text import FormattedText
 
 from keepersdk import errors, utils, crypto
+from keepersdk.password_strength import MasterPasswordStrength, IMasterPasswordStrengthUI
 from keepersdk.authentication import login_auth, keeper_auth, endpoint, configuration
 from keepersdk.proto import APIRequest_pb2, enterprise_pb2, ssocloud_pb2
 from keepersdk.authentication.yubikey import yubikey_authenticate, IKeeperUserInteraction
@@ -36,6 +37,16 @@ class FidoCliInteraction(fido2.client.UserInteraction, IKeeperUserInteraction):
     def request_uv(self, permissions, rd_id):
         prompt_utils.output_text("User Verification required.")
         return True
+
+
+class ConsoleMasterPasswordStrengthUI(IMasterPasswordStrengthUI):
+    """Display master password strength in the Keeper CLI."""
+
+    def report_master_password_strength(self, score: int, category: str) -> None:
+        if category == 'UNKNOWN':
+            prompt_utils.output_text('Password strength could not be determined.')
+        else:
+            prompt_utils.output_text(f'Password strength: {category}')
 
 
 class LoginFlow:
@@ -488,7 +499,8 @@ class LoginFlow:
         if auth.auth_context.session_token_restriction == keeper_auth.SessionTokenRestriction.AccountRecovery:
             prompt_utils.output_text(
                 'Your Master Password has expired, you are required to change it before you can login.')
-            password = LoginAPI.change_master_password(auth)
+            password = LoginAPI.change_master_password(
+                auth, user_interaction=ConsoleMasterPasswordStrengthUI())
             if password:
                 new_auth = LoginFlow.login(auth.keeper_endpoint.storage, password=password)
                 if new_auth:
@@ -528,7 +540,8 @@ class LoginAPI:
     @staticmethod
     def change_master_password(
             auth: keeper_auth.KeeperAuth, password_rules: Optional[List[APIRequest_pb2.PasswordRules]]=None,
-            min_iterations: Optional[int]=None) -> Optional[str]:
+            min_iterations: Optional[int]=None,
+            user_interaction: Optional[IMasterPasswordStrengthUI]=None) -> Optional[str]:
 
         if password_rules is None:
             password_rules, min_iterations = \
@@ -551,6 +564,7 @@ class LoginAPI:
                         if not re.match(pattern, password):
                             failed_rules.append(rule.description)
                     if len(failed_rules) == 0:
+                        MasterPasswordStrength.report(user_interaction, password)
                         LoginAPI.change_master_password_command(
                             auth, password, min_iterations or constants.PBKDF2_ITERATIONS)
                         logger.debug('Password changed')
