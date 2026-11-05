@@ -166,7 +166,7 @@ class Connection(ConnectionBase):
                 response = requests.request(
                     method=http_method,
                     url=url,
-                    verify=self.verify_ssl,
+                    verify=endpoint.get_ssl_verify() if self.verify_ssl else False,
                     headers={
                         **headers,
                         'User-Agent': agent

@@ -4,11 +4,12 @@ import locale
 import logging
 import os
 import re
+import ssl
 import time
 import warnings
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
-from typing import Optional, Dict, Any, Type, TypeVar, Mapping, Tuple
+from typing import Optional, Dict, Any, Type, TypeVar, Mapping, Tuple, Union
 from urllib.parse import urlunparse, urlparse
 
 import requests
@@ -158,6 +159,35 @@ def set_certificate_check(value: bool) -> None:
         else:
             warnings.simplefilter('ignore', InsecureRequestWarning)
 
+def get_ssl_verify(ignore_certificate_errors: bool = False) -> Union[str, bool]:
+    """Return the ``requests`` ``verify`` value: a CA bundle path, or False when verification is off.
+
+    Verification is off when ``ignore_certificate_errors`` is set (e.g. a self-hosted server
+    configured to skip validation), ``set_certificate_check(False)`` was called, the legacy
+    ``VERIFY_SSL=FALSE`` environment variable is set, or ``KEEPER_SSL_CERT_FILE`` disables it.
+    """
+    if ignore_certificate_errors or not get_certificate_check():
+        return False
+    if os.environ.get('VERIFY_SSL', 'TRUE').upper() == 'FALSE':
+        return False
+    return utils.get_ssl_cert_file()
+
+
+def create_ssl_context(verify: Union[str, bool]) -> ssl.SSLContext:
+    """Build a client SSL context (for WebSockets) matching a ``requests`` ``verify`` value."""
+    if isinstance(verify, str) and verify:
+        if os.path.isdir(verify):
+            context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, capath=verify)
+        else:
+            context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=verify)
+    else:
+        context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+        if verify is False:
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+    return context
+
+
 def get_proxies() -> Optional[Dict]:
     global _proxies
     return _proxies
@@ -261,6 +291,11 @@ class KeeperEndpoint(object):
         return self._ignore_certificate_errors or not get_certificate_check()
 
     @property
+    def ssl_verify(self) -> Union[str, bool]:
+        """Return the ``requests`` ``verify`` value for the currently selected server."""
+        return get_ssl_verify(self._ignore_certificate_errors)
+
+    @property
     def server_key_id(self):
         return self._server_key_id or 7
 
@@ -303,7 +338,7 @@ class KeeperEndpoint(object):
         throttle_retries = 0
         while True:
             response = post_with_connection_retry(url, headers=headers, data=payload,
-                                                  verify=not self.ignore_certificate_errors, timeout=DEFAULT_TIMEOUT)
+                                                  verify=self.ssl_verify, timeout=DEFAULT_TIMEOUT)
             logger.debug('<<<  [ROUTER] Response Code: [%d]', response.status_code)
 
             if response.status_code == 200:
@@ -362,7 +397,8 @@ class KeeperEndpoint(object):
 
         throttle_retries = 0
         while True:
-            response = requests.post(url, data=rq.SerializeToString(), timeout=DEFAULT_TIMEOUT)
+            response = requests.post(url, data=rq.SerializeToString(), verify=self.ssl_verify,
+                                     timeout=DEFAULT_TIMEOUT)
             if response.status_code == 200:
                 rs_body = response.content
                 payload = crypto.decrypt_aes_v2(rs_body, encryption_key)
@@ -445,7 +481,7 @@ class KeeperEndpoint(object):
                 'User-Agent': 'KeeperSDK.Python/' + self.client_version
             }
             rs = post_with_connection_retry(url, data=api_request.SerializeToString(), headers=headers,
-                                            proxies=get_proxies(), verify=not self.ignore_certificate_errors,
+                                            proxies=get_proxies(), verify=self.ssl_verify,
                                             timeout=DEFAULT_TIMEOUT)
             logger.debug('<<< Response Code: [%d]', rs.status_code)
 

@@ -119,10 +119,8 @@ class BasePushNotifications(abc.ABC, FanOut[Dict[str, Any]]):
             headers = push_parameters.headers or {}
 
             if url.startswith('wss://'):
-                ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
-                if self.get_ignore_certificate_errors():
-                    ssl_context.check_hostname = False
-                    ssl_context.verify_mode = ssl.CERT_NONE
+                ssl_context = endpoint.create_ssl_context(
+                    endpoint.get_ssl_verify(self.get_ignore_certificate_errors()))
             try:
                 async with websockets.connect(
                         url, additional_headers=headers, ping_interval=30, open_timeout=4, ssl=ssl_context) as ws_app:

@@ -4,7 +4,7 @@ import math
 import re
 import sys
 import time
-from typing import Iterator, Callable, Optional
+from typing import Any, Iterator, Callable, Optional, Union
 from urllib.parse import urlparse
 from pathlib import Path
 from . import crypto
@@ -294,13 +294,34 @@ def get_default_path():
     return default_path
 
 
-def get_ssl_cert_file():
-    """Get SSL certificate file path, preferring system CA store for corporate environments like Zscaler"""
+_SSL_CERT_UNSET = object()
+_cached_ssl_cert_file: Any = _SSL_CERT_UNSET
+
+
+def reset_ssl_cert_file_cache() -> None:
+    """Forget the resolved CA bundle so the next call re-reads ``KEEPER_SSL_CERT_FILE``."""
+    global _cached_ssl_cert_file
+    _cached_ssl_cert_file = _SSL_CERT_UNSET
+
+
+def get_ssl_cert_file() -> Union[str, bool]:
+    """Resolve the CA bundle path, or False when ``KEEPER_SSL_CERT_FILE`` disables verification.
+
+    Prefers the system CA store, which includes corporate CAs (e.g. Zscaler), over certifi.
+    The result is cached; call ``reset_ssl_cert_file_cache`` after changing the environment.
+    """
+    global _cached_ssl_cert_file
+    if _cached_ssl_cert_file is _SSL_CERT_UNSET:
+        _cached_ssl_cert_file = _resolve_ssl_cert_file()
+    return _cached_ssl_cert_file
+
+
+def _resolve_ssl_cert_file() -> Union[str, bool]:
     import ssl
     import platform
     import certifi
     import os
-    
+
     # Allow user to override via environment variable
     user_cert_file = os.getenv('KEEPER_SSL_CERT_FILE')
     if user_cert_file:
@@ -358,18 +379,12 @@ def get_ssl_cert_file():
     return certifi.where()
 
 def ssl_aware_request(method, url, **kwargs):
-    """Make an SSL-aware HTTP request using system CA certificates when available"""
+    """Make an HTTP request that honors the SDK SSL settings unless ``verify`` is given."""
     import requests
-    
-    # Only set verify if not already specified
+    from .authentication import endpoint
+
     if 'verify' not in kwargs:
-        cert_file = get_ssl_cert_file()
-        if cert_file is False:
-            kwargs['verify'] = False
-        elif cert_file:
-            kwargs['verify'] = cert_file
-        # If cert_file is None, let requests use its default
-    
+        kwargs['verify'] = endpoint.get_ssl_verify()
     return requests.request(method, url, **kwargs)
 
 

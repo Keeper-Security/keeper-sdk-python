@@ -1102,7 +1102,12 @@ class LoginPushNotifications(notifications.BasePushNotifications):
     def __init__(self, login: LoginAuth) -> None:
         super().__init__()
         self.login: Optional[LoginAuth] = login
+        # Kept separately: self.login is cleared once the connection parameters are taken.
+        self.keeper_endpoint = login.keeper_endpoint
         self.transmission_key = utils.generate_aes_key()
+
+    def get_ignore_certificate_errors(self) -> bool:
+        return self.keeper_endpoint.ignore_certificate_errors
 
     def on_messaged_received(self, message: Union[str, bytes]):
         if isinstance(message, bytes):
