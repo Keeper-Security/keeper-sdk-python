@@ -162,9 +162,16 @@ def set_certificate_check(value: bool) -> None:
 def get_ssl_verify(ignore_certificate_errors: bool = False) -> Union[str, bool]:
     """Return the ``requests`` ``verify`` value: a CA bundle path, or False when verification is off.
 
-    Verification is off when ``ignore_certificate_errors`` is set (e.g. a self-hosted server
-    configured to skip validation), ``set_certificate_check(False)`` was called, the legacy
-    ``VERIFY_SSL=FALSE`` environment variable is set, or ``KEEPER_SSL_CERT_FILE`` disables it.
+    Settings are checked in this order; any one of the first four turns verification off:
+
+    1. ``ignore_certificate_errors`` - the per-server setting of the server being called
+       (``configuration.set_server_ignore_certificate_errors``). Callers pass it for their
+       own server only (see ``KeeperEndpoint.ssl_verify``), so it never affects other servers.
+    2. ``set_certificate_check(False)`` - global, e.g. the CLI ``certificate_check`` config.
+    3. ``VERIFY_SSL=FALSE`` - legacy global environment variable.
+    4. ``KEEPER_SSL_CERT_FILE=none`` (or ``false``) - global environment variable.
+    5. Otherwise the CA bundle: ``KEEPER_SSL_CERT_FILE`` (a path, ``certifi`` or ``system``),
+       else the system CA store, else certifi. See ``utils.get_ssl_cert_file``.
     """
     if ignore_certificate_errors or not get_certificate_check():
         return False

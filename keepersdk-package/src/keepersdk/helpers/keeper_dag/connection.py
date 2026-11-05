@@ -9,7 +9,7 @@ from . import ConnectionBase, dag_utils, exceptions
 
 from keepersdk.vault import vault_online, vault_record
 from keepersdk import crypto, utils
-from keepersdk.authentication import endpoint
+from keepersdk.authentication import endpoint as auth_endpoint
 
 class Connection(ConnectionBase):
 
@@ -88,7 +88,7 @@ class Connection(ConnectionBase):
     # deprecated
     def get_keeper_tokens(self):
         self.transmission_key = utils.generate_aes_key()
-        server_public_key = endpoint.SERVER_PUBLIC_KEYS[self.vault.keeper_auth.keeper_endpoint.server_key_id]
+        server_public_key = auth_endpoint.SERVER_PUBLIC_KEYS[self.vault.keeper_auth.keeper_endpoint.server_key_id]
 
         if self.vault.keeper_auth.keeper_endpoint.server_key_id < 7:
             self.dep_encrypted_transmission_key = crypto.encrypt_rsa(self.transmission_key, server_public_key)
@@ -110,7 +110,7 @@ class Connection(ConnectionBase):
             self.transmission_key = utils.generate_aes_key()
             self.logger.debug(f"transmission key is {self.transmission_key}")
             # self.params.rest_context.transmission_key = self.transmission_key
-            server_public_key = endpoint.SERVER_PUBLIC_KEYS[self.vault.keeper_auth.keeper_endpoint.server_key_id]
+            server_public_key = auth_endpoint.SERVER_PUBLIC_KEYS[self.vault.keeper_auth.keeper_endpoint.server_key_id]
 
             if self.vault.keeper_auth.keeper_endpoint.server_key_id < 7:
                 encrypted_transmission_key = crypto.encrypt_rsa(self.transmission_key, server_public_key)
@@ -166,7 +166,7 @@ class Connection(ConnectionBase):
                 response = requests.request(
                     method=http_method,
                     url=url,
-                    verify=endpoint.get_ssl_verify() if self.verify_ssl else False,
+                    verify=auth_endpoint.get_ssl_verify() if self.verify_ssl else False,
                     headers={
                         **headers,
                         'User-Agent': agent

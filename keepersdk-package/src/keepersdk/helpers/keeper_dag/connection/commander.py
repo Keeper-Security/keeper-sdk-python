@@ -2,7 +2,7 @@ from __future__ import annotations
 import logging
 from . import ConnectionBase
 from ..exceptions import DAGConnectionException
-from ....authentication import endpoint
+from ....authentication import endpoint as auth_endpoint
 from ..dag_utils import value_to_boolean
 import os
 import requests
@@ -89,7 +89,7 @@ class Connection(ConnectionBase):
 
     def get_keeper_tokens(self):
         self.transmission_key = utils.generate_aes_key()
-        server_public_key = endpoint.SERVER_PUBLIC_KEYS[self.vault.keeper_auth.keeper_endpoint.server_key_id]
+        server_public_key = auth_endpoint.SERVER_PUBLIC_KEYS[self.vault.keeper_auth.keeper_endpoint.server_key_id]
 
         if self.vault.keeper_auth.keeper_endpoint.server_key_id < 7:
             self.dep_encrypted_transmission_key = crypto.encrypt_rsa(self.transmission_key, server_public_key)
@@ -107,7 +107,7 @@ class Connection(ConnectionBase):
         else:
             self.transmission_key = utils.generate_aes_key()
             self.logger.debug(f"transmission key is {self.transmission_key}")
-            server_public_key = endpoint.SERVER_PUBLIC_KEYS[self.vault.keeper_auth.keeper_endpoint.server_key_id]
+            server_public_key = auth_endpoint.SERVER_PUBLIC_KEYS[self.vault.keeper_auth.keeper_endpoint.server_key_id]
 
             if self.vault.keeper_auth.keeper_endpoint.server_key_id < 7:
                 encrypted_transmission_key = crypto.encrypt_rsa(self.transmission_key, server_public_key)
@@ -162,7 +162,7 @@ class Connection(ConnectionBase):
                 response = requests.request(
                     method=http_method,
                     url=url,
-                    verify=endpoint.get_ssl_verify() if self.verify_ssl else False,
+                    verify=auth_endpoint.get_ssl_verify() if self.verify_ssl else False,
                     headers={
                         **headers,
                         'User-Agent': agent

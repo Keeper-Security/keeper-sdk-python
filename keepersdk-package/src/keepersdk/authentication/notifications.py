@@ -108,6 +108,7 @@ class BasePushNotifications(abc.ABC, FanOut[Dict[str, Any]]):
         logger = utils.get_logger()
 
         ssl_context: Optional[ssl.SSLContext] = None
+        ws_app: Optional[websockets.ClientConnection] = None
         while self.use_pushes:
             push_parameters: Optional[PushConnectionParameters] = self.get_connection_parameters()
             if push_parameters is None:
