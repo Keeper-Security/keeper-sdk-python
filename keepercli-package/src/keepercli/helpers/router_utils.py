@@ -174,7 +174,7 @@ def router_send_message_to_gateway(context: KeeperParams, transmission_key, rq_p
 
     rs = requests.post(
         krouter_url + "/api/user/send_controller_message",
-        verify=VERIFY_SSL,
+        verify=endpoint.get_ssl_verify() if VERIFY_SSL else False,
 
         headers={
             'TransmissionKey': utils.base64_url_encode(encrypted_transmission_key),
@@ -423,7 +423,7 @@ def _post_request_to_router(vault: vault_online.VaultOnline, path, rq_proto=None
         rs = requests.request(method,
                               krouter_url + path,
                               params=query_params,
-                              verify=VERIFY_SSL,
+                              verify=endpoint.get_ssl_verify() if VERIFY_SSL else False,
                               headers={
                                 'TransmissionKey': utils.base64_url_encode(encrypted_transmission_key),
                                 'Authorization': f'KeeperUser {utils.base64_url_encode(encrypted_session_token)}'

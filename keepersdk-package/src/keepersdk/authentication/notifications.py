@@ -100,10 +100,15 @@ class BasePushNotifications(abc.ABC, FanOut[Dict[str, Any]]):
     def get_connection_parameters(self) -> Optional[PushConnectionParameters]:
         pass
 
+    def get_ignore_certificate_errors(self) -> bool:
+        """Return whether TLS validation should be bypassed for this connection."""
+        return not endpoint.get_certificate_check()
+
     async def main_loop(self) -> None:
         logger = utils.get_logger()
 
         ssl_context: Optional[ssl.SSLContext] = None
+        ws_app: Optional[websockets.ClientConnection] = None
         while self.use_pushes:
             push_parameters: Optional[PushConnectionParameters] = self.get_connection_parameters()
             if push_parameters is None:
@@ -115,10 +120,8 @@ class BasePushNotifications(abc.ABC, FanOut[Dict[str, Any]]):
             headers = push_parameters.headers or {}
 
             if url.startswith('wss://'):
-                ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
-                if not endpoint.get_certificate_check():
-                    ssl_context.check_hostname = False
-                    ssl_context.verify_mode = ssl.CERT_NONE
+                ssl_context = endpoint.create_ssl_context(
+                    endpoint.get_ssl_verify(self.get_ignore_certificate_errors()))
             try:
                 async with websockets.connect(
                         url, additional_headers=headers, ping_interval=30, open_timeout=4, ssl=ssl_context) as ws_app:

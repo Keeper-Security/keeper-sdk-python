@@ -117,6 +117,7 @@ class RecordFileReportCommand(base.ArgparseCommand):
             response = requests.get(
                 download.url, 
                 proxies=endpoint.get_proxies(),
+                verify=endpoint.get_ssl_verify(),
                 headers={"Range": "bytes=0-1"}
             )
             return 'OK' if response.status_code in {200, 206} else str(response.status_code)

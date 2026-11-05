@@ -110,6 +110,16 @@ class IServerConfiguration(IEntityId):
     def server_key_id(self) -> int:
         pass
 
+    @property
+    def public_keys(self) -> Dict[int, str]:
+        """Custom EC public keys configured for this server, keyed by key ID."""
+        return {}
+
+    @property
+    def ignore_certificate_errors(self) -> bool:
+        """Whether TLS certificate validation is disabled for this server."""
+        return False
+
     def get_id(self):
         return self.server
 
@@ -313,11 +323,15 @@ class ServerConfiguration(IServerConfiguration):
 
         self._server = ''
         self._server_key_id = 1
+        self._public_keys: Dict[int, str] = {}
+        self._ignore_certificate_errors = False
         if isinstance(other, str):
             self._server = adjust_servername(other)
         elif isinstance(other, IServerConfiguration):
             self._server = other.server
             self._server_key_id = other.server_key_id
+            self._public_keys = dict(other.public_keys or {})
+            self._ignore_certificate_errors = bool(other.ignore_certificate_errors)
 
     @property
     def server(self):
@@ -329,7 +343,23 @@ class ServerConfiguration(IServerConfiguration):
 
     @server_key_id.setter
     def server_key_id(self, value):
-        self._server_key_id = value
+        self._server_key_id = int(value)
+
+    @property
+    def public_keys(self):
+        return self._public_keys
+
+    @public_keys.setter
+    def public_keys(self, value):
+        self._public_keys = {int(k): v for k, v in (value or {}).items()}
+
+    @property
+    def ignore_certificate_errors(self):
+        return self._ignore_certificate_errors
+
+    @ignore_certificate_errors.setter
+    def ignore_certificate_errors(self, value):
+        self._ignore_certificate_errors = bool(value)
 
 
 class DeviceServerConfiguration(IDeviceServerConfiguration):
@@ -549,8 +579,11 @@ class _JsonDeviceConfiguration(dict, IDeviceConfiguration):
 
 
 class _JsonServerConfiguration(dict, IServerConfiguration):
+    # JSON key names in the "servers" section of config.json, not server settings.
     SERVER = 'server'
     SERVER_KEY_ID = 'server_key_id'
+    PUBLIC_KEYS = 'public_keys'
+    IGNORE_CERTIFICATE_ERRORS = 'ignore_certificate_errors'
 
     def __init__(self, data: Union[None, dict, IServerConfiguration]=None) -> None:
         super(_JsonServerConfiguration, self).__init__()
@@ -559,6 +592,8 @@ class _JsonServerConfiguration(dict, IServerConfiguration):
         if isinstance(data, IServerConfiguration):
             self[self.SERVER] = data.server
             self[self.SERVER_KEY_ID] = data.server_key_id
+            self[self.PUBLIC_KEYS] = {str(k): v for k, v in (data.public_keys or {}).items()}
+            self[self.IGNORE_CERTIFICATE_ERRORS] = bool(data.ignore_certificate_errors)
 
     @property
     def server(self):
@@ -567,6 +602,15 @@ class _JsonServerConfiguration(dict, IServerConfiguration):
     @property
     def server_key_id(self):
         return self.get(self.SERVER_KEY_ID, 1)
+
+    @property
+    def public_keys(self):
+        values = self.get(self.PUBLIC_KEYS, {})
+        return {int(k): v for k, v in values.items()} if isinstance(values, dict) else {}
+
+    @property
+    def ignore_certificate_errors(self):
+        return bool(self.get(self.IGNORE_CERTIFICATE_ERRORS, False))
 
 
 class _JsonUserDeviceConfiguration(dict, IUserDeviceConfiguration):
@@ -820,6 +864,61 @@ class JsonFileLoader(IJsonLoader):
     def store_json(self, data):
         with open(self.file_path, 'wb') as f:
             f.write(data)
+
+
+
+def set_server_public_key(storage: IConfigurationStorage, server: str, key_id: int, public_key: str) -> None:
+    """Configure a Base64 URL-encoded EC public key for one Keeper server."""
+    try:
+        from .. import crypto
+        crypto.load_ec_public_key(utils.base64_url_decode(public_key))
+    except Exception as e:
+        raise ValueError(f'EC public key expected: {e}') from e
+    if not isinstance(key_id, int) or key_id < 1:
+        raise ValueError('Server key ID must be a positive integer')
+    config = storage.get()
+    name = adjust_servername(server)
+    existing = config.servers().get(name)
+    sc = ServerConfiguration(existing if existing else name)
+    keys = dict(sc.public_keys or {})
+    keys[key_id] = public_key
+    sc.public_keys = keys
+    sc.server_key_id = key_id
+    config.servers().put(sc)
+    storage.put(config)
+
+
+def set_server_key_id(storage: IConfigurationStorage, server: str, key_id: int) -> None:
+    """Select a previously configured server key ID."""
+    if not isinstance(key_id, int) or key_id < 1:
+        raise ValueError('Server key ID must be a positive integer')
+    config = storage.get()
+    name = adjust_servername(server)
+    existing = config.servers().get(name)
+    sc = ServerConfiguration(existing if existing else name)
+    if key_id not in (sc.public_keys or {}) and key_id not in range(1, 18):
+        raise ValueError(f'No public key configured for key ID {key_id}')
+    sc.server_key_id = key_id
+    config.servers().put(sc)
+    storage.put(config)
+
+
+def set_server_ignore_certificate_errors(storage: IConfigurationStorage, server: str, ignore: bool) -> None:
+    """Set TLS certificate validation behavior for a single Keeper server.
+
+    Disabling validation is intended for self-hosted servers with self-signed
+    certificates. It leaves the connection encrypted but does not authenticate
+    the server's identity.
+    """
+    if not isinstance(ignore, bool):
+        raise ValueError('ignore must be a boolean')
+    config = storage.get()
+    name = adjust_servername(server)
+    existing = config.servers().get(name)
+    sc = ServerConfiguration(existing if existing else name)
+    sc.ignore_certificate_errors = ignore
+    config.servers().put(sc)
+    storage.put(config)
 
 
 class JsonConfigurationStorage(IConfigurationStorage):

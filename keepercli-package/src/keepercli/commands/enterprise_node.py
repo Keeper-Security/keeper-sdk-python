@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Any
 
 import requests
 
-from keepersdk.authentication import keeper_auth
+from keepersdk.authentication import endpoint, keeper_auth
 from keepersdk.enterprise import enterprise_types, batch_management, enterprise_management
 from keepersdk.vault import attachment
 from ..helpers import report_utils
@@ -389,7 +389,7 @@ class EnterpriseNodeSetLogoCommand(base.ArgparseCommand, enterprise_management.I
         form_data['Content-Type'] = upload_task.mime_type
         with upload_task.open() as task_stream:
             files = {file_param: (None, task_stream, upload_task.mime_type)}
-            upload_rs = requests.post(upload_url, files=files, data=form_data)
+            upload_rs = requests.post(upload_url, files=files, data=form_data, verify=endpoint.get_ssl_verify())
             if upload_rs.status_code == success_status_code:
                 # Verify file upload
                 check_rq = {

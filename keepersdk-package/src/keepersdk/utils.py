@@ -4,7 +4,7 @@ import math
 import re
 import sys
 import time
-from typing import Iterator, Callable, Optional
+from typing import Iterator, Callable, Optional, Tuple, Union
 from urllib.parse import urlparse
 from pathlib import Path
 from . import crypto
@@ -294,13 +294,45 @@ def get_default_path():
     return default_path
 
 
-def get_ssl_cert_file():
-    """Get SSL certificate file path, preferring system CA store for corporate environments like Zscaler"""
+# (KEEPER_SSL_CERT_FILE value it was resolved for, resolved CA bundle or False)
+_cached_ssl_cert_file: Optional[Tuple[Optional[str], Union[str, bool]]] = None
+
+
+def reset_ssl_cert_file_cache() -> None:
+    """Forget the resolved CA bundle, e.g. after a CA bundle file was added or removed."""
+    global _cached_ssl_cert_file
+    _cached_ssl_cert_file = None
+
+
+def get_ssl_cert_file() -> Union[str, bool]:
+    """Resolve the CA bundle path, or False when ``KEEPER_SSL_CERT_FILE`` disables verification.
+
+    Prefers the system CA store, which includes corporate CAs (e.g. Zscaler), over certifi.
+    The result is cached and re-resolved whenever ``KEEPER_SSL_CERT_FILE`` changes; call
+    ``reset_ssl_cert_file_cache`` if CA bundle files change on disk while the process runs.
+    """
+    global _cached_ssl_cert_file
+    import os
+
+    user_cert_file = os.getenv('KEEPER_SSL_CERT_FILE')
+    if _cached_ssl_cert_file is None or _cached_ssl_cert_file[0] != user_cert_file:
+        _cached_ssl_cert_file = (user_cert_file, _resolve_ssl_cert_file())
+    return _cached_ssl_cert_file[1]
+
+
+def _is_readable_ca_location(path: Optional[str]) -> bool:
+    import os
+    if not path:
+        return False
+    return os.path.exists(path) and os.access(path, os.R_OK)
+
+
+def _resolve_ssl_cert_file() -> Union[str, bool]:
     import ssl
     import platform
     import certifi
     import os
-    
+
     # Allow user to override via environment variable
     user_cert_file = os.getenv('KEEPER_SSL_CERT_FILE')
     if user_cert_file:
@@ -310,11 +342,11 @@ def get_ssl_cert_file():
             return certifi.where()
         elif user_cert_file.lower() == 'none' or user_cert_file.lower() == 'false':
             return False  # Disable SSL verification
-        elif os.path.exists(user_cert_file):
+        elif _is_readable_ca_location(user_cert_file):
             return user_cert_file
         else:
             # Don't use logging here as it can interfere with main logging config
-            print(f"Warning: SSL cert file specified in KEEPER_SSL_CERT_FILE not found: {user_cert_file}", file=sys.stderr)
+            print(f"Warning: SSL cert file specified in KEEPER_SSL_CERT_FILE not found or not readable: {user_cert_file}", file=sys.stderr)
     
     # Try to use system CA store first for corporate environments
     try:
@@ -326,7 +358,7 @@ def get_ssl_cert_file():
                 '/etc/ssl/cert.pem',  # macOS system CA bundle
             ]
             for ca_path in system_ca_paths:
-                if os.path.exists(ca_path):
+                if _is_readable_ca_location(ca_path):
                     return ca_path
         
         # On Linux/Unix systems
@@ -338,15 +370,15 @@ def get_ssl_cert_file():
                 '/etc/ssl/cert.pem',                   # Generic
             ]
             for ca_path in system_ca_paths:
-                if os.path.exists(ca_path):
+                if _is_readable_ca_location(ca_path):
                     return ca_path
         
         # Try to get default SSL context locations
         try:
             default_locations = ssl.get_default_verify_paths()
-            if default_locations.cafile and os.path.exists(default_locations.cafile):
+            if _is_readable_ca_location(default_locations.cafile):
                 return default_locations.cafile
-            if default_locations.capath and os.path.exists(default_locations.capath):
+            if _is_readable_ca_location(default_locations.capath):
                 return default_locations.capath
         except:
             pass
@@ -358,18 +390,12 @@ def get_ssl_cert_file():
     return certifi.where()
 
 def ssl_aware_request(method, url, **kwargs):
-    """Make an SSL-aware HTTP request using system CA certificates when available"""
+    """Make an HTTP request that honors the SDK SSL settings unless ``verify`` is given."""
     import requests
-    
-    # Only set verify if not already specified
+    from .authentication import endpoint
+
     if 'verify' not in kwargs:
-        cert_file = get_ssl_cert_file()
-        if cert_file is False:
-            kwargs['verify'] = False
-        elif cert_file:
-            kwargs['verify'] = cert_file
-        # If cert_file is None, let requests use its default
-    
+        kwargs['verify'] = endpoint.get_ssl_verify()
     return requests.request(method, url, **kwargs)
 
 

@@ -467,6 +467,9 @@ class KeeperPushNotifications(notifications.BasePushNotifications):
         self.auth: KeeperAuth = auth
         self.transmission_key = utils.generate_aes_key()
 
+    def get_ignore_certificate_errors(self) -> bool:
+        return self.auth.keeper_endpoint.ignore_certificate_errors
+
     def on_messaged_received(self, message: Union[str, bytes]):
         if isinstance(message, bytes):
             if self.transmission_key:

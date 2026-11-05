@@ -49,7 +49,7 @@ def get_dag_leafs(vault: vault_online.VaultOnline, encrypted_session_token: byte
     try:
         rs = requests.request('post',
                               krouter_host + path,
-                              verify=VERIFY_SSL,
+                              verify=endpoint.get_ssl_verify() if VERIFY_SSL else False,
                               headers={
                                   'TransmissionKey': utils.base64_url_encode(encrypted_transmission_key),
                                   'Authorization': f'KeeperUser {utils.base64_url_encode(encrypted_session_token)}'
