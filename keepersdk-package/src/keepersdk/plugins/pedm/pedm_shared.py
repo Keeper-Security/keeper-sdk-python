@@ -90,7 +90,11 @@ class EventRequestType(int, enum.Enum):
     FileAccess = 2,
     CommandLine = 5,
     LeastPrivilege = 6,
-    Custom = 99
+    Custom = 99,
+    AgenticAi = 100,
+    AgenticFileAccess = 101,
+    AgenticPrivilegeElevation = 102,
+
 
 def approval_type_to_name(event_type: int) -> str:
     if event_type == EventRequestType.PrivilegeElevation:

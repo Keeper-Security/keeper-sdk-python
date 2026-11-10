@@ -1,5 +1,7 @@
 import argparse
 import datetime
+import hashlib
+import hmac
 import json
 import os
 import platform
@@ -12,6 +14,7 @@ import attrs
 
 from keepersdk import utils, constants, crypto
 from keepersdk.plugins.pedm import agent_plugin, pedm_shared
+from keepersdk.plugins.pedm.pedm_shared import approval_type_to_name
 from keepersdk.proto import NotificationCenter_pb2
 from keepersdk.utils import get_logger
 from . import base
@@ -38,6 +41,7 @@ class PedmAgentCommand(base.GroupCommand):
         self.register_command(PedmAgentPolicyCommand(), 'policy', 'p')
         self.register_command(PedmAgentVerify2faCommand(), '2fa')
         self.register_command(PedmAgentNotificationCommand(), 'notification')
+        self.register_command(PedmAgentKeychainCommand(), 'keychain')
 
 
 class PedmAgentCreateCommand(base.ArgparseCommand):
@@ -406,7 +410,8 @@ class PedmAgentApprovalListCommand(base.ArgparseCommand):
 class PedmAgentApprovalCreateCommand(base.ArgparseCommand):
     def __init__(self):
         parser = argparse.ArgumentParser(prog='create', description='Create KEPM approval request')
-        parser.add_argument('--type', dest='type', action='store', required=True, choices=['elevate', 'file_access', 'command', 'least_privilege'],
+        parser.add_argument('--type', dest='type', action='store', required=True,
+                            choices=['elevate', 'file_access', 'command', 'agentic_ai', 'agentic_access', 'agentic_elevate'],
                             help='Approval Request Type')
         application_group = parser.add_mutually_exclusive_group(required=True)
         application_group.add_argument('--application', dest='application', action='append',
@@ -430,19 +435,21 @@ class PedmAgentApprovalCreateCommand(base.ArgparseCommand):
             raise base.CommandError('KEPM Agent is not connected')
         assert isinstance(agent.hash_key, bytes)
 
-        a_type = kwargs.get('type')
+        a_type = kwargs.get('type') or ''
         if a_type == 'elevate':
             approval_type = pedm_shared.EventRequestType.PrivilegeElevation
         elif a_type == 'file_access':
             approval_type = pedm_shared.EventRequestType.FileAccess
         elif a_type == 'command':
             approval_type = pedm_shared.EventRequestType.CommandLine
-        elif a_type == 'least_privilege':
-            approval_type = pedm_shared.EventRequestType.LeastPrivilege
-        elif a_type == 'custom':
-            approval_type = pedm_shared.EventRequestType.Custom
+        elif a_type == 'agentic_ai':
+            approval_type = pedm_shared.EventRequestType.AgenticAi
+        elif a_type == 'agentic_access':
+            approval_type = pedm_shared.EventRequestType.AgenticFileAccess
+        elif a_type == 'agentic_elevate':
+            approval_type = pedm_shared.EventRequestType.AgenticPrivilegeElevation
         else:
-            approval_type = pedm_shared.EventRequestType.Custom
+            raise base.CommandError(f'Approval type "{a_type}" is not supported')
 
         def load_properties(prop_arg: str, coll_arg: str, coll_type: int) -> Dict[str, str]:
             assert isinstance(agent.hash_key, bytes)
@@ -1433,3 +1440,406 @@ class PedmAgentNotificationCommand(base.ArgparseCommand):
             agent.start_notifications()
         else:
             agent.stop_notifications()
+
+
+# Keychain entity types by CLI name; the value is the entityType of the KRouter routes api/agent/keychain/*
+KEYCHAIN_ENTITY_TYPES = {'password': 'PASSWORD', 'approval': 'APPROVAL'}
+
+# The entity types "keychain add" can store; a password always gets rows for the agent itself and the enterprise.
+KEYCHAIN_ADD_ENTITY_TYPES = ['password']
+
+
+def keychain_entity_type(kwargs: Dict[str, Any]) -> str:
+    entity_type = kwargs.get('entity_type') or 'password'
+    name = KEYCHAIN_ENTITY_TYPES.get(entity_type)
+    if not name:
+        raise base.CommandError(f'Entity type "{entity_type}" is not supported')
+    return name
+
+
+def aes_fingerprint(key: bytes) -> str:
+    """HKDF-SHA256 with an empty salt and info "keychain key id", 8 bytes; see KRouter docs/Keychain/Keychain.md#fingerprints"""
+    prk = hmac.new(bytes(32), key, hashlib.sha256).digest()
+    return utils.base64_url_encode(hmac.new(prk, b'keychain key id\x01', hashlib.sha256).digest()[:8])
+
+
+def keychain_agent(context: KeeperParams) -> agent_plugin.PedmAgentPlugin:
+    agent = context.pedm_agent_plugin
+    if not agent:
+        raise base.CommandError('KEPM Agent is not connected')
+    if not agent.is_registered:
+        raise base.CommandError('KEPM agent is not registered')
+    return agent
+
+
+def keychain_request(agent: agent_plugin.PedmAgentPlugin, action: str, rq: Dict[str, Any]) -> Any:
+    """Every request names the AGENT_KEY instance the agent holds, by its fingerprint."""
+    assert agent.hash_key
+    rq['agentKey'] = aes_fingerprint(agent.hash_key)
+    return agent.execute_rest(f'keychain/{action}', rq)
+
+
+class KeychainEntity:
+    """An entity read with keychain/get: its AES key, opened along the path, and its data."""
+
+    def __init__(self, rs: Dict[str, Any], key: bytes):
+        self.rs = rs
+        self.key = key
+
+    @property
+    def aes_fingerprint(self) -> str:
+        return self.rs['path'][-1]['subject']['fingerprint']
+
+    @property
+    def data(self) -> Optional[Dict[str, Any]]:
+        return self.rs.get('data')
+
+    def decrypt_data(self) -> bytes:
+        data = self.data
+        if not data:
+            return b''
+        if data['aesFingerprint'] != self.aes_fingerprint:
+            raise base.CommandError('The data is not encrypted by the key the path opened')
+        return crypto.decrypt_aes_v2(utils.base64_url_decode(data['encryptedData']), self.key)
+
+
+def keychain_get(agent: agent_plugin.PedmAgentPlugin, entity_type: str, uid: str) -> KeychainEntity:
+    rs = keychain_request(agent, 'get', {'entityType': entity_type, 'uid': uid})
+    if not isinstance(rs, dict):
+        raise base.CommandError('Keychain returned no entity')
+    if rs.get('stale'):
+        raise base.CommandError('The agent only has an old key of this entity: its share was not renewed after a rotation')
+    path = rs.get('path')
+    if not isinstance(path, list) or len(path) == 0:
+        raise base.CommandError('Keychain returned an empty path')
+    return KeychainEntity(rs, keychain_open_path(agent, path))
+
+
+def keychain_open_path(agent: agent_plugin.PedmAgentPlugin, path: List[Dict[str, Any]]) -> bytes:
+    """Opens each step with the agent key, the agent's own ECC key, or a key opened by an earlier step."""
+    assert agent.hash_key
+    opened: Dict[Tuple[str, str, str, str], Any] = {}
+
+    def instance(value: Dict[str, Any]) -> Tuple[str, str, str, str]:
+        return value['entity']['type'], value['entity']['uid'], value['keyType'], value['fingerprint']
+
+    key: Any = None
+    for step in path:
+        encrypted = utils.base64_url_decode(step['encrypted'])
+        encryptor = instance(step['encryptor'])
+        if encryptor in opened:
+            opener = opened[encryptor]
+        elif encryptor[0] == 'AGENT_KEY':
+            opener = agent.hash_key
+        elif encryptor[0] == 'AGENT' and encryptor[1] == agent.agent_uid:
+            opener = agent.private_key
+        else:
+            raise base.CommandError(f'Cannot open a step encrypted by {encryptor}')
+        plaintext = crypto.decrypt_ec(encrypted, opener) if encryptor[2] == 'ECC' else crypto.decrypt_aes_v2(encrypted, opener)
+        subject = instance(step['subject'])
+        if subject[2] == 'AES':
+            if aes_fingerprint(plaintext) != subject[3]:
+                raise base.CommandError(f'A step does not hold the key it names: {subject}')
+            key = plaintext
+        else:
+            key = crypto.load_ec_private_key(plaintext)
+        opened[subject] = key
+    return key
+
+
+class PedmAgentKeychainCommand(base.GroupCommand):
+    def __init__(self):
+        super().__init__('KEPM Agent keychain')
+        self.register_command(PedmAgentKeychainAddCommand(), 'add')
+        self.register_command(PedmAgentKeychainGetCommand(), 'get')
+        self.register_command(PedmAgentKeychainUpdateCommand(), 'update')
+        self.register_command(PedmAgentKeychainListCommand(), 'list', 'l')
+        self.register_command(PedmAgentKeychainRotateCommand(), 'rotate')
+
+
+def keychain_load_data(text: str) -> bytes:
+    if text.startswith('@'):
+        file_name = os.path.expanduser(text[1:])
+        if not os.path.isfile(file_name):
+            raise base.CommandError(f'File "{file_name}" does not exist')
+        with open(file_name, 'rb') as f:
+            return f.read()
+    return text.encode('utf-8')
+
+
+class PedmAgentKeychainAddCommand(base.ArgparseCommand):
+    def __init__(self):
+        parser = argparse.ArgumentParser(prog='add', description='Store data in the keychain, shared with the agent itself and the enterprise')
+        parser.add_argument('--entity-type', dest='entity_type', action='store', choices=KEYCHAIN_ADD_ENTITY_TYPES,
+                            default='password', help='Keychain entity type')
+        parser.add_argument('--uid', dest='uid', action='store', help='Entity UID; generated when omitted')
+        parser.add_argument('--label', dest='label', action='store', help='Plain text label')
+        parser.add_argument('--all-agents', dest='all_agents', action='store_true', help='Share with the agent key')
+        parser.add_argument('--agent', dest='agent', action='append', metavar='FILE',
+                            help='Share with the agent of this agent configuration file')
+        parser.add_argument('data', metavar='TEXT', help='Data to store, or @FILENAME to load it from a file')
+        super().__init__(parser)
+
+    @staticmethod
+    def load_agent(file_name: str) -> Tuple[str, Any]:
+        file_name = os.path.expanduser(file_name)
+        if not os.path.isfile(file_name):
+            raise base.CommandError(f'File "{file_name}" does not exist')
+        with open(file_name, 'rt') as f:
+            config = json.load(f)
+        agent_uid = config.get('agent_uid')
+        public_key = config.get('public_key')
+        if not isinstance(agent_uid, str) or not isinstance(public_key, str):
+            raise base.CommandError(f'File "{file_name}" has no agent_uid and public_key')
+        return agent_uid, crypto.load_ec_public_key(utils.base64_url_decode(public_key))
+
+    def execute(self, context: KeeperParams, **kwargs) -> Any:
+        agent = keychain_agent(context)
+        assert agent.hash_key
+        assert agent.peer_public_key
+        entity_type = keychain_entity_type(kwargs)
+        data = keychain_load_data(kwargs.get('data') or '')
+        uid = kwargs.get('uid') or utils.generate_uid()
+        others = [self.load_agent(x) for x in (kwargs.get('agent') or [])]
+
+        key = utils.generate_aes_key()
+
+        def row(to: str, encrypted: bytes, row_uid: Optional[str] = None) -> Dict[str, Any]:
+            value: Dict[str, Any] = {'to': to, 'encryptedKey': utils.base64_url_encode(encrypted)}
+            if row_uid:
+                value['uid'] = row_uid
+            return value
+
+        rows = [
+            row('AGENT', crypto.encrypt_ec(key, agent.public_key), agent.agent_uid),
+            row('ENTERPRISE', crypto.encrypt_ec(key, agent.peer_public_key)),
+        ]
+        if kwargs.get('all_agents') is True:
+            rows.append(row('AGENT_KEY', crypto.encrypt_aes_v2(key, agent.hash_key)))
+        for other_uid, other_key in others:
+            if other_uid != agent.agent_uid:
+                rows.append(row('AGENT', crypto.encrypt_ec(key, other_key), other_uid))
+        encrypted_data = crypto.encrypt_aes_v2(data, key)
+        rq: Dict[str, Any] = {
+            'entityType': entity_type, 'uid': uid, 'aesFingerprint': aes_fingerprint(key), 'rows': rows,
+            'encryptedData': utils.base64_url_encode(encrypted_data)
+        }
+        label = kwargs.get('label')
+        if label:
+            rq['label'] = label
+        keychain_request(agent, 'add', rq)
+        return f'UID: {uid}'
+
+
+class PedmAgentKeychainGetCommand(base.ArgparseCommand):
+    def __init__(self):
+        parser = argparse.ArgumentParser(prog='get', description='Read data from the keychain')
+        parser.add_argument('--entity-type', dest='entity_type', action='store', choices=list(KEYCHAIN_ENTITY_TYPES.keys()),
+                            default='password', help='Keychain entity type')
+        parser.add_argument('--output', dest='output', action='store', metavar='FILE', help='Write the data to this file')
+        parser.add_argument('uid', metavar='UID', help='Entity UID')
+        super().__init__(parser)
+
+    def execute(self, context: KeeperParams, **kwargs) -> Any:
+        agent = keychain_agent(context)
+        entity = keychain_get(agent, keychain_entity_type(kwargs), kwargs['uid'])
+        rs = entity.rs
+        owner = rs.get('owner') or {}
+        prompt_utils.output_text(f'Owner: {owner.get("type")} {owner.get("uid")}  Permission: {rs.get("permission")}')
+        if rs.get('label'):
+            prompt_utils.output_text(f'Label: {rs["label"]}')
+        if not entity.data:
+            return 'No data'
+        data = entity.decrypt_data()
+        prompt_utils.output_text(f'Version: {entity.data.get("version")}')
+
+        output = kwargs.get('output')
+        if output:
+            with open(os.path.expanduser(output), 'wb') as f:
+                f.write(data)
+            return f'{len(data)} bytes written to {output}'
+        # UTF-8 text is printed as is; anything else as web-safe base64.
+        try:
+            return data.decode('utf-8')
+        except UnicodeDecodeError:
+            return utils.base64_url_encode(data)
+
+
+class PedmAgentKeychainUpdateCommand(base.ArgparseCommand):
+    def __init__(self):
+        parser = argparse.ArgumentParser(prog='update', description='Replace the data of a keychain entity')
+        parser.add_argument('--entity-type', dest='entity_type', action='store', choices=list(KEYCHAIN_ENTITY_TYPES.keys()),
+                            default='password', help='Keychain entity type')
+        parser.add_argument('uid', metavar='UID', help='Entity UID')
+        parser.add_argument('data', metavar='TEXT', help='New data, or @FILENAME to load it from a file')
+        super().__init__(parser)
+
+    def execute(self, context: KeeperParams, **kwargs) -> Any:
+        agent = keychain_agent(context)
+        entity_type = keychain_entity_type(kwargs)
+        entity = keychain_get(agent, entity_type, kwargs['uid'])
+        version = entity.data.get('version', 0) if entity.data else 0
+        data = keychain_load_data(kwargs.get('data') or '')
+        encrypted = crypto.encrypt_aes_v2(data, entity.key)
+        rq = {'entityType': entity_type, 'uid': kwargs['uid'], 'expectedVersion': version,
+              'aesFingerprint': entity.aes_fingerprint, 'encryptedData': utils.base64_url_encode(encrypted)}
+        rs = keychain_request(agent, 'update', rq)
+        return f'Version: {rs.get("version") if isinstance(rs, dict) else "?"}'
+
+
+class PedmAgentKeychainRotateCommand(base.ArgparseCommand):
+    """Replaces the AES key of an entity the agent manages; see KRouter docs/Keychain/Keychain.md#rotation"""
+
+    def __init__(self):
+        parser = argparse.ArgumentParser(prog='rotate', description='Replace the key of a keychain entity the agent manages')
+        parser.add_argument('--entity-type', dest='entity_type', action='store', choices=list(KEYCHAIN_ENTITY_TYPES.keys()),
+                            default='password', help='Keychain entity type')
+        parser.add_argument('--drop-foreign', dest='drop_foreign', action='store_true',
+                            help='Drop the grants the agent cannot re-encrypt; by default their holders keep only the old key')
+        parser.add_argument('--drop-agent', dest='drop_agent', action='append', metavar='AGENT_UID',
+                            help='Cut this agent off instead of re-encrypting the key for it')
+        parser.add_argument('--dry-run', dest='dry_run', action='store_true', help='Show what the rotation would touch and stop')
+        parser.add_argument('uid', metavar='UID', help='Entity UID')
+        super().__init__(parser)
+
+    @staticmethod
+    def list_grants(agent: agent_plugin.PedmAgentPlugin, entity_type: str, uid: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], int]:
+        """All pages of keychain/grants: the grants, the foreign grants, and the time of the first page."""
+        grants: List[Dict[str, Any]] = []
+        foreign: List[Dict[str, Any]] = []
+        listed_at: Optional[int] = None
+        start_after: Optional[str] = None
+        while True:
+            rq: Dict[str, Any] = {'entityType': entity_type, 'uid': uid}
+            if start_after:
+                rq['startAfter'] = start_after
+            rs = keychain_request(agent, 'grants', rq)
+            if not isinstance(rs, dict):
+                raise base.CommandError('Keychain returned no grants')
+            if listed_at is None:
+                listed_at = rs['listedAt']
+            grants.extend(rs.get('grants') or [])
+            foreign.extend(rs.get('foreign') or [])
+            start_after = rs.get('next')
+            if not start_after:
+                break
+        assert listed_at is not None
+        return grants, foreign, listed_at
+
+    @staticmethod
+    def encrypt_for(agent: agent_plugin.PedmAgentPlugin, grant: Dict[str, Any], key: bytes) -> Optional[bytes]:
+        """The new key encrypted for the grant's encryptor, or None when the agent cannot do it."""
+        assert agent.hash_key
+        encryptor = grant['encryptor']
+        if encryptor['keyType'] == 'AES':
+            if encryptor['entity']['type'] == 'AGENT_KEY' and encryptor['fingerprint'] == aes_fingerprint(agent.hash_key):
+                return crypto.encrypt_aes_v2(key, agent.hash_key)
+            return None
+        public_key = grant.get('publicKey')
+        if not public_key:
+            return None
+        return crypto.encrypt_ec(key, crypto.load_ec_public_key(utils.base64_url_decode(public_key)))
+
+    def execute(self, context: KeeperParams, **kwargs) -> Any:
+        agent = keychain_agent(context)
+        entity_type = keychain_entity_type(kwargs)
+        uid = kwargs['uid']
+        entity = keychain_get(agent, entity_type, uid)
+        if entity.rs.get('permission') != 'MANAGE':
+            raise base.CommandError('The agent does not manage this entity')
+
+        stats = keychain_request(agent, 'stats', {'entityType': entity_type, 'uid': uid})
+        if not isinstance(stats, dict):
+            raise base.CommandError('Keychain returned no statistics')
+        prompt_utils.output_text(f'Shares: {stats.get("shares")} ({stats.get("convertible")} the agent can re-encrypt, '
+                                 f'{stats.get("notConvertible")} it cannot)  Children: {stats.get("children")}  '
+                                 f'Instances: {stats.get("instances")}/{stats.get("maxInstances")}')
+        blockers = stats.get('blockers') or []
+        if blockers:
+            raise base.CommandError(f'The key cannot be rotated now: {", ".join(blockers)}')
+
+        grants, foreign, listed_at = self.list_grants(agent, entity_type, uid)
+        dropped_agents = set(kwargs.get('drop_agent') or [])
+        new_key = utils.generate_aes_key()
+        converted: List[Dict[str, Any]] = []
+        dropped: List[str] = []
+        ignored = 0
+        # Only the share grants of the current key move; grants of older keys stay with their stale holders.
+        for grant in grants:
+            if grant['kind'] != 'SHARE' or not grant['subjectCurrent']:
+                continue
+            encryptor = grant['encryptor']
+            if encryptor['entity']['type'] == 'AGENT' and encryptor['entity']['uid'] in dropped_agents:
+                if encryptor['entity']['uid'] == agent.agent_uid:
+                    raise base.CommandError('The agent cannot drop its own grant')
+                dropped.append(grant['token'])
+                continue
+            encrypted = self.encrypt_for(agent, grant, new_key)
+            if encrypted is None:
+                ignored += 1
+                continue
+            converted.append({'grant': grant['token'], 'encryptor': encryptor, 'encryptedKey': utils.base64_url_encode(encrypted)})
+        foreign_current = [x for x in foreign if x['subjectCurrent']]
+        drop_foreign = kwargs.get('drop_foreign') is True
+        if kwargs.get('dry_run') is True:
+            prompt_utils.output_text(f'Would re-encrypt {len(converted)} grants, drop {len(dropped)}, leave {ignored} stale, '
+                                     f'and {"drop" if drop_foreign else "leave stale"} {len(foreign_current)} the agent cannot open')
+            return None
+
+        rq: Dict[str, Any] = {
+            'entityType': entity_type, 'uid': uid,
+            'expectedFingerprint': entity.aes_fingerprint, 'newFingerprint': aes_fingerprint(new_key),
+            'defaultAction': 'DROP' if drop_foreign else 'IGNORE',
+            'converted': converted, 'dropped': dropped,
+        }
+        if drop_foreign:
+            rq['listedAt'] = listed_at
+        if entity.data:
+            rq['expectedDataVersion'] = entity.data.get('version')
+            rq['encryptedData'] = utils.base64_url_encode(crypto.encrypt_aes_v2(entity.decrypt_data(), new_key))
+        # Children stay under the old key; the self grant, the old key encrypted by the new one, keeps them reachable.
+        if (stats.get('children') or 0) > 0:
+            rq['selfGrant'] = utils.base64_url_encode(crypto.encrypt_aes_v2(entity.key, new_key))
+        keychain_request(agent, 'rotate', rq)
+        return (f'Rotated: {len(converted)} grants re-encrypted, {len(dropped)} dropped, '
+                f'{len(foreign_current) if drop_foreign else 0} foreign dropped, {ignored + (0 if drop_foreign else len(foreign_current))} left stale')
+
+
+class PedmAgentKeychainListCommand(base.ArgparseCommand):
+    def __init__(self):
+        parser = argparse.ArgumentParser(prog='list', description='List the keychain entities the agent can open',
+                                         parents=[base.report_output_parser])
+        parser.add_argument('--entity-type', dest='entity_type', action='store', choices=list(KEYCHAIN_ENTITY_TYPES.keys()),
+                            help='Keychain entity type at any depth; without it, the entities directly under the agent keys')
+        super().__init__(parser)
+
+    def execute(self, context: KeeperParams, **kwargs) -> Any:
+        agent = keychain_agent(context)
+        entities: List[Dict[str, Any]] = []
+        if kwargs.get('entity_type'):
+            rs = keychain_request(agent, 'list', {'entityType': keychain_entity_type(kwargs)})
+            if isinstance(rs, dict):
+                entities.extend(rs.get('entities') or [])
+        else:
+            start_after: Optional[str] = None
+            while True:
+                rq: Dict[str, Any] = {} if start_after is None else {'startAfter': start_after}
+                rs = keychain_request(agent, 'list', rq)
+                if not isinstance(rs, dict):
+                    break
+                entities.extend(rs.get('entities') or [])
+                start_after = rs.get('next')
+                if not start_after:
+                    break
+
+        table = []
+        for e in entities:
+            owner = e.get('owner') or {}
+            table.append([e['entity']['type'], e['entity']['uid'], e.get('label') or '', f'{owner.get("type", "")} {owner.get("uid", "")}'.strip(),
+                          e.get('permission') or '', bool(e.get('stale'))])
+        table.sort(key=lambda r: (r[0], r[2], r[1]))
+        headers = ['entity_type', 'uid', 'label', 'owner', 'permission', 'stale']
+        fmt = kwargs.get('format')
+        if fmt != 'json':
+            headers = [report_utils.field_to_title(x) for x in headers]
+        return report_utils.dump_report_data(table, headers, fmt=fmt, filename=kwargs.get('output'))
