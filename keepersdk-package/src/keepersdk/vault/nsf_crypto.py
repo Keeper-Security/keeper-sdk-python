@@ -315,6 +315,38 @@ def decrypt_record_keys(
                 decrypted_keys[rk.record_uid] = record_key
         except Exception:
             continue
+
+    # NSF file attachments can be linked to a parent record instead of having
+    # their own RecordKey entry. Their key is wrapped by the parent record key
+    # and is delivered through KeeperDriveData.recordLinks. Resolve
+    # these links after normal record keys so linked records can also act as
+    # parents for further links.
+    record_links = list(storage.record_links.get_all_links())
+    progress = True
+    while progress:
+        progress = False
+        for link in record_links:
+            child_uid = link.child_record_uid
+            parent_uid = link.parent_record_uid
+            if not child_uid or not parent_uid or child_uid in decrypted_keys or not link.record_key:
+                continue
+
+            parent_key = decrypted_keys.get(parent_uid)
+            if parent_key is None:
+                continue
+
+            try:
+                encrypted_key = utils.base64_url_decode(link.record_key)
+            except Exception:
+                continue
+            # RecordLink.recordKey is wrapped by the parent record key (AES-GCM; CBC for
+            # older links). A bad link is skipped: another parent may still provide the key.
+            child_key = try_decrypt_symmetric(encrypted_key, parent_key)
+
+            if child_key:
+                decrypted_keys[child_uid] = child_key
+                progress = True
+
     return decrypted_keys
 
 
