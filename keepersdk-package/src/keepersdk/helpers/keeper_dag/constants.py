@@ -1,4 +1,11 @@
-from enum import StrEnum
+try:
+    from enum import StrEnum
+except ImportError:
+    from enum import Enum
+
+    class StrEnum(str, Enum):  # Python 3.10: enum.StrEnum was added in 3.11
+        def __str__(self) -> str:
+            return str(self.value)
 
 # This should the relationship between Keeper Vault record
 RECORD_LINK_GRAPH_ID = 0

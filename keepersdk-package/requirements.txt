@@ -9,3 +9,4 @@ pydantic>=2.6.4; python_version>='3.8'
 google-api-core>=2.16.0
 tzlocal>=5.2.0
 zxcvbn>=4.5.0,<5
+keeper-mlkem; python_version >= "3.11"
