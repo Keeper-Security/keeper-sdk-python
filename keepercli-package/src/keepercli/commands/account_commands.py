@@ -5,7 +5,8 @@ import re
 from typing import Tuple, Optional, List, Any, Dict
 
 from keepersdk import crypto, utils, errors
-from keepersdk.authentication import keeper_auth  
+from keepersdk.authentication import keeper_auth
+from keepersdk.password_strength import MasterPasswordStrength
 from keepersdk.proto import AccountSummary_pb2, APIRequest_pb2, enterprise_pb2
 from keepersdk.vault import vault_online
 from . import base
@@ -19,6 +20,7 @@ RESET_PASSWORD_CANCELLED = 'Password change was cancelled or failed'
 RESET_PASSWORD_ERROR = 'Error changing password: {}'
 RESET_PASSWORD_CHANGING = 'Changing Master Password for "{}"'
 RESET_PASSWORD_CURRENT_INCORRECT = 'Current password incorrect'
+RESET_PASSWORD_SAME_AS_CURRENT = 'New password must be different from the current password'
 RESET_PASSWORD_BREACHWATCH_SCAN = 'Breachwatch: 1 passwords to scan'
 RESET_PASSWORD_BREACHWATCH_RESULT = 'Breachwatch password scan result: {}'
 RESET_PASSWORD_SSO_DELETING = 'Deleting SSO Master Password for "{}"'
@@ -425,6 +427,10 @@ class ResetPasswordCommand(base.ArgparseCommand):
         """Change password using provided arguments."""
         auth = context.auth
 
+        if new_password == current_password:
+            logger.warning(RESET_PASSWORD_SAME_AS_CURRENT)
+            return
+
         if current_salt and not self._validate_current_password_with_salt(current_password, current_salt, auth):
             return
         elif not current_salt:
@@ -432,7 +438,9 @@ class ResetPasswordCommand(base.ArgparseCommand):
             
         if not self._validate_password_rules(auth, new_password):
             return
-            
+
+        MasterPasswordStrength.report(login.ConsoleMasterPasswordStrengthUI(), new_password)
+
         self._perform_breachwatch_scan(context.vault, new_password)
         
         if is_sso_user:
@@ -444,7 +452,8 @@ class ResetPasswordCommand(base.ArgparseCommand):
     
     def _change_password_interactive(self, context: params.KeeperParams):
         """Change password using interactive prompts."""
-        new_password = login.LoginAPI.change_master_password(context.auth)
+        new_password = login.LoginAPI.change_master_password(
+            context.auth, user_interaction=login.ConsoleMasterPasswordStrengthUI())
         if new_password:
             logger.info(RESET_PASSWORD_SUCCESS)
             self._update_context_password(context, new_password)

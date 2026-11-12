@@ -4,13 +4,14 @@ import os
 import re
 import urllib.parse
 import webbrowser
-from typing import Dict, List, Union, Optional, Any, Tuple
+from typing import Dict, List, Union, Optional, Any, Tuple, Set
 
 import fido2.client
 import pyperclip
 from prompt_toolkit.formatted_text import FormattedText
 
 from keepersdk import errors, utils, crypto
+from keepersdk.password_strength import MasterPasswordStrength, IMasterPasswordStrengthUI
 from keepersdk.authentication import login_auth, keeper_auth, endpoint, configuration
 from keepersdk.proto import APIRequest_pb2, enterprise_pb2, ssocloud_pb2
 from keepersdk.authentication.yubikey import yubikey_authenticate, IKeeperUserInteraction
@@ -36,6 +37,16 @@ class FidoCliInteraction(fido2.client.UserInteraction, IKeeperUserInteraction):
     def request_uv(self, permissions, rd_id):
         prompt_utils.output_text("User Verification required.")
         return True
+
+
+class ConsoleMasterPasswordStrengthUI(IMasterPasswordStrengthUI):
+    """Display master password strength in the Keeper CLI."""
+
+    def report_master_password_strength(self, score: int, category: str) -> None:
+        if category == 'UNKNOWN':
+            prompt_utils.output_text('Password strength could not be determined.')
+        else:
+            prompt_utils.output_text(f'Password strength: {category}')
 
 
 class LoginFlow:
@@ -104,7 +115,7 @@ class LoginFlow:
                 elif isinstance(step, login_auth.LoginStepTwoFactor):
                     LoginFlow.handle_two_factor(step)
                 elif isinstance(step, login_auth.LoginStepPassword):
-                    LoginFlow.handle_verify_password(step)
+                    passwords.append(LoginFlow.handle_verify_password(step))
                 elif isinstance(step, login_auth.LoginStepSsoToken):
                     LoginFlow.handle_sso_redirect(step)
                 elif isinstance(step, login_auth.LoginStepSsoDataKey):
@@ -114,7 +125,7 @@ class LoginFlow:
             if isinstance(step, login_auth.LoginStepError):
                 raise errors.KeeperApiError(step.code, step.message)
             if isinstance(step, login_auth.LoginStepConnected):
-                return LoginFlow.post_login(step.take_keeper_auth())
+                return LoginFlow.post_login(step.take_keeper_auth(), login_passwords=passwords)
             else:
                 raise errors.KeeperApiError('not_supported', f'Login step {type(step).__name__} is not supported')
         except KeyboardInterrupt:
@@ -218,7 +229,8 @@ class LoginFlow:
                     prompt_utils.output_text(f'SSO Login error: ({kae.result_code}) {kae.message}')
 
     @staticmethod
-    def handle_verify_password(step: login_auth.LoginStepPassword):
+    def handle_verify_password(step: login_auth.LoginStepPassword) -> str:
+        """Prompt until the password is accepted; returns the accepted password."""
         prompt_utils.output_text(f'\nEnter password for {step.username}')
         while True:
             password = prompt_utils.input_password('Password: ')
@@ -226,7 +238,7 @@ class LoginFlow:
                 raise KeyboardInterrupt()
             try:
                 step.verify_password(password)
-                break
+                return password
             except errors.KeeperApiError as kae:
                 prompt_utils.output_text('Invalid email or password combination, please re-enter.'
                                          if kae.result_code == 'auth_failed' else kae.message)
@@ -475,7 +487,8 @@ class LoginFlow:
             step.resume()
 
     @staticmethod
-    def post_login(auth: keeper_auth.KeeperAuth) -> keeper_auth.KeeperAuth:
+    def post_login(auth: keeper_auth.KeeperAuth,
+                   login_passwords: Optional[List[str]] = None) -> keeper_auth.KeeperAuth:
         if auth.auth_context.session_token_restriction == keeper_auth.SessionTokenRestriction.Unrestricted:
             return auth
 
@@ -488,7 +501,8 @@ class LoginFlow:
         if auth.auth_context.session_token_restriction == keeper_auth.SessionTokenRestriction.AccountRecovery:
             prompt_utils.output_text(
                 'Your Master Password has expired, you are required to change it before you can login.')
-            password = LoginAPI.change_master_password(auth)
+            password = LoginAPI.change_master_password(
+                auth, user_interaction=ConsoleMasterPasswordStrengthUI(), current_passwords=login_passwords)
             if password:
                 new_auth = LoginFlow.login(auth.keeper_endpoint.storage, password=password)
                 if new_auth:
@@ -528,7 +542,16 @@ class LoginAPI:
     @staticmethod
     def change_master_password(
             auth: keeper_auth.KeeperAuth, password_rules: Optional[List[APIRequest_pb2.PasswordRules]]=None,
-            min_iterations: Optional[int]=None) -> Optional[str]:
+            min_iterations: Optional[int]=None,
+            user_interaction: Optional[IMasterPasswordStrengthUI]=None,
+            current_passwords: Optional[List[str]]=None) -> Optional[str]:
+        """``current_passwords``: passwords the user logged in with; the new password must differ from them."""
+
+        # The new password is stripped below, so compare against stripped values too.
+        used_passwords: Set[str] = set()
+        for current_password in current_passwords or []:
+            if current_password:
+                used_passwords.update((current_password, current_password.strip()))
 
         if password_rules is None:
             password_rules, min_iterations = \
@@ -544,13 +567,18 @@ class LoginAPI:
                     raise KeyboardInterrupt()
                 password2 = prompt_utils.input_password('... {0:>24}: '.format('Re-Enter Password')).strip()
 
-                if password == password2:
+                if password != password2:
+                    logger.warning('Passwords do not match.')
+                elif password in used_passwords:
+                    logger.warning('New password must be different from the current password')
+                else:
                     failed_rules = []
                     for rule in password_rules:
                         pattern = re.compile(rule.pattern)
                         if not re.match(pattern, password):
                             failed_rules.append(rule.description)
                     if len(failed_rules) == 0:
+                        MasterPasswordStrength.report(user_interaction, password)
                         LoginAPI.change_master_password_command(
                             auth, password, min_iterations or constants.PBKDF2_ITERATIONS)
                         logger.debug('Password changed')
@@ -558,8 +586,6 @@ class LoginAPI:
                     else:
                         for description in failed_rules:
                             logger.warning(f'\t{description}')
-                else:
-                    logger.warning('Passwords do not match.')
         except KeyboardInterrupt:
             logger.info('Canceled')
 
