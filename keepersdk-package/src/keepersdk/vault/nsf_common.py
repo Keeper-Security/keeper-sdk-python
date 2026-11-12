@@ -163,12 +163,14 @@ def parse_folder_access_result(
             'message': result.message or default_message,
             'success': not is_failure,
         }
+    # No result row means the server did not confirm the change; never report it as success.
     return {
         'folder_uid': folder_uid,
         'accessor': accessor_label,
-        'status': 'SUCCESS',
-        'message': default_message,
-        'success': True,
+        'status': 'NO_RESULT',
+        'message': 'The server returned no result for this folder access change; '
+                   'refresh and verify the folder access before retrying.',
+        'success': False,
     }
 
 
