@@ -2,7 +2,7 @@ import json
 import os
 import sqlite3
 import threading
-from typing import Dict, Optional, Any, Type
+from typing import Dict, Optional, Any, Type, Callable
 
 from keepersdk import utils as keepersdk_utils
 from keepersdk.authentication import configuration, endpoint, keeper_auth
@@ -165,6 +165,28 @@ class KeeperParams:
         self._pedm_plugin: Optional[admin_plugin.PedmPlugin] = None
 
         self._pam_plugin: Optional[pam_plugin.PamPlugin] = None
+        self._session_revoked = threading.Event()
+        self._session_revoked_callback: Optional[Callable[[], None]] = None
+
+    def set_session_revoked_callback(self, callback: Optional[Callable[[], None]]) -> None:
+        """Set a callback used to wake the CLI when the active session is revoked."""
+        self._session_revoked_callback = callback
+
+    def consume_session_revoked(self) -> bool:
+        """Return and clear the pending remote-session-revocation signal."""
+        if self._session_revoked.is_set():
+            self._session_revoked.clear()
+            return True
+        return False
+
+    def _on_session_revoked(self, _reason: str) -> None:
+        self._session_revoked.set()
+        callback = self._session_revoked_callback
+        if callback:
+            try:
+                callback()
+            except Exception:
+                keepersdk_utils.get_logger().exception('Unable to notify CLI of remote logout')
 
     @property
     def keeper_config(self) -> KeeperConfig:
@@ -196,6 +218,7 @@ class KeeperParams:
             self._vault = None
 
         if self._auth:
+            self._auth.remove_session_revoked_callback(self._on_session_revoked)
             self._auth.close()
             self._auth = None
 
@@ -210,7 +233,9 @@ class KeeperParams:
                  ):
         self.clear_session()
         if value:
+            self._session_revoked.clear()
             self._auth = value
+            self._auth.register_session_revoked_callback(self._on_session_revoked)
             if skip_vault is None:
                 skip_vault = self.keeper_config.skip_vault
             if not skip_vault:

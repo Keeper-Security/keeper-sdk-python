@@ -5,7 +5,8 @@ import enum
 import json
 import logging
 import time
-from typing import Optional, Dict, Any, List, Type, Set, Iterable, Union, Tuple
+import threading
+from typing import Optional, Dict, Any, List, Type, Set, Iterable, Union, Tuple, Callable
 
 import attrs
 from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePrivateKey, EllipticCurvePublicKey
@@ -14,7 +15,7 @@ from google.protobuf.json_format import MessageToJson, MessageToDict
 
 from . import endpoint, notifications
 from .. import errors, utils, crypto
-from ..proto import AccountSummary_pb2, APIRequest_pb2, breachwatch_pb2, push_pb2
+from ..proto import AccountSummary_pb2, APIRequest_pb2, breachwatch_pb2, push_pb2, router_pb2
 
 
 class IKeeperAuth(abc.ABC):
@@ -134,6 +135,105 @@ class KeeperAuth:
         self.push_notifications: Optional[notifications.FanOut[Dict[str, Any]]] = None
         self._ttk: Optional[TimeToKeepalive] = None
         self._key_cache: Optional[Dict[str, UserKeys]] = None
+        self._session_revoked_callbacks: List[Callable[[str], None]] = []
+        self._session_revoked = False
+        self._session_revoked_lock = threading.RLock()
+
+    def register_session_revoked_callback(self, callback: Callable[[str], None]) -> None:
+        """Register a callback invoked when Keeper remotely revokes this session."""
+        with self._session_revoked_lock:
+            if callback not in self._session_revoked_callbacks:
+                self._session_revoked_callbacks.append(callback)
+            already_revoked = self._session_revoked
+        if already_revoked:
+            callback('remote_logout')
+
+    def remove_session_revoked_callback(self, callback: Callable[[str], None]) -> None:
+        """Remove a previously registered session-revocation callback."""
+        with self._session_revoked_lock:
+            try:
+                self._session_revoked_callbacks.remove(callback)
+            except ValueError:
+                pass
+
+    def _notify_session_revoked(self, reason: str) -> None:
+        with self._session_revoked_lock:
+            if self._session_revoked:
+                return
+            self._session_revoked = True
+            callbacks = tuple(self._session_revoked_callbacks)
+        for callback in callbacks:
+            try:
+                callback(reason)
+            except Exception:
+                utils.get_logger().exception('Session revocation callback failed')
+
+    @staticmethod
+    def _get_access_lowered_events(message: Any) -> List[Dict[str, Any]]:
+        """Extract access-lowered events from the JSON push notification envelope."""
+        if not isinstance(message, dict):
+            return []
+
+        # Keeper push messages are JSON envelopes. Accept the camelCase and
+        # snake_case names used by generated protobuf JSON and API messages.
+        candidates = [message]
+        for key in ('userAccessLoweredEventsRequest', 'user_access_lowered_events',
+                    'userAccessLoweredEvents', 'accessLoweredEvents', 'data', 'payload'):
+            value = message.get(key)
+            if isinstance(value, dict):
+                candidates.append(value)
+            elif isinstance(value, str) and value.lstrip().startswith('{'):
+                try:
+                    parsed_value = json.loads(value)
+                except (TypeError, ValueError):
+                    continue
+                if isinstance(parsed_value, dict):
+                    candidates.append(parsed_value)
+
+        command = message.get('command') or message.get('event') or message.get('message')
+        if isinstance(command, str) and command.lower() in {
+                'user_access_lowered_events', 'useraccessloweredevents',
+                'user_access_lowered_events_request'}:
+            candidates.append(message)
+
+        result: List[Dict[str, Any]] = []
+        for candidate in candidates:
+            events = candidate.get('events')
+            if isinstance(events, list):
+                result.extend(event for event in events if isinstance(event, dict))
+            elif 'eventType' in candidate or 'event_type' in candidate:
+                result.append(candidate)
+        return result
+
+    @staticmethod
+    def _get_access_lowered_event_type(event: Dict[str, Any]) -> Optional[int]:
+        event_type = event.get('eventType', event.get('event_type'))
+        if isinstance(event_type, int) and not isinstance(event_type, bool):
+            return event_type
+        if isinstance(event_type, str):
+            try:
+                return router_pb2.UserAccessLoweredEventType.Value(event_type)
+            except (ValueError, KeyError):
+                try:
+                    return int(event_type)
+                except ValueError:
+                    return None
+        return None
+
+    def _handle_access_lowered_events(self, message: Any) -> None:
+        events = self._get_access_lowered_events(message)
+        for event in events:
+            event_type = self._get_access_lowered_event_type(event)
+            if event_type == router_pb2.UALE_DEVICE_LOGOUT:
+                # The push URL is created with this authenticated device's token.
+                # Keeper routes a targeted device logout to the corresponding
+                # device channel; the event's deviceId is not the CLI list index.
+                if event.get('deviceId', event.get('device_id')) is not None:
+                    self._notify_session_revoked('device_logout')
+                    return
+            elif event_type == router_pb2.UALE_USER_LOGOUT_ALL_DEVICES:
+                self._notify_session_revoked('all_devices_logout')
+                return
 
     def __enter__(self):
         return self
@@ -475,7 +575,9 @@ class KeeperPushNotifications(notifications.BasePushNotifications):
                 decrypted_data = message
             rs = push_pb2.WssClientResponse()
             rs.ParseFromString(decrypted_data)
-            self.push(json.loads(rs.message))
+            event = json.loads(rs.message)
+            self.auth._handle_access_lowered_events(event)
+            self.push(event)
 
     async def on_connected(self):
         await self.send_message(utils.base64_url_encode(self.auth.auth_context.session_token))

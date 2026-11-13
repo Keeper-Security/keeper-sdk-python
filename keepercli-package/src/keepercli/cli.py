@@ -9,7 +9,7 @@ from . import prompt_utils, api, autocomplete
 from .commands import command_completer, base, command_history, command_visibility
 from .helpers import report_utils
 from .params import KeeperParams, KeeperConfig
-from keepersdk import constants
+from keepersdk import constants, errors
 from keepersdk.vault import vault_utils
 
 if sys.platform == 'win32':
@@ -109,6 +109,23 @@ def loop(keeper_config: KeeperConfig, commands: base.CliCommands) -> int:
                 complete_while_typing=False, completer=completer, auto_suggest=None, key_bindings=prompt_utils.kb,
                 enable_history_search=False, history=KeeperHistory())
 
+        def interrupt_prompt_for_remote_logout() -> None:
+            # This callback is invoked by the WebSocket background thread.
+            # Schedule Application.exit on prompt_toolkit's own event loop.
+            if prompt_session is None:
+                return
+            try:
+                app = prompt_session.app
+                app_loop = app.loop
+                if app_loop is not None and app_loop.is_running():
+                    app_loop.call_soon_threadsafe(app.exit, result='')
+            except Exception:
+                # The prompt may not be running (for example, while a command
+                # is executing). The main loop consumes the event separately.
+                pass
+
+        context.set_session_revoked_callback(interrupt_prompt_for_remote_logout)
+
         if keeper_config.username:
             options = '--resume-session'
             if keeper_config.password:
@@ -127,8 +144,20 @@ def loop(keeper_config: KeeperConfig, commands: base.CliCommands) -> int:
         logger.setLevel(logging.DEBUG if keeper_config.debug else logging.WARNING)
 
     while True:
+        if context.consume_session_revoked():
+            context.clear_session()
+            logger.warning('Your Keeper session was logged out remotely. Please login again.')
+
         if context.auth:
-            context.auth.on_idle()
+            try:
+                context.auth.on_idle()
+            except errors.KeeperApiError as e:
+                if e.result_code == 'session_token_expired':
+                    context.clear_session()
+                    logger.warning('Your Keeper session has expired. Please login again.')
+                else:
+                    logger.debug(e, exc_info=True)
+                    logger.error('An unexpected error occurred: %s', e)
 
         if len(command_queue) > 0:
             command = command_queue.pop(0)
@@ -146,6 +175,12 @@ def loop(keeper_config: KeeperConfig, commands: base.CliCommands) -> int:
             except KeyboardInterrupt:
                 prompt_utils.output_text('')
                 continue
+
+        if context.consume_session_revoked():
+            context.clear_session()
+            logger.warning('Your Keeper session was logged out remotely. Please login again.')
+            continue
+
         command = command.strip()
         if not command:
             continue
@@ -170,10 +205,6 @@ def loop(keeper_config: KeeperConfig, commands: base.CliCommands) -> int:
                 context.vault.sync_down()
             result = do_command(command, context, commands)
             error_no = 0
-            if context.vault and not context.vault.sync_requested:
-                # Deliver client audit events (e.g. open_record, copy_password) in the background.
-                # Skipped while a sync is pending so sync still runs before the next command, as before.
-                context.vault.run_pending_jobs()
             if isinstance(result, KeeperParams):
                 if len(context_stack) > 0 and result is context_stack[-1]:
                     context_to_release = context
@@ -190,9 +221,20 @@ def loop(keeper_config: KeeperConfig, commands: base.CliCommands) -> int:
             break
         except KeyboardInterrupt:
             pass
+        except errors.KeeperApiError as e:
+            logger.debug(e, exc_info=True)
+            if e.result_code == 'session_token_expired':
+                context.clear_session()
+                logger.warning('Your Keeper session has expired. Please login again.')
+            else:
+                logger.error('An unexpected error occurred: %s. Type "debug" to toggle verbose error output', e)
         except Exception as e:
             logger.debug(e, exc_info=True)
             logger.error('An unexpected error occurred: %s. Type "debug" to toggle verbose error output', e)
+
+        if context.consume_session_revoked():
+            context.clear_session()
+            logger.warning('Your Keeper session was logged out remotely. Please login again.')
 
         if keeper_config.batch_mode and error_no != 0 and not suppress_errno:
             break
