@@ -178,7 +178,7 @@ class KeeperAuth:
         # snake_case names used by generated protobuf JSON and API messages.
         candidates = [message]
         for key in ('userAccessLoweredEventsRequest', 'user_access_lowered_events',
-                    'userAccessLoweredEvents', 'accessLoweredEvents', 'data', 'payload'):
+                    'userAccessLoweredEvents', 'accessLoweredEvents', 'data', 'payload', 'message'):
             value = message.get(key)
             if isinstance(value, dict):
                 candidates.append(value)

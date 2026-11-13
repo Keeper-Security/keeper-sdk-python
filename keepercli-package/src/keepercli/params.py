@@ -166,22 +166,31 @@ class KeeperParams:
 
         self._pam_plugin: Optional[pam_plugin.PamPlugin] = None
         self._session_revoked = threading.Event()
+        self._session_state_lock = threading.RLock()
         self._session_revoked_callback: Optional[Callable[[], None]] = None
+        self._auth_session_revoked_callback: Optional[Callable[[str], None]] = None
 
     def set_session_revoked_callback(self, callback: Optional[Callable[[], None]]) -> None:
         """Set a callback used to wake the CLI when the active session is revoked."""
-        self._session_revoked_callback = callback
+        with self._session_state_lock:
+            self._session_revoked_callback = callback
 
     def consume_session_revoked(self) -> bool:
         """Return and clear the pending remote-session-revocation signal."""
-        if self._session_revoked.is_set():
+        with self._session_state_lock:
+            if not self._session_revoked.is_set():
+                return False
             self._session_revoked.clear()
             return True
-        return False
 
-    def _on_session_revoked(self, _reason: str) -> None:
-        self._session_revoked.set()
-        callback = self._session_revoked_callback
+    def _on_session_revoked(self, auth: keeper_auth.KeeperAuth, _reason: str) -> None:
+        with self._session_state_lock:
+            # Ignore late callbacks from an authentication object that has
+            # already been replaced by a clean login.
+            if self._auth is not auth:
+                return
+            self._session_revoked.set()
+            callback = self._session_revoked_callback
         if callback:
             try:
                 callback()
@@ -201,6 +210,13 @@ class KeeperParams:
         return self._keeper_config.getter('certificate_check', bool)
 
     def clear_session(self) -> None:
+        with self._session_state_lock:
+            auth = self._auth
+            auth_callback = self._auth_session_revoked_callback
+            self._auth = None
+            self._auth_session_revoked_callback = None
+            self._session_revoked.clear()
+
         self.current_folder = None
 
         if self._pedm_plugin:
@@ -217,10 +233,10 @@ class KeeperParams:
             self._vault.close()
             self._vault = None
 
-        if self._auth:
-            self._auth.remove_session_revoked_callback(self._on_session_revoked)
-            self._auth.close()
-            self._auth = None
+        if auth:
+            if auth_callback:
+                auth.remove_session_revoked_callback(auth_callback)
+            auth.close()
 
     @property
     def auth(self) -> Optional[keeper_auth.KeeperAuth]:
@@ -233,9 +249,12 @@ class KeeperParams:
                  ):
         self.clear_session()
         if value:
-            self._session_revoked.clear()
-            self._auth = value
-            self._auth.register_session_revoked_callback(self._on_session_revoked)
+            with self._session_state_lock:
+                self._auth = value
+                callback = lambda reason, auth=value: self._on_session_revoked(auth, reason)
+                self._auth_session_revoked_callback = callback
+                self._session_revoked.clear()
+            value.register_session_revoked_callback(callback)
             if skip_vault is None:
                 skip_vault = self.keeper_config.skip_vault
             if not skip_vault:
