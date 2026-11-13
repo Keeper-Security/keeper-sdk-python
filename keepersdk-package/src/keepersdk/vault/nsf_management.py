@@ -7,7 +7,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple, Union
 
 from .. import crypto, utils
 from ..errors import KeeperApiError
-from ..proto import folder_pb2, record_endpoints_pb2, record_pb2, remove_pb2, record_details_pb2, folder_access_pb2, keeperdrive_move_pb2, keeperdrive_convert_pb2
+from ..proto import folder_pb2, record_endpoints_pb2, record_pb2, remove_pb2, record_details_pb2, folder_access_pb2, keeperdrive_move_pb2, keeperdrive_convert_pb2, pagination_pb2
 from . import nsf_crypto, nsf_data, nsf_common, sync_down, vault_extensions, vault_record
 from .vault_online import VaultOnline
 
@@ -304,6 +304,10 @@ def list_nsf_items(
 
     if include_folders:
         for folder in view.folders():
+            # A folder whose key never decrypted has no usable name; don't list it as a
+            # placeholder. It stays in the NSF view, so mutations (remove, move) still work.
+            if not folder.folder_key:
+                continue
             rows.append(NsfListRow(
                 item_type='Folder',
                 uid=folder.folder_uid,
@@ -1099,6 +1103,8 @@ def get_nsf_record_accesses(
         show_denied: bool = False) -> Dict[str, Any]:
     """``vault/records/v3/details/access``, chunked at 100 UIDs per request.
 
+    Follows ``pageInfo`` paging within each chunk, so the result is complete.
+
     By default only direct, non-denied rows are returned. Pass
     ``show_inherited=True`` and/or ``show_denied=True`` to include inherited /
     denied rows. Code that reasons about effective access (permission checks,
@@ -1113,41 +1119,84 @@ def get_nsf_record_accesses(
     result: Dict[str, Any] = {'record_accesses': [], 'forbidden_records': []}
     for i in range(0, len(uids), _RECORD_ACCESS_CHUNK):
         chunk = uids[i:i + _RECORD_ACCESS_CHUNK]
-        rq = record_details_pb2.RecordAccessRequest()
-        for uid in chunk:
-            rq.recordUids.append(utils.base64_url_decode(uid))
-        rs = vault.keeper_auth.execute_auth_rest('vault/records/v3/details/access', rq, response_type=record_details_pb2.RecordAccessResponse)
-        if rs is None:
-            continue
-
-        for ra in rs.recordAccesses:
-            d = ra.data
-            ai = ra.accessorInfo
-            if not _include_access_row(bool(d.inherited), bool(d.deniedAccess), show_inherited, show_denied):
-                continue
-            ao = {
-                'record_uid': utils.base64_url_encode(d.recordUid),
-                'accessor_name': ai.name,
-                'access_type': folder_pb2.AccessType.Name(d.accessType) if hasattr(d, 'accessType') else 'UNKNOWN',
-                'access_type_uid': utils.base64_url_encode(d.accessTypeUid),
-                'owner': getattr(d, 'owner', False),
-                'inherited': bool(getattr(d, 'inherited', False)),
-                'access_role_type': int(getattr(d, 'accessRoleType', 0) or 0),
-            }
-            for flag in ('can_view_title', 'can_edit', 'can_view', 'can_list_access',
-                         'can_update_access', 'can_delete', 'can_change_ownership',
-                         'can_request_access', 'can_approve_access', 'denied_access'):
-                if flag == 'denied_access':
-                    ao[flag] = getattr(d, 'deniedAccess', False)
-                else:
-                    ao[flag] = getattr(d, flag, False)
-            result['record_accesses'].append(ao)
-        for fu in rs.forbiddenRecords:
-            result['forbidden_records'].append(utils.base64_url_encode(fu))
+        for rs in _fetch_record_access_pages(vault, chunk):
+            _add_record_access_rows(rs, result, show_inherited, show_denied)
+    result['forbidden_records'] = list(dict.fromkeys(result['forbidden_records']))
     return result
 
 
-def _resolve_uid_to_username(vault: VaultOnline, uid_b64: str) -> Optional[str]:
+_RECORD_ACCESS_PAGE_SIZE = 500
+"""Server maximum rows per ``vault/records/v3/details/access`` page."""
+
+_RECORD_ACCESS_MAX_PAGES = 50
+"""Safety cap on pages consumed per UID chunk."""
+
+
+def _fetch_record_access_pages(
+        vault: VaultOnline, chunk: List[str]) -> Iterable[record_details_pb2.RecordAccessResponse]:
+    """Yield every page of ``vault/records/v3/details/access`` for one UID chunk.
+
+    The first request is sent without ``page`` (an explicit page size on the first
+    request returned incomplete accessor lists for some vaults); follow-ups request
+    the next page using the returned cursor.
+    """
+    page: Optional[pagination_pb2.Page] = None
+    for _ in range(_RECORD_ACCESS_MAX_PAGES):
+        rq = record_details_pb2.RecordAccessRequest()
+        for uid in chunk:
+            rq.recordUids.append(utils.base64_url_decode(uid))
+        if page is not None:
+            rq.page.CopyFrom(page)
+        rs = vault.keeper_auth.execute_auth_rest(
+            'vault/records/v3/details/access', rq, response_type=record_details_pb2.RecordAccessResponse)
+        if rs is None:
+            return
+        yield rs
+        if not rs.HasField('pageInfo') or not rs.pageInfo.hasMore:
+            return
+        page_number = (page.pageNumber if page is not None else 1)
+        page = pagination_pb2.Page(
+            pageNumber=(rs.pageInfo.pageNumber or page_number) + 1,
+            pageSize=_RECORD_ACCESS_PAGE_SIZE,
+            cursorToken=rs.pageInfo.cursorToken)
+    utils.get_logger().warning(
+        'Record access listing stopped after %d pages; results may be incomplete', _RECORD_ACCESS_MAX_PAGES)
+
+
+def _add_record_access_rows(
+        rs: record_details_pb2.RecordAccessResponse,
+        result: Dict[str, Any],
+        show_inherited: bool,
+        show_denied: bool) -> None:
+    for ra in rs.recordAccesses:
+        d = ra.data
+        ai = ra.accessorInfo
+        if not _include_access_row(bool(d.inherited), bool(d.deniedAccess), show_inherited, show_denied):
+            continue
+        ao = {
+            'record_uid': utils.base64_url_encode(d.recordUid),
+            'accessor_name': ai.name,
+            'access_type': folder_pb2.AccessType.Name(d.accessType) if hasattr(d, 'accessType') else 'UNKNOWN',
+            'access_type_uid': utils.base64_url_encode(d.accessTypeUid),
+            'owner': getattr(d, 'owner', False),
+            'inherited': bool(getattr(d, 'inherited', False)),
+            'access_role_type': int(getattr(d, 'accessRoleType', 0) or 0),
+        }
+        for flag in ('can_view_title', 'can_edit', 'can_view', 'can_list_access',
+                     'can_update_access', 'can_delete', 'can_change_ownership',
+                     'can_request_access', 'can_approve_access', 'denied_access'):
+            if flag == 'denied_access':
+                ao[flag] = getattr(d, 'deniedAccess', False)
+            else:
+                ao[flag] = getattr(d, flag, False)
+        result['record_accesses'].append(ao)
+    for fu in rs.forbiddenRecords:
+        result['forbidden_records'].append(utils.base64_url_encode(fu))
+
+
+def _load_share_object_usernames(vault: VaultOnline) -> Dict[str, str]:
+    """Map account UID -> username from one ``vault/get_share_objects`` call; empty on error."""
+    usernames: Dict[str, str] = {}
     try:
         rq = record_pb2.GetShareObjectsRequest()
         rs = vault.keeper_auth.execute_auth_rest('vault/get_share_objects', rq, response_type=record_pb2.GetShareObjectsResponse)
@@ -1156,14 +1205,27 @@ def _resolve_uid_to_username(vault: VaultOnline, uid_b64: str) -> Optional[str]:
                               rs.shareEnterpriseUsers, rs.shareMCEnterpriseUsers):
                 for su in user_list:
                     if su.userAccountUid:
-                        su_uid = utils.base64_url_encode(su.userAccountUid)
-                        if su_uid == uid_b64:
-                            return su.username
-    except Exception:
-        pass
+                        usernames.setdefault(utils.base64_url_encode(su.userAccountUid), su.username)
+    except Exception as e:
+        utils.get_logger().debug('NSF username lookup failed: %s', e)
+    return usernames
 
 
-_FOLDER_ACCESS_CHUNK = 100
+class _UsernameResolver:
+    """Resolves accessor UIDs to usernames, loading the share-objects list at most once."""
+
+    def __init__(self, vault: VaultOnline) -> None:
+        self._vault = vault
+        self._usernames: Optional[Dict[str, str]] = None
+
+    def get(self, uid_b64: str) -> Optional[str]:
+        if self._usernames is None:
+            self._usernames = _load_share_object_usernames(self._vault)
+        return self._usernames.get(uid_b64)
+
+
+# Smaller than the 100-UID API limit: larger folder batches can drop accessor rows.
+_FOLDER_ACCESS_CHUNK = 25
 
 
 _FOLDER_ACCESS_MAX_PAGES = 50
@@ -1180,19 +1242,22 @@ def _include_access_row(inherited: bool, denied: bool, show_inherited: bool, sho
 
 
 def _parse_folder_accessor(
-        vault: VaultOnline,
+        usernames: Optional[_UsernameResolver],
         a: Any,
         show_inherited: bool = False,
         show_denied: bool = False) -> Optional[Dict[str, Any]]:
-    """Parse one folder accessor row, or return None when it is filtered out."""
+    """Parse one folder accessor row, or return None when it is filtered out.
+
+    ``usernames`` resolves ``AT_USER`` accessors; None leaves ``username`` empty.
+    """
     if not _include_access_row(bool(a.inherited), bool(a.deniedAccess), show_inherited, show_denied):
         return None
     auid = utils.base64_url_encode(a.accessTypeUid)
     at = folder_pb2.AccessType.Name(a.accessType)
     rt = folder_pb2.AccessRoleType.Name(a.accessRoleType)
     username = None
-    if at == 'AT_USER':
-        username = _resolve_uid_to_username(vault, auid)
+    if at == 'AT_USER' and usernames is not None:
+        username = usernames.get(auid)
     ai = {
         'accessor_uid': auid, 'access_type': at, 'role': rt,
         'access_role_type': int(a.accessRoleType),
@@ -1228,8 +1293,9 @@ def _fetch_nsf_folder_access_chunk(
         vault: VaultOnline,
         chunk: List[str],
         show_inherited: bool = False,
-        show_denied: bool = False) -> Dict[str, Dict[str, Any]]:
-    """Fetch access details for one <=100-UID chunk, fully draining continuation pages."""
+        show_denied: bool = False,
+        usernames: Optional[_UsernameResolver] = None) -> Dict[str, Dict[str, Any]]:
+    """Fetch access details for one UID chunk, fully draining continuation pages."""
     accumulated: Dict[str, Dict[str, Any]] = {}
     continuation_token = None
     for _ in range(_FOLDER_ACCESS_MAX_PAGES):
@@ -1255,7 +1321,7 @@ def _fetch_nsf_folder_access_chunk(
             else:
                 accessors = []
                 for a in fr.accessors:
-                    parsed = _parse_folder_accessor(vault, a, show_inherited, show_denied)
+                    parsed = _parse_folder_accessor(usernames, a, show_inherited, show_denied)
                     if parsed is not None:
                         accessors.append(parsed)
                 entry = accumulated.setdefault(
@@ -1272,8 +1338,9 @@ def get_nsf_folder_access(
         vault: VaultOnline,
         folder_uids: Iterable[str],
         show_inherited: bool = False,
-        show_denied: bool = False) -> Dict[str, Any]:
-    """``vault/folders/v3/access``, chunked at 100 UIDs per request.
+        show_denied: bool = False,
+        resolve_usernames: bool = True) -> Dict[str, Any]:
+    """``vault/folders/v3/access``, chunked at 25 UIDs per request.
 
     By default only direct, non-denied rows are returned. Pass
     ``show_inherited=True`` and/or ``show_denied=True`` to include inherited /
@@ -1284,6 +1351,9 @@ def get_nsf_folder_access(
     Fully drains continuation-token pagination within each chunk before
     moving to the next, so the returned ``results`` are always complete —
     there is no caller-facing ``has_more``/``continuation_token`` to track.
+
+    ``AT_USER`` rows get a ``username`` from one ``vault/get_share_objects`` call per
+    invocation. Pass ``resolve_usernames=False`` to skip that call; ``username`` is then None.
     """
     uids: List[str] = []
     for raw in folder_uids:
@@ -1293,15 +1363,17 @@ def get_nsf_folder_access(
     if not uids:
         raise NsfError('At least one folder UID is required')
 
+    usernames = _UsernameResolver(vault) if resolve_usernames else None
     results: List[Dict[str, Any]] = []
     for i in range(0, len(uids), _FOLDER_ACCESS_CHUNK):
         chunk = uids[i:i + _FOLDER_ACCESS_CHUNK]
-        accumulated = _fetch_nsf_folder_access_chunk(vault, chunk, show_inherited, show_denied)
+        accumulated = _fetch_nsf_folder_access_chunk(vault, chunk, show_inherited, show_denied, usernames)
         results.extend(accumulated.values())
     return {'results': results}
 
 
-def load_nsf_access_details(vault: VaultOnline, load_folder: bool = False, load_record: bool = False) -> Dict[str, int]:
+def load_nsf_access_details(vault: VaultOnline, load_folder: bool = False, load_record: bool = False,
+                            resolve_usernames: bool = True) -> Dict[str, int]:
     """Fetch access details for every NSF folder/record and cache them on ``vault.nsf_data``.
 
     Scans all folder and record UIDs currently known to the NSF cache
@@ -1313,6 +1385,7 @@ def load_nsf_access_details(vault: VaultOnline, load_folder: bool = False, load_
 
     The cache always holds the complete access state, including inherited and
     denied rows; filter at read time if only direct access is wanted.
+    ``resolve_usernames=False`` skips the folder accessor username lookup.
     """
     view = _nsf_view(vault)
     if not load_folder and not load_record:
@@ -1325,7 +1398,8 @@ def load_nsf_access_details(vault: VaultOnline, load_folder: bool = False, load_
     loaded = {'folders': 0, 'records': 0}
 
     if folder_uid_list:
-        access = get_nsf_folder_access(vault, folder_uid_list, show_inherited=True, show_denied=True)
+        access = get_nsf_folder_access(vault, folder_uid_list, show_inherited=True, show_denied=True,
+                                       resolve_usernames=resolve_usernames)
         for fr in access.get('results') or []:
             fuid = fr.get('folder_uid')
             if not fuid:
