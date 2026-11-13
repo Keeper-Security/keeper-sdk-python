@@ -9,7 +9,7 @@ from . import prompt_utils, api, autocomplete
 from .commands import command_completer, base, command_history, command_visibility
 from .helpers import report_utils
 from .params import KeeperParams, KeeperConfig
-from keepersdk import constants
+from keepersdk import constants, errors
 from keepersdk.vault import vault_utils
 
 if sys.platform == 'win32':
@@ -69,6 +69,49 @@ def do_command(command_line: str, context: KeeperParams, commands: base.CliComma
     return None
 
 
+def _create_prompt_interrupt_callback(prompt_session: Optional[PromptSession]) -> Callable[[], None]:
+    """Create a callback that safely interrupts an active prompt from another thread."""
+    def interrupt_prompt() -> None:
+        if prompt_session is None:
+            return
+        try:
+            app = prompt_session.app
+            app_loop = app.loop
+            if app_loop is not None and app_loop.is_running():
+                app_loop.call_soon_threadsafe(app.exit, result='')
+        except Exception:
+            # The prompt may not be active; the main loop consumes the signal.
+            pass
+
+    return interrupt_prompt
+
+
+def _clear_revoked_session(context: KeeperParams, logger: logging.Logger) -> bool:
+    """Clear a remotely revoked session on the CLI thread."""
+    if not context.consume_session_revoked():
+        return False
+    context.clear_session()
+    logger.warning('Your Keeper session was logged out remotely. Please login again.')
+    return True
+
+
+def _flush_pending_vault_jobs(context: KeeperParams, logger: logging.Logger) -> None:
+    """Flush queued vault jobs after each command, preserving client audit events."""
+    if context.vault and not context.vault.sync_requested:
+        try:
+            context.vault.run_pending_jobs()
+        except errors.KeeperApiError as e:
+            if e.result_code == 'session_token_expired':
+                context.clear_session()
+                logger.warning('Your Keeper session has expired. Please login again.')
+            else:
+                logger.debug(e, exc_info=True)
+                logger.error('Unable to process pending vault jobs: %s', e)
+        except Exception as e:
+            logger.debug(e, exc_info=True)
+            logger.error('Unable to process pending vault jobs: %s', e)
+
+
 def loop(keeper_config: KeeperConfig, commands: base.CliCommands) -> int:
     prompt_session: Optional[PromptSession] = None
     command_queue: List[str] = []
@@ -109,6 +152,8 @@ def loop(keeper_config: KeeperConfig, commands: base.CliCommands) -> int:
                 complete_while_typing=False, completer=completer, auto_suggest=None, key_bindings=prompt_utils.kb,
                 enable_history_search=False, history=KeeperHistory())
 
+        context.set_session_revoked_callback(_create_prompt_interrupt_callback(prompt_session))
+
         if keeper_config.username:
             options = '--resume-session'
             if keeper_config.password:
@@ -127,8 +172,18 @@ def loop(keeper_config: KeeperConfig, commands: base.CliCommands) -> int:
         logger.setLevel(logging.DEBUG if keeper_config.debug else logging.WARNING)
 
     while True:
+        _clear_revoked_session(context, logger)
+
         if context.auth:
-            context.auth.on_idle()
+            try:
+                context.auth.on_idle()
+            except errors.KeeperApiError as e:
+                if e.result_code == 'session_token_expired':
+                    context.clear_session()
+                    logger.warning('Your Keeper session has expired. Please login again.')
+                else:
+                    logger.debug(e, exc_info=True)
+                    logger.error('An unexpected error occurred: %s', e)
 
         if len(command_queue) > 0:
             command = command_queue.pop(0)
@@ -146,6 +201,10 @@ def loop(keeper_config: KeeperConfig, commands: base.CliCommands) -> int:
             except KeyboardInterrupt:
                 prompt_utils.output_text('')
                 continue
+
+        if _clear_revoked_session(context, logger):
+            continue
+
         command = command.strip()
         if not command:
             continue
@@ -170,10 +229,6 @@ def loop(keeper_config: KeeperConfig, commands: base.CliCommands) -> int:
                 context.vault.sync_down()
             result = do_command(command, context, commands)
             error_no = 0
-            if context.vault and not context.vault.sync_requested:
-                # Deliver client audit events (e.g. open_record, copy_password) in the background.
-                # Skipped while a sync is pending so sync still runs before the next command, as before.
-                context.vault.run_pending_jobs()
             if isinstance(result, KeeperParams):
                 if len(context_stack) > 0 and result is context_stack[-1]:
                     context_to_release = context
@@ -190,9 +245,19 @@ def loop(keeper_config: KeeperConfig, commands: base.CliCommands) -> int:
             break
         except KeyboardInterrupt:
             pass
+        except errors.KeeperApiError as e:
+            logger.debug(e, exc_info=True)
+            if e.result_code == 'session_token_expired':
+                context.clear_session()
+                logger.warning('Your Keeper session has expired. Please login again.')
+            else:
+                logger.error('An unexpected error occurred: %s. Type "debug" to toggle verbose error output', e)
         except Exception as e:
             logger.debug(e, exc_info=True)
             logger.error('An unexpected error occurred: %s. Type "debug" to toggle verbose error output', e)
+
+        if not _clear_revoked_session(context, logger):
+            _flush_pending_vault_jobs(context, logger)
 
         if keeper_config.batch_mode and error_no != 0 and not suppress_errno:
             break
