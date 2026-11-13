@@ -278,7 +278,8 @@ def sync_down_request(auth: keeper_auth.KeeperAuth,
                             if sfk.keyType == record_pb2.ENCRYPTED_BY_DATA_KEY:
                                 sfkd = crypto.decrypt_aes_v1(sfkd, team_key)
                             elif sfk.keyType == record_pb2.ENCRYPTED_BY_PUBLIC_KEY:
-                                team_private_key = crypto.decrypt_aes_v1(sync_down_team.teamPrivateKey, team_key)
+                                team_private_key = vault_data.decrypt_team_rsa_private_key(
+                                    sync_down_team.teamPrivateKey, team_key)
                                 rsa_private_key = crypto.load_rsa_private_key(team_private_key)
                                 sfkd = crypto.decrypt_rsa(sfkd, rsa_private_key)
                             elif sfk.keyType == record_pb2.ENCRYPTED_BY_DATA_KEY_GCM:

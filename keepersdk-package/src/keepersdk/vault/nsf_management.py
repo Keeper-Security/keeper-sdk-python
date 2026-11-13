@@ -304,6 +304,10 @@ def list_nsf_items(
 
     if include_folders:
         for folder in view.folders():
+            # A folder whose key never decrypted has no usable name; don't list it as a
+            # placeholder. It stays in the NSF view, so mutations (remove, move) still work.
+            if not folder.folder_key:
+                continue
             rows.append(NsfListRow(
                 item_type='Folder',
                 uid=folder.folder_uid,
