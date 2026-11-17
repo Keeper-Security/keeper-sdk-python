@@ -12,11 +12,13 @@ from typing import Optional, Dict, Any, Type, TypeVar, Mapping, Tuple
 from urllib.parse import urlunparse, urlparse
 
 import requests
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from google.protobuf.json_format import MessageToJson
 from google.protobuf.message import Message
 from urllib3.exceptions import InsecureRequestWarning
 
 from . import configuration
+from .qrc import qrc_crypto, qrc_keys
 from .. import crypto, utils
 from .. import errors
 from ..constants import DEFAULT_KEEPER_SERVER, DEFAULT_DEVICE_NAME, CLIENT_VERSION
@@ -132,11 +134,32 @@ def set_proxies(proxies: Optional[Dict]) -> None:
     _proxies = proxies
 
 
+_QRC_ERROR_MARKERS = ('qrc', 'quantum', 'ml-kem')
+
+
+def _is_qrc_rejection(error_code: str, error_message: str) -> bool:
+    """True when an error says the server could not open the QRC envelope.
+
+    Matches the ``crypto_error`` code or QRC-specific wording only: generic words such as
+    "encryption" also appear in ordinary errors, and those requests must not be resent.
+    """
+    if error_code == 'crypto_error':
+        return True
+    text = f'{error_code} {error_message}'.lower()
+    return any(marker in text for marker in _QRC_ERROR_MARKERS)
+
+
+def is_ec_server_key_id(key_id: Any) -> bool:
+    """Return True when *key_id* names a built-in Keeper EC server key."""
+    return isinstance(SERVER_PUBLIC_KEYS.get(key_id), ec.EllipticCurvePublicKey)
+
+
 def encrypt_with_keeper_key(data: bytes, key_id: int) -> bytes:
-    if 1 <= key_id <= 6:
-        return crypto.encrypt_rsa(data, SERVER_PUBLIC_KEYS[key_id])
-    elif 7 <= key_id <= 17:
-        return crypto.encrypt_ec(data, SERVER_PUBLIC_KEYS[key_id])
+    public_key = SERVER_PUBLIC_KEYS.get(key_id)
+    if isinstance(public_key, rsa.RSAPublicKey):
+        return crypto.encrypt_rsa(data, public_key)
+    elif isinstance(public_key, ec.EllipticCurvePublicKey):
+        return crypto.encrypt_ec(data, public_key)
     else:
         raise errors.KeeperApiError('invalid_key_id', f'Key ID \"{key_id}\" is not valid.')
 
@@ -146,7 +169,10 @@ def prepare_api_request(key_id: int, transmission_key: bytes,
                         *,
                         session_token: Optional[bytes] = None,
                         keeper_locale: Optional[str] = None,
-                        payload_version: Optional[int] = None) -> APIRequest_pb2.ApiRequest:
+                        payload_version: Optional[int] = None,
+                        qrc_message: Optional[qrc_crypto.QrcMessage] = None,
+                        qrc_key_id: Optional[int] = None,
+                        qrc_ec_key_id: Optional[int] = None) -> APIRequest_pb2.ApiRequest:
     api_payload = APIRequest_pb2.ApiRequestPayload()
     if isinstance(payload_version, int):
         api_payload.apiVersion = payload_version
@@ -156,10 +182,19 @@ def prepare_api_request(key_id: int, transmission_key: bytes,
         api_payload.payload = payload
 
     enc_payload = crypto.encrypt_aes_v2(api_payload.SerializeToString(), transmission_key)
-    enc_transmission_key = encrypt_with_keeper_key(transmission_key, key_id)
     api_request = APIRequest_pb2.ApiRequest()
-    api_request.encryptedTransmissionKey = enc_transmission_key
-    api_request.publicKeyId = key_id
+    if qrc_message is None:
+        api_request.encryptedTransmissionKey = encrypt_with_keeper_key(transmission_key, key_id)
+        api_request.publicKeyId = key_id
+    else:
+        if qrc_key_id is None or qrc_ec_key_id is None:
+            raise ValueError('QRC key IDs are required when qrc_message is provided')
+        api_request.publicKeyId = qrc_key_id
+        api_request.qrcMessageKey.clientEcPublicKey = qrc_message.client_ec_public_key
+        api_request.qrcMessageKey.mlKemEncapsulatedKey = qrc_message.mlkem_encapsulated_key
+        api_request.qrcMessageKey.data = qrc_message.encrypted_transmission_key
+        api_request.qrcMessageKey.msgVersion = qrc_message.message_version
+        api_request.qrcMessageKey.ecKeyId = qrc_ec_key_id
     api_request.encryptedPayload = enc_payload
     api_request.locale = keeper_locale or 'en_US'
 
@@ -174,6 +209,8 @@ class KeeperEndpoint(object):
         self.locale = resolve_locale()
         self._server: str = ''
         self._server_key_id = 7
+        self._qrc_key_id: Optional[int] = -1
+        self._qrc_client_ec_private_key = None
         self._storage = configuration_storage
         if not keeper_server:
             config = configuration_storage.get()
@@ -193,6 +230,10 @@ class KeeperEndpoint(object):
     def server(self, keeper_server: str) -> None:
         config = self._storage.get()
         keeper_server = configuration.adjust_servername(keeper_server)
+        previous_server = self._server
+        if previous_server and previous_server != keeper_server:
+            self._qrc_key_id = -1
+            self._qrc_client_ec_private_key = None
         sc = config.servers().get(keeper_server)
         if sc:
             self._server = sc.server
@@ -206,6 +247,21 @@ class KeeperEndpoint(object):
     @property
     def server_key_id(self):
         return self._server_key_id or 7
+
+    @property
+    def qrc_key_id(self) -> Optional[int]:
+        """Return the configured QRC key ID, or ``None`` when unavailable."""
+        if self._qrc_key_id == -1:
+            host = self.server.lower().split(':', 1)[0]
+            self._qrc_key_id = qrc_keys.QRC_KEY_IDS_BY_HOST.get(host)
+            if self._qrc_key_id is not None and self._qrc_key_id not in qrc_keys.QRC_PUBLIC_KEYS:
+                self._qrc_key_id = None
+        return self._qrc_key_id
+
+    def disable_qrc(self) -> None:
+        """Disable QRC for this endpoint until its server is changed."""
+        self._qrc_key_id = None
+        self._qrc_client_ec_private_key = None
 
     def get_configuration_storage(self):
         return self._storage
@@ -365,10 +421,37 @@ class KeeperEndpoint(object):
         throttle_retries = 0
         key_retries = 0
         while True:
-            api_request = prepare_api_request(key_id, transmission_key, payload,
-                                              session_token=session_token,
-                                              keeper_locale=self.locale,
-                                              payload_version=payload_version)
+            qrc_key_id = self.qrc_key_id
+            use_qrc = qrc_key_id is not None and qrc_crypto.is_available()
+            qrc_message = None
+            if use_qrc:
+                try:
+                    if self._qrc_client_ec_private_key is None:
+                        self._qrc_client_ec_private_key = crypto.generate_ec_key()[0]
+                    qrc_message = qrc_crypto.encrypt_transmission_key(
+                        transmission_key,
+                        self._qrc_client_ec_private_key,
+                        SERVER_PUBLIC_KEYS[key_id],
+                        qrc_keys.QRC_PUBLIC_KEYS[qrc_key_id],
+                    )
+                    logger.debug(
+                        'Using QRC hybrid encryption (ML-KEM key ID: %s, EC key ID: %s)',
+                        qrc_key_id, key_id,
+                    )
+                except Exception as exc:
+                    logger.warning('QRC encryption failed (%s); falling back to ECC', exc)
+                    self.disable_qrc()
+                    qrc_key_id = None
+
+            api_request = prepare_api_request(
+                key_id, transmission_key, payload,
+                session_token=session_token,
+                keeper_locale=self.locale,
+                payload_version=payload_version,
+                qrc_message=qrc_message,
+                qrc_key_id=qrc_key_id,
+                qrc_ec_key_id=key_id if qrc_message is not None else None,
+            )
 
             if endpoint.startswith('https://'):
                 url = endpoint
@@ -401,10 +484,38 @@ class KeeperEndpoint(object):
             if error_rs is not None:
                 logger.debug('<<< Response Error: [%s]', error_rs)
                 if error_code == 'key' and 'key_id' in error_rs:
+                    if qrc_message is not None:
+                        key_retries += 1
+                        if key_retries > MAX_KEY_RETRIES:
+                            raise errors.KeeperApiError(
+                                error_code, error_message or 'Invalid QRC server public key'
+                            )
+                        qrc_ec_key_id = error_rs.get('qrc_ec_key_id')
+                        if is_ec_server_key_id(qrc_ec_key_id) and qrc_ec_key_id != key_id:
+                            logger.debug(
+                                'QRC EC key mismatch: updating from %s to %s',
+                                key_id, qrc_ec_key_id,
+                            )
+                            key_id = qrc_ec_key_id
+                            continue
+                        # No usable EC key to retry QRC with: fall back to ECC, using the
+                        # server's suggested key when it is a built-in one.
+                        logger.debug('QRC key rejected; falling back to ECC')
+                        self.disable_qrc()
+                        if error_rs['key_id'] in SERVER_PUBLIC_KEYS:
+                            key_id = error_rs['key_id']
+                        continue
                     key_retries += 1
                     if key_retries > MAX_KEY_RETRIES:
                         raise errors.KeeperApiError(error_code, error_message or 'Invalid server public key')
                     key_id = error_rs['key_id']
+                    continue
+                if (qrc_message is not None and rs.status_code in (400, 500)
+                        and _is_qrc_rejection(error_code, error_message)):
+                    # The server could not open the QRC envelope, so it did not process
+                    # the request: resending it with ECC is safe.
+                    logger.warning('QRC request rejected; falling back to ECC')
+                    self.disable_qrc()
                     continue
                 if error_code == 'region_redirect':
                     raise errors.RegionRedirectError(error_rs.get('region_host') or '', error_message)
@@ -570,6 +681,9 @@ SERVER_PUBLIC_KEYS: Dict[int, Any] = {
 
     17: crypto.load_ec_public_key(utils.base64_url_decode(
         'BFX68cb97m9_sweGdOVavFM3j5ot6gveg6xT4BtGahfGhKib-zdZyO9pwvv1cBda9ahkSzo1BQ4NVXp9qRyqVGU')),
+
+    18: crypto.load_ec_public_key(utils.base64_url_decode(
+        'BNhngQqTT1bPKxGuB6FhbPTAeNVFl8PKGGSGo5W06xWIReutm6ix6JPivqnbvkydY-1uDQTr-5e6t70G01Bb5JA')),
 }
 
 KEEPER_LANGUAGES: Dict[str, str] = {
