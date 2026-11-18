@@ -316,36 +316,27 @@ def decrypt_record_keys(
         except Exception:
             continue
 
-    # NSF file attachments can be linked to a parent record instead of having
-    # their own RecordKey entry. Their key is wrapped by the parent record key
-    # and is delivered through KeeperDriveData.recordLinks. Resolve
-    # these links after normal record keys so linked records can also act as
-    # parents for further links.
-    record_links = list(storage.record_links.get_all_links())
-    progress = True
-    while progress:
-        progress = False
-        for link in record_links:
-            child_uid = link.child_record_uid
-            parent_uid = link.parent_record_uid
-            if not child_uid or not parent_uid or child_uid in decrypted_keys or not link.record_key:
+    # Linked records (for example, file attachments uploaded by another user)
+    # store the child record key encrypted with the parent record key.  Resolve
+    # these links after direct record keys have been processed.  Repeat the
+    # pass because a linked record can itself be the parent of another link.
+    changed = True
+    while changed:
+        changed = False
+        for link in storage.record_links.get_all_links():
+            if link.child_record_uid in decrypted_keys or not link.record_key:
                 continue
-
-            parent_key = decrypted_keys.get(parent_uid)
+            parent_key = decrypted_keys.get(link.parent_record_uid)
             if parent_key is None:
                 continue
-
             try:
-                encrypted_key = utils.base64_url_decode(link.record_key)
+                child_key = try_decrypt_symmetric(
+                    utils.base64_url_decode(link.record_key), parent_key)
             except Exception:
-                continue
-            # RecordLink.recordKey is wrapped by the parent record key (AES-GCM; CBC for
-            # older links). A bad link is skipped: another parent may still provide the key.
-            child_key = try_decrypt_symmetric(encrypted_key, parent_key)
-
-            if child_key:
-                decrypted_keys[child_uid] = child_key
-                progress = True
+                child_key = None
+            if child_key is not None:
+                decrypted_keys[link.child_record_uid] = child_key
+                changed = True
 
     return decrypted_keys
 
