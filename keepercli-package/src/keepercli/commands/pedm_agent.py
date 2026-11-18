@@ -489,7 +489,10 @@ class PedmAgentApprovalCreateCommand(base.ArgparseCommand):
 
         justification: Union[str, bytes, None] = kwargs.get('justification')
         if isinstance(justification, str):
-            justification = justification.encode('utf-8')
+            j = {
+                "text": justification,
+            }
+            justification = json.dumps(j).encode('utf-8')
         if isinstance(justification, bytes):
             justification = crypto.encrypt_aes_v2(justification, agent.hash_key)
             justification = utils.base64_url_encode(justification)
