@@ -35,6 +35,30 @@ def try_decrypt_symmetric(encrypted_key: bytes, symmetric_key: bytes) -> Optiona
     return None
 
 
+def folder_key_opens_data(row: Optional[nsf.NSFFolder], folder_key: Optional[bytes]) -> bool:
+    """Return False when *folder_key* is proven wrong for the folder *row*.
+
+    A legacy AES-CBC fallback can "decrypt" a key with the wrong wrapping key and still
+    yield 32 bytes. Folder data is authenticated AES-GCM, so failing to open it proves the
+    key is wrong. A folder without data cannot be checked, so its key is accepted.
+    """
+    if not folder_key or len(folder_key) != 32:
+        return False
+    if row is None or not row.data:
+        return True
+    return _decrypt_folder_data(row.data, folder_key) is not None
+
+
+def _decrypt_folder_data(encrypted_data_b64: str, folder_key: bytes) -> Optional[Dict[str, Any]]:
+    """Decrypt NSF folder data (AES-GCM JSON object), or None if the key does not open it."""
+    try:
+        data_bytes = crypto.decrypt_aes_v2(utils.base64_url_decode(encrypted_data_b64), folder_key)
+        payload = json.loads(data_bytes.decode('utf-8'))
+    except Exception:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
 def try_decrypt_with_user_keys(encrypted_key: bytes, auth_context: keeper_auth.AuthContext) -> Optional[bytes]:
     result = try_decrypt_symmetric(encrypted_key, auth_context.data_key)
     if result is not None:
@@ -82,8 +106,12 @@ def try_decrypt_from_folder_access(
         folder_uid: str,
         storage: INSFStorage,
         auth_context: keeper_auth.AuthContext,
-        teams: Optional[Mapping[str, TeamKeyMaterial]] = None) -> Optional[bytes]:
-    """Unwrap folder key from folderAccesses (user or team), mirroring Web Vault."""
+        teams: Optional[Mapping[str, TeamKeyMaterial]] = None,
+        folder_row: Optional[nsf.NSFFolder] = None) -> Optional[bytes]:
+    """Unwrap folder key from folderAccesses (user or team), mirroring Web Vault.
+
+    Pass *folder_row* to skip access entries whose key does not open the folder data.
+    """
     teams = teams or {}
     for fa in storage.folder_accesses.get_links_by_subject(folder_uid):
         if not fa.folder_key_encrypted:
@@ -129,7 +157,7 @@ def try_decrypt_from_folder_access(
             if folder_key is None:
                 folder_key = try_decrypt_with_user_keys(enc_key, auth_context)
 
-            if folder_key is not None and len(folder_key) == 32:
+            if folder_key_opens_data(folder_row, folder_key):
                 return folder_key
         except Exception:
             continue
@@ -140,12 +168,16 @@ def try_decrypt_folder_key(
         fk: nsf.NSFFolderKey,
         auth_context: keeper_auth.AuthContext,
         decrypted_folder_keys: Dict[str, bytes],
-        teams: Optional[Mapping[str, TeamKeyMaterial]] = None) -> Optional[bytes]:
+        teams: Optional[Mapping[str, TeamKeyMaterial]] = None,
+        folder_row: Optional[nsf.NSFFolder] = None) -> Optional[bytes]:
     """
     Attempt decrypt from a FolderKey link.
 
     Returns None for ENCRYPTED_BY_TEAM_KEY (caller must use folderAccesses).
     For PARENT_KEY without a decrypted parent, returns None so caller can fall back.
+    With *folder_row*, a key that does not open the folder data is rejected, and for
+    PARENT_KEY the folder's own parent is tried before the key entry's (which can go
+    stale after a move), mirroring Web Vault.
     """
     enc_key_type = fk.encrypted_by
     if enc_key_type == int(_FOLDER_KEY_ENCRYPTION.ENCRYPTED_BY_TEAM_KEY):
@@ -155,15 +187,22 @@ def try_decrypt_folder_key(
     try:
         encrypted_key = utils.base64_url_decode(fk.folder_key)
         if enc_key_type == int(_FOLDER_KEY_ENCRYPTION.ENCRYPTED_BY_USER_KEY):
-            return try_decrypt_with_user_keys(encrypted_key, auth_context)
+            key = try_decrypt_with_user_keys(encrypted_key, auth_context)
+            return key if folder_key_opens_data(folder_row, key) else None
         if enc_key_type == int(_FOLDER_KEY_ENCRYPTION.ENCRYPTED_BY_PARENT_KEY):
-            parent_uid = fk.parent_uid
-            if not parent_uid:
-                return None
-            parent_key = decrypted_folder_keys.get(parent_uid)
-            if parent_key is None:
-                return None
-            return try_decrypt_symmetric(encrypted_key, parent_key)
+            parent_uids = [fk.parent_uid]
+            if folder_row is not None and folder_row.parent_uid and folder_row.parent_uid != fk.parent_uid:
+                parent_uids.insert(0, folder_row.parent_uid)
+            for parent_uid in parent_uids:
+                if not parent_uid:
+                    continue
+                parent_key = decrypted_folder_keys.get(parent_uid)
+                if parent_key is None:
+                    continue
+                key = try_decrypt_symmetric(encrypted_key, parent_key)
+                if folder_key_opens_data(folder_row, key):
+                    return key
+            return None
     except Exception:
         return None
     return None
@@ -178,12 +217,14 @@ def try_decrypt_folder_entity_key(
     try:
         encrypted_key = utils.base64_url_decode(row.folder_key)
         key = try_decrypt_with_user_keys(encrypted_key, auth_context)
-        if key is not None:
+        if folder_key_opens_data(row, key):
             return key
         if row.parent_uid:
             parent_key = decrypted_folder_keys.get(row.parent_uid)
             if parent_key is not None:
-                return try_decrypt_symmetric(encrypted_key, parent_key)
+                key = try_decrypt_symmetric(encrypted_key, parent_key)
+                if folder_key_opens_data(row, key):
+                    return key
     except Exception:
         pass
     return None
@@ -204,12 +245,9 @@ def _folder_needs_access_fallback(
         if fk.encrypted_by == int(_FOLDER_KEY_ENCRYPTION.ENCRYPTED_BY_TEAM_KEY):
             return True
         if fk.encrypted_by == int(_FOLDER_KEY_ENCRYPTION.ENCRYPTED_BY_PARENT_KEY):
-            parent_uid = fk.parent_uid
-            if not parent_uid or parent_uid not in decrypted_keys:
-                # Parent missing or not yet unwrapped — try accesses (Vault fallback).
-                return True
-            # Parent key already available; PARENT_KEY path will handle this folder.
-            continue
+            # Parent missing, not yet unwrapped, or its key did not open this folder
+            # (the PARENT_KEY path already ran this pass) — try accesses (Vault fallback).
+            return True
         if fk.encrypted_by == int(_FOLDER_KEY_ENCRYPTION.ENCRYPTED_BY_USER_KEY):
             return True  # USER_KEY already tried; fall back to accesses
     return False
@@ -231,7 +269,8 @@ def decrypt_folder_keys(
     for fk in storage.folder_keys.get_all_links():
         keys_by_folder.setdefault(fk.folder_uid, []).append(fk)
     folder_rows = list(storage.folders.get_all_entities())
-    candidates = set(keys_by_folder.keys()) | {row.folder_uid for row in folder_rows}
+    rows_by_uid = {row.folder_uid: row for row in folder_rows}
+    candidates = set(keys_by_folder.keys()) | set(rows_by_uid)
 
     progress = True
     while progress:
@@ -240,7 +279,8 @@ def decrypt_folder_keys(
             if folder_uid in decrypted_keys:
                 continue
             for fk in folder_keys:
-                key = try_decrypt_folder_key(fk, auth_context, decrypted_keys, teams)
+                key = try_decrypt_folder_key(fk, auth_context, decrypted_keys, teams,
+                                             folder_row=rows_by_uid.get(folder_uid))
                 if key is not None:
                     decrypted_keys[folder_uid] = key
                     progress = True
@@ -260,7 +300,8 @@ def decrypt_folder_keys(
                 continue
             if not _folder_needs_access_fallback(folder_uid, keys_by_folder, decrypted_keys):
                 continue
-            key = try_decrypt_from_folder_access(folder_uid, storage, auth_context, teams)
+            key = try_decrypt_from_folder_access(folder_uid, storage, auth_context, teams,
+                                                 folder_row=rows_by_uid.get(folder_uid))
             if key is not None:
                 decrypted_keys[folder_uid] = key
                 progress = True
@@ -321,15 +362,9 @@ def decrypt_record_keys(
 def decrypt_folder_name(encrypted_data_b64: str, folder_key: bytes) -> Optional[str]:
     if not encrypted_data_b64:
         return None
-    try:
-        data_bytes = crypto.decrypt_aes_v2(utils.base64_url_decode(encrypted_data_b64), folder_key)
-        payload = json.loads(data_bytes.decode('utf-8'))
-        if isinstance(payload, dict):
-            name = payload.get('name')
-            return str(name) if name is not None else None
-    except Exception:
-        return None
-    return None
+    payload = _decrypt_folder_data(encrypted_data_b64, folder_key)
+    name = payload.get('name') if payload is not None else None
+    return str(name) if name is not None else None
 
 
 def decrypt_record_data(
