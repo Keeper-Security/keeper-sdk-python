@@ -146,8 +146,7 @@ class TestNsfAccessListingFilters(unittest.TestCase):
             p = patch('keepersdk.vault.nsf_management.' + target, side_effect=lambda _v, u: u)
             p.start()
             self.addCleanup(p.stop)
-        p = patch('keepersdk.vault.nsf_management._resolve_uid_to_username',
-                  side_effect=lambda _v, uid: f'user-{uid}')
+        p = patch('keepersdk.vault.nsf_management._load_share_object_usernames', return_value={})
         self.resolve_username = p.start()
         self.addCleanup(p.stop)
 
@@ -252,7 +251,7 @@ class TestNsfLoadAccessDetails(unittest.TestCase):
                       return_value={'record_accesses': []}) as gra:
             loaded = nsf_management.load_nsf_access_details(vault, load_folder=True, load_record=True)
         self.assertEqual(loaded, {'folders': 1, 'records': 1})
-        self.assertEqual(gfa.call_args.kwargs, {'show_inherited': True, 'show_denied': True})
+        self.assertEqual(gfa.call_args.kwargs, {'show_inherited': True, 'show_denied': True, 'resolve_usernames': True})
         self.assertEqual(gra.call_args.kwargs, {'show_inherited': True, 'show_denied': True})
 
 
