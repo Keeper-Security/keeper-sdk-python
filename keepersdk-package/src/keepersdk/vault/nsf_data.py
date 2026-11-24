@@ -189,6 +189,19 @@ class NSFData:
         linked: Set[str] = set()
         for fr in self._storage.folder_records.get_all_links():
             linked.add(fr.record_uid)
+        # File attachments and other linked records may not have their own
+        # folder_records entry. They stay in the NSF view while their parent
+        # record does; chains of links are followed.
+        children: Dict[str, List[str]] = {}
+        for record_link in self._storage.record_links.get_all_links():
+            if record_link.parent_record_uid and record_link.child_record_uid:
+                children.setdefault(record_link.parent_record_uid, []).append(record_link.child_record_uid)
+        pending = list(linked)
+        while pending:
+            for child_uid in children.get(pending.pop(), []):
+                if child_uid not in linked:
+                    linked.add(child_uid)
+                    pending.append(child_uid)
         for uid in list(self._records):
             if uid not in linked:
                 del self._records[uid]

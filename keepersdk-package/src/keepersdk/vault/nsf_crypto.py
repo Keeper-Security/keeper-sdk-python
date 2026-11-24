@@ -315,6 +315,29 @@ def decrypt_record_keys(
                 decrypted_keys[rk.record_uid] = record_key
         except Exception:
             continue
+
+    # Linked records (for example, file attachments uploaded by another user)
+    # store the child record key encrypted with the parent record key.  Resolve
+    # these links after direct record keys have been processed.  Repeat the
+    # pass because a linked record can itself be the parent of another link.
+    changed = True
+    while changed:
+        changed = False
+        for link in storage.record_links.get_all_links():
+            if link.child_record_uid in decrypted_keys or not link.record_key:
+                continue
+            parent_key = decrypted_keys.get(link.parent_record_uid)
+            if parent_key is None:
+                continue
+            try:
+                child_key = try_decrypt_symmetric(
+                    utils.base64_url_decode(link.record_key), parent_key)
+            except Exception:
+                child_key = None
+            if child_key is not None:
+                decrypted_keys[link.child_record_uid] = child_key
+                changed = True
+
     return decrypted_keys
 
 

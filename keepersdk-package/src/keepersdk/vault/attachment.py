@@ -58,12 +58,108 @@ class AttachmentDownloadRequest:
             self.download_to_stream(file_stream)
 
 
+def _load_nsf_record(vault: vault_online.VaultOnline, record_uid: str):
+    """Build a record object from the decrypted NSF view.
+
+    NSF records are intentionally not inserted into ``vault_data``.  This
+    adapter gives the attachment code the small record interface it needs
+    without copying NSF records into the classic vault cache.
+    """
+    if not vault.nsf_data:
+        return None
+    entry = vault.nsf_data.get_record(record_uid)
+    if entry is None or not entry.record_key or not entry.decrypted_data:
+        return None
+    try:
+        payload = json.loads(entry.decrypted_data)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+
+    if entry.version >= 4:
+        record = FileRecord()
+    else:
+        record = TypedRecord()
+    record.record_uid = record_uid
+    record.load_record_data(payload)
+    return record
+
+
+def _prepare_nsf_attachment_download(
+        vault: vault_online.VaultOnline,
+        record_uid: str,
+        attachment_name: Optional[str] = None) -> Iterator[AttachmentDownloadRequest]:
+    record = _load_nsf_record(vault, record_uid)
+    if record is None:
+        utils.get_logger().warning('NSF record UID "%s" not found or has no decrypted key.', record_uid)
+        return
+
+    file_uids: List[str] = []
+    if isinstance(record, FileRecord):
+        file_uids.append(record_uid)
+    elif isinstance(record, TypedRecord):
+        facade = FileRefRecordFacade()
+        facade.record = record
+        if isinstance(facade.file_ref, list):
+            file_uids.extend(facade.file_ref)
+
+    if attachment_name:
+        filtered_uids: List[str] = []
+        name_l = attachment_name.lower()
+        for file_uid in file_uids:
+            file_record = _load_nsf_record(vault, file_uid)
+            if isinstance(file_record, FileRecord):
+                file_name = file_record.file_name or ''
+                title = file_record.title or ''
+                if attachment_name == file_uid or title.lower() == name_l or file_name.lower() == name_l:
+                    filtered_uids.append(file_uid)
+        file_uids = filtered_uids
+
+    if not file_uids:
+        return
+
+    request = record_pb2.FilesGetRequest()
+    request.for_thumbnails = False
+    for file_uid in file_uids:
+        request.record_uids.append(utils.base64_url_decode(file_uid))
+
+    response = vault.keeper_auth.execute_auth_rest(
+        'vault/files_download', request, response_type=record_pb2.FilesGetResponse)
+    assert response is not None
+
+    for file_status in response.files:
+        file_uid = utils.base64_url_encode(file_status.record_uid)
+        if file_status.status != record_pb2.FG_SUCCESS:
+            utils.get_logger().warning('Error requesting download URL for file "%s"', file_uid)
+            continue
+        file_record = _load_nsf_record(vault, file_uid)
+        if not isinstance(file_record, FileRecord):
+            utils.get_logger().warning('NSF file record "%s" is unavailable.', file_uid)
+            continue
+        file_entry = vault.nsf_data.get_record(file_uid)
+        if file_entry is None or not file_entry.record_key:
+            utils.get_logger().warning('NSF file record "%s" has no decrypted key.', file_uid)
+            continue
+        download = AttachmentDownloadRequest()
+        download.file_id = file_uid
+        download.url = file_status.url
+        download.success_status_code = file_status.success_status_code
+        download.encryption_key = file_entry.record_key
+        download.title = file_record.title or file_record.file_name
+        download.is_gcm_encrypted = file_status.fileKeyType == record_pb2.ENCRYPTED_BY_DATA_KEY_GCM
+        yield download
+
+
 def prepare_attachment_download(vault: vault_online.VaultOnline,
                                 record_uid: str,
                                 attachment_name: Optional[str]=None) -> Iterator[AttachmentDownloadRequest]:
     record = vault.vault_data.load_record(record_uid)
     if not record:
-        utils.get_logger().warning('Record UID \"%s\" not found.', record_uid)
+        # NSF records are held in a separate decrypted view.  Keep the
+        # existing classic path unchanged and fall back to NSF only when the
+        # classic lookup misses.
+        yield from _prepare_nsf_attachment_download(vault, record_uid, attachment_name)
         return
 
     if isinstance(record, (TypedRecord, FileRecord)):

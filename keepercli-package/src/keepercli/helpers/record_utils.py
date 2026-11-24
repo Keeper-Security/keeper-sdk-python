@@ -92,6 +92,35 @@ def resolve_records(pattern: str, context: KeeperParams, *, recursive: bool=Fals
         yield record_info.record_uid
         return
 
+    # NSF records are maintained in a separate decrypted view and are not
+    # present in the classic vault_data index.  Allow commands which operate
+    # on a record UID (such as download-attachment) to resolve them directly.
+    if context.vault.nsf_data and context.vault.nsf_data.get_record(pattern):
+        yield pattern
+        return
+
+    # An NSF folder has its own in-memory view as well.  Support a folder UID
+    # here so --recursive can operate on NSF records without mixing the NSF
+    # and classic folder trees.
+    if context.vault.nsf_data:
+        nsf_folder = context.vault.nsf_data.get_folder(pattern)
+        if nsf_folder:
+            visited = set()
+
+            def walk(folder) -> Iterator[str]:
+                if folder.folder_uid in visited:
+                    return
+                visited.add(folder.folder_uid)
+                yield from folder.record_uids
+                if recursive:
+                    for child_uid in folder.subfolder_uids:
+                        child = context.vault.nsf_data.get_folder(child_uid)
+                        if child:
+                            yield from walk(child)
+
+            yield from walk(nsf_folder)
+            return
+
     folder = context.vault.vault_data.get_folder(pattern)
     if folder:
         pattern = ''
