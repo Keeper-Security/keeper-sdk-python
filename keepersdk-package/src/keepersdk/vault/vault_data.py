@@ -788,6 +788,14 @@ def load_keeper_shared_folder(vault: VaultData, *,
     return shared_folder
 
 
+def decrypt_team_rsa_private_key(encrypted_private_key: bytes, team_key: bytes) -> bytes:
+    """Unwrap a team RSA private key: AES-GCM (current) or legacy AES-CBC."""
+    try:
+        return crypto.decrypt_aes_v2(encrypted_private_key, team_key)
+    except Exception:
+        return crypto.decrypt_aes_v1(encrypted_private_key, team_key)
+
+
 def load_keeper_team(storage_team: storage_types.StorageTeam, team_key: bytes) -> vault_types.Team:
     team = vault_types.Team()
     team.team_uid = storage_team.team_uid
@@ -796,7 +804,7 @@ def load_keeper_team(storage_team: storage_types.StorageTeam, team_key: bytes) -
     team.restrict_view = storage_team.restrict_view
     team.restrict_share = storage_team.restrict_share
     if storage_team.rsa_private_key:
-        rsa_private_key = crypto.decrypt_aes_v1(storage_team.rsa_private_key, team_key)
+        rsa_private_key = decrypt_team_rsa_private_key(storage_team.rsa_private_key, team_key)
         team.rsa_private_key = crypto.load_rsa_private_key(rsa_private_key)
     if storage_team.ec_private_key:
         ec_private_key = crypto.decrypt_aes_v2(storage_team.ec_private_key, team_key)
