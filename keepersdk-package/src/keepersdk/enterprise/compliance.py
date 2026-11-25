@@ -3,19 +3,21 @@
 import datetime
 import json
 import logging
+import fnmatch
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any, Iterable, Set, Tuple, Callable
 
 from ..authentication import keeper_auth
 from ..proto import enterprise_pb2
-from .. import crypto, utils
+from .. import crypto, errors, utils
 from . import enterprise_types
 from ..plugins.sox import storage_types as st
 
 
 API_EVENT_SUMMARY_ROW_LIMIT = 1000
 MAX_RECORDS_PER_REQUEST = 1000
+MAX_USERS_PER_REQUEST = 5000
 
 # Report type constants
 REPORT_TYPE_DEFAULT = 'default'
@@ -66,6 +68,10 @@ class ComplianceReportEntry:
     in_trash: bool = False
     shared: bool = False
     shared_folder_uid: Optional[List[str]] = None
+    created: Optional[datetime.datetime] = None
+    last_pw_change: Optional[datetime.datetime] = None
+    last_modified: Optional[datetime.datetime] = None
+    last_rotation: Optional[datetime.datetime] = None
 
 
 @dataclass
@@ -141,6 +147,18 @@ class ComplianceReportConfig:
     no_cache: bool = False
     cache_max_age_days: int = 1
     external_share_type: str = 'all'
+    resolve_teams: bool = False
+
+    def __post_init__(self) -> None:
+        """Validate options before a report starts fetching data."""
+        if self.rebuild and self.no_rebuild:
+            raise ValueError("rebuild and no_rebuild cannot both be enabled")
+        if self.cache_max_age_days < 0:
+            raise ValueError("cache_max_age_days cannot be negative")
+        if self.report_type not in (REPORT_TYPE_HISTORY, REPORT_TYPE_VAULT):
+            raise ValueError(f"Unsupported report type: {self.report_type}")
+        if self.external_share_type not in ('all', 'direct', 'shared-folder'):
+            raise ValueError(f"Unsupported external share type: {self.external_share_type}")
 
 
 @dataclass
@@ -187,12 +205,15 @@ class ComplianceReportGenerator:
         config: Optional[ComplianceReportConfig] = None,
         vault_storage: Optional[Any] = None,
         compliance_storage: Optional[Any] = None,
-        progress_callback: Optional[Callable[[str], None]] = None
+        progress_callback: Optional[Callable[[str], None]] = None,
+        vault_data: Optional[Any] = None
     ) -> None:
+        """``vault_data`` (a ``VaultData``) supplies decrypted shared folder names, if given."""
         self._enterprise_data = enterprise_data
         self._auth = auth
         self._config = config or ComplianceReportConfig()
         self._vault_storage = vault_storage
+        self._vault_data = vault_data
         self._progress_callback = progress_callback
         self._compliance_storage = compliance_storage
         self._user_teams: Optional[Dict[int, Set[str]]] = None
@@ -215,7 +236,7 @@ class ComplianceReportGenerator:
     def config(self) -> ComplianceReportConfig:
         return self._config
     
-    def get_preliminary_records(self) -> Dict[str, Dict[str, Any]]:
+    def get_preliminary_records(self) -> Dict[str, RecordInfo]:
         """Build user lookups and fetch preliminary compliance data."""
         self._build_user_lookups()
         self._fetch_preliminary_compliance_data()
@@ -489,7 +510,7 @@ class ComplianceReportGenerator:
         except Exception as e:
             logger.debug(f'Error saving compliance to cache: {e}')
     
-    def _get_ec_private_key(self) -> Optional[bytes]:
+    def _get_ec_private_key(self) -> Optional[Any]:
         """Get the enterprise EC private key for decryption."""
         return self._enterprise_data.enterprise_info.ec_private_key
     
@@ -501,6 +522,17 @@ class ComplianceReportGenerator:
         ec_key = self._get_ec_private_key()
         if ec_key is None:
             return {}
+
+        # EC compliance metadata is encoded as an uncompressed P-256 point
+        # (65 bytes), followed by AES-GCM nonce/ciphertext/tag. Some response
+        # rows legitimately have no EC metadata; avoid sending those rows to
+        # the EC loader and flooding the CLI with point-format warnings.
+        if not isinstance(encrypted_data, (bytes, bytearray)):
+            return {}
+        if len(encrypted_data) < 93 or encrypted_data[0] != 4:
+            return {}
+        if isinstance(ec_key, (bytes, bytearray)):
+            ec_key = crypto.load_ec_private_key(bytes(ec_key))
         
         try:
             data_json = crypto.decrypt_ec(encrypted_data, ec_key)
@@ -527,6 +559,10 @@ class ComplianceReportGenerator:
                 self._progress_callback('Loading from cache...')
             if self._load_prelim_from_cache():
                 return
+
+        if self._config.no_rebuild:
+            logger.warning('No usable preliminary compliance cache is available; remote fetch disabled by no_rebuild')
+            return
         
         if user_ids is None:
             user_ids = [u.enterprise_user_id for u in self._enterprise_data.users.get_all_entities()]
@@ -536,18 +572,8 @@ class ComplianceReportGenerator:
             return
         
         total_users = len(user_ids)
-        
-        rq = enterprise_pb2.PreliminaryComplianceDataRequest()
-        rq.includeNonShared = not self._config.shared
-        rq.includeTotalMatchingRecordsInFirstResponse = True
-        for uid in user_ids:
-            rq.enterpriseUserIds.append(uid)
-        
-        has_more = True
-        continuation_token = None
         total_records = 0
         loaded_records = 0
-        current_batch = 0
         users_processed = 0
         processed_user_ids = set()
         
@@ -555,19 +581,29 @@ class ComplianceReportGenerator:
             self._progress_callback(f'Loading record information - Users: 0/{total_users}, Records: 0/0')
         
         try:
-            while has_more:
-                if continuation_token:
-                    rq.continuationToken = continuation_token
-                
-                current_batch += 1
-                
-                try:
+            for user_offset in range(0, len(user_ids), MAX_USERS_PER_REQUEST):
+                user_batch = user_ids[user_offset:user_offset + MAX_USERS_PER_REQUEST]
+                continuation_token = None
+                seen_tokens = set()
+                has_more = True
+                first_response = True
+
+                while has_more:
+                    rq = enterprise_pb2.PreliminaryComplianceDataRequest()
+                    rq.includeNonShared = not self._config.shared
+                    rq.includeTotalMatchingRecordsInFirstResponse = first_response
+                    rq.enterpriseUserIds.extend(user_batch)
+                    if continuation_token:
+                        rq.continuationToken = continuation_token
+
                     rs = self._auth.execute_auth_rest(
                         'enterprise/get_preliminary_compliance_data',
                         rq,
                         response_type=enterprise_pb2.PreliminaryComplianceDataResponse
                     )
-                    
+                    if rs is None:
+                        raise RuntimeError('Preliminary compliance endpoint returned an empty response')
+
                     if rs.totalMatchingRecords > 0 and total_records == 0:
                         total_records = rs.totalMatchingRecords
                     
@@ -590,20 +626,25 @@ class ComplianceReportGenerator:
                                 if shared_folder_uid not in self._record_shared_folders[record_uid]:
                                     self._record_shared_folders[record_uid].append(shared_folder_uid)
                             
-                            self._records[record_uid] = RecordInfo(
-                                record_uid=record_uid,
-                                record_uid_bytes=record.recordUid,
-                                encrypted_data=record.encryptedData,
-                                owner_email=owner_email,
-                                owner_user_id=user_id,
-                                title=record_data.get('title', ''),
-                                record_type=record_data.get('record_type', ''),
-                                url=record_data.get('url', ''),
-                                shared=record.shared,
-                                in_trash=record_data.get('in_trash', False),
-                                has_attachments=record_data.get('has_attachments', False),
-                                shared_folder_uid=shared_folder_uid
-                            )
+                            existing = self._records.get(record_uid)
+                            if existing is None:
+                                self._records[record_uid] = RecordInfo(
+                                    record_uid=record_uid,
+                                    record_uid_bytes=record.recordUid,
+                                    encrypted_data=record.encryptedData,
+                                    owner_email=owner_email,
+                                    owner_user_id=user_id,
+                                    title=record_data.get('title', '') or record_data.get('record_title', ''),
+                                    record_type=record_data.get('record_type', '') or record_data.get('type', ''),
+                                    url=record_data.get('url', ''),
+                                    shared=record.shared,
+                                    in_trash=record_data.get('in_trash', False),
+                                    has_attachments=record_data.get('has_attachments', False),
+                                    shared_folder_uid=shared_folder_uid
+                                )
+                            else:
+                                existing.shared = existing.shared or record.shared
+                                existing.has_attachments = existing.has_attachments or record_data.get('has_attachments', False)
                             
                             self._update_permissions_lookup(
                                 record_uid, 
@@ -615,16 +656,18 @@ class ComplianceReportGenerator:
                     if self._progress_callback:
                         total_display = total_records if total_records > 0 else loaded_records
                         self._progress_callback(f'Loading record information - Users: {users_processed}/{total_users}, Records: {loaded_records}/{total_display}')
-                    
-                    has_more = rs.hasMore and rs.continuationToken
-                    if has_more:
-                        continuation_token = rs.continuationToken
-                    else:
-                        continuation_token = None
-                        
-                except Exception as e:
-                    logger.warning(f'Error fetching preliminary compliance data: {e}')
-                    break
+
+                    if not rs.hasMore:
+                        has_more = False
+                        continue
+                    if not rs.continuationToken:
+                        raise RuntimeError('Preliminary compliance response indicated more data without a continuation token')
+                    token = bytes(rs.continuationToken)
+                    if token in seen_tokens:
+                        raise RuntimeError('Preliminary compliance response repeated a continuation token')
+                    seen_tokens.add(token)
+                    continuation_token = token
+                    first_response = False
             
             self._save_prelim_to_cache()
         finally:
@@ -636,6 +679,10 @@ class ComplianceReportGenerator:
         if self._is_compliance_cache_fresh():
             if self._load_compliance_from_cache():
                 return
+
+        if self._config.no_rebuild:
+            logger.warning('No usable compliance cache is available; remote fetch disabled by no_rebuild')
+            return
         
         all_record_bytes = [info.record_uid_bytes for info in self._records.values() if info.record_uid_bytes]
         total_records = len(all_record_bytes)
@@ -643,56 +690,66 @@ class ComplianceReportGenerator:
         if total_records == 0:
             return
         
-        user_ids = [u.enterprise_user_id for u in self._enterprise_data.users.get_all_entities()]
-        total_users = len(user_ids)
-        node_id = self._config.node_id if self._config.node_id else self._enterprise_data.root_node.node_id
+        all_user_ids = [u.enterprise_user_id for u in self._enterprise_data.users.get_all_entities()]
+        root_node = getattr(self._enterprise_data, 'root_node', None)
+        node_id = self._config.node_id if self._config.node_id is not None else getattr(root_node, 'node_id', 0)
         
         batches = [all_record_bytes[i:i + MAX_RECORDS_PER_REQUEST] for i in range(0, total_records, MAX_RECORDS_PER_REQUEST)]
         total_batches = len(batches)
+
+        # Users the preliminary data listed for each record (their owned records),
+        # captured before full data adds shared access to the permissions lookup.
+        record_uid_by_bytes = {info.record_uid_bytes: uid for uid, info in self._records.items()}
+        record_user_ids: Dict[str, Set[int]] = defaultdict(set)
+        for (record_uid, user_id) in self._record_permissions:
+            record_user_ids[record_uid].add(user_id)
         
         if self._progress_callback:
-            self._progress_callback(f'Loading compliance data - Users: {total_users}/{total_users}, Current Batch: 0/{total_batches}')
+            self._progress_callback(f'Loading compliance data - Current Batch: 0/{total_batches}')
         
         try:
             for batch_idx, record_batch in enumerate(batches):
-                try:
+                batch_user_ids: Set[int] = set()
+                for record_uid_bytes in record_batch:
+                    record_uid = record_uid_by_bytes.get(record_uid_bytes)
+                    if record_uid is not None:
+                        batch_user_ids.update(record_user_ids.get(record_uid, ()))
+                user_ids = list(batch_user_ids or set(all_user_ids))
+                for user_offset in range(0, len(user_ids), MAX_USERS_PER_REQUEST):
+                    user_batch = user_ids[user_offset:user_offset + MAX_USERS_PER_REQUEST]
                     rq = enterprise_pb2.ComplianceReportRequest()
                     rq.saveReport = False
                     rq.reportName = f'Compliance Report on {datetime.datetime.now()}'
-                    
+
                     report_run = rq.complianceReportRun
-                    report_run.users.extend(user_ids)
+                    report_run.users.extend(user_batch)
                     report_run.records.extend(record_batch)
-                    
                     caf = report_run.reportCriteriaAndFilter
                     caf.nodeId = node_id
                     caf.criteria.includeNonShared = not self._config.shared
-                    
-                    rs = self._auth.execute_auth_rest(
-                        'enterprise/run_compliance_report',
-                        rq,
-                        response_type=enterprise_pb2.ComplianceReportResponse
-                    )
-                    
-                    self._process_audit_records(rs.auditRecords)
-                    self._process_shared_folder_records(rs.sharedFolderRecords)
-                    self._process_user_record_permissions(rs.userRecords)
-                    self._process_shared_folder_users(rs.sharedFolderUsers)
-                    self._process_shared_folder_teams(rs.sharedFolderTeams)
-                    self._process_user_profiles(rs.userProfiles)
-                    
-                    if self._progress_callback:
-                        pct = ((batch_idx + 1) / total_batches) * 100
-                        self._progress_callback(f'Loading compliance data - Users: {total_users}/{total_users}, Current Batch: {batch_idx + 1}/{total_batches} ({pct:.2f}%)')
-                    
-                except Exception as e:
-                    error_msg = str(e)
-                    if 'access_denied' in error_msg or 'no run compliance reports privilege' in error_msg:
-                        self._build_permissions_from_enterprise_data()
-                        break
-                    else:
-                        logger.warning(f'Error fetching full compliance data batch {batch_idx + 1}/{total_batches}: {e}')
-                        continue
+
+                    try:
+                        rs = self._auth.execute_auth_rest(
+                            'enterprise/run_compliance_report', rq,
+                            response_type=enterprise_pb2.ComplianceReportResponse)
+                        if rs is None:
+                            raise RuntimeError('Compliance report endpoint returned an empty response')
+                        self._process_audit_records(rs.auditRecords)
+                        self._process_shared_folder_records(rs.sharedFolderRecords)
+                        self._process_user_record_permissions(rs.userRecords)
+                        self._process_shared_folder_users(rs.sharedFolderUsers)
+                        self._process_shared_folder_teams(rs.sharedFolderTeams)
+                        self._process_user_profiles(rs.userProfiles)
+                    except Exception as e:
+                        error_msg = str(e).lower()
+                        if 'access_denied' in error_msg or 'no run compliance reports privilege' in error_msg:
+                            self._build_permissions_from_enterprise_data()
+                            return
+                        raise
+
+                if self._progress_callback:
+                    pct = ((batch_idx + 1) / total_batches) * 100
+                    self._progress_callback(f'Loading compliance data - Current Batch: {batch_idx + 1}/{total_batches} ({pct:.2f}%)')
             
             self._save_compliance_to_cache()
         finally:
@@ -738,7 +795,7 @@ class ComplianceReportGenerator:
                         if not record.title:
                             record.title = audit_data.get('title', '')
                         if not record.record_type:
-                            record.record_type = audit_data.get('record_type', '')
+                            record.record_type = audit_data.get('record_type', '') or audit_data.get('type', '')
                         if not record.url:
                             record.url = audit_data.get('url', '')
             except Exception:
@@ -806,15 +863,19 @@ class ComplianceReportGenerator:
             folder_uid = utils.base64_url_encode(sf_team.sharedFolderUid)
             if folder_uid not in self._shared_folders:
                 continue
-            
-            team_uid = utils.base64_url_encode(sf_team.teamUid)
-            self._shared_folders[folder_uid].teams.add(team_uid)
-            
-            folder_records = self._shared_folders[folder_uid].records
-            team_members = self._team_members.get(team_uid, set())
-            for record_uid, perm_bits in folder_records.items():
-                for user_id in team_members:
-                    self._update_permissions_lookup(record_uid, user_id, perm_bits)
+
+            # SharedFolderTeam.teamUids is a repeated protobuf field. Older
+            # implementations treated it as a scalar teamUid, which raises
+            # AttributeError when the compliance endpoint returns team access.
+            for team_uid_bytes in sf_team.teamUids:
+                team_uid = utils.base64_url_encode(team_uid_bytes)
+                self._shared_folders[folder_uid].teams.add(team_uid)
+
+                folder_records = self._shared_folders[folder_uid].records
+                team_members = self._team_members.get(team_uid, set())
+                for record_uid, perm_bits in folder_records.items():
+                    for user_id in team_members:
+                        self._update_permissions_lookup(record_uid, user_id, perm_bits)
         
         logger.debug(f'Processed {len(sf_teams)} shared folder team links')
 
@@ -843,6 +904,21 @@ class ComplianceReportGenerator:
     def _get_record_shared_folders(self, record_uid: str) -> List[str]:
         """Get list of shared folder UIDs that contain this record."""
         return self._record_shared_folders.get(record_uid, [])
+
+    def _get_shared_folder_name(self, folder_uid: str) -> str:
+        """Return the decrypted shared folder name from vault data, or the UID if unknown.
+
+        Vault storage holds the name encrypted with the shared folder key, so only
+        ``VaultData`` (which decrypts it) can supply it.
+        """
+        if self._vault_data is not None:
+            try:
+                folder = self._vault_data.get_shared_folder(folder_uid)
+                if folder is not None and folder.name:
+                    return str(folder.name)
+            except Exception:
+                logger.debug('Unable to resolve shared folder name for %s', folder_uid, exc_info=True)
+        return folder_uid
     
     def generate_default_report(self) -> List[ComplianceReportEntry]:
         """Generate default compliance report with record permissions."""
@@ -857,6 +933,7 @@ class ComplianceReportGenerator:
                                 if u.node_id == self._config.node_id}
         
         permissions_lookup = self._build_permissions_lookup()
+        aging_data = self._fetch_aging_data(list(self._records)) if self._config.aging else {}
         entries = []
         
         for record_uid, record_info in self._records.items():
@@ -879,7 +956,11 @@ class ComplianceReportGenerator:
                     url=record_info.url,
                     in_trash=record_info.in_trash,
                     shared=record_info.shared,
-                    shared_folder_uid=self._get_record_shared_folders(record_uid) or None
+                    shared_folder_uid=self._get_record_shared_folders(record_uid) or None,
+                    created=aging_data.get(record_uid, {}).get('created'),
+                    last_pw_change=aging_data.get(record_uid, {}).get('last_pw_change'),
+                    last_modified=aging_data.get(record_uid, {}).get('last_modified'),
+                    last_rotation=aging_data.get(record_uid, {}).get('last_rotation')
                 )
 
                 if self._should_include_entry(entry):
@@ -896,7 +977,8 @@ class ComplianceReportGenerator:
                 return False
         
         if config.record:
-            if not any(p == entry.record_uid for p in config.record):
+            if not any(p == entry.record_uid or fnmatch.fnmatch(entry.title.lower(), p.lower())
+                       for p in config.record):
                 return False
         
         if config.url:
@@ -943,12 +1025,24 @@ class ComplianceReportGenerator:
         
         entries = []
         team_names = {team.team_uid: team.name for team in self._enterprise_data.teams.get_all_entities()}
+        requested_team_uids = set()
+        if self._config.team:
+            self._build_user_teams_lookup()
+            requested_team_uids = {
+                self._team_name_to_uid.get(team_ref.lower(), team_ref)
+                for team_ref in self._config.team
+            }
+        requested_team_users = self._get_team_filter_user_ids() if self._config.team else set()
         
         for folder_uid, folder_info in self._shared_folders.items():
             folder_teams = folder_info.teams
             folder_records = folder_info.records
             
             for team_uid in folder_teams:
+                matches_team = not requested_team_uids or team_uid in requested_team_uids
+                matches_user = bool(requested_team_users and folder_info.users & requested_team_users)
+                if not matches_team and not (self._config.resolve_teams and matches_user):
+                    continue
                 team_name = team_names.get(team_uid, team_uid)
                 
                 team_users = None
@@ -963,7 +1057,7 @@ class ComplianceReportGenerator:
                 entry = TeamReportEntry(
                     team_name=team_name,
                     team_uid=team_uid,
-                    shared_folder_name=folder_uid,
+                    shared_folder_name=self._get_shared_folder_name(folder_uid),
                     shared_folder_uid=folder_uid,
                     permissions=permissions_to_string(team_permissions),
                     records=len(folder_records),
@@ -984,10 +1078,21 @@ class ComplianceReportGenerator:
         aging_data = self._fetch_aging_data(record_uids)
         
         entries = []
-        
+
+        users_by_record: Dict[str, Set[int]] = defaultdict(set)
+        for (r_uid, user_id) in self._record_permissions:
+            users_by_record[r_uid].add(user_id)
+        if report_type == REPORT_TYPE_HISTORY:
+            # Historical access can remain reportable after current vault
+            # permissions have changed.
+            for (email, r_uid) in access_events:
+                event_user_id = self._email_to_user_id.get(email)
+                if event_user_id is not None:
+                    users_by_record[r_uid].add(event_user_id)
+
         for record_uid, record_info in self._records.items():
-            users_with_access = {user_id for (r_uid, user_id) in self._record_permissions if r_uid == record_uid}
-            
+            users_with_access = users_by_record.get(record_uid, set())
+
             for user_id in users_with_access:
                 email = self._user_id_to_email.get(user_id, '')
                 if not email:
@@ -1028,7 +1133,12 @@ class ComplianceReportGenerator:
         return entries
     
     def _fetch_aging_data(self, record_uids: List[str]) -> Dict[str, Dict[str, Optional[datetime.datetime]]]:
-        """Fetch aging data for records."""
+        """Fetch and cache record lifecycle dates.
+
+        Audit reports are limited to 1000 record UIDs per request.  The cache
+        stores zero values as well as real timestamps so records without a
+        matching event are not queried on every report.
+        """
         if not record_uids:
             return {}
         
@@ -1041,9 +1151,32 @@ class ComplianceReportGenerator:
             } for r in record_uids
         }
         
-        try:
-            logger.debug(f'Fetching aging data for {len(record_uids)} records...')
-            
+        now = int(datetime.datetime.now().timestamp())
+        cache_cutoff = now - int(datetime.timedelta(days=self._config.cache_max_age_days).total_seconds())
+        cached = {}
+        stale_uids = set(record_uids)
+        reused_cache = False
+        if self._compliance_storage is not None:
+            try:
+                for entity in self._compliance_storage.record_aging.get_all_entities():
+                    if entity.record_uid not in aging_data:
+                        continue
+                    cached[entity.record_uid] = {
+                        'created': self._ts_to_datetime(entity.created),
+                        'last_pw_change': self._ts_to_datetime(entity.last_pw_change),
+                        'last_modified': self._ts_to_datetime(entity.last_modified),
+                        'last_rotation': self._ts_to_datetime(entity.last_rotation),
+                    }
+                if self._compliance_storage.records_dated >= cache_cutoff:
+                    aging_data.update(cached)
+                    stale_uids -= set(cached)
+                    reused_cache = bool(cached)
+            except Exception:
+                logger.debug('Unable to load record aging cache', exc_info=True)
+
+        if stale_uids:
+            stale_uid_list = sorted(stale_uids)
+            logger.debug('Fetching aging data for %d records...', len(stale_uids))
             aging_configs = {
                 'created': {
                     'event_types': [],
@@ -1068,49 +1201,47 @@ class ComplianceReportGenerator:
             }
             
             for stat_name, config in aging_configs.items():
-                try:
-                    audit_filter: Dict[str, Any] = {'record_uid': record_uids}
-                    
+                for offset in range(0, len(stale_uid_list), API_EVENT_SUMMARY_ROW_LIMIT):
+                    uid_chunk = stale_uid_list[offset:offset + API_EVENT_SUMMARY_ROW_LIMIT]
+                    audit_filter: Dict[str, Any] = {'record_uid': uid_chunk}
                     if config['event_types']:
                         audit_filter['audit_event_type'] = config['event_types']
-                    
-                    rq: Dict[str, Any] = {
-                        'command': 'get_audit_event_reports',
-                        'scope': 'enterprise',
-                        'report_type': 'span',
-                        'filter': audit_filter,
-                        'columns': ['record_uid'],
-                        'aggregate': [config['aggregate']],
-                        'order': config['order'],
-                        'limit': API_EVENT_SUMMARY_ROW_LIMIT
+                    request: Dict[str, Any] = {
+                        'command': 'get_audit_event_reports', 'scope': 'enterprise',
+                        'report_type': 'span', 'filter': audit_filter,
+                        'columns': ['record_uid'], 'aggregate': [config['aggregate']],
+                        'order': config['order'], 'limit': API_EVENT_SUMMARY_ROW_LIMIT
                     }
-                    
-                    rs = self._auth.execute_auth_command(rq)
-                    events = rs.get('audit_event_overview_report_rows', [])
-                    
-                    logger.debug(f'Fetched {len(events)} events for {stat_name}')
-                    
-                    for event in events:
-                        record_uid = event.get('record_uid', '')
-                        if record_uid in aging_data:
-                            timestamp = event.get(config['aggregate'], 0)
-                            if timestamp:
-                                aging_data[record_uid][stat_name] = self._ts_to_datetime(timestamp)
-                
-                except Exception as e:
-                    logger.debug(f'Error fetching {stat_name} data: {e}')
-                    continue
-            
-            for record_uid, stats in aging_data.items():
-                if stats['last_modified'] is None and stats['created']:
+                    response = self._auth.execute_auth_command(request)
+                    if not isinstance(response, dict):
+                        raise RuntimeError('Audit aging endpoint returned an invalid response')
+                    for event in response.get('audit_event_overview_report_rows') or []:
+                        uid = event.get('record_uid', '')
+                        timestamp = event.get(config['aggregate'], 0)
+                        if uid in aging_data and timestamp:
+                            aging_data[uid][stat_name] = self._ts_to_datetime(timestamp)
+
+            for uid in stale_uids:
+                stats = aging_data[uid]
+                if stats['last_modified'] is None:
                     stats['last_modified'] = stats['created']
-                
-                if stats['last_pw_change'] is None and stats['created']:
+                if stats['last_pw_change'] is None:
                     stats['last_pw_change'] = stats['created']
-        
-        except Exception as e:
-            logger.warning(f'Error fetching aging data: {e}')
-        
+
+            if self._compliance_storage is not None:
+                entities = []
+                for uid in stale_uids:
+                    entity = st.StorageRecordAging(record_uid=uid)
+                    for field_name in ('created', 'last_pw_change', 'last_modified', 'last_rotation'):
+                        value = aging_data[uid][field_name]
+                        setattr(entity, field_name, int(value.timestamp()) if value else 0)
+                    entities.append(entity)
+                self._compliance_storage.record_aging.put_entities(entities)
+                # The date covers the whole aging cache. When cached rows were reused,
+                # keep their (older) date so they still expire on schedule.
+                if not reused_cache:
+                    self._compliance_storage.set_records_dated(now)
+
         return aging_data
     
     def _ts_to_datetime(self, timestamp: Any) -> Optional[datetime.datetime]:
@@ -1126,66 +1257,95 @@ class ComplianceReportGenerator:
         return None
     
     def _fetch_record_access_events(self, report_type: str = 'history') -> Dict[Tuple[str, str], Dict[str, Any]]:
-        """Fetch record access events from audit logs."""
-        access_events = {}
-        
-        try:
-            user_emails = list(self._email_to_user_id.keys())
-            if not user_emails:
-                return access_events
-            
-            logger.debug(f'Fetching access events for {len(user_emails)} users...')
-            
-            for email in user_emails:
-                try:
-                    user_filter: Dict[str, Any] = {'username': email}
-                    
-                    if report_type == REPORT_TYPE_VAULT:
-                        user_records = []
-                        user_id = self._email_to_user_id.get(email.lower())
-                        if user_id:
-                            for (r_uid, u_id), _ in self._record_permissions.items():
-                                if u_id == user_id:
-                                    user_records.append(r_uid)
-                        if not user_records:
-                            continue
-                        user_filter['record_uid'] = user_records
-                    
-                    rq: Dict[str, Any] = {
-                        'command': 'get_audit_event_reports',
-                        'scope': 'enterprise',
-                        'report_type': 'span',
-                        'filter': user_filter,
-                        'columns': ['record_uid', 'ip_address', 'keeper_version'],
-                        'aggregate': ['last_created'],
-                        'limit': API_EVENT_SUMMARY_ROW_LIMIT
-                    }
-                    
-                    rs = self._auth.execute_auth_command(rq)
-                    events = rs.get('audit_event_overview_report_rows', [])
-                    
-                    logger.debug(f'Fetched {len(events)} access events for {email}')
-                    
-                    for event in events:
-                        record_uid = event.get('record_uid', '')
-                        if record_uid:
-                            access_key = (email, record_uid)
-                            access_events[access_key] = {
-                                'record_uid': record_uid,
-                                'ip_address': event.get('ip_address', ''),
-                                'keeper_version': event.get('keeper_version', ''),
-                                'last_created': event.get('last_created', 0)
-                            }
-                
-                except Exception as e:
-                    logger.debug(f'Error fetching audit events for {email}: {e}')
+        """Fetch the latest access event for each report user and record.
+
+        Mirrors Commander: users are queried together through ``execute_batch``.
+        A response holds at most 1000 aggregate rows, so each query pages backwards
+        in time (``created <= created_max``) until it is complete. The vault report
+        filters by the user's records (at most 1000 per query) and stops once every
+        record has an event.
+        """
+        access_events: Dict[Tuple[str, str], Dict[str, Any]] = {}
+        email_to_user_id = self._email_to_user_id or {}
+
+        records_by_user: Dict[int, List[str]] = defaultdict(list)
+        if report_type == REPORT_TYPE_VAULT:
+            for (record_uid, user_id) in self._record_permissions:
+                records_by_user[user_id].append(record_uid)
+
+        # One query per user, or per user and record chunk for the vault report.
+        queries: Dict[Tuple[str, int], Dict[str, Any]] = {}
+        for email, user_id in email_to_user_id.items():
+            if report_type == REPORT_TYPE_VAULT:
+                record_uids = records_by_user.get(user_id, [])
+                for index, offset in enumerate(range(0, len(record_uids), API_EVENT_SUMMARY_ROW_LIMIT)):
+                    queries[(email, index)] = {
+                        'filter_recs': record_uids[offset:offset + API_EVENT_SUMMARY_ROW_LIMIT],
+                        'created_max': None}
+            else:
+                queries[(email, 0)] = {'filter_recs': None, 'created_max': None}
+
+        while queries:
+            keys = list(queries)
+            requests = [self._record_access_request(email, **queries[(email, index)]) for email, index in keys]
+            responses = self._auth.execute_batch(requests)
+            if len(responses) != len(requests):
+                raise RuntimeError('Record access batch returned an unexpected number of responses')
+
+            next_queries: Dict[Tuple[str, int], Dict[str, Any]] = {}
+            for key, response in zip(keys, responses):
+                if not isinstance(response, dict) or response.get('result') != 'success':
+                    raise errors.KeeperApiError(
+                        (response or {}).get('result_code') or 'audit_report_failed',
+                        (response or {}).get('message') or 'Record access report request failed')
+                email = key[0]
+                query = queries[key]
+                events = response.get('audit_event_overview_report_rows') or []
+                remaining = set(query['filter_recs'] or ())
+                for event in events:
+                    uid = event.get('record_uid', '')
+                    if not uid:
+                        continue
+                    remaining.discard(uid)
+                    # Pages walk backwards in time: keep the first (latest) event.
+                    access_events.setdefault((email, uid), {
+                        'record_uid': uid,
+                        'ip_address': event.get('ip_address', ''),
+                        'keeper_version': event.get('keeper_version', ''),
+                        'last_created': event.get('last_created', 0)
+                    })
+
+                done = len(events) < API_EVENT_SUMMARY_ROW_LIMIT or (query['filter_recs'] is not None and not remaining)
+                if done:
                     continue
-        
-        except Exception as e:
-            logger.warning(f'Error fetching record access events: {e}')
-        
+                created_max = int(events[-1].get('last_created', 0) or 0)
+                if not created_max or (query['created_max'] is not None and created_max >= query['created_max']):
+                    logger.warning('Record access events for %s did not page backwards; results may be incomplete', email)
+                    continue
+                next_queries[key] = {
+                    'filter_recs': sorted(remaining) if query['filter_recs'] is not None else None,
+                    'created_max': created_max}
+            queries = next_queries
+
         logger.debug(f'Total access events fetched: {len(access_events)}')
         return access_events
+
+    @staticmethod
+    def _record_access_request(
+            email: str, filter_recs: Optional[List[str]] = None, created_max: Optional[int] = None) -> Dict[str, Any]:
+        audit_filter: Dict[str, Any] = {'username': email}
+        if filter_recs is not None:
+            audit_filter['record_uid'] = filter_recs
+        if created_max:
+            audit_filter['created'] = {'max': created_max}
+        return {
+            'command': 'get_audit_event_reports', 'scope': 'enterprise',
+            'report_type': 'span', 'filter': audit_filter,
+            'columns': ['record_uid', 'ip_address', 'keeper_version'],
+            'aggregate': ['last_created'],
+            'order': 'descending',
+            'limit': API_EVENT_SUMMARY_ROW_LIMIT
+        }
     
     def generate_summary_report(self) -> List[SummaryReportEntry]:
         """Generate summary statistics report by user."""
@@ -1263,6 +1423,15 @@ class ComplianceReportGenerator:
             folder_teams = list(folder_info.teams)
             folder_users = list(folder_info.users)
             folder_records = list(folder_info.records.keys())
+
+            if self._config.team:
+                requested = self._get_team_filter_user_ids() or set()
+                direct_match = bool(set(folder_teams) & {
+                    self._team_name_to_uid.get(ref.lower(), ref) for ref in self._config.team
+                })
+                user_match = bool(requested & set(folder_users))
+                if not direct_match and not (self._config.resolve_teams and user_match):
+                    continue
             
             emails = []
             
@@ -1362,7 +1531,10 @@ class ComplianceReportGenerator:
     def get_headers(report_type: str, show_team_users: bool = False, aging: bool = False) -> List[str]:
         """Get column headers for the specified report type."""
         if report_type == REPORT_TYPE_DEFAULT:
-            return ['record_uid', 'title', 'record_type', 'username', 'permissions', 'url', 'in_trash', 'shared_folder_uid']
+            headers = ['record_uid', 'title', 'record_type', 'username', 'permissions', 'url', 'in_trash', 'shared_folder_uid']
+            if aging:
+                headers.extend(['created', 'last_pw_change', 'last_modified', 'last_rotation'])
+            return headers
         elif report_type == REPORT_TYPE_TEAM:
             headers = ['team_name', 'team_uid', 'shared_folder_name', 'shared_folder_uid', 'permissions', 'records']
             if show_team_users:
@@ -1401,7 +1573,7 @@ class ComplianceReportGenerator:
                     display_uid = ''
                 last_record_uid = entry.record_uid
                 
-                yield [
+                row = [
                     display_uid,
                     entry.title,
                     entry.record_type,
@@ -1411,6 +1583,10 @@ class ComplianceReportGenerator:
                     entry.in_trash,
                     entry.shared_folder_uid
                 ]
+                if self._config.aging:
+                    row.extend([entry.created or '', entry.last_pw_change or '',
+                                entry.last_modified or '', entry.last_rotation or ''])
+                yield row
         
         elif report_category == REPORT_TYPE_TEAM:
             entries = self.generate_team_report()
@@ -1485,7 +1661,7 @@ class ComplianceReportGenerator:
 def get_preliminary_compliance_data(
     enterprise_data: enterprise_types.IEnterpriseData,
     auth: keeper_auth.KeeperAuth
-) -> Dict[str, Dict[str, Any]]:
+) -> Dict[str, RecordInfo]:
     """Convenience function to fetch preliminary compliance data.
     
     Args:

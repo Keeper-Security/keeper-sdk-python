@@ -48,7 +48,7 @@ class TrashListCommand(base.ArgparseCommand):
     @staticmethod
     def add_arguments_to_parser(parser: argparse.ArgumentParser):
         """Add command-specific arguments to the parser."""
-        parser.add_argument('--reload', dest='reload', action='store_true', help='reload Drive (NSF) trash from the server')
+        parser.add_argument('--reload', dest='reload', action='store_true', help='reload NSF trash from the server')
         parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', help="verbose output")
         parser.add_argument('pattern', nargs='?', type=str, action='store', help='search pattern')
 

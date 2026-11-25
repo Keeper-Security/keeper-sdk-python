@@ -151,17 +151,18 @@ class ExtSharesReportCommand(base.ArgparseCommand):
 
         spinner = ProgressSpinner()
         spinner.start('Loading...')
+        try:
+            generator = compliance.ComplianceReportGenerator(
+                context.enterprise_data,
+                context.auth,
+                config,
+                compliance_storage=get_compliance_storage(context),
+                progress_callback=create_progress_callback(spinner),
+            )
 
-        generator = compliance.ComplianceReportGenerator(
-            context.enterprise_data,
-            context.auth,
-            config,
-            compliance_storage=get_compliance_storage(context),
-            progress_callback=create_progress_callback(spinner),
-        )
-
-        rows = list(generator.generate_report_rows(compliance.REPORT_TYPE_EXTERNAL_SHARES))
-        spinner.stop()
+            rows = list(generator.generate_report_rows(compliance.REPORT_TYPE_EXTERNAL_SHARES))
+        finally:
+            spinner.stop()
 
         if action == 'remove' and rows:
             if not force:
@@ -171,20 +172,22 @@ class ExtSharesReportCommand(base.ArgparseCommand):
                     return self._dump_report(rows, fmt, output_file)
             self._remove_external_shares(context, rows, share_type)
             spinner.start('Reloading...')
-            config_reload = compliance.ComplianceReportConfig(
-                shared=True,
-                rebuild=True,
-                external_share_type=share_type,
-            )
-            generator_reload = compliance.ComplianceReportGenerator(
-                context.enterprise_data,
-                context.auth,
-                config_reload,
-                compliance_storage=get_compliance_storage(context),
-                progress_callback=create_progress_callback(spinner),
-            )
-            rows = list(generator_reload.generate_report_rows(compliance.REPORT_TYPE_EXTERNAL_SHARES))
-            spinner.stop()
+            try:
+                config_reload = compliance.ComplianceReportConfig(
+                    shared=True,
+                    rebuild=True,
+                    external_share_type=share_type,
+                )
+                generator_reload = compliance.ComplianceReportGenerator(
+                    context.enterprise_data,
+                    context.auth,
+                    config_reload,
+                    compliance_storage=get_compliance_storage(context),
+                    progress_callback=create_progress_callback(spinner),
+                )
+                rows = list(generator_reload.generate_report_rows(compliance.REPORT_TYPE_EXTERNAL_SHARES))
+            finally:
+                spinner.stop()
 
         return self._dump_report(rows, fmt, output_file)
 
