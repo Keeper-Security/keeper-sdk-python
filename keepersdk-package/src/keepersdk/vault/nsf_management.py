@@ -7,12 +7,15 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple, Union
 
 from .. import crypto, utils
 from ..errors import KeeperApiError
-from ..proto import folder_pb2, record_endpoints_pb2, record_pb2, remove_pb2, record_details_pb2, folder_access_pb2
+from ..proto import folder_pb2, record_endpoints_pb2, record_pb2, remove_pb2, record_details_pb2, folder_access_pb2, keeperdrive_move_pb2, keeperdrive_convert_pb2, pagination_pb2
 from . import nsf_crypto, nsf_data, nsf_common, sync_down, vault_extensions, vault_record
 from .vault_online import VaultOnline
 
 ROOT_FOLDER_UID = 'AAAAAAAAAAAAAAAAAPmtNA'
 """Sentinel UID the server uses for the NSF root folder."""
+
+MAX_NSF_FOLDER_DEPTH = 5
+"""Maximum number of NSF folder levels below the NSF root."""
 
 NSF_RECORD_ADD_BATCH_LIMIT = 1000
 """Maximum number of NSF records per ``vault/records/v3/add`` request."""
@@ -40,6 +43,18 @@ class NsfModifyResult:
     revision: int = 0
 
 
+@dataclass
+class NsfRecordConversionResult:
+    """Outcome for converting one classic record to the NSF permission model."""
+    record_uid: str
+    status: str = ''
+    message: str = ''
+    success: bool = False
+    skipped: bool = False
+    outcome_uncertain: bool = False
+    refresh_warning: str = ''
+
+
 @dataclass(frozen=True)
 class NsfRecordAddSpec:
     """Specification for creating one NSF record in a batch add request."""
@@ -54,6 +69,17 @@ class NsfRecordAddSpec:
 @dataclass
 class NsfFolderModifyResult:
     folder_uid: str
+    success: bool
+    status: str = ''
+    message: str = ''
+
+
+@dataclass
+class NsfMoveResult:
+    item_uid: str
+    item_type: str
+    source_folder_uid: Optional[str]
+    destination_folder_uid: str
     success: bool
     status: str = ''
     message: str = ''
@@ -278,6 +304,10 @@ def list_nsf_items(
 
     if include_folders:
         for folder in view.folders():
+            # A folder whose key never decrypted has no usable name; don't list it as a
+            # placeholder. It stays in the NSF view, so mutations (remove, move) still work.
+            if not folder.folder_key:
+                continue
             rows.append(NsfListRow(
                 item_type='Folder',
                 uid=folder.folder_uid,
@@ -992,19 +1022,28 @@ def update_nsf_typed_record(
 
 def get_nsf_record_details(
         vault: VaultOnline,
-        record_uids: Iterable[str]) -> Dict[str, Any]:
-    """``vault/get_records_details`` — title/type when cache lacks decrypted payload."""
-    uids = [resolve_nsf_record_uid(vault, u) or u for u in record_uids]
+        record_uids: Iterable[str],
+        record_keys: Optional[Mapping[str, bytes]] = None,
+        include_payload: bool = False) -> Dict[str, Any]:
+    """``vault/get_records_details`` — title/type when cache lacks decrypted payload.
+
+    ``record_keys`` supplies keys for records absent from the NSF view (e.g. trashed records).
+    ``include_payload`` adds the decrypted record JSON (including secret field values) as ``payload``.
+    """
+    known_keys = dict(record_keys or {})
+    uids = [u if u in known_keys else (resolve_nsf_record_uid(vault, u) or u) for u in record_uids]
     uids = [u for u in uids if u]
     if not uids:
         raise NsfError('At least one record UID is required')
 
     view = _nsf_view(vault)
-    record_keys = {
+    keys_by_uid: Dict[str, bytes] = {
         entry.record_uid: entry.record_key
         for entry in view.records()
         if entry.record_key
     }
+    for uid, key in known_keys.items():
+        keys_by_uid.setdefault(uid, key)
 
     out_data: List[Dict[str, Any]] = []
     forbidden: List[str] = []
@@ -1034,20 +1073,23 @@ def get_nsf_record_details(
             if not record_uid or record_data is None:
                 continue
             record_key = _resolve_record_key_for_details(
-                vault, record_data, record_uid, record_keys)
+                vault, record_data, record_uid, keys_by_uid)
             if not record_key:
                 continue
             plain = _decrypt_record_details_payload(record_data, record_key)
             if not plain:
                 continue
             payload = _parse_record_payload(plain.decode('utf-8'))
-            out_data.append({
+            detail = {
                 'record_uid': record_uid,
                 'title': str(payload.get('title') or 'Unknown'),
                 'type': str(payload.get('type') or 'Unknown'),
                 'revision': int(record_data.revision or 0),
                 'version': int(record_data.version or 0),
-            })
+            }
+            if include_payload:
+                detail['payload'] = payload
+            out_data.append(detail)
     return {'data': out_data, 'forbidden_records': forbidden}
 
 
@@ -1060,6 +1102,8 @@ def get_nsf_record_accesses(
         show_inherited: bool = False,
         show_denied: bool = False) -> Dict[str, Any]:
     """``vault/records/v3/details/access``, chunked at 100 UIDs per request.
+
+    Follows ``pageInfo`` paging within each chunk, so the result is complete.
 
     By default only direct, non-denied rows are returned. Pass
     ``show_inherited=True`` and/or ``show_denied=True`` to include inherited /
@@ -1075,41 +1119,84 @@ def get_nsf_record_accesses(
     result: Dict[str, Any] = {'record_accesses': [], 'forbidden_records': []}
     for i in range(0, len(uids), _RECORD_ACCESS_CHUNK):
         chunk = uids[i:i + _RECORD_ACCESS_CHUNK]
-        rq = record_details_pb2.RecordAccessRequest()
-        for uid in chunk:
-            rq.recordUids.append(utils.base64_url_decode(uid))
-        rs = vault.keeper_auth.execute_auth_rest('vault/records/v3/details/access', rq, response_type=record_details_pb2.RecordAccessResponse)
-        if rs is None:
-            continue
-
-        for ra in rs.recordAccesses:
-            d = ra.data
-            ai = ra.accessorInfo
-            if not _include_access_row(bool(d.inherited), bool(d.deniedAccess), show_inherited, show_denied):
-                continue
-            ao = {
-                'record_uid': utils.base64_url_encode(d.recordUid),
-                'accessor_name': ai.name,
-                'access_type': folder_pb2.AccessType.Name(d.accessType) if hasattr(d, 'accessType') else 'UNKNOWN',
-                'access_type_uid': utils.base64_url_encode(d.accessTypeUid),
-                'owner': getattr(d, 'owner', False),
-                'inherited': bool(getattr(d, 'inherited', False)),
-                'access_role_type': int(getattr(d, 'accessRoleType', 0) or 0),
-            }
-            for flag in ('can_view_title', 'can_edit', 'can_view', 'can_list_access',
-                         'can_update_access', 'can_delete', 'can_change_ownership',
-                         'can_request_access', 'can_approve_access', 'denied_access'):
-                if flag == 'denied_access':
-                    ao[flag] = getattr(d, 'deniedAccess', False)
-                else:
-                    ao[flag] = getattr(d, flag, False)
-            result['record_accesses'].append(ao)
-        for fu in rs.forbiddenRecords:
-            result['forbidden_records'].append(utils.base64_url_encode(fu))
+        for rs in _fetch_record_access_pages(vault, chunk):
+            _add_record_access_rows(rs, result, show_inherited, show_denied)
+    result['forbidden_records'] = list(dict.fromkeys(result['forbidden_records']))
     return result
 
 
-def _resolve_uid_to_username(vault: VaultOnline, uid_b64: str) -> Optional[str]:
+_RECORD_ACCESS_PAGE_SIZE = 500
+"""Server maximum rows per ``vault/records/v3/details/access`` page."""
+
+_RECORD_ACCESS_MAX_PAGES = 50
+"""Safety cap on pages consumed per UID chunk."""
+
+
+def _fetch_record_access_pages(
+        vault: VaultOnline, chunk: List[str]) -> Iterable[record_details_pb2.RecordAccessResponse]:
+    """Yield every page of ``vault/records/v3/details/access`` for one UID chunk.
+
+    The first request is sent without ``page`` (an explicit page size on the first
+    request returned incomplete accessor lists for some vaults); follow-ups request
+    the next page using the returned cursor.
+    """
+    page: Optional[pagination_pb2.Page] = None
+    for _ in range(_RECORD_ACCESS_MAX_PAGES):
+        rq = record_details_pb2.RecordAccessRequest()
+        for uid in chunk:
+            rq.recordUids.append(utils.base64_url_decode(uid))
+        if page is not None:
+            rq.page.CopyFrom(page)
+        rs = vault.keeper_auth.execute_auth_rest(
+            'vault/records/v3/details/access', rq, response_type=record_details_pb2.RecordAccessResponse)
+        if rs is None:
+            return
+        yield rs
+        if not rs.HasField('pageInfo') or not rs.pageInfo.hasMore:
+            return
+        page_number = (page.pageNumber if page is not None else 1)
+        page = pagination_pb2.Page(
+            pageNumber=(rs.pageInfo.pageNumber or page_number) + 1,
+            pageSize=_RECORD_ACCESS_PAGE_SIZE,
+            cursorToken=rs.pageInfo.cursorToken)
+    utils.get_logger().warning(
+        'Record access listing stopped after %d pages; results may be incomplete', _RECORD_ACCESS_MAX_PAGES)
+
+
+def _add_record_access_rows(
+        rs: record_details_pb2.RecordAccessResponse,
+        result: Dict[str, Any],
+        show_inherited: bool,
+        show_denied: bool) -> None:
+    for ra in rs.recordAccesses:
+        d = ra.data
+        ai = ra.accessorInfo
+        if not _include_access_row(bool(d.inherited), bool(d.deniedAccess), show_inherited, show_denied):
+            continue
+        ao = {
+            'record_uid': utils.base64_url_encode(d.recordUid),
+            'accessor_name': ai.name,
+            'access_type': folder_pb2.AccessType.Name(d.accessType) if hasattr(d, 'accessType') else 'UNKNOWN',
+            'access_type_uid': utils.base64_url_encode(d.accessTypeUid),
+            'owner': getattr(d, 'owner', False),
+            'inherited': bool(getattr(d, 'inherited', False)),
+            'access_role_type': int(getattr(d, 'accessRoleType', 0) or 0),
+        }
+        for flag in ('can_view_title', 'can_edit', 'can_view', 'can_list_access',
+                     'can_update_access', 'can_delete', 'can_change_ownership',
+                     'can_request_access', 'can_approve_access', 'denied_access'):
+            if flag == 'denied_access':
+                ao[flag] = getattr(d, 'deniedAccess', False)
+            else:
+                ao[flag] = getattr(d, flag, False)
+        result['record_accesses'].append(ao)
+    for fu in rs.forbiddenRecords:
+        result['forbidden_records'].append(utils.base64_url_encode(fu))
+
+
+def _load_share_object_usernames(vault: VaultOnline) -> Dict[str, str]:
+    """Map account UID -> username from one ``vault/get_share_objects`` call; empty on error."""
+    usernames: Dict[str, str] = {}
     try:
         rq = record_pb2.GetShareObjectsRequest()
         rs = vault.keeper_auth.execute_auth_rest('vault/get_share_objects', rq, response_type=record_pb2.GetShareObjectsResponse)
@@ -1118,14 +1205,27 @@ def _resolve_uid_to_username(vault: VaultOnline, uid_b64: str) -> Optional[str]:
                               rs.shareEnterpriseUsers, rs.shareMCEnterpriseUsers):
                 for su in user_list:
                     if su.userAccountUid:
-                        su_uid = utils.base64_url_encode(su.userAccountUid)
-                        if su_uid == uid_b64:
-                            return su.username
-    except Exception:
-        pass
+                        usernames.setdefault(utils.base64_url_encode(su.userAccountUid), su.username)
+    except Exception as e:
+        utils.get_logger().debug('NSF username lookup failed: %s', e)
+    return usernames
 
 
-_FOLDER_ACCESS_CHUNK = 100
+class _UsernameResolver:
+    """Resolves accessor UIDs to usernames, loading the share-objects list at most once."""
+
+    def __init__(self, vault: VaultOnline) -> None:
+        self._vault = vault
+        self._usernames: Optional[Dict[str, str]] = None
+
+    def get(self, uid_b64: str) -> Optional[str]:
+        if self._usernames is None:
+            self._usernames = _load_share_object_usernames(self._vault)
+        return self._usernames.get(uid_b64)
+
+
+# Smaller than the 100-UID API limit: larger folder batches can drop accessor rows.
+_FOLDER_ACCESS_CHUNK = 25
 
 
 _FOLDER_ACCESS_MAX_PAGES = 50
@@ -1142,19 +1242,22 @@ def _include_access_row(inherited: bool, denied: bool, show_inherited: bool, sho
 
 
 def _parse_folder_accessor(
-        vault: VaultOnline,
+        usernames: Optional[_UsernameResolver],
         a: Any,
         show_inherited: bool = False,
         show_denied: bool = False) -> Optional[Dict[str, Any]]:
-    """Parse one folder accessor row, or return None when it is filtered out."""
+    """Parse one folder accessor row, or return None when it is filtered out.
+
+    ``usernames`` resolves ``AT_USER`` accessors; None leaves ``username`` empty.
+    """
     if not _include_access_row(bool(a.inherited), bool(a.deniedAccess), show_inherited, show_denied):
         return None
     auid = utils.base64_url_encode(a.accessTypeUid)
     at = folder_pb2.AccessType.Name(a.accessType)
     rt = folder_pb2.AccessRoleType.Name(a.accessRoleType)
     username = None
-    if at == 'AT_USER':
-        username = _resolve_uid_to_username(vault, auid)
+    if at == 'AT_USER' and usernames is not None:
+        username = usernames.get(auid)
     ai = {
         'accessor_uid': auid, 'access_type': at, 'role': rt,
         'access_role_type': int(a.accessRoleType),
@@ -1190,8 +1293,9 @@ def _fetch_nsf_folder_access_chunk(
         vault: VaultOnline,
         chunk: List[str],
         show_inherited: bool = False,
-        show_denied: bool = False) -> Dict[str, Dict[str, Any]]:
-    """Fetch access details for one <=100-UID chunk, fully draining continuation pages."""
+        show_denied: bool = False,
+        usernames: Optional[_UsernameResolver] = None) -> Dict[str, Dict[str, Any]]:
+    """Fetch access details for one UID chunk, fully draining continuation pages."""
     accumulated: Dict[str, Dict[str, Any]] = {}
     continuation_token = None
     for _ in range(_FOLDER_ACCESS_MAX_PAGES):
@@ -1217,7 +1321,7 @@ def _fetch_nsf_folder_access_chunk(
             else:
                 accessors = []
                 for a in fr.accessors:
-                    parsed = _parse_folder_accessor(vault, a, show_inherited, show_denied)
+                    parsed = _parse_folder_accessor(usernames, a, show_inherited, show_denied)
                     if parsed is not None:
                         accessors.append(parsed)
                 entry = accumulated.setdefault(
@@ -1234,8 +1338,9 @@ def get_nsf_folder_access(
         vault: VaultOnline,
         folder_uids: Iterable[str],
         show_inherited: bool = False,
-        show_denied: bool = False) -> Dict[str, Any]:
-    """``vault/folders/v3/access``, chunked at 100 UIDs per request.
+        show_denied: bool = False,
+        resolve_usernames: bool = True) -> Dict[str, Any]:
+    """``vault/folders/v3/access``, chunked at 25 UIDs per request.
 
     By default only direct, non-denied rows are returned. Pass
     ``show_inherited=True`` and/or ``show_denied=True`` to include inherited /
@@ -1246,6 +1351,9 @@ def get_nsf_folder_access(
     Fully drains continuation-token pagination within each chunk before
     moving to the next, so the returned ``results`` are always complete —
     there is no caller-facing ``has_more``/``continuation_token`` to track.
+
+    ``AT_USER`` rows get a ``username`` from one ``vault/get_share_objects`` call per
+    invocation. Pass ``resolve_usernames=False`` to skip that call; ``username`` is then None.
     """
     uids: List[str] = []
     for raw in folder_uids:
@@ -1255,15 +1363,17 @@ def get_nsf_folder_access(
     if not uids:
         raise NsfError('At least one folder UID is required')
 
+    usernames = _UsernameResolver(vault) if resolve_usernames else None
     results: List[Dict[str, Any]] = []
     for i in range(0, len(uids), _FOLDER_ACCESS_CHUNK):
         chunk = uids[i:i + _FOLDER_ACCESS_CHUNK]
-        accumulated = _fetch_nsf_folder_access_chunk(vault, chunk, show_inherited, show_denied)
+        accumulated = _fetch_nsf_folder_access_chunk(vault, chunk, show_inherited, show_denied, usernames)
         results.extend(accumulated.values())
     return {'results': results}
 
 
-def load_nsf_access_details(vault: VaultOnline, load_folder: bool = False, load_record: bool = False) -> Dict[str, int]:
+def load_nsf_access_details(vault: VaultOnline, load_folder: bool = False, load_record: bool = False,
+                            resolve_usernames: bool = True) -> Dict[str, int]:
     """Fetch access details for every NSF folder/record and cache them on ``vault.nsf_data``.
 
     Scans all folder and record UIDs currently known to the NSF cache
@@ -1275,6 +1385,7 @@ def load_nsf_access_details(vault: VaultOnline, load_folder: bool = False, load_
 
     The cache always holds the complete access state, including inherited and
     denied rows; filter at read time if only direct access is wanted.
+    ``resolve_usernames=False`` skips the folder accessor username lookup.
     """
     view = _nsf_view(vault)
     if not load_folder and not load_record:
@@ -1287,7 +1398,8 @@ def load_nsf_access_details(vault: VaultOnline, load_folder: bool = False, load_
     loaded = {'folders': 0, 'records': 0}
 
     if folder_uid_list:
-        access = get_nsf_folder_access(vault, folder_uid_list, show_inherited=True, show_denied=True)
+        access = get_nsf_folder_access(vault, folder_uid_list, show_inherited=True, show_denied=True,
+                                       resolve_usernames=resolve_usernames)
         for fr in access.get('results') or []:
             fuid = fr.get('folder_uid')
             if not fuid:
@@ -1573,6 +1685,475 @@ def _parse_record_remove_preview(response: remove_pb2.RemoveResponse) -> List[Ns
             error=_parse_remove_error(res.error if res.HasField('error') else None),
         ))
     return items
+
+
+_SUCCESSFUL_NSF_MOVE_RESULTS = {
+    keeperdrive_move_pb2.MOVED,
+    keeperdrive_move_pb2.TARGET_ALREADY_PRESENT_SOURCE_REMOVED,
+}
+
+
+def _normalize_nsf_move_destination(
+        vault: VaultOnline,
+        identifier: str) -> str:
+    resolved = resolve_nsf_folder_uid(vault, identifier)
+    if resolved:
+        return resolved
+    if identifier and identifier.casefold() in ('root', 'my drive'):
+        return ROOT_FOLDER_UID
+    if identifier and is_nsf_folder(vault, identifier):
+        return identifier
+    raise NsfError(f'NSF destination folder not found: {identifier}')
+
+
+def _get_nsf_record_key_type(vault: VaultOnline, record_uid: str) -> int:
+    """Return the stored NSF record-key encryption type."""
+    links = _nsf_view(vault).storage.record_keys.get_links_by_subject(record_uid)
+    for link in links:
+        if link.record_key_type:
+            return int(link.record_key_type)
+    return folder_pb2.encrypted_by_data_key_gcm
+
+
+def _parse_nsf_move_result(
+        result: Any,
+        *,
+        item_uid: str,
+        item_type: str,
+        source_folder_uid: Optional[str],
+        destination_folder_uid: str) -> NsfMoveResult:
+    status = folder_pb2.FolderModifyStatus.Name(result.status)
+    move_status = keeperdrive_move_pb2.MoveResultStatus.Name(result.move_result_status)
+    success = (
+        result.status == folder_pb2.SUCCESS
+        and result.move_result_status in _SUCCESSFUL_NSF_MOVE_RESULTS
+    )
+    message = result.message or move_status
+    return NsfMoveResult(
+        item_uid=item_uid,
+        item_type=item_type,
+        source_folder_uid=source_folder_uid,
+        destination_folder_uid=destination_folder_uid,
+        success=success,
+        status=status,
+        message=message,
+    )
+
+
+def _validate_nsf_folder_move_destination(
+        vault: VaultOnline,
+        source_uid: str,
+        destination_uid: str) -> None:
+    if source_uid == ROOT_FOLDER_UID:
+        raise NsfError('The NSF root folder cannot be moved')
+    if source_uid == destination_uid:
+        raise NsfError('Source and destination folders are the same')
+
+    current_uid = destination_uid
+    visited: set[str] = set()
+    while current_uid and current_uid != ROOT_FOLDER_UID:
+        if current_uid == source_uid:
+            raise NsfError('Cannot move an NSF folder into itself or one of its descendants')
+        if current_uid in visited:
+            break
+        visited.add(current_uid)
+        folder = _nsf_view(vault).get_folder(current_uid)
+        if folder is None:
+            break
+        current_uid = folder.parent_uid or ROOT_FOLDER_UID
+
+
+def resolve_nsf_conversion_destination(vault: VaultOnline, folder_identifier: Optional[str]) -> str:
+    """Resolve the destination folder UID or name for conversion; ``''`` means the NSF root.
+
+    Raises ``NsfError`` when the folder is not found or the name matches more than one folder.
+    """
+    if not folder_identifier:
+        return ''
+    identifier = folder_identifier.strip()
+    if identifier.casefold() in ('root', 'my drive', ROOT_FOLDER_UID.casefold()):
+        return ''
+    # Resolves an NSF folder UID or a unique folder name.
+    destination_uid = resolve_nsf_folder_uid(vault, identifier)
+    if destination_uid:
+        return destination_uid
+    lower = identifier.casefold()
+    matches = [f.folder_uid for f in _nsf_view(vault).folders() if (f.name or '').casefold() == lower]
+    if len(matches) > 1:
+        raise NsfError(
+            f'{len(matches)} NSF folders are named "{identifier}". Use the folder UID for this operation.')
+    raise NsfError(f'Destination "{folder_identifier}" is not an NSF folder in the local cache.')
+
+
+def convert_classic_records_to_nsf(
+        vault: VaultOnline,
+        record_uids: Iterable[str],
+        folder_identifier: Optional[str] = None,
+        *,
+        request_sync: bool = True) -> List[NsfRecordConversionResult]:
+    """Permanently convert owned classic records to NSF records in batches of 100."""
+    if record_uids is None:
+        raise NsfError('At least one classic record UID is required.')
+    record_uids = list(record_uids)
+    if not record_uids:
+        raise NsfError('At least one classic record UID is required.')
+
+    owner_key = vault.keeper_auth.auth_context.data_key
+    if not owner_key or len(owner_key) != 32:
+        raise NsfError('User data key must be a 32-byte AES key.')
+
+    destination_uid = resolve_nsf_conversion_destination(vault, folder_identifier)
+    destination_key = owner_key
+    if destination_uid:
+        destination_key = _get_folder_key(vault, destination_uid)
+        if not destination_key or len(destination_key) != 32:
+            raise NsfError(f'Destination folder key for "{destination_uid}" is invalid.')
+
+    def skipped(uid: str, status: str, message: str) -> NsfRecordConversionResult:
+        return NsfRecordConversionResult(record_uid=uid, status=status, message=message, skipped=True)
+
+    results: List[Optional[NsfRecordConversionResult]] = [None] * len(record_uids)
+    seen: set[str] = set()
+    pending: List[Tuple[int, str, bytes]] = []
+    for index, raw_uid in enumerate(record_uids):
+        uid = raw_uid.strip() if isinstance(raw_uid, str) else ''
+        if not uid:
+            results[index] = skipped(str(raw_uid or ''), 'SKIPPED_INVALID_UID', 'Record UID is empty or invalid.')
+            continue
+        try:
+            uid_bytes = utils.base64_url_decode(uid)
+        except Exception:
+            results[index] = skipped(uid, 'SKIPPED_INVALID_UID', 'Invalid Keeper record UID; skipped.')
+            continue
+        if len(uid_bytes) != 16 or utils.base64_url_encode(uid_bytes) != uid:
+            results[index] = skipped(uid, 'SKIPPED_INVALID_UID', 'UID must be a canonical 16-byte Keeper UID; skipped.')
+            continue
+        if uid in seen:
+            results[index] = skipped(uid, 'SKIPPED_DUPLICATE', 'Duplicate record UID; skipped.')
+            continue
+        seen.add(uid)
+        if is_nsf_record(vault, uid):
+            results[index] = skipped(uid, 'SKIPPED_ALREADY_NSF', 'Record is already an NSF record; skipped.')
+            continue
+        if vault.vault_data.get_record(uid) is None:
+            results[index] = skipped(uid, 'SKIPPED_NOT_FOUND', 'Classic record was not found in the local cache; skipped.')
+            continue
+        record_key = vault.vault_data.get_record_key(uid)
+        if not record_key or len(record_key) != 32:
+            results[index] = skipped(uid, 'SKIPPED_INVALID_KEY', 'Classic record key is unavailable or invalid; skipped.')
+            continue
+        pending.append((index, uid, uid_bytes))
+
+    status_messages = {
+        keeperdrive_convert_pb2.OK: ('OK', 'Converted successfully.'),
+        keeperdrive_convert_pb2.ENTERPRISE_NOT_KEEPER_DRIVE_ENABLED: ('ENTERPRISE_NOT_KEEPER_DRIVE_ENABLED', 'The enterprise is not Keeper Drive enabled.'),
+        keeperdrive_convert_pb2.NOT_RECORD_OWNER: ('NOT_RECORD_OWNER', 'The record is not owned by the caller.'),
+        keeperdrive_convert_pb2.RECORD_NOT_FOUND: ('RECORD_NOT_FOUND', 'No active owned record was found.'),
+        keeperdrive_convert_pb2.RECORD_ALREADY_CONVERTED: ('RECORD_ALREADY_CONVERTED', 'The record is already an NSF record.'),
+        keeperdrive_convert_pb2.FOLDER_ACCESS_DENIED: ('FOLDER_ACCESS_DENIED', 'The caller cannot add records to the destination folder.'),
+        keeperdrive_convert_pb2.INVALID_FOLDER_KEY: ('INVALID_FOLDER_KEY', 'The destination folder key is invalid.'),
+        keeperdrive_convert_pb2.INVALID_OWNER_KEY: ('INVALID_OWNER_KEY', 'The owner key is invalid.'),
+        keeperdrive_convert_pb2.RECORD_NOT_LEGACY: ('RECORD_NOT_LEGACY', 'The record is not a classic record.'),
+        keeperdrive_convert_pb2.TARGET_NOT_DRIVE_FOLDER: ('TARGET_NOT_DRIVE_FOLDER', 'The destination is not an NSF folder.'),
+        keeperdrive_convert_pb2.RECORD_LINK_CHILD_NOT_OWNED: ('RECORD_LINK_CHILD_NOT_OWNED', 'A linked child record is not owned by the caller.'),
+        keeperdrive_convert_pb2.RECORD_LINK_PARENT_NOT_OWNED: ('RECORD_LINK_PARENT_NOT_OWNED', 'A linked parent record is not owned by the caller.'),
+        keeperdrive_convert_pb2.RECORD_LINK_RECORD_IN_TRASH: ("RECORD_LINK_RECORD_IN_TRASH", "A linked record is in the caller's trash."),
+        keeperdrive_convert_pb2.INTERNAL_ERROR: ('INTERNAL_ERROR', 'The server could not complete the conversion.'),
+        keeperdrive_convert_pb2.RECORD_LINK_CHILD_NOT_INCLUDED: ('RECORD_LINK_CHILD_NOT_INCLUDED', 'A linked classic record must also be included.'),
+        keeperdrive_convert_pb2.RECORD_LINK_FILE_PROMOTION_FAILED: ('RECORD_LINK_FILE_PROMOTION_FAILED', 'A linked file attachment could not be promoted.'),
+        keeperdrive_convert_pb2.RECORD_LINK_COMPONENT_FAILED: ('RECORD_LINK_COMPONENT_FAILED', 'A related record failed and this record was rolled back.'),
+        keeperdrive_convert_pb2.RECORD_VERSION_NOT_CONVERTIBLE: ('RECORD_VERSION_NOT_CONVERTIBLE', 'The record version cannot be converted.'),
+    }
+
+    for offset in range(0, len(pending), 100):
+        batch = pending[offset:offset + 100]
+        request = keeperdrive_convert_pb2.ConvertRecordRequest()
+        for _, uid, uid_bytes in batch:
+            record_key = vault.vault_data.get_record_key(uid)
+            request.records.add(
+                record_uid=uid_bytes,
+                folder_uid=utils.base64_url_decode(destination_uid) if destination_uid else b'',
+                record_key_encrypted_by_folder_key=crypto.encrypt_aes_v2(record_key, destination_key),
+                record_key_encrypted_by_owner_key=crypto.encrypt_aes_v2(record_key, owner_key),
+            )
+        requested = {uid for _, uid, _ in batch}
+        try:
+            response = vault.keeper_auth.execute_auth_rest(
+                'vault/records/v3/convert', request,
+                response_type=keeperdrive_convert_pb2.ConvertRecordResponse)
+        except (OSError, TimeoutError, ConnectionError):
+            # A transport failure can happen after the server has committed the conversion.
+            for index, uid, _ in batch:
+                results[index] = NsfRecordConversionResult(
+                    record_uid=uid, status='RESPONSE_UNAVAILABLE',
+                    message='No reliable conversion response was received. Refresh the vault and verify each record before retrying.',
+                    outcome_uncertain=True)
+            continue
+        except KeeperApiError as exc:
+            # A batch-level API error does not include per-record outcomes. Until
+            # the backend guarantees that these responses are always pre-commit,
+            # preserve the server code but mark the batch uncertain rather than
+            # claiming that a permanent conversion definitely failed.
+            error_code = str(getattr(exc, 'result_code', '') or 'API_ERROR')
+            is_transport_error = error_code.casefold() == 'http_error'
+            status = 'RESPONSE_UNAVAILABLE' if is_transport_error else error_code.upper()
+            message = (
+                'No reliable conversion response was received. Refresh the vault and verify each record before retrying.'
+                if is_transport_error else
+                f'The conversion batch returned API error {error_code!r}; the server commit state is not confirmed. '
+                'Refresh the vault and verify each record before retrying.'
+            )
+            for index, uid, _ in batch:
+                results[index] = NsfRecordConversionResult(
+                    record_uid=uid, status=status, message=message,
+                    outcome_uncertain=True)
+            continue
+        if response is None:
+            for index, uid, _ in batch:
+                results[index] = NsfRecordConversionResult(
+                    record_uid=uid, status='RESPONSE_MISSING',
+                    message='The conversion service returned no response. Refresh the vault and verify its state before retrying.',
+                    outcome_uncertain=True)
+            continue
+        returned = {}
+        duplicates = set()
+        for item in response.results:
+            returned_uid = utils.base64_url_encode(item.record_uid) if item.record_uid else ''
+            if returned_uid not in requested:
+                continue
+            if returned_uid in returned:
+                duplicates.add(returned_uid)
+            else:
+                returned[returned_uid] = item
+        for index, uid, _ in batch:
+            if uid in duplicates:
+                results[index] = NsfRecordConversionResult(
+                    record_uid=uid, status='RESULT_DUPLICATE',
+                    message='The server returned multiple results for this record. Refresh the vault and verify its current state.',
+                    outcome_uncertain=True)
+            elif uid not in returned:
+                results[index] = NsfRecordConversionResult(
+                    record_uid=uid, status='RESULT_MISSING',
+                    message='The server did not return a result for this record. Refresh the vault and verify its current state.',
+                    outcome_uncertain=True)
+            else:
+                item = returned[uid]
+                status, message = status_messages.get(
+                    item.status,
+                    (f'UNKNOWN_STATUS_{item.status}', f'The server returned unknown conversion status {item.status}; verify the record state after sync-down.'))
+                results[index] = NsfRecordConversionResult(
+                    record_uid=uid, status=status, message=message,
+                    success=item.status == keeperdrive_convert_pb2.OK,
+                    outcome_uncertain=(
+                        item.status == keeperdrive_convert_pb2.CONVERT_RECORD_STATUS_UNSPECIFIED
+                        or status.startswith('UNKNOWN_STATUS_')))
+
+    final_results = [item for item in results if item is not None]
+    if request_sync and any(r.success or r.outcome_uncertain for r in final_results):
+        try:
+            vault.sync_requested = True
+            vault.run_pending_jobs()
+        except Exception:
+            warning = 'Vault refresh failed after conversion. Refresh the vault and verify record state before relying on cached data.'
+            for result in final_results:
+                if result.success or result.outcome_uncertain:
+                    result.refresh_warning = warning
+        else:
+            _verify_uncertain_conversions(vault, final_results)
+    return final_results
+
+
+def _verify_uncertain_conversions(vault: VaultOnline, results: List[NsfRecordConversionResult]) -> None:
+    """Resolve uncertain conversion outcomes from the refreshed vault.
+
+    Conversion is permanent, so the caller must not retry a record whose outcome is unknown.
+    After sync-down, a record present in the NSF cache was converted; a record that is still
+    classic and absent from the NSF cache was not. Anything else stays uncertain.
+    """
+    for result in results:
+        if not result.outcome_uncertain:
+            continue
+        uid = result.record_uid
+        if is_nsf_record(vault, uid):
+            result.status = 'OK'
+            result.message = 'Converted successfully (confirmed after vault refresh).'
+            result.success = True
+            result.outcome_uncertain = False
+        elif vault.vault_data.get_record(uid) is not None:
+            result.message = (f'Not converted (confirmed after vault refresh: the record is still a classic record). '
+                              f'Server response: {result.status}.')
+            result.outcome_uncertain = False
+
+
+def move_nsf_record(
+        vault: VaultOnline,
+        record_identifier: str,
+        destination_folder_identifier: str,
+        *,
+        request_sync: bool = True) -> NsfMoveResult:
+    """Move one NSF record using the Keeper folder-record move API."""
+    record_uid = resolve_nsf_record_uid(vault, record_identifier) or record_identifier
+    if not is_nsf_record(vault, record_uid):
+        raise NsfError(f'NSF record not found: {record_identifier}')
+
+    destination_uid = _normalize_nsf_move_destination(vault, destination_folder_identifier)
+
+    source_uids = find_nsf_folders_for_record(vault, record_uid)
+    if not source_uids:
+        raise NsfError(f'No NSF folder location was found for record {record_identifier}')
+    if len(source_uids) > 1:
+        raise NsfError(
+            f'NSF record {record_identifier} has multiple folder locations '
+            f'({", ".join(source_uids)}); use nsf-shortcut keep to reduce it to one '
+            'location before moving')
+    source_uid = source_uids[0]
+
+    if source_uid == destination_uid:
+        raise NsfError('Source and destination folders are the same')
+
+    record_key = _get_record_key(vault, record_uid)
+    record_key_type = _get_nsf_record_key_type(vault, record_uid)
+
+    if destination_uid == ROOT_FOLDER_UID:
+        destination_key = vault.keeper_auth.auth_context.data_key
+        target_bytes = b''
+    else:
+        destination_key = _get_folder_key(vault, destination_uid)
+        target_bytes = utils.base64_url_decode(destination_uid)
+
+    if source_uid == ROOT_FOLDER_UID:
+        source_bytes = b''
+    else:
+        source_bytes = utils.base64_url_decode(source_uid)
+
+    encrypted_record_key, _ = nsf_common.encrypt_record_key_for_folder(
+        record_key, destination_key, record_key_type)
+
+    move = keeperdrive_move_pb2.FolderRecordMove()
+    move.source_folder_uid = source_bytes
+    move.target_folder_uid = target_bytes
+    move.record_uid = utils.base64_url_decode(record_uid)
+    move.encrypted_record_key = encrypted_record_key
+
+    request = keeperdrive_move_pb2.FolderRecordMoveRequest()
+    request.moves.append(move)
+
+    response = vault.keeper_auth.execute_auth_rest(
+        'vault/folders/v3/record_move',
+        request,
+        response_type=keeperdrive_move_pb2.FolderRecordMoveResponse)
+    if response is None or not response.results:
+        raise KeeperApiError('no_results', 'No results from NSF record move response')
+
+    result = _parse_nsf_move_result(
+        response.results[0],
+        item_uid=record_uid,
+        item_type='record',
+        source_folder_uid=source_uid,
+        destination_folder_uid=destination_uid,
+    )
+    if not result.success:
+        raise KeeperApiError(result.status, result.message or 'Failed to move NSF record')
+
+    _request_sync(vault, request_sync)
+    return result
+
+
+def _nsf_folder_depth(vault: VaultOnline, folder_uid: str) -> int:
+    """Nesting depth of ``folder_uid`` (root's direct children are depth 1)."""
+    depth = 0
+    current = folder_uid
+    visited: set[str] = set()
+    while current and current != ROOT_FOLDER_UID and current not in visited:
+        visited.add(current)
+        folder = _nsf_view(vault).get_folder(current)
+        if folder is None:
+            break
+        depth += 1
+        current = folder.parent_uid or ROOT_FOLDER_UID
+    return depth
+
+
+def _nsf_folder_subtree_height(
+        vault: VaultOnline,
+        folder_uid: str,
+        visited: Optional[set[str]] = None) -> int:
+    """Number of additional folder levels below ``folder_uid`` (0 if it has no sub-folders)."""
+    visited = visited if visited is not None else set()
+    if folder_uid in visited:
+        return 0
+    visited.add(folder_uid)
+    folder = _nsf_view(vault).get_folder(folder_uid)
+    children = list(folder.subfolder_uids) if folder else []
+    if not children:
+        return 0
+    return 1 + max(_nsf_folder_subtree_height(vault, child, visited) for child in children)
+
+
+def _validate_nsf_folder_move_depth(
+        vault: VaultOnline,
+        source_uid: str,
+        destination_uid: str) -> None:
+    dest_depth = _nsf_folder_depth(vault, destination_uid)
+    subtree_height = _nsf_folder_subtree_height(vault, source_uid)
+    new_depth = dest_depth + 1 + subtree_height
+    if new_depth > MAX_NSF_FOLDER_DEPTH:
+        raise NsfError(
+            f'Cannot move folder: resulting nesting depth ({new_depth}) would '
+            f'exceed the maximum of {MAX_NSF_FOLDER_DEPTH} levels.')
+
+
+def move_nsf_folder(
+        vault: VaultOnline,
+        folder_identifier: str,
+        destination_folder_identifier: str,
+        *,
+        request_sync: bool = True) -> NsfMoveResult:
+    """Move one NSF folder using the Keeper folder move API."""
+    source_uid = resolve_nsf_folder_uid(vault, folder_identifier) or folder_identifier
+    if not is_nsf_folder(vault, source_uid):
+        raise NsfError(f'NSF source folder not found: {folder_identifier}')
+
+    destination_uid = _normalize_nsf_move_destination(vault, destination_folder_identifier)
+    _validate_nsf_folder_move_destination(vault, source_uid, destination_uid)
+
+    _validate_nsf_folder_move_depth(vault, source_uid, destination_uid)
+
+    folder_key = _get_folder_key(vault, source_uid)
+    if destination_uid == ROOT_FOLDER_UID:
+        parent_key = vault.keeper_auth.auth_context.data_key
+        target_parent_bytes = b''
+    else:
+        parent_key = _get_folder_key(vault, destination_uid)
+        target_parent_bytes = utils.base64_url_decode(destination_uid)
+
+    move = keeperdrive_move_pb2.FolderMove()
+    move.folder_uid = utils.base64_url_decode(source_uid)
+    move.target_parent_uid = target_parent_bytes
+    move.encrypted_folder_key = crypto.encrypt_aes_v2(folder_key, parent_key)
+
+    request = keeperdrive_move_pb2.FolderMoveRequest()
+    request.moves.append(move)
+
+    response = vault.keeper_auth.execute_auth_rest(
+        'vault/folders/v3/folder_move',
+        request,
+        response_type=keeperdrive_move_pb2.FolderMoveResponse)
+    if response is None or not response.results:
+        raise KeeperApiError('no_results', 'No results from NSF folder move response')
+
+    result = _parse_nsf_move_result(
+        response.results[0],
+        item_uid=source_uid,
+        item_type='folder',
+        source_folder_uid=source_uid,
+        destination_folder_uid=destination_uid,
+    )
+    if not result.success:
+        raise KeeperApiError(result.status, result.message or 'Failed to move NSF folder')
+
+    _request_sync(vault, request_sync)
+    return result
 
 
 def remove_nsf_records(

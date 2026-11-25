@@ -24,6 +24,24 @@ logger = api.get_logger()
 
 GET_SHARE_ADMINS = 'enterprise/get_sharing_admins'
 
+MASKED_VALUE = '********'
+SENSITIVE_FIELD_TYPES = frozenset({
+    'password', 'secret', 'otp', 'privateKey', 'pinCode',
+    'oneTimeCode', 'keyPair', 'licenseNumber'
+})
+
+
+def is_sensitive_field_type(field_type: Optional[str]) -> bool:
+    """Check if a field type is considered sensitive and should be masked."""
+    return field_type in SENSITIVE_FIELD_TYPES
+
+
+def field_has_value(value) -> bool:
+    """True when a record field value (scalar or list) is non-empty."""
+    if isinstance(value, list):
+        return any(value)
+    return bool(value)
+
 
 def is_record_uid(value: str) -> bool:
     if not value:
@@ -73,6 +91,35 @@ def resolve_records(pattern: str, context: KeeperParams, *, recursive: bool=Fals
     if record_info:
         yield record_info.record_uid
         return
+
+    # NSF records are maintained in a separate decrypted view and are not
+    # present in the classic vault_data index.  Allow commands which operate
+    # on a record UID (such as download-attachment) to resolve them directly.
+    if context.vault.nsf_data and context.vault.nsf_data.get_record(pattern):
+        yield pattern
+        return
+
+    # An NSF folder has its own in-memory view as well.  Support a folder UID
+    # here so --recursive can operate on NSF records without mixing the NSF
+    # and classic folder trees.
+    if context.vault.nsf_data:
+        nsf_folder = context.vault.nsf_data.get_folder(pattern)
+        if nsf_folder:
+            visited = set()
+
+            def walk(folder) -> Iterator[str]:
+                if folder.folder_uid in visited:
+                    return
+                visited.add(folder.folder_uid)
+                yield from folder.record_uids
+                if recursive:
+                    for child_uid in folder.subfolder_uids:
+                        child = context.vault.nsf_data.get_folder(child_uid)
+                        if child:
+                            yield from walk(child)
+
+            yield from walk(nsf_folder)
+            return
 
     folder = context.vault.vault_data.get_folder(pattern)
     if folder:

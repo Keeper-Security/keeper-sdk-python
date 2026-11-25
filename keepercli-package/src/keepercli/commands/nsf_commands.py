@@ -23,6 +23,20 @@ logger = api.get_logger()
 _MASKED_TYPES = frozenset({'password', 'secret', 'pinCode', 'pin_code'})
 
 
+def _field_values(field: Dict[str, Any]) -> List[Any]:
+    """Return a record field's ``value`` as a list."""
+    values = field.get('value', [])
+    if not isinstance(values, list):
+        values = [values]
+    return values
+
+
+def _has_password_value(fields: List[Any]) -> bool:
+    """True when any ``password`` field in the record has a non-empty value."""
+    return any(isinstance(f, dict) and f.get('type') == 'password' and any(_field_values(f))
+               for f in fields)
+
+
 def _mask_sensitive_fields(fields: List[Any], *, unmask: bool) -> List[Any]:
     """Return a copy of record fields with sensitive values replaced unless ``unmask``."""
     if unmask or not fields:
@@ -37,12 +51,9 @@ def _mask_sensitive_fields(fields: List[Any], *, unmask: bool) -> List[Any]:
             masked_fields.append(f)
             continue
         entry = dict(f)
-        values = entry.get('value', [])
-        if not isinstance(values, list):
-            values = [values]
         entry['value'] = [
             '********' if (val or val == 0) else val
-            for val in values
+            for val in _field_values(entry)
         ]
         masked_fields.append(entry)
     return masked_fields
@@ -358,6 +369,13 @@ class NsfGetCommand(base.ArgparseCommand):
             self._print_record_json(vault, detail, verbose, unmask, show_inherited, show_denied)
         else:
             self._print_record_detail(detail, verbose, unmask, show_inherited, show_denied)
+
+        record_uid = detail.get('record_uid')
+        caep = vault.client_audit_event_plugin()
+        if caep and record_uid:
+            caep.schedule_audit_event('open_record', record_uid=record_uid)
+            if unmask and _has_password_value(detail.get('fields') or []):
+                caep.schedule_audit_event('revealed_password', record_uid=record_uid)
 
     @staticmethod
     def _print_folder_detail(
@@ -878,6 +896,81 @@ def _confirm_removal(prompt: str, force: bool) -> bool:
     return prompt_utils.user_choice(prompt, 'yn', default='n') in ('y', 'yes')
 
 
+
+
+class NsfConvertCommand(base.ArgparseCommand):
+    """Permanently convert classic records to the NSF permission model."""
+
+    def __init__(self):
+        parser = argparse.ArgumentParser(
+            prog='nsf-convert',
+            description='Permanently convert owned classic records to NSF records.',
+        )
+        parser.add_argument(
+            'records', nargs='+',
+            help='Classic record UID(s) to convert (batches of up to 100 are sent automatically)',
+        )
+        parser.add_argument(
+            '--folder', dest='folder',
+            help='Existing NSF destination folder UID/name; omitted means NSF root',
+        )
+        parser.add_argument(
+            '-f', '--force', dest='force', action='store_true',
+            help='Skip permanent-conversion confirmation',
+        )
+        super().__init__(parser)
+
+    def execute(self, context: KeeperParams, **kwargs):
+        vault = _require_vault(context)
+        record_uids = kwargs.get('records') or []
+        folder = kwargs.get('folder')
+        # Validate the destination before asking for confirmation.
+        destination_uid = _wrap_nsf(
+            'nsf-convert', lambda: nsf_management.resolve_nsf_conversion_destination(vault, folder))
+        if not kwargs.get('force'):
+            logger.warning(
+                'WARNING: Conversion is permanent. Classic shared-folder membership '
+                'and additional classic folder placements are not retained.')
+            if destination_uid and destination_uid != folder:
+                logger.info('Destination: %s (%s)', folder, destination_uid)
+            else:
+                logger.info('Destination: %s', destination_uid or 'NSF root')
+            for uid in record_uids:
+                logger.info('  %s', uid)
+            if not _confirm_removal('Continue with permanent conversion?', False):
+                logger.info('Conversion cancelled.')
+                return
+
+        results = _wrap_nsf(
+            'nsf-convert',
+            lambda: nsf_management.convert_classic_records_to_nsf(
+                vault, record_uids, folder_identifier=destination_uid or None))
+        for result in results:
+            if result.success:
+                logger.info("Classic record '%s' converted to an NSF record.", result.record_uid)
+            elif result.outcome_uncertain:
+                logger.warning(
+                    "Conversion outcome for '%s' is uncertain: %s (status: %s). "
+                    "Refresh the vault and verify the record before retrying.",
+                    result.record_uid, result.message, result.status)
+            elif result.skipped:
+                logger.warning("Classic record '%s' skipped: %s", result.record_uid, result.message)
+            else:
+                logger.error(
+                    "Classic record '%s' was not converted: %s (status: %s)",
+                    result.record_uid, result.message, result.status)
+        for result in results:
+            if result.refresh_warning:
+                logger.warning('%s', result.refresh_warning)
+                break
+        logger.info(
+            'Conversion complete: %d confirmed converted, %d uncertain, %d failed, %d skipped.',
+            sum(1 for r in results if r.success),
+            sum(1 for r in results if r.outcome_uncertain),
+            sum(1 for r in results if not r.success and not r.outcome_uncertain and not r.skipped),
+            sum(1 for r in results if r.skipped),
+        )
+
 class NsfRecordDetailsCommand(base.ArgparseCommand):
 
     def __init__(self):
@@ -1059,6 +1152,85 @@ class NsfRndirCommand(base.ArgparseCommand):
                 logger.info('Folder "%s" color has been updated', display)
             else:
                 logger.info('Folder "%s" has been updated', display)
+
+
+class NsfMvCommand(base.ArgparseCommand):
+    def __init__(self):
+        parser = argparse.ArgumentParser(
+            prog='nsf-move',
+            description='Move an NSF record or folder to another NSF folder',
+        )
+        NsfMvCommand.add_arguments_to_parser(parser)
+        super().__init__(parser)
+
+    @staticmethod
+    def add_arguments_to_parser(parser: argparse.ArgumentParser) -> None:
+        parser.add_argument(
+            'source',
+            type=str,
+            help='NSF record UID/title or folder UID/name to move',
+        )
+        parser.add_argument(
+            'destination',
+            type=str,
+            help='Destination NSF folder UID/name, or root / My Drive',
+        )
+
+    def execute(self, context: KeeperParams, **kwargs):
+        vault = _require_vault(context)
+        source = (kwargs.get('source') or '').strip()
+        destination = (kwargs.get('destination') or '').strip()
+
+        if not source:
+            raise base.CommandError('Source record/folder is required')
+        if not destination:
+            raise base.CommandError('Destination folder is required')
+
+        folder_uid = nsf_management.resolve_nsf_folder_uid(vault, source)
+        record_uid = nsf_management.resolve_nsf_record_uid(vault, source)
+        if folder_uid and record_uid:
+            raise base.CommandError(
+                f'Source "{source}" matches both an NSF folder and record. '
+                'Use the UID directly to disambiguate.'
+            )
+        if folder_uid:
+            item_type = 'folder'
+        elif record_uid:
+            item_type = 'record'
+        else:
+            raise base.CommandError(f'NSF record or folder not found: {source}')
+
+        if item_type == 'folder':
+            result = _wrap_nsf(
+                'nsf-move',
+                lambda: nsf_management.move_nsf_folder(
+                    vault,
+                    source,
+                    destination,
+                ),
+            )
+            logger.info(
+                "Moved NSF folder '%s' to '%s'",
+                result.item_uid,
+                result.destination_folder_uid,
+            )
+            return result
+
+        result = _wrap_nsf(
+            'nsf-move',
+            lambda: nsf_management.move_nsf_record(
+                vault,
+                source,
+                destination,
+            ),
+        )
+        logger.info(
+            "Moved NSF record '%s' from '%s' to '%s'",
+            result.item_uid,
+            result.source_folder_uid,
+            result.destination_folder_uid,
+        )
+        return result
 
 
 class NsfRmCommand(base.ArgparseCommand):
@@ -1704,4 +1876,3 @@ class NsfLoadAccessCacheCommand(base.ArgparseCommand):
         logger.info(
             'Loaded access details for %d folder(s) and %d record(s) into the NSF cache',
             loaded.get('folders', 0), loaded.get('records', 0))
-

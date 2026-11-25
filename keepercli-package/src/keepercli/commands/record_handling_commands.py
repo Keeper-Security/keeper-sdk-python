@@ -373,7 +373,9 @@ class ClipboardCommand(base.ArgparseCommand):
         
         # Schedule audit event for password copy
         if copy_item == 'Password' and text:
-            context.vault.client_audit_event_plugin().schedule_audit_event('copy_password', record_uid=record_uid)
+            caep = context.vault.client_audit_event_plugin()
+            if caep:
+                caep.schedule_audit_event('copy_password', record_uid=record_uid)
 
     def _load_record_history(self, context: KeeperParams, record_uid: str) -> Optional[List]:
         """Load record history from server."""
@@ -469,6 +471,12 @@ class RecordHistoryCommand(base.ArgparseCommand):
             help="verbose output"
         )
         parser.add_argument(
+            '--unmask',
+            dest='unmask',
+            action='store_true',
+            help="display hidden field content with 'view' and 'diff' actions"
+        )
+        parser.add_argument(
             'record', 
             nargs='?', 
             type=str, 
@@ -496,7 +504,7 @@ class RecordHistoryCommand(base.ArgparseCommand):
             return
 
         action = kwargs.get('action') or 'list'
-        return self._execute_action(action, vault, history, kwargs)
+        return self._execute_action(action, vault, record_uid, history, kwargs)
 
     def _validate_vault(self, context: KeeperParams):
         """Validate that vault is initialized."""
@@ -526,14 +534,15 @@ class RecordHistoryCommand(base.ArgparseCommand):
                 return folder_record_uid
         return None
 
-    def _execute_action(self, action: str, vault: vault_online.VaultOnline, history: List, kwargs: Dict):
+    def _execute_action(self, action: str, vault: vault_online.VaultOnline, record_uid: str, history: List,
+                        kwargs: Dict):
         """Execute the specified history action."""
         if action == 'list':
             return self._list_history(history, kwargs)
         elif action == 'view':
-            return self._view_revision(history, kwargs)
+            return self._view_revision(vault, record_uid, history, kwargs)
         elif action == 'diff':
-            return self._show_diff(history, kwargs)
+            return self._show_diff(vault, record_uid, history, kwargs)
         elif action == 'restore':
             return self._restore_revision(vault, history, kwargs)
 
@@ -555,9 +564,10 @@ class RecordHistoryCommand(base.ArgparseCommand):
         
         return report_utils.dump_report_data(rows, headers, fmt=fmt, filename=kwargs.get('output'))
 
-    def _view_revision(self, history: List, kwargs: Dict):
+    def _view_revision(self, vault: vault_online.VaultOnline, record_uid: str, history: List, kwargs: Dict):
         """View a specific revision."""
         revision = kwargs.get('revision') or 0
+        unmask = kwargs.get('unmask') or False
         length = len(history)
         
         if revision < 0 or revision >= length:
@@ -572,12 +582,19 @@ class RecordHistoryCommand(base.ArgparseCommand):
         rows.append(['Title', record_data.get('title')])
         rows.append(['Type', record_data.get('type')])
         fields = record_data.get('fields', [])
+        password_revealed = False
         for field in fields:
             label = field.get('label')
             if not label or label == '':
                 label = field.get('type')
             value = field.get('value')
             if value:
+                field_type = field.get('type')
+                if not unmask and record_utils.is_sensitive_field_type(field_type):
+                    if record_utils.field_has_value(value):
+                        value = record_utils.MASKED_VALUE
+                elif field_type == 'password' and record_utils.field_has_value(value):
+                    password_revealed = True
                 if isinstance(value, list):
                     value = '\n'.join(value)
                 rows.append([label, value])
@@ -592,11 +609,14 @@ class RecordHistoryCommand(base.ArgparseCommand):
             no_header=True, 
             right_align=(0,)
         )
+        if password_revealed:
+            self._schedule_password_revealed(vault, record_uid)
 
-    def _show_diff(self, history: List, kwargs: Dict):
+    def _show_diff(self, vault: vault_online.VaultOnline, record_uid: str, history: List, kwargs: Dict):
         """Show differences between revisions."""
         revision = kwargs.get('revision') or 0
         verbose = kwargs.get('verbose') or False
+        unmask = kwargs.get('unmask') or False
         length = len(history)
         
         if revision < 0 or revision >= length:
@@ -604,9 +624,48 @@ class RecordHistoryCommand(base.ArgparseCommand):
 
         index = 0 if revision == 0 else length - revision
         rows = self._generate_diff_rows(history, index, length, verbose)
+        sensitive_names, password_names = self._get_sensitive_field_names(history)
+        if unmask:
+            password_revealed = any(row[1] in password_names and (row[2] or row[3]) for row in rows)
+        else:
+            password_revealed = False
+            self._mask_sensitive_rows(rows, sensitive_names)
         
         headers = ('Version', 'Field', 'New Value', 'Old Value')
         report_utils.dump_report_data(rows, headers)
+        if password_revealed:
+            self._schedule_password_revealed(vault, record_uid)
+
+    def _get_sensitive_field_names(self, history: List) -> Tuple[set, set]:
+        """Names (as used in diff rows) of sensitive and of password fields across all revisions."""
+        sensitive_names = set()
+        password_names = set()
+        for rev in history:
+            data = rev.get('data_unencrypted')
+            if not data:
+                continue
+            for field in json.loads(data).get('fields', []):
+                field_type = field.get('type')
+                name = field.get('label') or field_type
+                if record_utils.is_sensitive_field_type(field_type):
+                    sensitive_names.add(name)
+                if field_type == 'password':
+                    password_names.add(name)
+        return sensitive_names, password_names
+
+    def _mask_sensitive_rows(self, rows: List, sensitive_names: set):
+        """Mask new/old values of sensitive fields in diff rows; values are compared before masking."""
+        for row in rows:
+            if row[1] in sensitive_names:
+                for index in (2, 3):
+                    if row[index]:
+                        row[index] = record_utils.MASKED_VALUE
+
+    def _schedule_password_revealed(self, vault: vault_online.VaultOnline, record_uid: str):
+        """Log a revealed_password client audit event for a password shown with --unmask."""
+        caep = vault.client_audit_event_plugin()
+        if caep:
+            caep.schedule_audit_event('revealed_password', record_uid=record_uid)
 
     def _generate_diff_rows(self, history: List, start_index: int, length: int, verbose: bool) -> List:
         """Generate diff rows between revisions."""
@@ -702,7 +761,9 @@ class RecordHistoryCommand(base.ArgparseCommand):
         record_data = json.loads(record_data_bytes)
 
         self._execute_restore_request(vault, rev['record_uid'], rev['revision'])
-        vault.client_audit_event_plugin().schedule_audit_event('revision_restored', record_uid=rev['record_uid'])
+        caep = vault.client_audit_event_plugin()
+        if caep:
+            caep.schedule_audit_event('revision_restored', record_uid=rev['record_uid'])
         vault.sync_down()
         logger.info('Record "%s" revision V.%d has been restored', record_data.get('title'), revision)
 

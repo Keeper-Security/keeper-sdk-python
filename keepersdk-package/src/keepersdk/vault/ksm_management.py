@@ -23,7 +23,7 @@ from ..proto.enterprise_pb2 import (
     DISCOVERY_AND_ROTATION_CONTROLLER,
     KCM_CONTROLLER,
 )
-from ..proto import record_pb2
+from ..proto import folder_pb2, record_pb2
 from ..proto.record_pb2 import ApplicationAddRequest, RecordUpdate, RecordsUpdateRequest
 
 URL_GET_SUMMARY_API = 'vault/get_applications_summary'
@@ -408,7 +408,11 @@ def _send_share_requests(vault: vault_online.VaultOnline, sf_requests: List, rec
     success_responses = []
     failed_responses = []
     if sf_requests:
-        success_responses, failed_responses = shares_management.FolderShares.send_requests(vault, sf_requests)
+        success_responses, failed_responses = shares_management.FolderShares.send_requests(
+            vault, sf_requests,
+            rebuild_request=lambda sf_uid, users, teams: _rebuild_folder_share_requests(
+                vault, sf_uid, users, teams, shares_management.ShareAction.GRANT.value)
+        )
     if rec_requests:
         success_responses_rec, failed_responses_rec = shares_management.RecordShares.send_requests(vault, rec_requests)
         success_responses.extend(success_responses_rec)
@@ -492,16 +496,37 @@ def _create_folder_share_requests(vault: vault_online.VaultOnline, shared_folder
     return requests
 
 
-def _build_folder_share_request(vault: vault_online.VaultOnline, folder_uid: str, 
-                                user: str, action: str) -> Dict:
-    """Build a single folder share request."""
+def _build_folder_share_request(vault: vault_online.VaultOnline, folder_uid: str,
+                                user: str, action: str,
+                                stale_users: Optional[Set[str]] = None,
+                                stale_teams: Optional[Set[str]] = None) -> folder_pb2.SharedFolderUpdateV3Request:
+    """Build a single folder share request.
+
+    ``stale_users`` / ``stale_teams`` are members the server reported as ``doesnt_exist`` on a
+    previous update. They are dropped from ``shared_folder.user_permissions`` so the request is
+    built with sharedFolderAddUser/Team instead of sharedFolderUpdateUser/Team.
+    """
     shared_folder = vault.vault_data.load_shared_folder(folder_uid)
     shared_folder_revision = vault.vault_data.storage.shared_folders.get_entity(folder_uid).revision
     sf_unencrypted_key = vault.vault_data.get_shared_folder_key(shared_folder_uid=folder_uid)
-    
+
+    user_permissions = list(shared_folder.user_permissions)
+    if stale_users or stale_teams:
+        stale_user_names = {x.lower() for x in (stale_users or ())}
+        stale_team_uids = set(stale_teams or ())
+        user_permissions = [
+            up for up in user_permissions
+            if not (
+                (up.user_type == vault_types.SharedFolderUserType.Team and up.user_uid in stale_team_uids)
+                or (up.user_type != vault_types.SharedFolderUserType.Team
+                    and (up.name or '').lower() in stale_user_names)
+            )
+        ]
+        shared_folder.user_permissions = user_permissions
+
     sf_info = {
         'shared_folder_uid': folder_uid,
-        'users': shared_folder.user_permissions,
+        'users': user_permissions,
         'teams': [],
         'records': shared_folder.record_permissions,
         'shared_folder_key_unencrypted': sf_unencrypted_key,
@@ -509,7 +534,7 @@ def _build_folder_share_request(vault: vault_online.VaultOnline, folder_uid: str
         'default_manage_records': shared_folder.default_can_edit,
         'revision': shared_folder_revision
     }
-    
+
     return shares_management.FolderShares.prepare_request(
         vault=vault,
         kwargs={'action': action},
@@ -521,6 +546,23 @@ def _build_folder_share_request(vault: vault_online.VaultOnline, folder_uid: str
         default_account=False,
         share_expiration=-1
     )
+
+
+def _rebuild_folder_share_requests(vault: vault_online.VaultOnline, folder_uid: str,
+                                   stale_users: List[str], stale_teams: List[str],
+                                   action: str) -> List[folder_pb2.SharedFolderUpdateV3Request]:
+    """Retry callback for FolderShares.send_requests on a 'doesnt_exist' update status.
+
+    FolderShares has already evicted the stale entries from the shared folder cache; this
+    rebuilds one request per stale user so each is sent as sharedFolderAddUser.
+    """
+    stale_user_set = set(stale_users or ())
+    stale_team_set = set(stale_teams or ())
+    return [
+        _build_folder_share_request(vault, folder_uid, user, action,
+                                    stale_users=stale_user_set, stale_teams=stale_team_set)
+        for user in stale_users or ()
+    ]
 
 
 def _create_record_share_requests(vault: vault_online.VaultOnline, enterprise: enterprise_data.EnterpriseData, shared_recs: List,

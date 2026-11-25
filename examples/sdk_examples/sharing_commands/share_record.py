@@ -537,6 +537,8 @@ def share_record_with_user(
     #   enterprise_access: If True, resolve uid_or_name as share-admin record (requires enterprise).
     #   recursive: If True and uid_or_name is a folder/shared folder, share all records inside.
     #   dry_run: If True, validate and return request without sending.
+    # Filled by prep_request with (record_uid, username) pairs whose existing share has expired.
+    expired_shares = set()
     request = shares_management.RecordShares.prep_request(
         vault=vault,
         emails=[user_email],
@@ -549,11 +551,20 @@ def share_record_with_user(
         recursive=False,
         can_edit=can_edit,
         can_share=can_share,
+        expired_shares=expired_shares,
     )
 
-    # Send the request
-    shares_management.RecordShares.send_requests(vault, [request])
-    print(f"Record {record_uid} shared with {user_email}.")
+    # Send the request. If the user's previous share has expired, it is granted again (an update
+    # rejected with 'doesnt_exist' is retried once as an add) and the result says so.
+    success_responses, failed_responses = shares_management.RecordShares.send_requests(
+        vault, [request], expired_shares=expired_shares
+    )
+    for message in success_responses:
+        print(message)
+    for message in failed_responses:
+        print(f"FAILED: {message}")
+    if not failed_responses:
+        print(f"Record {record_uid} shared with {user_email}.")
     vault.close()
     keeper_auth_context.close()
 

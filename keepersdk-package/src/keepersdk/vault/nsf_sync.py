@@ -76,7 +76,7 @@ def apply_nsf_proto_message(
     _process_removed_folder_records_proto(nsf_msg, nsf_storage, task)
     _process_removed_record_links_proto(nsf_msg, nsf_storage, task)
     _store_folders_proto(nsf_msg, nsf_storage, task)
-    _store_folder_keys_proto(nsf_msg, nsf_storage)
+    _store_folder_keys_proto(nsf_msg, nsf_storage, task)
     _store_records_proto(nsf_msg, nsf_storage, task)
     _store_record_data_proto(nsf_msg, nsf_storage, task)
     _store_folder_records_proto(nsf_msg, nsf_storage, task)
@@ -167,10 +167,64 @@ def _store_folders_proto(
             task.add_folders((f.folder_uid for f in folders))
 
 
-def _store_folder_keys_proto(nsf_msg: SyncDown_pb2.KeeperDriveData, storage: INSFStorage) -> None:
+_FK_PARENT = int(folder_pb2.FolderKeyEncryptionType.ENCRYPTED_BY_PARENT_KEY)
+_FK_USER = int(folder_pb2.FolderKeyEncryptionType.ENCRYPTED_BY_USER_KEY)
+_PLACEMENT_KEY_TYPES = (_FK_PARENT, _FK_USER)
+
+
+def _store_folder_keys_proto(
+        nsf_msg: SyncDown_pb2.KeeperDriveData,
+        storage: INSFStorage,
+        task: Optional['NSFRebuildTask'] = None) -> None:
     keys = [_proto_folder_key(x) for x in nsf_msg.folderKeys]
-    if keys:
-        storage.folder_keys.put_links(keys)
+    if not keys:
+        return
+
+    # Folders whose FolderData is in this same page: FolderData.parentUid is authoritative.
+    folders_in_page = {_uid_b64(x.folderUid) for x in nsf_msg.folders}
+
+    # Resolve the placement key (PARENT_KEY preferred, else USER_KEY = root) per folder.
+    placement: Dict[str, nsf.NSFFolderKey] = {}
+    for fk in keys:
+        if not fk.folder_uid or fk.encrypted_by not in _PLACEMENT_KEY_TYPES:
+            continue
+        if fk.encrypted_by == _FK_PARENT and not fk.parent_uid:
+            continue
+        current = placement.get(fk.folder_uid)
+        if current is None or (current.encrypted_by != _FK_PARENT and fk.encrypted_by == _FK_PARENT):
+            placement[fk.folder_uid] = fk
+
+    stale_links: List[Tuple[str, str]] = []
+    updated_folders: List[nsf.NSFFolder] = []
+    touched: List[str] = []
+    for folder_uid, fk in placement.items():
+        new_parent = fk.parent_uid if fk.encrypted_by == _FK_PARENT else ''
+
+        # Drop old placement links (folder -> old parent / old root key). Folder move
+        # sync only sends the new FolderKey, and links are keyed by (folder, parent),
+        # so without this the old link survives next to the new one.
+        for existing in storage.folder_keys.get_links_by_subject(folder_uid):
+            if existing.encrypted_by in _PLACEMENT_KEY_TYPES and existing.parent_uid != fk.parent_uid:
+                stale_links.append((existing.folder_uid, existing.parent_uid))
+
+        if folder_uid in folders_in_page:
+            continue
+        row = storage.folders.get_entity(folder_uid)
+        if row is None:
+            continue
+        if (row.parent_uid or '') != new_parent or row.folder_key != fk.folder_key:
+            old_parent = row.parent_uid
+            updated_folders.append(dataclasses.replace(
+                row, parent_uid=new_parent, folder_key=fk.folder_key))
+            touched.extend(x for x in (folder_uid, old_parent, new_parent) if x)
+
+    if stale_links:
+        storage.folder_keys.delete_links(stale_links)
+    storage.folder_keys.put_links(keys)
+    if updated_folders:
+        storage.folders.put_entities(updated_folders)
+    if task and touched:
+        task.add_folders(touched)
 
 
 def _store_record_data_proto(

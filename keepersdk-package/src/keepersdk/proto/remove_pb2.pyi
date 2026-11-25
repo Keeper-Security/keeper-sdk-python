@@ -3,7 +3,8 @@ from google.protobuf.internal import containers as _containers
 from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
-from typing import ClassVar as _ClassVar, Iterable as _Iterable, Mapping as _Mapping, Optional as _Optional, Union as _Union
+from collections.abc import Iterable as _Iterable, Mapping as _Mapping
+from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
@@ -18,6 +19,7 @@ class RecordOperationType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     UNLINK_FROM_FOLDER: _ClassVar[RecordOperationType]
     MOVE_TO_FOLDER_TRASH: _ClassVar[RecordOperationType]
     MOVE_TO_OWNER_TRASH: _ClassVar[RecordOperationType]
+    DELETE_PERMANENT: _ClassVar[RecordOperationType]
 
 class FolderOperationType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -34,6 +36,9 @@ class RemoveErrorCode(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     REMOVE_ERROR_TRASHCAN_FOLDER: _ClassVar[RemoveErrorCode]
     REMOVE_ERROR_ROOT_FOLDER: _ClassVar[RemoveErrorCode]
     REMOVE_ERROR_DESCENDANT_DENIED: _ClassVar[RemoveErrorCode]
+    REMOVE_ERROR_NOT_IN_TRASH: _ClassVar[RemoveErrorCode]
+    REMOVE_ERROR_RETENTION_NOT_MET: _ClassVar[RemoveErrorCode]
+    REMOVE_ERROR_STILL_REFERENCED: _ClassVar[RemoveErrorCode]
 
 class RemoveStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -66,6 +71,7 @@ RECORD_OPERATION_UNKNOWN: RecordOperationType
 UNLINK_FROM_FOLDER: RecordOperationType
 MOVE_TO_FOLDER_TRASH: RecordOperationType
 MOVE_TO_OWNER_TRASH: RecordOperationType
+DELETE_PERMANENT: RecordOperationType
 FOLDER_OPERATION_UNKNOWN: FolderOperationType
 FOLDER_MOVE_TO_FOLDER_TRASH: FolderOperationType
 FOLDER_MOVE_TO_OWNER_TRASH: FolderOperationType
@@ -76,6 +82,9 @@ REMOVE_ERROR_ACCESS_DENIED: RemoveErrorCode
 REMOVE_ERROR_TRASHCAN_FOLDER: RemoveErrorCode
 REMOVE_ERROR_ROOT_FOLDER: RemoveErrorCode
 REMOVE_ERROR_DESCENDANT_DENIED: RemoveErrorCode
+REMOVE_ERROR_NOT_IN_TRASH: RemoveErrorCode
+REMOVE_ERROR_RETENTION_NOT_MET: RemoveErrorCode
+REMOVE_ERROR_STILL_REFERENCED: RemoveErrorCode
 REMOVE_STATUS_UNKNOWN: RemoveStatus
 REMOVE_STATUS_SUCCESS: RemoveStatus
 REMOVE_STATUS_STALE_PREVIEW: RemoveStatus
@@ -279,3 +288,29 @@ class TrashcanRestoreRequest(_message.Message):
     folders: _containers.RepeatedCompositeFieldContainer[RestoreFolder]
     target_folder_uid: bytes
     def __init__(self, records: _Optional[_Iterable[_Union[RestoreRecord, _Mapping]]] = ..., folders: _Optional[_Iterable[_Union[RestoreFolder, _Mapping]]] = ..., target_folder_uid: _Optional[bytes] = ...) -> None: ...
+
+class EmptyTrashcanRequest(_message.Message):
+    __slots__ = ("action", "confirmation_token", "trashcan_uid")
+    ACTION_FIELD_NUMBER: _ClassVar[int]
+    CONFIRMATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    TRASHCAN_UID_FIELD_NUMBER: _ClassVar[int]
+    action: RemoveAction
+    confirmation_token: bytes
+    trashcan_uid: bytes
+    def __init__(self, action: _Optional[_Union[RemoveAction, str]] = ..., confirmation_token: _Optional[bytes] = ..., trashcan_uid: _Optional[bytes] = ...) -> None: ...
+
+class EmptyTrashcanResponse(_message.Message):
+    __slots__ = ("confirmation_token", "token_expires_at", "impact", "results", "error_message", "more_remaining")
+    CONFIRMATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    TOKEN_EXPIRES_AT_FIELD_NUMBER: _ClassVar[int]
+    IMPACT_FIELD_NUMBER: _ClassVar[int]
+    RESULTS_FIELD_NUMBER: _ClassVar[int]
+    ERROR_MESSAGE_FIELD_NUMBER: _ClassVar[int]
+    MORE_REMAINING_FIELD_NUMBER: _ClassVar[int]
+    confirmation_token: bytes
+    token_expires_at: int
+    impact: Impact
+    results: _containers.RepeatedCompositeFieldContainer[RemoveResult]
+    error_message: str
+    more_remaining: bool
+    def __init__(self, confirmation_token: _Optional[bytes] = ..., token_expires_at: _Optional[int] = ..., impact: _Optional[_Union[Impact, _Mapping]] = ..., results: _Optional[_Iterable[_Union[RemoveResult, _Mapping]]] = ..., error_message: _Optional[str] = ..., more_remaining: _Optional[bool] = ...) -> None: ...
