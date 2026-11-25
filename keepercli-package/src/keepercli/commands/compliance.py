@@ -81,6 +81,18 @@ def get_compliance_storage(context: KeeperParams) -> Optional[cs.SqliteComplianc
     return storage
 
 
+def clear_compliance_storage(context: KeeperParams) -> None:
+    """Remove persisted compliance data for ``--no-cache`` runs."""
+    storage = get_compliance_storage(context)
+    if storage is None:
+        return
+    try:
+        storage.clear_all()
+    finally:
+        if storage.close_connection:
+            storage.close_connection()
+
+
 def get_node_id(enterprise_data, name: str) -> int:
     """Resolve node ID from name or numeric ID."""
     if isinstance(name, str) and name.isdecimal():
@@ -189,6 +201,8 @@ class ComplianceReportCommand(base.ArgparseCommand):
                                          help='show deleted records only')
         deleted_status_group.add_argument('--active-items', action='store_true',
                                          help='show active records only')
+        parser.add_argument('--aging', action='store_true',
+                           help='include record-aging data')
     
     def execute(self, context: KeeperParams, **kwargs) -> Any:
         base.require_login(context)
@@ -208,6 +222,7 @@ class ComplianceReportCommand(base.ArgparseCommand):
             shared=kwargs.get('shared', False),
             deleted_items=kwargs.get('deleted_items', False),
             active_items=kwargs.get('active_items', False),
+            aging=kwargs.get('aging', False),
             node_id=node_id,
             rebuild=kwargs.get('rebuild', False),
             no_rebuild=kwargs.get('no_rebuild', False),
@@ -216,18 +231,21 @@ class ComplianceReportCommand(base.ArgparseCommand):
         
         spinner = ProgressSpinner()
         spinner.start('Loading...')
+        try:
+            generator = compliance.ComplianceReportGenerator(
+                enterprise_data, context.auth, config,
+                vault_storage=context.vault.vault_data.storage,
+                compliance_storage=None if no_cache else get_compliance_storage(context),
+                progress_callback=create_progress_callback(spinner)
+            )
+
+            rows = list(generator.generate_report_rows('default', blank_duplicate_uids=(output_format == 'table')))
+        finally:
+            spinner.stop()
+        if no_cache:
+            clear_compliance_storage(context)
         
-        generator = compliance.ComplianceReportGenerator(
-            enterprise_data, context.auth, config,
-            vault_storage=context.vault.vault_data.storage,
-            compliance_storage=None if no_cache else get_compliance_storage(context),
-            progress_callback=create_progress_callback(spinner)
-        )
-        
-        rows = list(generator.generate_report_rows('default', blank_duplicate_uids=(output_format == 'table')))
-        spinner.stop()
-        
-        headers = compliance.ComplianceReportGenerator.get_headers('default')
+        headers = compliance.ComplianceReportGenerator.get_headers('default', aging=config.aging)
         if output_format != 'json':
             headers = [report_utils.field_to_title(h) for h in headers]
         
@@ -261,6 +279,10 @@ class ComplianceTeamReportCommand(base.ArgparseCommand):
         """Add team report specific arguments."""
         parser.add_argument('-tu', '--show-team-users', action='store_true',
                            help='show all members of each team')
+        parser.add_argument('--team', action='append',
+                           help='name or UID of team(s) to include')
+        parser.add_argument('--resolve-teams', action='store_true',
+                           help='match folders where team members have individual access')
     
     def execute(self, context: KeeperParams, **kwargs) -> Any:
         base.require_login(context)
@@ -276,6 +298,8 @@ class ComplianceTeamReportCommand(base.ArgparseCommand):
         config = compliance.ComplianceReportConfig(
             shared=True,
             show_team_users=show_team_users,
+            team=kwargs.get('team'),
+            resolve_teams=kwargs.get('resolve_teams', False),
             node_id=node_id,
             rebuild=kwargs.get('rebuild', False),
             no_rebuild=kwargs.get('no_rebuild', False),
@@ -284,15 +308,19 @@ class ComplianceTeamReportCommand(base.ArgparseCommand):
         
         spinner = ProgressSpinner()
         spinner.start('Loading...')
-        
-        generator = compliance.ComplianceReportGenerator(
-            enterprise_data, context.auth, config,
-            compliance_storage=None if no_cache else get_compliance_storage(context),
-            progress_callback=create_progress_callback(spinner)
-        )
-        
-        rows = list(generator.generate_report_rows('team'))
-        spinner.stop()
+        try:
+            generator = compliance.ComplianceReportGenerator(
+                enterprise_data, context.auth, config,
+                compliance_storage=None if no_cache else get_compliance_storage(context),
+                progress_callback=create_progress_callback(spinner),
+                vault_data=context.vault.vault_data if context.vault else None
+            )
+
+            rows = list(generator.generate_report_rows('team'))
+        finally:
+            spinner.stop()
+        if no_cache:
+            clear_compliance_storage(context)
         
         headers = compliance.ComplianceReportGenerator.get_headers('team', show_team_users)
         if output_format != 'json':
@@ -357,16 +385,19 @@ class ComplianceRecordAccessReportCommand(base.ArgparseCommand):
         
         spinner = ProgressSpinner()
         spinner.start('Loading...')
-        
-        generator = compliance.ComplianceReportGenerator(
-            enterprise_data, context.auth, config,
-            vault_storage=context.vault.vault_data.storage,
-            compliance_storage=None if no_cache else get_compliance_storage(context),
-            progress_callback=create_progress_callback(spinner)
-        )
-        
-        rows = list(generator.generate_report_rows('record_access', report_type=report_type))
-        spinner.stop()
+        try:
+            generator = compliance.ComplianceReportGenerator(
+                enterprise_data, context.auth, config,
+                vault_storage=context.vault.vault_data.storage,
+                compliance_storage=None if no_cache else get_compliance_storage(context),
+                progress_callback=create_progress_callback(spinner)
+            )
+
+            rows = list(generator.generate_report_rows('record_access', report_type=report_type))
+        finally:
+            spinner.stop()
+        if no_cache:
+            clear_compliance_storage(context)
         
         headers = compliance.ComplianceReportGenerator.get_headers('record_access', aging=aging)
         if output_format != 'json':
@@ -419,15 +450,18 @@ class ComplianceSummaryReportCommand(base.ArgparseCommand):
         
         spinner = ProgressSpinner()
         spinner.start('Loading...')
-        
-        generator = compliance.ComplianceReportGenerator(
-            enterprise_data, context.auth, config,
-            compliance_storage=None if no_cache else get_compliance_storage(context),
-            progress_callback=create_progress_callback(spinner)
-        )
-        
-        rows = list(generator.generate_report_rows('summary'))
-        spinner.stop()
+        try:
+            generator = compliance.ComplianceReportGenerator(
+                enterprise_data, context.auth, config,
+                compliance_storage=None if no_cache else get_compliance_storage(context),
+                progress_callback=create_progress_callback(spinner)
+            )
+
+            rows = list(generator.generate_report_rows('summary'))
+        finally:
+            spinner.stop()
+        if no_cache:
+            clear_compliance_storage(context)
         
         if node_id:
             logger.info(f'Output is limited to "{node_id}" node')
@@ -472,6 +506,10 @@ class ComplianceSharedFolderReportCommand(base.ArgparseCommand):
         """Add shared folder report specific arguments."""
         parser.add_argument('-tu', '--show-team-users', action='store_true',
                            help='show all members of each team')
+        parser.add_argument('--team', action='append',
+                           help='name or UID of team(s) to include')
+        parser.add_argument('--resolve-teams', action='store_true',
+                           help='match folders where team members have individual access')
     
     def execute(self, context: KeeperParams, **kwargs) -> Any:
         base.require_login(context)
@@ -487,6 +525,8 @@ class ComplianceSharedFolderReportCommand(base.ArgparseCommand):
         config = compliance.ComplianceReportConfig(
             shared=True,
             show_team_users=show_team_users,
+            team=kwargs.get('team'),
+            resolve_teams=kwargs.get('resolve_teams', False),
             node_id=node_id,
             rebuild=kwargs.get('rebuild', False),
             no_rebuild=kwargs.get('no_rebuild', False),
@@ -495,15 +535,18 @@ class ComplianceSharedFolderReportCommand(base.ArgparseCommand):
         
         spinner = ProgressSpinner()
         spinner.start('Loading...')
-        
-        generator = compliance.ComplianceReportGenerator(
-            enterprise_data, context.auth, config,
-            compliance_storage=None if no_cache else get_compliance_storage(context),
-            progress_callback=create_progress_callback(spinner)
-        )
-        
-        rows = list(generator.generate_report_rows('shared_folder'))
-        spinner.stop()
+        try:
+            generator = compliance.ComplianceReportGenerator(
+                enterprise_data, context.auth, config,
+                compliance_storage=None if no_cache else get_compliance_storage(context),
+                progress_callback=create_progress_callback(spinner)
+            )
+
+            rows = list(generator.generate_report_rows('shared_folder'))
+        finally:
+            spinner.stop()
+        if no_cache:
+            clear_compliance_storage(context)
         
         headers = compliance.ComplianceReportGenerator.get_headers('shared_folder')
         if output_format != 'json':

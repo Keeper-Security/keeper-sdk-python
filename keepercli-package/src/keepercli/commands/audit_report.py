@@ -95,6 +95,79 @@ class EnterpriseAuditReport(base.ArgparseCommand):
                             help='Filter: Geo location')
         parser.add_argument('--device-type', dest='device_type', action='store',
                             help='Filter: Device type')
+        parser.add_argument('--max-record-details', dest='max_record_details', action='store_true',
+                            help='allow retrieval of additional record-detail data if not in cache')
+
+    @staticmethod
+    def enrich_record_details(context: KeeperParams, events: List[Dict[str, Any]]) -> None:
+        """Populate missing audit record metadata from vault/cache/compliance data.
+
+        This mirrors Commander's ``--max-record-details`` behavior. The local
+        vault is checked first; only unresolved record UIDs are sent through
+        the compliance preliminary-data path.
+        """
+        record_uids = {
+            event.get('record_uid') for event in events
+            if event.get('record_uid') and not event.get('record_title')
+        }
+        if not record_uids:
+            return
+
+        details: Dict[str, Dict[str, str]] = {}
+        unresolved = set(record_uids)
+        for record_uid in list(unresolved):
+            try:
+                record = context.vault.vault_data.get_record(record_uid)
+                if record is not None:
+                    details[record_uid] = {
+                        'record_title': getattr(record, 'title', '') or '',
+                        'record_url': getattr(record, 'url', '') or '',
+                    }
+                    unresolved.discard(record_uid)
+            except Exception:
+                logger = getattr(context, 'logger', None)
+                if logger:
+                    logger.debug('Unable to resolve audit record %s from vault', record_uid,
+                                 exc_info=True)
+
+        if unresolved:
+            storage = None
+            try:
+                from keepersdk.enterprise import compliance
+                from .compliance import get_compliance_storage
+
+                storage = get_compliance_storage(context)
+                generator = compliance.ComplianceReportGenerator(
+                    context.enterprise_data,
+                    context.auth,
+                    compliance.ComplianceReportConfig(),
+                    vault_storage=context.vault.vault_data.storage,
+                    compliance_storage=storage
+                )
+                preliminary = generator.get_preliminary_records()
+                for record_uid in unresolved:
+                    record = preliminary.get(record_uid)
+                    if record is not None:
+                        details[record_uid] = {
+                            'record_title': record.title or '',
+                            'record_url': record.url or '',
+                        }
+            except Exception as err:
+                # Audit output remains usable when compliance reporting is not
+                # enabled or the account lacks the compliance privilege.
+                prompt_utils.output_text(f'Unable to retrieve compliance record details: {err}')
+            finally:
+                if storage is not None and getattr(storage, 'close_connection', None):
+                    storage.close_connection()
+
+        for event in events:
+            record_uid = event.get('record_uid')
+            detail = details.get(record_uid)
+            if detail:
+                if not event.get('record_title'):
+                    event['record_title'] = detail['record_title']
+                if not event.get('record_url'):
+                    event['record_url'] = detail['record_url']
     
     def execute(self, context: KeeperParams, **kwargs) -> Any:
         base.require_login(context)
@@ -185,8 +258,14 @@ class EnterpriseAuditReport(base.ArgparseCommand):
                 load_syslog_templates(auth)
             else:
                 misc_fields.update(MISC_FIELDS)
+                if kwargs.get('max_record_details'):
+                    fields.extend(('record_title', 'record_url'))
 
-            for event in raw_report.execute_audit_report():
+            events = list(raw_report.execute_audit_report())
+            if kwargs.get('max_record_details'):
+                self.enrich_record_details(context, events)
+
+            for event in events:
                 if len(misc_fields) > 0:
                     new_fields = misc_fields.intersection(event.keys())
                     if len(new_fields) > 0:
